@@ -324,7 +324,9 @@ describe('execution plan admission boundaries', () => {
     const recovered = await rebuildResumeHistoryFromEvents('thread_bound', stored.id);
     const resumedOptions = deriveResumeStreamOptions(stored, {
       kind: 'chat-turn',
-      ...(recovered ? { inputMessages: recovered } : {}),
+      ...(recovered
+        ? { inputMessages: recovered.history, systemPrompts: recovered.systemPrompts }
+        : {}),
     });
     expect(resumedOptions.workspaceSelection).toMatchObject({ workspaceId: 'workspace_bound_a' });
 

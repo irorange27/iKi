@@ -1,5 +1,6 @@
 import { createLogger } from '@iki/backend/logger';
 import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import * as chatMessageDb from '@iki/backend/db/chat_message';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 
@@ -35,6 +36,40 @@ export const pickUserTurnMessage = (
   const id = typeof (lastUser as { id?: unknown }).id === 'string' ? (lastUser as { id: string }).id : '';
   if (!id.trim()) return undefined;
   return { messageId: id, message: lastUser };
+};
+
+/**
+ * The input fact for an id-less send (wake/task transports, issue #139): the
+ * last user message carries no client id, so the accepted input is projected
+ * into the vocabulary's message shape under a deterministic per-turn id, and
+ * the caller's system messages ride the fact — they ARE the task's config
+ * (the plan's systemPrompt is the template join, never the task prompt), and
+ * a resume without them would re-run the task under the wrong persona.
+ * Undefined when anything in the recorded set is unrepresentable (non-string
+ * content): the resume gate then keeps refusing loudly — a PARTIAL fact that
+ * a resume would silently complete wrong is worse than no fact.
+ */
+export const pickIdLessSendInput = (
+  options: ChatTurnOptions,
+  runId: string
+): { messageId: string; message: ChatUiMessage; runId: string; system?: string[] } | undefined => {
+  const lastUser = [...options.messages].reverse().find(message => message.role === 'user');
+  const content = (lastUser as { content?: unknown } | undefined)?.content;
+  if (!lastUser || typeof content !== 'string' || !content.trim()) return undefined;
+  const system: string[] = [];
+  for (const message of options.messages) {
+    if (message.role !== 'system') continue;
+    const systemContent = (message as { content?: unknown }).content;
+    if (typeof systemContent !== 'string') return undefined;
+    if (systemContent.trim()) system.push(systemContent);
+  }
+  const messageId = `input_${runId}`;
+  return {
+    messageId,
+    message: { id: messageId, role: 'user', parts: [{ type: 'text', text: content }] },
+    runId,
+    ...(system.length > 0 ? { system } : {}),
+  };
 };
 
 /**

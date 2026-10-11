@@ -13,7 +13,7 @@ import { tryAcquireCrossProcessThreadRun } from '@iki/backend/db/thread_run_lock
 import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps, onMessagePersisted } from './platform';
 import { deriveResumeStreamOptions, rebuildResumeHistoryFromEvents } from './run_rehydrator';
-import type { AgentRun } from '@iki/backend/types/agent_run';
+import type { AgentRun, AgentRunKind } from '@iki/backend/types/agent_run';
 import type { ModelMessage } from 'ai';
 import { buildThreadMarkdown, parseStoredMessageForExport } from '../message/thread_markdown_export';
 import { searchThreadContent } from '../message/thread_content_search';
@@ -77,26 +77,32 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   // an in-place run its own id. Facts stay in the log; display and replay
   // show the whole story. A run whose log has no usable history — or whose
   // replay does not end with the recorded task (a user message) — refuses
-  // loudly BEFORE any successor row is created. Only chat turns are
-  // resumable from the log today: wake/task sends are id-less ModelMessages
-  // and record no input fact (ledgered in #134 — loud refusal beats the
-  // silent wrong-task re-run the unguarded flip produced).
+  // loudly BEFORE any successor row is created. Kind admission is per
+  // caller: retry opens the wake/task send kinds whose id-less sends record
+  // input facts (issue #139); resumeRun stays chat-turn-only — a blocked
+  // task row recovers via the approval flow or re-scheduling, not a
+  // handoff-resume that would bypass the approval gate. Continuation kinds
+  // (handoff-resume, approval-resume) and delegated-agent (its own harness,
+  // no send facts) refuse everywhere.
   const resumeHistoryOrRefusal = async (
-    run: AgentRun
-  ): Promise<{ history: ModelMessage[] } | { refusal: { success: false; error: string } }> => {
+    run: AgentRun,
+    admittedKinds: readonly AgentRunKind[]
+  ): Promise<
+    { history: ModelMessage[]; systemPrompts: string[] } | { refusal: { success: false; error: string } }
+  > => {
     if (!run.threadId) return { refusal: { success: false, error: 'Run has no thread ID' } };
-    if (run.kind !== 'chat-turn') {
+    if (!admittedKinds.includes(run.kind)) {
       return {
         refusal: {
           success: false,
-          error: `Run ${run.id} has kind ${run.kind}; only chat-turn runs resume from the session log today.`,
+          error: `Run ${run.id} has kind ${run.kind}; session-log resume is admitted for: ${admittedKinds.join(', ')}.`,
         },
       };
     }
     const excludeRunId = run.status === 'queued' ? (run.parentRunId ?? run.id) : run.id;
-    const history = await rebuildResumeHistoryFromEvents(run.threadId, excludeRunId);
-    const last = history?.[history.length - 1];
-    if (!history || history.length === 0 || last?.role !== 'user') {
+    const recovered = await rebuildResumeHistoryFromEvents(run.threadId, excludeRunId);
+    const last = recovered?.history[recovered.history.length - 1];
+    if (!recovered || recovered.history.length === 0 || last?.role !== 'user') {
       return {
         refusal: {
           success: false,
@@ -104,7 +110,30 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
         },
       };
     }
-    return { history };
+    // Attribution join (#139 review): when the tail input fact carries the
+    // run it was accepted for, the retried run must be that run or its
+    // descendant — otherwise the replay's tail is a LATER send's task and
+    // the re-run would execute it under this run's plan (the silent
+    // wrong-task re-run the gate exists to prevent, in a retry-after-resend
+    // interleaving). Facts without a runId (chat sends, pre-#139 rows) skip
+    // the join; their tail semantics are the F3 contract.
+    if (recovered.inputRunId) {
+      const ancestry = new Set<string>([run.id]);
+      let ancestor = run.parentRunId ? agentRunDb.getAgentRun(run.parentRunId) : null;
+      while (ancestor) {
+        ancestry.add(ancestor.id);
+        ancestor = ancestor.parentRunId ? agentRunDb.getAgentRun(ancestor.parentRunId) : null;
+      }
+      if (!ancestry.has(recovered.inputRunId)) {
+        return {
+          refusal: {
+            success: false,
+            error: `Run ${run.id} cannot resume: the replay's tail input was recorded for run ${recovered.inputRunId}, not this run's task.`,
+          },
+        };
+      }
+    }
+    return recovered;
   };
 
   const resumeRun = async (
@@ -117,7 +146,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       return { success: false, error: `Cannot resume a run with status ${run.status}` };
     }
 
-    const recovered = await resumeHistoryOrRefusal(run);
+    const recovered = await resumeHistoryOrRefusal(run, ['chat-turn']);
     if ('refusal' in recovered) return recovered.refusal;
 
     if (run.status === 'queued') {
@@ -134,6 +163,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
             originalRunId: run.id,
           },
           inputMessages: recovered.history,
+          systemPrompts: recovered.systemPrompts,
         })
       );
       return { success: true, ...(result as Record<string, unknown>) };
@@ -155,6 +185,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
             }
           : undefined,
         inputMessages: recovered.history,
+        systemPrompts: recovered.systemPrompts,
       })
     );
 
@@ -174,7 +205,13 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     }
 
     // Refuse before the queued successor row exists — no orphan retry rows.
-    const recovered = await resumeHistoryOrRefusal(original);
+    // The wake/task send kinds are admitted here (issue #139): their id-less
+    // sends record input facts, so the retry re-runs the recorded TASK.
+    const recovered = await resumeHistoryOrRefusal(original, [
+      'chat-turn',
+      'proactive-task',
+      'awaiter-wake',
+    ]);
     if ('refusal' in recovered) return recovered.refusal;
 
     const retryResult = runs.retryRun(runId);
@@ -190,7 +227,10 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     const result = await streaming.stream(
       target,
       deriveResumeStreamOptions(newRun, {
-        kind: 'chat-turn',
+        // The retry keeps the original's kind: the successor row, the plan
+        // and the turn_started fact must attribute the re-run to the same
+        // kind the task entered with (issue #139).
+        kind: original.kind,
         parentRunId: runId,
         // The queued retry row is adopted as the executing identity.
         adoptRunId: retryResult.newRunId,
@@ -199,6 +239,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
           originalRunId: runId,
         },
         inputMessages: recovered.history,
+        systemPrompts: recovered.systemPrompts,
       })
     );
 

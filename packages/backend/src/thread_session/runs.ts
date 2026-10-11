@@ -102,7 +102,9 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
     const newRunId = createPrefixedId('run');
     agentRunDb.createAgentRun({
       id: newRunId,
-      kind: 'chat-turn',
+      // The successor keeps the original's kind — a retried wake/task run is
+      // still a wake/task run (issue #139 attribution).
+      kind: original.kind,
       status: 'queued',
       threadId: original.threadId,
       parentRunId: original.id,

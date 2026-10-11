@@ -245,12 +245,13 @@ describe('retry and queued resume read the session log alone', () => {
     expect(requestPrompt).not.toContain('PARENT_PARTIAL_TEXT');
   });
 
-  it('a non-chat-turn run refuses the session-log resume instead of re-running the wrong task', async () => {
-    // Wake/task sends are id-less ModelMessages: no input_accepted fact is
-    // recorded, so the replay cannot reconstruct their task. The unguarded
-    // flip silently answered the thread's last CHAT message under the wake's
-    // plan — the kind gate refuses loudly instead (input facts for id-less
-    // sends are a separate slice, ledgered in #134).
+  it('a wake run whose log has no recorded input facts refuses instead of re-running the wrong task', async () => {
+    // Wake/task sends are id-less ModelMessages: rows written before the
+    // input-facts slice (#139) recorded no input_accepted fact, so the replay
+    // cannot reconstruct their task. The kind is admitted for retry since
+    // #139, but the missing-facts refusal keeps the same guarantee — the
+    // unguarded flip silently answered the thread's last CHAT message under
+    // the wake's plan; this refuses loudly instead.
     agentRunDb.createAgentRun({
       id: 'run_wake_1',
       kind: 'awaiter-wake',
@@ -277,7 +278,7 @@ describe('retry and queued resume read the session log alone', () => {
     const result = await service.retryAndExecute(target, 'run_wake_1');
 
     expect(result.success).toBe(false);
-    expect(JSON.stringify(result)).toContain('only chat-turn runs');
+    expect(JSON.stringify(result)).toContain('no recorded session facts ending in its task');
     expect(createModelMock).not.toHaveBeenCalled();
     // The stale row copy would have "worked" — proving the flip took the
     // loud path, not the silent one.

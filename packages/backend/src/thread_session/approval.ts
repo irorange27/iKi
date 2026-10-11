@@ -363,10 +363,22 @@ export const createChatApproval = (deps: {
     // and the resume is rejected. Memory context rides the persisted seam
     // (skipRetrieval): this path bypasses the preparer, so it injects itself.
     const replayHistory = await resumeHistoryFromReplay(replay);
+    // The tail input fact's system prompts lead the recovered history
+    // (issue #139): a paused TASK turn's agent prompt rides the input fact —
+    // the replay's message list alone would resume it under the wrong
+    // persona. Chat pauses see an empty array and keep the old shape.
+    const replayWithSystem = replayHistory
+      ? [
+          ...replay.inputSystemPrompts.map(
+            content => ({ role: 'system', content }) as ModelMessage
+          ),
+          ...replayHistory,
+        ]
+      : null;
     const inputMessages =
-      unrecordedApprovals.length === 0 && replayHistory
+      unrecordedApprovals.length === 0 && replayWithSystem
         ? await deps.memory.injectMemoryIntoMessages(
-            replayHistory,
+            replayWithSystem,
             threadId,
             { skipRetrieval: true }
           )

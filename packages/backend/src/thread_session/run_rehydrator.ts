@@ -144,11 +144,32 @@ export const resumeHistoryFromReplay = async (
   return await toModelInputMessages(replay.messages, { repairInterruptedTools: false });
 };
 
+/**
+ * The full recovery INPUT for a run: the replay history plus the system
+ * prompts recorded with the tail input fact (issue #139 — wake/task sends
+ * bind their agent system prompt to the input; a resume without it would
+ * re-run the task under the wrong persona) and the tail fact's `runId` when
+ * it carries one (the recovery gate joins it against the retried run's
+ * ancestry). Chat-turn recoveries see empty `systemPrompts` and no
+ * `inputRunId`, keeping their preparer-owned assembly.
+ */
 export const rebuildResumeHistoryFromEvents = async (
   threadId: string,
   excludeRunId?: string
-): Promise<ModelMessage[] | null> =>
-  resumeHistoryFromReplay(rebuildThreadViewFromEvents(threadId, { excludeRunId }));
+): Promise<{
+  history: ModelMessage[];
+  systemPrompts: string[];
+  inputRunId?: string;
+} | null> => {
+  const replay = rebuildThreadViewFromEvents(threadId, { excludeRunId });
+  const history = await resumeHistoryFromReplay(replay);
+  if (!history) return null;
+  return {
+    history,
+    systemPrompts: replay.inputSystemPrompts,
+    ...(replay.inputRunId ? { inputRunId: replay.inputRunId } : {}),
+  };
+};
 
 /**
  * Stream options for re-entering the turn loop from a run row (queued resume,
@@ -168,10 +189,17 @@ export const deriveResumeStreamOptions = (
     adoptRunId?: string;
     /** The session-log recovery history (rebuildResumeHistoryFromEvents). */
     inputMessages?: ModelMessage[];
+    /** The system prompts recorded with the tail input fact (issue #139) —
+     * prepended ahead of the recorded input so a resumed wake/task turn runs
+     * under the persona it was accepted with. Empty for chat recoveries. */
+    systemPrompts?: string[];
   }
 ): ChatTurnOptions => {
   const plan = deriveRunTurnPlan(run);
   const recordedMessages = overrides.inputMessages ?? [];
+  const systemMessages = (overrides.systemPrompts ?? []).map(
+    content => ({ role: 'system', content }) as ModelMessage
+  );
   return {
     providerType: plan.providerType,
     ...(plan.providerId ? { providerId: plan.providerId } : {}),
@@ -186,8 +214,9 @@ export const deriveResumeStreamOptions = (
     maxIterations: plan.maxIterations,
     // The recorded input is the recovery source. A run without recorded
     // messages resumes empty and fails explicitly downstream — missing input
-    // must not be fabricated.
-    messages: recordedMessages as ChatTurnOptions['messages'],
+    // must not be fabricated. The tail input fact's system prompts lead the
+    // request, matching the fresh wake/task send shape (system first).
+    messages: [...systemMessages, ...recordedMessages] as ChatTurnOptions['messages'],
     threadId: run.threadId ?? undefined,
     tools: plan.enabledTools,
     skillIds: plan.availableSkillIds,
