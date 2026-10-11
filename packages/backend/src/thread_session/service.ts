@@ -14,6 +14,7 @@ import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps, onMessagePersisted } from './platform';
 import { deriveResumeStreamOptions, rebuildResumeHistoryFromEvents } from './run_rehydrator';
 import type { AgentRun, AgentRunKind } from '@iki/backend/types/agent_run';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ModelMessage } from 'ai';
 import { buildThreadMarkdown, parseStoredMessageForExport } from '../message/thread_markdown_export';
 import { searchThreadContent } from '../message/thread_content_search';
@@ -133,9 +134,23 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       };
     }
     const excludeRunIds = deadTaskChainRunIds(run);
-    const recovered = await rebuildResumeHistoryFromEvents(run.threadId, excludeRunIds);
+    let recovered: Awaited<ReturnType<typeof rebuildResumeHistoryFromEvents>>;
+    try {
+      recovered = await rebuildResumeHistoryFromEvents(run.threadId, excludeRunIds);
+    } catch (error) {
+      // The recovery-input owner throws when a journaled effect of the dead
+      // chain cannot be represented from the log (#143) — a refusal, not an
+      // exception past the IPC boundary.
+      return { refusal: { success: false, error: getErrorMessage(error) } };
+    }
     const last = recovered?.history[recovered.history.length - 1];
-    if (!recovered || recovered.history.length === 0 || last?.role !== 'user') {
+    // A tool tail is a CONTINUATION (#143): the recovery history carries the
+    // dead chain's journaled exchange pairs after the task input, and the
+    // resumed turn runs with an empty prompt over existing history. A plain
+    // assistant tail is still no task to re-run.
+    const tailIsRecoverable =
+      last?.role === 'user' || (recovered?.continuation === true && last?.role === 'tool');
+    if (!recovered || recovered.history.length === 0 || !tailIsRecoverable) {
       return {
         refusal: {
           success: false,
