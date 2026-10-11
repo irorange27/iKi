@@ -34,9 +34,38 @@ import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/te
 import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
+
+// F4: the thrown-error teardown of a cancelled resume must still land its
+// terminal fact. The flag makes the FIRST terminal-bearing append fail once
+// (as a real transient write failure would); the resolved-cancel tail then
+// loses the fact and the catch's loud-guarded record must recover it — a
+// regression that fails on the pre-F4 code, where only the tail recorded.
+const sessionLogThrows = vi.hoisted(() => ({ failNextTerminal: false }));
+vi.mock('@iki/backend/thread_session/session_log', async importOriginal => {
+  const actual = await importOriginal<
+    typeof import('@iki/backend/thread_session/session_log')
+  >();
+  const TERMINALS = new Set(['turn_completed', 'turn_failed', 'turn_cancelled']);
+  return {
+    ...actual,
+    recordSessionEvents: vi.fn(
+      (threadId: string, events: ReadonlyArray<{ type: string }>) => {
+        if (
+          sessionLogThrows.failNextTerminal &&
+          events.some(event => TERMINALS.has(event.type))
+        ) {
+          sessionLogThrows.failNextTerminal = false;
+          throw new actual.SessionLogWriteError(threadId);
+        }
+        return actual.recordSessionEvents(threadId, events as never);
+      }
+    ),
+  };
+});
 import { resolveThreadWorkspaceSelectionSnapshot } from '@iki/backend/workspaces/thread_workspace';
 import {
   MODEL_OUTPUT_COMMITTED,
+  rebuildThreadViewFromEvents,
   recordSessionEvents,
   SESSION_EVENT_VERSION,
 } from '@iki/backend/thread_session/session_log';
@@ -314,6 +343,57 @@ describe('approval resume keeps the turn-start workspace', () => {
     // The barrier held: the approved write executed nowhere.
     await expect(fs.stat(path.join(a, 'approved.txt'))).rejects.toThrow();
     await expect(fs.stat(path.join(b, 'approved.txt'))).rejects.toThrow();
+
+    // Whichever cancel shape fires — the driver resolving a cancelled
+    // outcome (tail records it via terminalFactForOutcome) or an error
+    // tearing the resume down (the catch's loud-guarded terminal) — the
+    // replay must end this continuation cancelled, never running forever.
+    const cancelledView = rebuildThreadViewFromEvents('thread_probe');
+    expect(cancelledView.turns.find(turn => turn.status === 'cancelled')).toBeDefined();
+  });
+
+  it('a cancelled resume lands its terminal fact even when the tail append fails', async () => {
+    let notifyLeaseLost: (() => void) | undefined;
+    const leaseCoordinator = createThreadStreamCoordinator({
+      crossProcessThreadRun: (_threadId, options) => {
+        notifyLeaseLost = options.onLeaseLost;
+        return () => undefined;
+      },
+    });
+    const delayedMemory = {
+      onMessagePersisted: vi.fn(),
+      injectMemoryIntoMessages: vi.fn(
+        (messages: unknown[]) =>
+          new Promise<typeof messages>(resolve => setTimeout(() => resolve(messages), 80))
+      ),
+      getAffectContextMessage: () => '',
+    };
+    const approvals = buildApprovals(leaseCoordinator);
+    const { approvalId } = await pauseOnApproval(approvals);
+
+    // Fresh registry, as after a restart.
+    const recoveredApprovals = buildApprovals(leaseCoordinator, delayedMemory);
+    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('never reaches the wire')]));
+    sessionLogThrows.failNextTerminal = true;
+
+    const pendingResume = recoveredApprovals.approveTool(
+      { id: 94, send: vi.fn() },
+      approvalId,
+      true
+    );
+    await new Promise(resolve => setTimeout(resolve, 20));
+    notifyLeaseLost!();
+    const result = await pendingResume;
+    expect(result).toMatchObject({ success: true });
+
+    const view = rebuildThreadViewFromEvents('thread_probe');
+    const resumedTurn = view.turns.find(
+      turn => turn.kind === 'approval-resume' && turn.status === 'cancelled'
+    );
+    expect(
+      resumedTurn,
+      'the catch must recover the terminal fact the failing tail append lost'
+    ).toBeDefined();
   });
 });
 

@@ -462,6 +462,46 @@ const main = async () => {
     throw new Error(`pending approvals survived restart: ${JSON.stringify(leftoverPending)}`);
   }
 
+  // F4 (ADR 008 flip): the restart recovery must record its facts in the
+  // session log — the expired approvals as system-sourced approval_decided
+  // events, and a terminal fact for each reclaimed run.
+  {
+    const eventDb = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'));
+    try {
+      const decidedRows = eventDb
+        .prepare("SELECT payload FROM session_events WHERE type = 'approval_decided'")
+        .all();
+      const systemDecided = decidedRows.filter(row => {
+        try {
+          return JSON.parse(row.payload).source === 'system';
+        } catch {
+          return false;
+        }
+      });
+      if (systemDecided.length === 0) {
+        throw new Error(
+          'restart recovery recorded no system-sourced approval decisions in the session log'
+        );
+      }
+      // Scoped to the RECLAIMED runs: the recovery terminal carries the
+      // reclamation message — 'Run interrupted by process restart' for
+      // running runs, 'Run blocked at restart — approval session lost' for
+      // blocked ones (round 3 crashes while approval-pending, so blocked).
+      const reclaimedTerminals = eventDb
+        .prepare(
+          "SELECT payload FROM session_events WHERE type = 'turn_failed' AND (json_extract(payload, '$.errorText') LIKE '%process restart%' OR json_extract(payload, '$.errorText') LIKE '%approval session lost%')"
+        )
+        .all();
+      if (reclaimedTerminals.length === 0) {
+        throw new Error(
+          'restart recovery recorded no terminal fact for the reclaimed runs in the session log'
+        );
+      }
+    } finally {
+      eventDb.close();
+    }
+  }
+
   step('post-recovery continuation turn');
   await typeAndSend(cdp, 'CHECK_HISTORY2');
   const report2 = await waitForDom(cdp, t => t.includes('HISTORY_REPORT[CHECK_HISTORY2]'), { label: 'post-recovery history report' });
