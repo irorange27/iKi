@@ -250,7 +250,7 @@ export const journaledExchangePairs = (
         payload.args === null ||
         !payload.result ||
         payload.result.toolCallId !== payload.toolCallId ||
-        typeof payload.result.toolName !== 'string'
+        payload.result.toolName !== payload.toolName
       ) {
         throw unrepresentable();
       }

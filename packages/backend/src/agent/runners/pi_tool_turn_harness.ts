@@ -528,8 +528,16 @@ export class PiToolTurnHarness {
         // effects the effect-aware retry must see. Handler errors produced
         // no world effect — they journal nothing. Fail-closed: a lost
         // record would let the retry re-issue the call. The loop passes the
-        // model's call id alongside name/arguments.
-        if (recordInlineExecution && runId && output.type !== 'error-text' && output.type !== 'execution-denied') {
+        // model's call id alongside name/arguments. Terminal tools
+        // (handoff) skip, matching the AI SDK site — a retried turn must
+        // not continue past a handoff it did not issue.
+        if (
+          recordInlineExecution &&
+          runId &&
+          output.type !== 'error-text' &&
+          output.type !== 'execution-denied' &&
+          !TERMINAL_TOOL_NAMES.has(call.name)
+        ) {
           recordInlineExecution({
             runId,
             toolCallId: call.id ?? '',

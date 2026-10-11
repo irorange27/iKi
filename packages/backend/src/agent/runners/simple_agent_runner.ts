@@ -561,7 +561,14 @@ export class SimpleAgentRunner {
             // tool inside this step; the effect-aware retry must see it.
             // Fail-closed — a lost record would let the retry re-issue the
             // call. Denials and handler errors never reach this branch.
-            if (request.runId && request.recordInlineExecution && !TERMINAL_TOOL_NAMES.has(part.toolName)) {
+            // Preliminary tool results (AsyncIterable handlers) are skipped:
+            // they would journal the same toolCallId twice.
+            if (
+              request.runId &&
+              request.recordInlineExecution &&
+              !TERMINAL_TOOL_NAMES.has(part.toolName) &&
+              (part as { preliminary?: unknown }).preliminary !== true
+            ) {
               request.recordInlineExecution({
                 runId: request.runId,
                 toolCallId: part.toolCallId,

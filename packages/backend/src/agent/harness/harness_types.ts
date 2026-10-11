@@ -50,8 +50,8 @@ export type TurnInput = {
   toolsOverride?: AgentTool[];
   /** The executing run's identity (issue #145): the driver injects the
    * tracker id so inline tool executions journal under the run the
-   * effect-aware retry attributes them to. Absent for harnesses whose
-   * caller runs outside the fact-recording pipeline (delegated evals). */
+   * effect-aware retry attributes them to; the delegated-agent tool passes
+   * its child tracker id (its recorder stays unwired — ledgered in #145). */
   runId?: string;
   /** The inline-execution fact port (issue #145): R5 keeps the fact writer
    * in thread_session, so it reaches the harnesses as an injected port —
