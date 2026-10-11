@@ -52,7 +52,7 @@ Tests use the real SDK with scripted providers where possible.
 
 ## Event authority flip - rollback (ADR 008)
 
-FLIP COMPLETE as of F4 (issue #136): every recovery consumer reads the session log; the old tables are projections. Acceptance items 1-10 and 15 of the event-sourced execution model are pinned by the suites named in PR #136's description; items 11-14/16-19 await the edit/fork product.
+FLIP COMPLETE as of F4 (issue #136): every recovery consumer reads the session log; the old tables are projections. Acceptance items 1-10 and 15 of the event-sourced execution model are pinned by the suites named in the flip-completion PR (#137) description; items 11-14/16-19 await the edit/fork product.
 
 | Rollback part | Meaning | Notes |
 |---|---|---|
