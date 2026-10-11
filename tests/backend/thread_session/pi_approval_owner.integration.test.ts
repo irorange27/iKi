@@ -284,5 +284,20 @@ describe('pi tool resume through the real five-state owner (switch item 3b)', ()
       output: { type: 'execution-denied', reason: 'integration rejection' },
     });
     expect(executions).toEqual([]);
+    // The denial is an outcome like any other: journaled (issue #143), so an
+    // effect-aware recovery pairs the refused call with its denial and the
+    // model does not re-ask a user who already said no.
+    const denialFacts = getSessionEvents(address.threadId, [TOOL_EXECUTION_FINISHED], {
+      path: '$.binding.approvalId',
+      value: rejectedApprovalId,
+    });
+    expect(denialFacts).toHaveLength(1);
+    expect(denialFacts[0].payload).toMatchObject({
+      decision: 'rejected',
+      result: {
+        toolCallId: 'call_owner_rejected',
+        output: { type: 'execution-denied', reason: 'integration rejection' },
+      },
+    });
   });
 });

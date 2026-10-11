@@ -214,6 +214,10 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
   });
 
   it('a denied execution pairs with its execution-denied result', async () => {
+    // The FINISHED shape here is what the owner journals for a denial since
+    // #143 (pinned end-to-end in pi_approval_owner.integration.test.ts);
+    // this test pins the READER: the refusal rides the recovery history, so
+    // the model does not re-ask a user who already said no.
     seedRun('run_effect143_a', 'failed');
     recordInputFact();
     recordExecutedCall({ approved: false, output: { type: 'text', value: 'execution denied by policy' } });

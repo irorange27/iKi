@@ -199,16 +199,20 @@ const execute = async (
   }
   if (!action.decision) return { kind: 'pending' };
   if (action.decision !== 'approved') {
-    return {
-      kind: 'completed',
-      reused: false,
-      result: {
-        type: 'tool-result',
-        toolCallId: action.binding.toolCallId,
-        toolName: action.binding.toolName,
-        output: { type: 'execution-denied', reason: action.reason ?? 'Tool execution denied.' },
-      },
+    // The denial is an outcome like any other: journaled, so an effect-aware
+    // recovery (#143) pairs the refused call with its execution-denied
+    // result and the model does not re-ask a user who already said no. A
+    // failed write leaves the decision unexecuted — the retry re-derives the
+    // same denial (no effect to duplicate).
+    const deniedResult: ToolResult = {
+      type: 'tool-result',
+      toolCallId: action.binding.toolCallId,
+      toolName: action.binding.toolName,
+      output: { type: 'execution-denied', reason: action.reason ?? 'Tool execution denied.' },
     };
+    if (!appendFact(action, TOOL_EXECUTION_FINISHED, deniedResult, 'execution'))
+      return { kind: 'busy' };
+    return { kind: 'completed', reused: false, result: deniedResult };
   }
   if (
     !action.facts.some(event => event.type === TOOL_EXECUTION_PREPARED) ||

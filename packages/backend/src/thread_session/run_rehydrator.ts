@@ -178,9 +178,11 @@ export const journaledExchangePairs = (
     if (
       typeof binding.toolCallId !== 'string' ||
       typeof binding.toolName !== 'string' ||
-      binding.args === undefined ||
+      typeof binding.args !== 'object' ||
+      binding.args === null ||
       !result ||
-      result.toolCallId !== binding.toolCallId
+      result.toolCallId !== binding.toolCallId ||
+      result.toolName !== binding.toolName
     ) {
       throw new Error(
         'A journaled tool execution of the dead chain cannot be represented from the log.'
@@ -304,11 +306,15 @@ export const deriveResumeStreamOptions = (
   );
   // Issue #143: a recovery history ending in a journaled tool result is a
   // CONTINUATION — the turn runs with an empty prompt over existing history
-  // and the streaming path's empty-prompt guard must stand down. Carried on
-  // the runConfig metadata; no prompt is fabricated.
+  // and the streaming path's empty-prompt guard must stand down. The tail
+  // shape is the honest source; a caller-supplied `continuation` flag is
+  // stripped so the guard can never be stood down for a non-continuation
+  // turn. Carried on the runConfig metadata; no prompt is fabricated.
   const continuation = recordedMessages.at(-1)?.role === 'tool';
-  const runMetadata = {
-    ...(overrides.metadata ?? {}),
+  const { continuation: _stripped, ...callerMetadata } = (overrides.metadata ??
+    {}) as Record<string, unknown>;
+  const runMetadata: Record<string, unknown> = {
+    ...callerMetadata,
     ...(continuation ? { continuation: true } : {}),
   };
   return {
