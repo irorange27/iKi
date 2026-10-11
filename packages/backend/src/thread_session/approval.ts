@@ -5,7 +5,7 @@ import { appendApprovalResponsesToHistory } from '../provider/ai_sdk_runtime';
 import { cloneModelMessages, rehydrateHarness, type TurnDriverHarness } from '../agent/harness';
 import { resumeHistoryFromReplay } from './run_rehydrator';
 import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
-import { pausedPlanRunsOnPiToolSupply } from './turn_supply_selection';
+import { pausedPlanRunsOnPiToolSupply, piDomainResumeHistory } from './turn_supply_selection';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import { createPrefixedId } from '../utils/id';
@@ -786,12 +786,15 @@ export const createChatApproval = (deps: {
           })
         : rehydrateHarness(planToHarnessConfig(ctx.plan, { guardActive: false }));
 
-      // Build history with collected approval responses — the AI SDK replay
-      // only; the Pi harness consumes the RAW paused history (its projection
-      // refuses approval parts) and pairs the decisions itself.
+      // Build the wire history. The Pi resume consumes the paused history in
+      // the Pi wire domain — piDomainResumeHistory strips the replay's
+      // pairing stamps (issue #133); its projection refuses approval parts
+      // and the owner pairs the decisions from the resume commands. The AI
+      // SDK replay keeps the stamped history and appends the collected
+      // responses for pairing.
       const responses = Array.from(session.collectedApprovalResponses.values());
       let streamHistory = resumesOnPi
-        ? cloneModelMessages(session.history ?? [])
+        ? piDomainResumeHistory(cloneModelMessages(session.history ?? []))
         : cloneModelMessages(session.history ?? []);
       if (!resumesOnPi && responses.length > 0) {
         streamHistory = appendApprovalResponsesToHistory(
