@@ -155,13 +155,16 @@ describe('pausedPlanRunsOnPiToolSupply (switch item 3c: autonomous resumes stay 
     ).toBe(false);
   });
 
-  it('refuses a restart-recovered replay history — the live approval part is outside the Pi domain (F2 supply flip, documented)', async () => {
+  it('admits a restart-recovered replay history — the pairing stamps strip to the Pi wire domain (issue #133)', async () => {
     // What rebuildThreadViewFromEvents → toModelInputMessages(repair:false)
     // yields for a paused turn: the assistant partial carries the live
-    // approval-request pair. The Pi projection rejects that part type, so a
-    // RESTART-recovered resume of a Pi-paused turn runs the AI SDK harness —
-    // the flip is deliberate and ledgered (ADR 008 F2 review, follow-up
-    // issue) until the projection learns the part.
+    // approval-request pair. piDomainResumeHistory strips those stamps (the
+    // live mirror never carried them — the pause registers
+    // harness.getHistory()), so a RESTART-recovered resume of a Pi-paused
+    // turn answers the selection identically to the live path and resumes on
+    // the Pi harness. This flips the supply flip documented at the ADR 008
+    // F2 review; a genuinely out-of-domain part (tool-approval-response)
+    // still refuses — pinned in the fresh-selection test above.
     const recoveredHistory = await toModelInputMessages(
       [
         {
@@ -189,7 +192,7 @@ describe('pausedPlanRunsOnPiToolSupply (switch item 3c: autonomous resumes stay 
     );
     expect(
       pausedPlanRunsOnPiToolSupply(plan({}), recoveredHistory as never)
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('refuses a static-factory provider', () => {
