@@ -8,12 +8,17 @@ import type {
   ReviewQueueItem,
 } from '@iki/backend/types/agent_run';
 import { createPrefixedId } from '@iki/backend/utils/id';
-import { rehydrateAgentRunTracker } from './run_tracker';
 import { buildRunTrajectory, type AtifTrajectory } from './atif_export';
 
 type ChatRunsDeps = {
   /** Aborts the active stream running a run id (owned by the stream coordinator). */
   abortActiveStream: (runId: string) => boolean;
+  /**
+   * Cancels the live execution owning a run id — the run-keyed registration
+   * that covers send and approval-resume executions too, not only streams.
+   * Returns false when no live execution in this process owns the run.
+   */
+  cancelExecution?: (runId: string, reason: string) => boolean;
   cancelPendingApprovalsForRun?: (runId: string) => number;
 };
 
@@ -80,11 +85,25 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
       return { success: false, error: `Run is already ${run.status}` };
     }
 
-    if (!deps.abortActiveStream(runId)) {
-      const tracker = rehydrateAgentRunTracker(runId);
-      tracker?.markCancelled({
-        text: run.output?.text ?? run.working.accumulatedText,
-      });
+    // Cancellation names a run and must reach the execution that owns it.
+    // The run-keyed index covers every entry that can execute a run —
+    // stream, send and approval resume — where the stream registry only
+    // covers subscribed senders. The owning execution persists its own
+    // terminal state through the shared finalize path.
+    const reachedExecution = deps.cancelExecution
+      ? deps.cancelExecution(runId, 'run-cancelled')
+      : deps.abortActiveStream(runId);
+    if (!reachedExecution) {
+      // No live execution in this process owns the run. Writing `cancelled`
+      // here would be a terminal fact nobody caused: a run may be executing
+      // in another process (desktop + daemon share this database) or have
+      // died with its process. Refuse and let reconciliation decide, rather
+      // than reporting a stop that did not happen.
+      return {
+        success: false,
+        error:
+          'No live execution owns this run in this process. If it is running elsewhere, cancel it there; otherwise it will be reconciled on startup.',
+      };
     }
     deps.cancelPendingApprovalsForRun?.(runId);
 

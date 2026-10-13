@@ -87,6 +87,15 @@ export const createChatApproval = (deps: {
     peek: (senderId: number) => ActiveStreamState | undefined;
     attach: (senderId: number, streamState: ActiveStreamState) => void;
     detach: (senderId: number, streamState: ActiveStreamState) => void;
+    /**
+     * Register the resumed continuation under its run so a cancel naming that
+     * run reaches this execution (a resumed stream has no session membership).
+     * Optional so unit doubles stay small; the composition root wires it.
+     */
+    registerExecution?: (execution: {
+      cancel: (reason: string) => void;
+      runId?: string | null;
+    }) => { dispose: () => void };
   };
   memory: ChatMemory;
   conversation: {
@@ -761,6 +770,15 @@ export const createChatApproval = (deps: {
       : undefined;
     streamState.runId = resumeRunTracker?.id;
     deps.streams.attach(resumedSenderId, streamState);
+    // The resumed continuation executes its own run with no stream session;
+    // registering it by run id is what lets a cancel reach it.
+    const execution = deps.streams.registerExecution?.({
+      runId: resumeRunTracker?.id ?? null,
+      cancel: reason => {
+        streamState.cancelled = true;
+        streamState.abortController.abort(reason);
+      },
+    });
     let isAwaitingApproval = false;
     // Set once the driver exists; the catch path must consult the driver's
     // CURRENT tracker (a handoff chain swaps it mid-turn).
@@ -996,6 +1014,7 @@ export const createChatApproval = (deps: {
         cleanupPendingSessionsForSender(resumedSenderId, resumeMessageId);
       }
       deps.streams.detach(resumedSenderId, streamState);
+      execution?.dispose();
     }
   };
 

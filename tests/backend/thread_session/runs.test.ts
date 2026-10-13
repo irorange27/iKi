@@ -58,28 +58,42 @@ describe('chat run cancellation', () => {
     db.getAgentRun.mockReturnValue(activeRun);
   });
 
-  it('lets the active execution owner persist cancellation', () => {
+  it('reaches the live execution that owns the run', () => {
     const abortActiveStream = vi.fn(() => true);
-    const runs = createChatRuns({ abortActiveStream });
+    const cancelExecution = vi.fn(() => true);
+    const runs = createChatRuns({ abortActiveStream, cancelExecution });
 
     expect(runs.cancelRun('run_1')).toEqual({ success: true });
-    expect(abortActiveStream).toHaveBeenCalledWith('run_1');
+    expect(cancelExecution).toHaveBeenCalledWith('run_1', 'run-cancelled');
+    expect(abortActiveStream).not.toHaveBeenCalled();
+    // The execution owner persists its own terminal state; cancelRun must not
+    // write one on its behalf.
+    expect(db.updateAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('refuses to write a terminal state when no live execution owns the run', () => {
+    const abortActiveStream = vi.fn(() => false);
+    const cancelExecution = vi.fn(() => false);
+    const markCancelled = vi.fn();
+    tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled });
+    const runs = createChatRuns({ abortActiveStream, cancelExecution });
+
+    const result = runs.cancelRun('run_1');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('No live execution owns this run');
+    // The old behavior wrote `cancelled` for a run nothing had stopped.
+    expect(markCancelled).not.toHaveBeenCalled();
     expect(tracker.rehydrateAgentRunTracker).not.toHaveBeenCalled();
     expect(db.updateAgentRun).not.toHaveBeenCalled();
   });
 
-  it('uses the Run lifecycle writer when no stream owns the run', () => {
-    const markCancelled = vi.fn();
-    tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled });
+  it('falls back to the stream abort for callers without the run-keyed index', () => {
+    const abortActiveStream = vi.fn(() => true);
     const cancelPendingApprovalsForRun = vi.fn(() => 0);
-    const runs = createChatRuns({
-      abortActiveStream: () => false,
-      cancelPendingApprovalsForRun,
-    });
+    const runs = createChatRuns({ abortActiveStream, cancelPendingApprovalsForRun });
 
     expect(runs.cancelRun('run_1')).toEqual({ success: true });
-    expect(tracker.rehydrateAgentRunTracker).toHaveBeenCalledWith('run_1');
-    expect(markCancelled).toHaveBeenCalledWith({ text: 'partial response' });
+    expect(abortActiveStream).toHaveBeenCalledWith('run_1');
     expect(cancelPendingApprovalsForRun).toHaveBeenCalledWith('run_1');
     expect(db.updateAgentRun).not.toHaveBeenCalled();
   });

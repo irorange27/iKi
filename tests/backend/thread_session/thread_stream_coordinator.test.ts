@@ -299,3 +299,55 @@ describe('createThreadStreamCoordinator execution handles', () => {
     release2!();
   });
 });
+
+describe('createThreadStreamCoordinator run-keyed executions', () => {
+  it('cancels the execution registered for a run, without stream membership', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const reasons: string[] = [];
+    const execution = coordinator.registerExecution({
+      runId: 'run_send',
+      cancel: reason => reasons.push(reason),
+    });
+
+    // No registerStream/attachStream call: the send transport shape.
+    expect(coordinator.hasLiveExecutionForRun('run_send')).toBe(true);
+    expect(coordinator.cancelExecutionByRunId('run_send', 'run-cancelled')).toBe(true);
+    expect(reasons).toEqual(['run-cancelled']);
+
+    execution.dispose();
+    expect(coordinator.hasLiveExecutionForRun('run_send')).toBe(false);
+  });
+
+  it('refuses to cancel a run no live execution owns', () => {
+    const coordinator = createThreadStreamCoordinator();
+    expect(coordinator.cancelExecutionByRunId('run_elsewhere', 'run-cancelled')).toBe(false);
+  });
+
+  it('re-keys the index when a handoff chain swaps the executing run', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const execution = coordinator.registerExecution({ runId: 'run_parent', cancel: () => undefined });
+
+    execution.setRunId('run_child');
+    // The parent is no longer executing here: naming it must not reach the
+    // chained segment's execution.
+    expect(coordinator.hasLiveExecutionForRun('run_parent')).toBe(false);
+    expect(coordinator.hasLiveExecutionForRun('run_child')).toBe(true);
+    expect(coordinator.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(true);
+
+    execution.dispose();
+    expect(coordinator.hasLiveExecutionForRun('run_child')).toBe(false);
+  });
+
+  it('dispose is idempotent and never drops a newer registration for the same run', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const first = coordinator.registerExecution({ runId: 'run_1', cancel: () => undefined });
+    const second = coordinator.registerExecution({ runId: 'run_1', cancel: () => undefined });
+
+    first.dispose();
+    // The stale record must not remove the newer owner's entry.
+    expect(coordinator.hasLiveExecutionForRun('run_1')).toBe(true);
+    first.dispose();
+    second.dispose();
+    expect(coordinator.hasLiveExecutionForRun('run_1')).toBe(false);
+  });
+});

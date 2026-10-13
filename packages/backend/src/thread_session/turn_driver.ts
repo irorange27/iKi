@@ -87,6 +87,12 @@ export type TurnDriverDeps = {
   /** Called after each completed tool execution so the durable assistant
    *  record carries mid-turn tool progress (crash recovery relies on it). */
   onToolActivity?: () => void;
+  /**
+   * Called when the executing run identity changes mid-turn (a handoff chain
+   * swaps the tracker). The caller re-keys its live-execution registration so
+   * cancellation keeps naming the run that is actually executing.
+   */
+  onRunIdChanged?: (runId: string) => void;
   approvals: {
     ensurePendingApprovalSession: (
       approvalId: string,
@@ -648,6 +654,9 @@ const runTurnBatches = async (
           )
         );
         streamState.runId = state.runTracker.id;
+        // The live-execution index follows the chain: a cancel naming the
+        // chained segment must reach the same execution, not a dead parent.
+        deps.onRunIdChanged?.(state.runTracker.id);
 
         // The chained batch resumes with a fresh [HANDOFF CONTEXT] history —
         // built BEFORE the harness so the supply selection gates against the

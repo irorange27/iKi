@@ -43,6 +43,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       peek: streamCoordinator.peekStream,
       attach: streamCoordinator.attachStream,
       detach: streamCoordinator.detachStream,
+      registerExecution: streamCoordinator.registerExecution,
     },
     memory,
     conversation: persistence,
@@ -52,6 +53,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   });
   const runs = createChatRuns({
     abortActiveStream: streamCoordinator.abortStreamByRunId,
+    cancelExecution: streamCoordinator.cancelExecutionByRunId,
     cancelPendingApprovalsForRun: approvals.cancelPendingApprovalsForRun,
   });
   const eval_ = createChatEval({ exportTrace: deps.exportTrace });
