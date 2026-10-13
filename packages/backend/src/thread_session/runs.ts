@@ -9,7 +9,8 @@ import type {
 } from '@iki/backend/types/agent_run';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { rehydrateAgentRunTracker } from './run_tracker';
-import { recordFailureTerminalEvent, turnFactsToEvents } from './session_log';
+import { recordFailureTerminalEvent, TURN_STARTED, turnFactsToEvents } from './session_log';
+import { getSessionEvents } from '@iki/backend/db/session_events';
 import { buildRunTrajectory, type AtifTrajectory } from './atif_export';
 
 type ChatRunsDeps = {
@@ -26,6 +27,17 @@ type ChatRunsDeps = {
 
 const REVIEW_QUEUE_KINDS: AgentRunKind[] = ['proactive-task', 'awaiter-wake'];
 const SUMMARY_MAX_CHARS = 280;
+
+/**
+ * Whether the session log recorded this run's start. A terminal fact for a
+ * run that never started (a `queued` row awaiting adoption) would create a
+ * turn in the replay that nothing else knows about, with a defaulted kind.
+ */
+const runHasStartedFact = (threadId: string, runId: string): boolean =>
+  getSessionEvents(threadId, [TURN_STARTED], {
+    path: '$.runId',
+    value: runId,
+  }).length > 0;
 
 const buildReviewQueueItem = (run: AgentRun): ReviewQueueItem => {
   const thread = run.threadId ? chatThreadDb.getChatThread(run.threadId) : null;
@@ -130,9 +142,13 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
       text: run.output?.text ?? run.working.accumulatedText,
     });
     // Session log: the pause is over and the run is terminal — replay must
-    // not show this run waiting forever. Failure-path terminal: a lost record
-    // must not mask the cancellation the caller is being told about.
-    if (run.threadId) {
+    // not show this run waiting forever. Only a run whose start was recorded
+    // gets a terminal fact: a `queued` row has no `turn_started` yet (that
+    // fact is written when the run is adopted and executes), and a terminal
+    // fact alone would materialize a phantom turn in the replay, defaulted to
+    // the wrong kind. Failure-path terminal: a lost record must not mask the
+    // cancellation the caller is being told about.
+    if (run.threadId && runHasStartedFact(run.threadId, runId)) {
       recordFailureTerminalEvent(run.threadId, turnFactsToEvents({
         terminal: { runId, status: 'cancelled' },
       }));

@@ -13,9 +13,13 @@ const db = vi.hoisted(() => ({
 const tracker = vi.hoisted(() => ({
   rehydrateAgentRunTracker: vi.fn(),
 }));
+const sessionEvents = vi.hoisted(() => ({
+  getSessionEvents: vi.fn(() => []),
+}));
 
 vi.mock('@iki/backend/db/agent_runs', () => db);
 vi.mock('@iki/backend/thread_session/run_tracker', () => tracker);
+vi.mock('@iki/backend/db/session_events', () => sessionEvents);
 vi.mock('@iki/backend/thread_session/atif_export', () => ({
   buildRunTrajectory: vi.fn(),
 }));
@@ -116,6 +120,42 @@ describe('chat run cancellation', () => {
 
     expect(runs.cancelRun('run_1')).toEqual({ success: true });
     expect(markCancelled).toHaveBeenCalled();
+  });
+
+  it('records the terminal fact for a paused run whose start the log holds', () => {
+    // `blocked` runs recorded `turn_started` before pausing, so replay must
+    // be told the pause is over — otherwise the run reads as running forever.
+    sessionEvents.getSessionEvents.mockReturnValue([{ revision: 1 }]);
+    db.getAgentRun.mockReturnValue({ ...activeRun, status: 'blocked' });
+    tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled: vi.fn() });
+    const runs = createChatRuns({
+      abortActiveStream: () => false,
+      cancelExecution: () => false,
+    });
+
+    expect(runs.cancelRun('run_1')).toEqual({ success: true });
+    expect(sessionEvents.getSessionEvents).toHaveBeenCalledWith(
+      'thread_1',
+      ['turn_started'],
+      { path: '$.runId', value: 'run_1' }
+    );
+  });
+
+  it('does not invent a turn in the replay for a run that never started', () => {
+    // A `queued` row records no `turn_started` until it is adopted. Writing a
+    // terminal fact for it would materialize a turn in the replay that nothing
+    // else knows about, with a defaulted kind.
+    sessionEvents.getSessionEvents.mockReturnValue([]);
+    db.getAgentRun.mockReturnValue({ ...activeRun, status: 'queued' });
+    tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled: vi.fn() });
+    const runs = createChatRuns({
+      abortActiveStream: () => false,
+      cancelExecution: () => false,
+    });
+
+    expect(runs.cancelRun('run_1')).toEqual({ success: true });
+    // The run row is terminal, but the log gains no terminal fact for it.
+    expect(sessionEvents.getSessionEvents).toHaveBeenCalled();
   });
 
   it('falls back to the stream abort for callers without the run-keyed index', () => {
