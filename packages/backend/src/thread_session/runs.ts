@@ -8,6 +8,8 @@ import type {
   ReviewQueueItem,
 } from '@iki/backend/types/agent_run';
 import { createPrefixedId } from '@iki/backend/utils/id';
+import { rehydrateAgentRunTracker } from './run_tracker';
+import { recordFailureTerminalEvent, turnFactsToEvents } from './session_log';
 import { buildRunTrajectory, type AtifTrajectory } from './atif_export';
 
 type ChatRunsDeps = {
@@ -93,19 +95,48 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
     const reachedExecution = deps.cancelExecution
       ? deps.cancelExecution(runId, 'run-cancelled')
       : deps.abortActiveStream(runId);
-    if (!reachedExecution) {
-      // No live execution in this process owns the run. Writing `cancelled`
-      // here would be a terminal fact nobody caused: a run may be executing
-      // in another process (desktop + daemon share this database) or have
-      // died with its process. Refuse and let reconciliation decide, rather
-      // than reporting a stop that did not happen.
+    if (reachedExecution) {
+      deps.cancelPendingApprovalsForRun?.(runId);
+      return { success: true };
+    }
+
+    // Nothing is executing the run in this process. What that means depends
+    // on the run's own status:
+    if (run.status === 'running') {
+      // The row claims an execution this process does not have. Writing
+      // `cancelled` here would be a terminal fact nobody caused: another
+      // process may own the run (desktop + daemon share the database), or it
+      // died with its process. Refuse and let that owner or startup
+      // reconciliation decide, instead of reporting a stop that did not
+      // happen.
       return {
         success: false,
         error:
           'No live execution owns this run in this process. If it is running elsewhere, cancel it there; otherwise it will be reconciled on startup.',
       };
     }
+
+    // `blocked` and `queued` runs are not executing by definition: one waits
+    // for an approval decision, the other has not started. Cancelling them is
+    // a real decision about a paused run, not a fabricated stop — so it
+    // finalizes through the Run lifecycle writer, and the run's pending
+    // approvals expire with it.
     deps.cancelPendingApprovalsForRun?.(runId);
+    const tracker = rehydrateAgentRunTracker(runId);
+    if (!tracker) {
+      return { success: false, error: `Run ${runId} could not be loaded to cancel.` };
+    }
+    tracker.markCancelled({
+      text: run.output?.text ?? run.working.accumulatedText,
+    });
+    // Session log: the pause is over and the run is terminal — replay must
+    // not show this run waiting forever. Failure-path terminal: a lost record
+    // must not mask the cancellation the caller is being told about.
+    if (run.threadId) {
+      recordFailureTerminalEvent(run.threadId, turnFactsToEvents({
+        terminal: { runId, status: 'cancelled' },
+      }));
+    }
 
     return { success: true };
   },

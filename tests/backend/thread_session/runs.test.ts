@@ -71,7 +71,7 @@ describe('chat run cancellation', () => {
     expect(db.updateAgentRun).not.toHaveBeenCalled();
   });
 
-  it('refuses to write a terminal state when no live execution owns the run', () => {
+  it('refuses to write a terminal state for a running run nothing owns', () => {
     const abortActiveStream = vi.fn(() => false);
     const cancelExecution = vi.fn(() => false);
     const markCancelled = vi.fn();
@@ -85,6 +85,37 @@ describe('chat run cancellation', () => {
     expect(markCancelled).not.toHaveBeenCalled();
     expect(tracker.rehydrateAgentRunTracker).not.toHaveBeenCalled();
     expect(db.updateAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('cancels a paused run through the Run lifecycle writer', () => {
+    // A blocked run waits for an approval decision and is not executing, so
+    // cancelling it is a decision about a paused run, not a fabricated stop.
+    db.getAgentRun.mockReturnValue({ ...activeRun, status: 'blocked' });
+    const markCancelled = vi.fn();
+    tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled });
+    const cancelPendingApprovalsForRun = vi.fn(() => 1);
+    const runs = createChatRuns({
+      abortActiveStream: () => false,
+      cancelExecution: () => false,
+      cancelPendingApprovalsForRun,
+    });
+
+    expect(runs.cancelRun('run_1')).toEqual({ success: true });
+    expect(markCancelled).toHaveBeenCalledWith({ text: 'partial response' });
+    expect(cancelPendingApprovalsForRun).toHaveBeenCalledWith('run_1');
+  });
+
+  it('cancels a queued run that has not started', () => {
+    db.getAgentRun.mockReturnValue({ ...activeRun, status: 'queued' });
+    const markCancelled = vi.fn();
+    tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled });
+    const runs = createChatRuns({
+      abortActiveStream: () => false,
+      cancelExecution: () => false,
+    });
+
+    expect(runs.cancelRun('run_1')).toEqual({ success: true });
+    expect(markCancelled).toHaveBeenCalled();
   });
 
   it('falls back to the stream abort for callers without the run-keyed index', () => {
