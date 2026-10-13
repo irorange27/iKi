@@ -22,6 +22,13 @@ type ChatRunsDeps = {
    * Returns false when no live execution in this process owns the run.
    */
   cancelExecution?: (runId: string, reason: string) => boolean;
+  /**
+   * Whether another process holds a live lease for the thread (SQLite-backed
+   * admission shared by desktop + daemon). Distinguishes "this process is
+   * simply not the owner" from "no owner exists anywhere" — the second is an
+   * orphan only local reconciliation can now clear.
+   */
+  hasLiveThreadLease?: (threadId: string) => boolean;
   cancelPendingApprovalsForRun?: (runId: string) => number;
 };
 
@@ -113,18 +120,37 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
     }
 
     // Nothing is executing the run in this process. What that means depends
-    // on the run's own status:
+    // on the run's own status and on who else claims it:
     if (run.status === 'running') {
-      // The row claims an execution this process does not have. Writing
-      // `cancelled` here would be a terminal fact nobody caused: another
-      // process may own the run (desktop + daemon share the database), or it
-      // died with its process. Refuse and let that owner or startup
-      // reconciliation decide, instead of reporting a stop that did not
-      // happen.
+      const leaseHeldElsewhere =
+        Boolean(run.threadId) && deps.hasLiveThreadLease?.(run.threadId as string) === true;
+      if (leaseHeldElsewhere) {
+        // Another live process owns this thread's turn right (desktop +
+        // daemon share this database), so it may well be executing this very
+        // run. Writing `cancelled` here would be a terminal fact nobody
+        // caused; refuse and name the owner instead.
+        return {
+          success: false,
+          error:
+            'This run is owned by another live process. Cancel it there — this process cannot stop it.',
+        };
+      }
+
+      // No live lease anywhere, yet the row says `running`: either it died
+      // with a process that left the row behind, or the owner finalized it
+      // while this process was deciding. A durable terminal fact resolves
+      // both — the replay must not show this turn executing forever — and
+      // nothing is running for it to contradict.
+      if (run.threadId && runHasStartedFact(run.threadId, runId)) {
+        recordFailureTerminalEvent(run.threadId, turnFactsToEvents({
+          terminal: { runId, status: 'cancelled' },
+        }));
+      }
+      deps.cancelPendingApprovalsForRun?.(runId);
       return {
-        success: false,
+        success: true,
         error:
-          'No live execution owns this run in this process. If it is running elsewhere, cancel it there; otherwise it will be reconciled on startup.',
+          'No live execution owned this run, so it was reclaimed as cancelled. Nothing was running.',
       };
     }
 

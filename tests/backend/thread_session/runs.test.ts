@@ -75,19 +75,44 @@ describe('chat run cancellation', () => {
     expect(db.updateAgentRun).not.toHaveBeenCalled();
   });
 
-  it('refuses to write a terminal state for a running run nothing owns', () => {
-    const abortActiveStream = vi.fn(() => false);
-    const cancelExecution = vi.fn(() => false);
+  it('refuses when another live process owns the thread', () => {
+    // A live cross-process lease means some other process may be executing
+    // this very run. Writing `cancelled` here would be a terminal fact nobody
+    // caused, so the cancel is refused and the owner is named.
+    db.getAgentRun.mockReturnValue({ ...activeRun, status: 'running' });
     const markCancelled = vi.fn();
     tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled });
-    const runs = createChatRuns({ abortActiveStream, cancelExecution });
+    const runs = createChatRuns({
+      abortActiveStream: () => false,
+      cancelExecution: () => false,
+      hasLiveThreadLease: () => true,
+    });
 
     const result = runs.cancelRun('run_1');
     expect(result.success).toBe(false);
-    expect(result.error).toContain('No live execution owns this run');
-    // The old behavior wrote `cancelled` for a run nothing had stopped.
+    expect(result.error).toContain('owned by another live process');
     expect(markCancelled).not.toHaveBeenCalled();
-    expect(tracker.rehydrateAgentRunTracker).not.toHaveBeenCalled();
+    expect(db.updateAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('reclaims a running run nobody owns when no lease is held', () => {
+    // No live execution here AND no live lease anywhere: the row says
+    // `running` but nothing is executing it. A durable terminal fact clears
+    // it instead of leaving a turn that reads as executing forever.
+    sessionEvents.getSessionEvents.mockReturnValue([{ revision: 1 }]);
+    db.getAgentRun.mockReturnValue({ ...activeRun, status: 'running' });
+    const cancelPendingApprovalsForRun = vi.fn(() => 0);
+    const runs = createChatRuns({
+      abortActiveStream: () => false,
+      cancelExecution: () => false,
+      hasLiveThreadLease: () => false,
+      cancelPendingApprovalsForRun,
+    });
+
+    const result = runs.cancelRun('run_1');
+    expect(result.success).toBe(true);
+    expect(result.error).toContain('reclaimed as cancelled');
+    expect(cancelPendingApprovalsForRun).toHaveBeenCalledWith('run_1');
     expect(db.updateAgentRun).not.toHaveBeenCalled();
   });
 

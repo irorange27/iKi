@@ -338,6 +338,35 @@ describe('createThreadStreamCoordinator run-keyed executions', () => {
     expect(coordinator.hasLiveExecutionForRun('run_child')).toBe(false);
   });
 
+  it('cancels a delegated child run through its parent execution', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const reasons: string[] = [];
+    coordinator.registerExecution({
+      runId: 'run_parent',
+      cancel: reason => reasons.push(reason),
+    });
+    coordinator.registerChildRunAlias('run_parent', 'run_child');
+
+    // The child has no execution of its own — it runs inside the parent's
+    // tool call and inherits the parent's abort signal.
+    expect(coordinator.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(true);
+    expect(reasons).toEqual(['run-cancelled']);
+  });
+
+  it('does not alias a child after its parent execution ended', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const parent = coordinator.registerExecution({
+      runId: 'run_parent',
+      cancel: () => undefined,
+    });
+    const disposeAlias = coordinator.registerChildRunAlias('run_parent', 'run_child');
+
+    parent.dispose();
+    expect(coordinator.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(false);
+
+    disposeAlias();
+  });
+
   it('dispose is idempotent and never drops a newer registration for the same run', () => {
     const coordinator = createThreadStreamCoordinator();
     const first = coordinator.registerExecution({ runId: 'run_1', cancel: () => undefined });

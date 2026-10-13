@@ -41,7 +41,6 @@ export type LiveRunExecution = {
   cancel: (reason: string) => void;
   /** Point the record at the run it now executes; null = no run identity yet. */
   setRunId: (runId: string | null) => void;
-  getRunId: () => string | null;
   /** Stop indexing this execution; idempotent. */
   dispose: () => void;
 };
@@ -133,6 +132,12 @@ export const createThreadStreamCoordinator = (deps?: {
    * delivery concern.
    */
   const executionsByRunId = new Map<string, LiveRunExecution>();
+  /**
+   * Delegated child runs that execute as part of a parent's tool call. The
+   * child inherits the parent's abort signal, so the parent is the executing
+   * unit; this map only makes the child's id address it.
+   */
+  const childRunAliases = new Map<string, string>();
   const threadRunLimiter = createRateLimiter({
     windowMs: THREAD_RATE_LIMIT_WINDOW_MS,
     maxRequests: THREAD_RATE_LIMIT_MAX_REQUESTS,
@@ -293,7 +298,6 @@ export const createThreadStreamCoordinator = (deps?: {
         runId = next;
         if (runId) executionsByRunId.set(runId, record);
       },
-      getRunId: () => runId,
       dispose: () => {
         if (disposed) return;
         disposed = true;
@@ -311,16 +315,47 @@ export const createThreadStreamCoordinator = (deps?: {
    * in this process owns the run — the caller must then treat the run as
    * "not executing here" and reconcile it against durable facts instead of
    * writing a terminal state it did not actually cause.
+   *
+   * A delegated child run has no execution of its own: the parent's tool call
+   * is the executing unit and the child inherits the parent's abort signal,
+   * so cancelling a child run addresses the parent's execution.
    */
   const cancelExecutionByRunId = (runId: string, reason: string): boolean => {
     const execution = executionsByRunId.get(runId);
-    if (!execution) return false;
-    execution.cancel(reason);
+    if (execution) {
+      execution.cancel(reason);
+      return true;
+    }
+    const parentRunId = childRunAliases.get(runId);
+    if (!parentRunId) return false;
+    const parent = executionsByRunId.get(parentRunId);
+    if (!parent) return false;
+    parent.cancel(reason);
     return true;
   };
 
+  /**
+   * Alias a delegated child run onto its parent's execution. The child
+   * inherits the parent's abort signal, so the parent is the unit a cancel
+   * stops; the alias only makes the child's id ADDRESS it. Disposed when the
+   * parent's execution ends.
+   */
+  const registerChildRunAlias = (parentRunId: string, childRunId: string): (() => void) => {
+    if (!parentRunId || !childRunId || parentRunId === childRunId) return () => undefined;
+    childRunAliases.set(childRunId, parentRunId);
+    return () => {
+      if (childRunAliases.get(childRunId) === parentRunId) {
+        childRunAliases.delete(childRunId);
+      }
+    };
+  };
+
   /** Whether a live execution in this process currently owns the run. */
-  const hasLiveExecutionForRun = (runId: string): boolean => executionsByRunId.has(runId);
+  const hasLiveExecutionForRun = (runId: string): boolean =>
+    executionsByRunId.has(runId) || (() => {
+      const parent = childRunAliases.get(runId);
+      return Boolean(parent && executionsByRunId.has(parent));
+    })();
 
   const steerStream = (
     senderId: number,
@@ -375,6 +410,7 @@ export const createThreadStreamCoordinator = (deps?: {
     steerStream,
     abortStreamByRunId,
     registerExecution,
+    registerChildRunAlias,
     cancelExecutionByRunId,
     hasLiveExecutionForRun,
     peekStream,

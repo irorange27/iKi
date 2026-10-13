@@ -95,7 +95,7 @@ export const createChatApproval = (deps: {
     registerExecution?: (execution: {
       cancel: (reason: string) => void;
       runId?: string | null;
-    }) => { dispose: () => void };
+    }) => { setRunId: (runId: string | null) => void; dispose: () => void };
   };
   memory: ChatMemory;
   conversation: {
@@ -878,6 +878,10 @@ export const createChatApproval = (deps: {
           drainSteerMessages: () => [],
           conversationPreview: false,
           onToolActivity: persistResumeProgress,
+          // A resumed autonomous turn can chain a handoff: the index must
+          // follow the chained segment, or a cancel naming it finds nothing
+          // (and the `running` row reads as uncancellable).
+          onRunIdChanged: runId => execution?.setRunId(runId),
           approvals: {
             ensurePendingApprovalSession: (approvalId, approvalSession) =>
               ensurePendingApprovalSession(approvalId, approvalSession),

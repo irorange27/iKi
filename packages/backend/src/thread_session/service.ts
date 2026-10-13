@@ -1,3 +1,4 @@
+import { setDelegatedChildRunAliasRegistrar } from '@iki/backend/tools';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
 import { noopPlatformDeps } from '@iki/backend/chat_platform';
@@ -9,7 +10,10 @@ import { createChatRuns } from './runs';
 import { createChatEval } from './eval';
 import { createChatStreaming } from './session_loop';
 import { createThreadStreamCoordinator } from './thread_stream_coordinator';
-import { tryAcquireCrossProcessThreadRun } from '@iki/backend/db/thread_run_locks';
+import {
+  hasLiveThreadRunLease,
+  tryAcquireCrossProcessThreadRun,
+} from '@iki/backend/db/thread_run_locks';
 import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps, onMessagePersisted } from './platform';
 import { deriveResumeStreamOptions, rebuildResumeHistoryFromEvents } from './run_rehydrator';
@@ -33,6 +37,13 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     crossProcessThreadRun: (threadId, options) =>
       tryAcquireCrossProcessThreadRun(threadId, { onLeaseLost: options.onLeaseLost }),
   });
+  // A delegated child run has no execution of its own — it runs inside the
+  // parent's tool call and inherits the parent's abort signal. Wiring the
+  // alias here keeps the knowledge in the execution owner.
+  setDelegatedChildRunAliasRegistrar((parentRunId, childRunId) =>
+    streamCoordinator.registerChildRunAlias(parentRunId, childRunId)
+  );
+
   const persistence = createChatPersistence({
     memory,
     onContinuityMessagePersisted: onMessagePersisted,
@@ -54,6 +65,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   const runs = createChatRuns({
     abortActiveStream: streamCoordinator.abortStreamByRunId,
     cancelExecution: streamCoordinator.cancelExecutionByRunId,
+    hasLiveThreadLease: hasLiveThreadRunLease,
     cancelPendingApprovalsForRun: approvals.cancelPendingApprovalsForRun,
   });
   const eval_ = createChatEval({ exportTrace: deps.exportTrace });

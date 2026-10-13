@@ -70,6 +70,19 @@ export type DelegatedAgentRuntime = {
 
 let delegatedAgentRuntime: DelegatedAgentRuntime | null = null;
 
+/**
+ * Composition hook for aliasing a delegated child run onto the executing
+ * parent. Set by the chat-service composition root (which owns the
+ * coordinator); the tool only needs it at execution time.
+ */
+let childRunAliasRegistrar: ((parentRunId: string, childRunId: string) => () => void) | null = null;
+
+export const setDelegatedChildRunAliasRegistrar = (
+  registrar: ((parentRunId: string, childRunId: string) => () => void) | null
+): void => {
+  childRunAliasRegistrar = registrar;
+};
+
 export const setDelegatedAgentRuntime = (runtime: DelegatedAgentRuntime): void => {
   delegatedAgentRuntime = runtime;
 };
@@ -386,6 +399,15 @@ export class DelegatedAgentTool extends BaseTool {
       },
     });
 
+    // The child runs inside this tool call — there is no second executing
+    // unit. Aliasing it onto the parent is what lets a cancel naming the
+    // child reach the execution that is actually running, instead of
+    // refusing a run that is executing right here.
+    const disposeChildAlias = childRunAliasRegistrar?.(
+      runtimeContext.runId ?? '',
+      runTracker.id
+    );
+
     let turnOutput: TurnOutput | undefined;
     try {
       turnOutput = await runWithToolRuntimeContext(
@@ -417,6 +439,8 @@ export class DelegatedAgentTool extends BaseTool {
         message: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      disposeChildAlias?.();
     }
 
     if ((turnOutput.toolApprovalRequests?.length ?? 0) > 0) {
