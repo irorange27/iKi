@@ -39,8 +39,6 @@ export const advanceApprovalPolicySnapshot = (
   box.allowPatterns.clear();
 };
 
-const GUARD_BYPASS_TOOLS = new Set(['handoff', 'plan', 'todo']);
-
 /** Resolve-time decision: the pre-ADR-005 flags and an explicit fixed policy. */
 const resolveStaticTool = (
   tool: AgentTool,
@@ -113,6 +111,17 @@ const prepareToolWithGuard = (
   };
 };
 
+  /**
+   * Loop-control tools the harness drives itself. They are NOT capabilities a
+   * resolver may add behind the caller's back: `todo` and `plan` write durable
+   * state (thread todos, the task plan) and `handoff` restarts the turn, so
+   * injecting them against an explicit `tools` bound silently widens a daemon
+   * grant, a NapCat allow-list or a pre-filtered safe list. A caller that
+   * wants them must name them in `enabledToolNames`, where the same guard and
+   * approval policy evaluate them like any other tool.
+   */
+  const CONTROL_TOOLS = new Set(['handoff', 'plan', 'todo']);
+
 export const resolveTools = (params: {
   enableTools: boolean;
   enabledToolNames: string[];
@@ -134,18 +143,13 @@ export const resolveTools = (params: {
 
   const resolvedTools: AgentTool[] = [];
 
-  for (const toolName of GUARD_BYPASS_TOOLS) {
-    const tool = defaultToolRegistry.get(toolName);
-    if (tool) resolvedTools.push(tool);
-  }
-
   if (params.availableSkillIds.length > 0) {
     const factory = params.skillToolFactory ?? (() => new LoadSkillTool().toAgentTool());
     resolvedTools.push(factory());
   }
 
   for (const toolName of params.enabledToolNames) {
-    if (GUARD_BYPASS_TOOLS.has(toolName) || toolName === 'load_skill') continue;
+    if (toolName === 'load_skill') continue;
     if (!defaultToolRegistry.get(toolName)) {
       logger.warn(`Tool ${toolName} not found in registry`);
       continue;

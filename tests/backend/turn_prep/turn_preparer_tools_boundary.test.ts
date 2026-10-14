@@ -109,6 +109,75 @@ describe('turn preparer explicit tool upper bound', () => {
     expect(prepared.guardedTools).toContain('shell');
   });
 
+  it('keeps the explicit upper bound through the harness — control tools are not re-added', async () => {
+    // The preparer honours the caller's bound; the resolver must not expand it
+    // back. `todo` and `plan` write durable state (thread todos, the task
+    // plan) and `handoff` is a loop protocol, so injecting them behind an
+    // explicit `tools` list silently widens the caller's capability: a
+    // daemon grant, a NapCat allow-list or `tools: ['read_file']` can execute
+    // and persist planning turns it was never granted.
+    // Register the loop-control tools the resolver unconditionally injects, so
+    // the expansion is observable on the wire exactly as it ships. `todo`
+    // writes durable thread state and `plan` writes the task plan, so these
+    // are real capabilities, not inert protocol markers.
+    defaultToolRegistry.register(
+      createTool({
+        name: 'web_search',
+        type: 'function',
+        description: 'boundary web probe',
+        paramSchema: z.object({}),
+        handler: async () => 'searched',
+      })
+    );
+    for (const name of ['handoff', 'plan', 'todo']) {
+      defaultToolRegistry.register(
+        createTool({
+          name,
+          type: 'function',
+          description: `boundary control probe ${name}`,
+          paramSchema: z.object({}),
+          handler: async () => name,
+        })
+      );
+    }
+    const prepared = await prepare({
+      tools: ['web_search'],
+      threadId: 'thread_boundary',
+      approvalPolicy: 'always',
+    });
+    expect(prepared.guardedTools).toEqual(['web_search']);
+
+    const model = new FauxModelProvider([fauxText('done')]);
+    const providerCalls = vi.spyOn(model, 'doStream');
+    createModelMock.mockReturnValue(model);
+
+    const harness = startTurnHarness({
+      providerType: 'openai',
+      model: 'boundary-model',
+      systemPrompt: 'boundary system',
+      enableTools: prepared.enableTools,
+      enabledToolNames: prepared.guardedTools,
+      availableSkillIds: prepared.selectedSkillIds,
+      guardActive: false,
+      // A disabled guard would normally broaden the resolved set.
+      approvalPolicy: 'always',
+      maxIterations: 5,
+    });
+    let text = '';
+    for await (const event of harness.turn({ prompt: prepared.prompt, history: prepared.history })) {
+      if (event.event === 'done') text = event.output.text;
+    }
+    expect(text).toBe('done');
+
+    const callOptions = providerCalls.mock.calls[0][0] as {
+      tools?: Record<string, { name?: string }> | Array<{ name?: string }>;
+    };
+    const sentToolNames = Array.isArray(callOptions.tools)
+      ? callOptions.tools.map(tool => tool.name)
+      : Object.keys(callOptions.tools ?? {});
+    expect(sentToolNames).toEqual(['web_search']);
+  });
+
   it('sends no tool schemas and runs no tools for an explicitly disabled send', async () => {
     // A registry entry named "shell" makes the old force-add behavior visible
     // at this boundary: with the old preparer the disabled turn still exposed
