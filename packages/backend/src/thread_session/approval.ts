@@ -455,8 +455,11 @@ export const createChatApproval = (deps: {
       providerType: derivedPlan.providerType,
       ...(derivedPlan.providerId ? { providerId: derivedPlan.providerId } : {}),
       model: derivedPlan.model,
-      // The legacy resume always re-enabled tools (bypass tools ride along
-      // via resolveTools even with an empty selection); keep that contract.
+      // The legacy resume re-enables the tool path so a resumed turn can keep
+      // executing, but the resolver no longer rides tools in behind an empty
+      // selection: `enabledTools` is exactly what the legacy row carried. A
+      // legacy row whose list is empty therefore resolves zero tools, which
+      // is fail-closed — the resumed turn answers without tooling.
       enableTools: true,
       enabledTools: resolvedToolNames,
       availableSkillIds: derivedPlan.availableSkillIds,

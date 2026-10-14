@@ -39,8 +39,6 @@ export const advanceApprovalPolicySnapshot = (
   box.allowPatterns.clear();
 };
 
-const GUARD_BYPASS_TOOLS = new Set(['handoff', 'plan', 'todo']);
-
 /** Resolve-time decision: the pre-ADR-005 flags and an explicit fixed policy. */
 const resolveStaticTool = (
   tool: AgentTool,
@@ -113,6 +111,18 @@ const prepareToolWithGuard = (
   };
 };
 
+/**
+ * Resolve the tool set for one turn from the caller's grants.
+ *
+ * The resolved set is exactly `enabledToolNames` plus the skill loader when
+ * skills are available. Nothing is added behind the caller's back: `todo` and
+ * `plan` write durable state (the thread's todo plan and the task plan) and
+ * `handoff` restarts the turn, so a caller that wants a loop-control tool must
+ * name it in `enabledToolNames` — where the same guard and approval policy
+ * then evaluate it like any other tool. Injecting them anyway would silently
+ * widen a daemon grant, a NapCat allow-list or a pre-filtered safe list past
+ * the caller's stated bound.
+ */
 export const resolveTools = (params: {
   enableTools: boolean;
   enabledToolNames: string[];
@@ -134,18 +144,22 @@ export const resolveTools = (params: {
 
   const resolvedTools: AgentTool[] = [];
 
-  for (const toolName of GUARD_BYPASS_TOOLS) {
-    const tool = defaultToolRegistry.get(toolName);
-    if (tool) resolvedTools.push(tool);
-  }
-
-  if (params.availableSkillIds.length > 0) {
-    const factory = params.skillToolFactory ?? (() => new LoadSkillTool().toAgentTool());
-    resolvedTools.push(factory());
-  }
-
+  // The skill loader is resolved like any other tool: through the guard and
+  // the approval policy, from the caller's own list. Pushing it raw whenever
+  // skills exist would widen a narrow grant past its stated bound — a daemon
+  // caller can filter `tools` while passing a raw `skillIds` — and would
+  // bypass the policy, since the registered value needs no approval.
   for (const toolName of params.enabledToolNames) {
-    if (GUARD_BYPASS_TOOLS.has(toolName) || toolName === 'load_skill') continue;
+    if (toolName === 'load_skill') {
+      if (params.availableSkillIds.length > 0) {
+        resolvedTools.push(
+          params.skillToolFactory
+            ? params.skillToolFactory()
+            : new LoadSkillTool().toAgentTool()
+        );
+      }
+      continue;
+    }
     if (!defaultToolRegistry.get(toolName)) {
       logger.warn(`Tool ${toolName} not found in registry`);
       continue;
