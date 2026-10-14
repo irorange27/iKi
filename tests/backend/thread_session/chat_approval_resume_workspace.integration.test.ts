@@ -50,8 +50,15 @@ vi.mock('@iki/backend/thread_session/session_log', async importOriginal => {
     ...actual,
     recordSessionEvents: vi.fn(
       (threadId: string, events: ReadonlyArray<{ type: string }>) => {
+        // The failure targets the CANCEL TAIL — the terminal that lands when
+        // the resumed turn unwinds. The resume's own start/parent-terminal
+        // write also carries a terminal (the parent segment ends there), so
+        // matching any terminal would hit that write first and change what
+        // this case exercises.
+        const startsATurn = events.some(event => event.type === 'turn_started');
         if (
           sessionLogThrows.failNextTerminal &&
+          !startsATurn &&
           events.some(event => TERMINALS.has(event.type))
         ) {
           sessionLogThrows.failNextTerminal = false;

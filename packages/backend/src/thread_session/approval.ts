@@ -719,13 +719,24 @@ export const createChatApproval = (deps: {
         )
       : null;
     if (resumePlan?.threadId && resumeRunTracker) {
-      // Session log: the continuation is its own run under the paused plan —
-      // recorded BEFORE the consume and the parent's markResumed. Failure
-      // releases the just-collected decision (a retry re-walks the full path;
-      // its decided fact re-records idempotently) and fails the child row, so
-      // neither the flow nor the run row can strand running.
+      // Session log: the continuation is its own run under the paused plan, and
+      // the parent segment ends with it — recorded together, BEFORE the
+      // consume and the parent's markResumed, so one atomic write carries both
+      // halves of the swap. Failure releases the just-collected decision (a
+      // retry re-walks the full path; its decided fact re-records idempotently)
+      // and fails the child row, so neither the flow nor the run row can strand
+      // running.
       try {
         recordSessionEvents(resumePlan.threadId, turnFactsToEvents({
+          ...(baseApprovalContext?.runId
+            ? {
+                terminal: {
+                  runId: baseApprovalContext.runId,
+                  status: 'completed' as const,
+                  finishReason: 'approval-resumed',
+                },
+              }
+            : {}),
           started: { runId: resumeRunTracker.id, kind: resumePlan.kind, plan: resumePlan },
         }));
       } catch (error) {

@@ -107,7 +107,9 @@ import {
   INPUT_ACCEPTED,
   MODEL_OUTPUT_COMMITTED,
   recordSessionEvents,
+  rebuildThreadViewFromEvents,
   SESSION_EVENT_VERSION,
+  TURN_STARTED,
 } from '@iki/backend/thread_session/session_log';
 
 const toolName = 'approval_resume_probe';
@@ -126,6 +128,15 @@ const seedResumeFacts = (approvalId: string, toolCallId: string) => {
           role: 'user',
           parts: [{ type: 'text', text: 'run approval probe' }],
         } as never,
+      },
+    },
+    {
+      type: TURN_STARTED,
+      version: SESSION_EVENT_VERSION,
+      payload: {
+        runId: 'run_blocked_1',
+        kind: 'chat-turn',
+        plan: {} as never,
       },
     },
     {
@@ -345,6 +356,17 @@ describe('createChatApproval resume integration', () => {
     });
 
     const result = await approvals.approveTool(target, approvedId, approved);
+
+    // The approval completes the parent segment in the run row AND in the
+    // session log. Without the fact the replay reads the parent's
+    // `turn_started` as still running while the run row says completed.
+    if (approved) {
+      const parentTurn = rebuildThreadViewFromEvents('thread_1')
+        .turns
+        .find(turn => turn.runId === 'run_blocked_1');
+      expect(parentTurn?.status).toBe('completed');
+      expect(parentTurn?.finishReason).toBe('approval-resumed');
+    }
 
     // The completion result exposes the continuation thread + reply so hosts
     // that own conversation persistence (daemon WS) can record it.

@@ -175,10 +175,16 @@ describe('session log approval facts across entries', () => {
       }),
     ]);
 
-    // The parent paused; the continuation is its own completed turn.
+    // Two segments, both terminal: the parent ran until it paused, and the
+    // approval answered — so it completes as `approval-resumed` — and the
+    // continuation then ran to its natural end. The run rows and the session
+    // log must agree on both.
     const completed = view.turns.filter(turn => turn.status === 'completed');
-    expect(completed).toHaveLength(1);
-    expect(completed[0]!.kind).toBe('approval-resume');
+    expect(completed).toHaveLength(2);
+    expect(completed.map(turn => turn.kind).sort()).toEqual([
+      'approval-resume',
+      'chat-turn',
+    ]);
 
     // The rebuilt conversation carries the final assistant message.
     const last = view.messages.at(-1)!;

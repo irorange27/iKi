@@ -18,6 +18,7 @@ import {
   SESSION_EVENT_VERSION,
   SessionLogCommitError,
   SessionLogWriteError,
+  turnFactsToEvents,
 } from './session_log';
 import { recordInlineToolExecution } from './tool_execution';
 import { buildFreshHandoffSystemMessage } from './handoff_resume';
@@ -637,6 +638,13 @@ const runTurnBatches = async (
         if (state.handoffChain >= MAX_HANDOFF_CHAIN || !autonomousMode) break;
 
         const parentRunId = state.runTracker.id;
+        // The segment swap is a lifecycle change, and the run row is only one
+        // projection of it. Without these facts the replay reads the parent as
+        // still running and the chained segment as a turn with a defaulted
+        // kind — two projections of one turn disagreeing.
+        recordSessionEvents(threadId, turnFactsToEvents({
+          terminal: { runId: parentRunId, status: 'completed', finishReason: 'handoff' },
+        }));
 
         state.runTracker = createAgentRunTracker(
           planToRunTrackerParams(
@@ -667,6 +675,16 @@ const runTurnBatches = async (
         // The live-execution index follows the chain: a cancel naming the
         // chained segment must reach the same execution, not a dead parent.
         deps.onRunIdChanged?.(state.runTracker.id);
+        // The chained segment's start is the same kind of lifecycle fact the
+        // entries write for a fresh turn. Without it a terminal-only record
+        // would materialize this turn with a defaulted kind.
+        recordSessionEvents(threadId, turnFactsToEvents({
+          started: {
+            runId: state.runTracker.id,
+            kind: 'handoff-resume',
+            plan: reidentifyPlan(deps.plan, { kind: 'handoff-resume', parentRunId }),
+          },
+        }));
 
         // The chained batch resumes with a fresh [HANDOFF CONTEXT] history —
         // built BEFORE the harness so the supply selection gates against the
