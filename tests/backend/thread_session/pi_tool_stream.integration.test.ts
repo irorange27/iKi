@@ -393,7 +393,7 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       messages: [
         { id: 'msg_pi_handoff', role: 'user', parts: [{ type: 'text', text: 'hand the task over' }] },
       ],
-      tools: [TOOL_NAME],
+      tools: [TOOL_NAME, 'handoff'], // handoff is a grant, not an injected one
     });
     expect(result).toMatchObject({ success: true });
 
@@ -488,7 +488,7 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       messages: [
         { id: 'msg_pi_chain', role: 'user', parts: [{ type: 'text', text: 'pass the baton' }] },
       ],
-      tools: [TOOL_NAME],
+      tools: [TOOL_NAME, 'handoff'], // handoff is a grant, not an injected one
     });
     expect(result).toMatchObject({ success: true });
 

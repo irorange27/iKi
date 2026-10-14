@@ -21,6 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { LoadSkillTool } from '@iki/backend/tools/skill_tools';
 import { createChatTurnPreparer } from '@iki/backend/turn_prep/turn_preparer';
 import { startTurnHarness } from '@iki/backend/agent/harness';
 import { FauxModelProvider, fauxText } from '@iki/backend/agent/testing/faux_model';
@@ -78,6 +79,10 @@ describe('turn preparer explicit tool upper bound', () => {
   afterEach(async () => {
     defaultToolRegistry.remove('shell');
     defaultToolRegistry.remove('web_search');
+    defaultToolRegistry.remove('handoff');
+    defaultToolRegistry.remove('plan');
+    defaultToolRegistry.remove('todo');
+    defaultToolRegistry.remove('load_skill');
     closeDatabase();
     await fs.rm(root, { recursive: true, force: true });
   });
@@ -111,15 +116,13 @@ describe('turn preparer explicit tool upper bound', () => {
 
   it('keeps the explicit upper bound through the harness — control tools are not re-added', async () => {
     // The preparer honours the caller's bound; the resolver must not expand it
-    // back. `todo` and `plan` write durable state (thread todos, the task
-    // plan) and `handoff` is a loop protocol, so injecting them behind an
-    // explicit `tools` list silently widens the caller's capability: a
-    // daemon grant, a NapCat allow-list or `tools: ['read_file']` can execute
-    // and persist planning turns it was never granted.
-    // Register the loop-control tools the resolver unconditionally injects, so
-    // the expansion is observable on the wire exactly as it ships. `todo`
-    // writes durable thread state and `plan` writes the task plan, so these
-    // are real capabilities, not inert protocol markers.
+    // back. `todo` persists the thread's todo plan, `handoff` restarts the turn
+    // as a new run segment, and `plan` only renders in-memory — but injecting
+    // them behind an explicit `tools` list silently widens the caller's
+    // capability: a daemon grant, a NapCat allow-list or `tools: ['read_file']`
+    // can execute and persist planning turns it was never granted.
+    // Register the loop-control tools the resolver used to inject, so the
+    // expansion is observable on the wire exactly as it shipped.
     defaultToolRegistry.register(
       createTool({
         name: 'web_search',
@@ -176,6 +179,97 @@ describe('turn preparer explicit tool upper bound', () => {
       ? callOptions.tools.map(tool => tool.name)
       : Object.keys(callOptions.tools ?? {});
     expect(sentToolNames).toEqual(['web_search']);
+  });
+
+  it('does not inject the skill loader behind a narrow grant', async () => {
+    // `availableSkillIds` comes from the caller's `skillIds`, not from its
+    // `tools` bound — a daemon caller can filter tools while passing a raw
+    // skill id. Pushing `load_skill` whenever skills exist would widen that
+    // grant, and bypass the approval policy with it.
+    defaultToolRegistry.register(
+      createTool({
+        name: 'web_search',
+        type: 'function',
+        description: 'boundary web probe',
+        paramSchema: z.object({}),
+        handler: async () => 'searched',
+      })
+    );
+    const prepared = await prepare({
+      tools: ['web_search'],
+      threadId: 'thread_boundary',
+      approvalPolicy: 'never',
+    });
+    const model = new FauxModelProvider([fauxText('done')]);
+    const providerCalls = vi.spyOn(model, 'doStream');
+    createModelMock.mockReturnValue(model);
+
+    const harness = startTurnHarness({
+      providerType: 'openai',
+      model: 'boundary-model',
+      systemPrompt: 'boundary system',
+      enableTools: prepared.enableTools,
+      enabledToolNames: prepared.guardedTools,
+      // Skills are available, but the caller did not grant the loader.
+      availableSkillIds: ['skill_boundary'],
+      guardActive: false,
+      maxIterations: 5,
+    });
+    for await (const event of harness.turn({ prompt: prepared.prompt, history: prepared.history })) {
+      if (event.event === 'done') expect(event.output.text).toBe('done');
+    }
+
+    const callOptions = providerCalls.mock.calls[0][0] as {
+      tools?: Record<string, { name?: string }> | Array<{ name?: string }>;
+    };
+    const sentToolNames = Array.isArray(callOptions.tools)
+      ? callOptions.tools.map(tool => tool.name)
+      : Object.keys(callOptions.tools ?? {});
+    expect(sentToolNames).toEqual(['web_search']);
+  });
+
+  it('grants the skill loader when the caller names it alongside its skills', async () => {
+    defaultToolRegistry.register(
+      createTool({
+        name: 'web_search',
+        type: 'function',
+        description: 'boundary web probe',
+        paramSchema: z.object({}),
+        handler: async () => 'searched',
+      })
+    );
+    defaultToolRegistry.register(new LoadSkillTool());
+    const prepared = await prepare({
+      tools: ['web_search', 'load_skill'],
+      threadId: 'thread_boundary',
+      approvalPolicy: 'never',
+    });
+    const model = new FauxModelProvider([fauxText('done')]);
+    const providerCalls = vi.spyOn(model, 'doStream');
+    createModelMock.mockReturnValue(model);
+
+    const harness = startTurnHarness({
+      providerType: 'openai',
+      model: 'boundary-model',
+      systemPrompt: 'boundary system',
+      enableTools: prepared.enableTools,
+      enabledToolNames: prepared.guardedTools,
+      availableSkillIds: ['skill_boundary'],
+      guardActive: false,
+      maxIterations: 5,
+    });
+    for await (const event of harness.turn({ prompt: prepared.prompt, history: prepared.history })) {
+      if (event.event === 'done') expect(event.output.text).toBe('done');
+    }
+
+    const callOptions = providerCalls.mock.calls[0][0] as {
+      tools?: Record<string, { name?: string }> | Array<{ name?: string }>;
+    };
+    const sentToolNames = Array.isArray(callOptions.tools)
+      ? callOptions.tools.map(tool => tool.name)
+      : Object.keys(callOptions.tools ?? {});
+    // Named and non-empty skills: the loader is granted by that name.
+    expect(sentToolNames).toEqual(expect.arrayContaining(['web_search', 'load_skill']));
   });
 
   it('sends no tool schemas and runs no tools for an explicitly disabled send', async () => {
