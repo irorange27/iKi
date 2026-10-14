@@ -138,15 +138,24 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
 
       // No live lease anywhere, yet the row says `running`: either it died
       // with a process that left the row behind, or the owner finalized it
-      // while this process was deciding. A durable terminal fact resolves
-      // both — the replay must not show this turn executing forever — and
-      // nothing is running for it to contradict.
+      // while this process was deciding. Nothing is executing it, so this is
+      // a real reclamation, not a fabricated stop. Finalize the row through
+      // the Run lifecycle writer — the row and the session log are two
+      // projections of one outcome and must not disagree — and record the
+      // terminal fact so replay does not show this turn executing forever.
+      const reclaimed = rehydrateAgentRunTracker(runId);
+      if (!reclaimed) {
+        return { success: false, error: `Run ${runId} could not be loaded to cancel.` };
+      }
+      deps.cancelPendingApprovalsForRun?.(runId);
+      reclaimed.markCancelled({
+        text: run.output?.text ?? run.working.accumulatedText,
+      });
       if (run.threadId && runHasStartedFact(run.threadId, runId)) {
         recordFailureTerminalEvent(run.threadId, turnFactsToEvents({
           terminal: { runId, status: 'cancelled' },
         }));
       }
-      deps.cancelPendingApprovalsForRun?.(runId);
       return {
         success: true,
         error:

@@ -93,6 +93,13 @@ export type TurnDriverDeps = {
    * cancellation keeps naming the run that is actually executing.
    */
   onRunIdChanged?: (runId: string) => void;
+  /**
+   * Aliases a delegated child run onto the execution running it (the child
+   * inherits this execution's abort signal). Passed through to the tool
+   * runtime context so a cancel naming the child reaches this execution,
+   * resolved per execution rather than through a process-global hook.
+   */
+  registerChildRunAlias?: (parentRunId: string, childRunId: string) => () => void;
   approvals: {
     ensurePendingApprovalSession: (
       approvalId: string,
@@ -426,6 +433,9 @@ const runTurnBatches = async (
                 },
                 ...(state.workspaceSelectionBox
                   ? { workspaceSelectionBox: state.workspaceSelectionBox }
+                  : {}),
+                ...(deps.registerChildRunAlias
+                  ? { registerChildRunAlias: deps.registerChildRunAlias }
                   : {}),
               },
               async () => {

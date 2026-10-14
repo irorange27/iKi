@@ -97,10 +97,13 @@ describe('chat run cancellation', () => {
 
   it('reclaims a running run nobody owns when no lease is held', () => {
     // No live execution here AND no live lease anywhere: the row says
-    // `running` but nothing is executing it. A durable terminal fact clears
-    // it instead of leaving a turn that reads as executing forever.
+    // `running` but nothing is executing it. Both projections of the outcome
+    // must converge: the row is finalized AND the replay terminal is recorded,
+    // so a repeated cancel cannot look successful while nothing happened.
     sessionEvents.getSessionEvents.mockReturnValue([{ revision: 1 }]);
     db.getAgentRun.mockReturnValue({ ...activeRun, status: 'running' });
+    const markCancelled = vi.fn();
+    tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled });
     const cancelPendingApprovalsForRun = vi.fn(() => 0);
     const runs = createChatRuns({
       abortActiveStream: () => false,
@@ -112,6 +115,8 @@ describe('chat run cancellation', () => {
     const result = runs.cancelRun('run_1');
     expect(result.success).toBe(true);
     expect(result.error).toContain('reclaimed as cancelled');
+    // The row is finalized, not left `running` while the log says cancelled.
+    expect(markCancelled).toHaveBeenCalledWith({ text: 'partial response' });
     expect(cancelPendingApprovalsForRun).toHaveBeenCalledWith('run_1');
     expect(db.updateAgentRun).not.toHaveBeenCalled();
   });

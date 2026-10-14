@@ -31,6 +31,14 @@ export type ToolRuntimeContext = {
   conversationModel?: ToolRuntimeConversationModel;
   delegationDepth?: number;
   /**
+   * Alias a delegated child run onto the execution that is running it. The
+   * child inherits the parent's abort signal and has no execution of its
+   * own, so a cancel naming the child must address the parent. Reads this
+   * per-execution context instead of a process global, so two chat services
+   * in one process (desktop + embedded daemon) cannot unmount each other.
+   */
+  registerChildRunAlias?: (parentRunId: string, childRunId: string) => () => void;
+  /**
    * Lazily-frozen workspace selection for this run. The first filesystem or
    * shell tool call resolves the thread's workspace from the database and
    * pins it here, so changing the thread's workspace mid-run cannot redirect

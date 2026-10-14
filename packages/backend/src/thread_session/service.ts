@@ -1,4 +1,3 @@
-import { setDelegatedChildRunAliasRegistrar } from '@iki/backend/tools';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
 import { noopPlatformDeps } from '@iki/backend/chat_platform';
@@ -37,13 +36,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     crossProcessThreadRun: (threadId, options) =>
       tryAcquireCrossProcessThreadRun(threadId, { onLeaseLost: options.onLeaseLost }),
   });
-  // A delegated child run has no execution of its own — it runs inside the
-  // parent's tool call and inherits the parent's abort signal. Wiring the
-  // alias here keeps the knowledge in the execution owner.
-  setDelegatedChildRunAliasRegistrar((parentRunId, childRunId) =>
-    streamCoordinator.registerChildRunAlias(parentRunId, childRunId)
-  );
-
   const persistence = createChatPersistence({
     memory,
     onContinuityMessagePersisted: onMessagePersisted,

@@ -119,6 +119,7 @@ export const createChatStreaming = (deps: {
     checkThreadRunRate: coordinator.checkThreadRunRate,
     tryAcquireThreadRun: coordinator.tryAcquireThreadRun,
     registerExecution: coordinator.registerExecution,
+    registerChildRunAlias: coordinator.registerChildRunAlias,
     conversation: deps.conversation,
     approvals: {
       ensurePendingApprovalSession: deps.approvals.ensurePendingApprovalSession,
@@ -399,6 +400,7 @@ export const createChatStreaming = (deps: {
         drainSteerMessages: () => coordinator.takeSteerMessages(senderId),
         onToolActivity: persistTurnProgress,
         onRunIdChanged: runId => execution.setRunId(runId),
+        registerChildRunAlias: coordinator.registerChildRunAlias,
         approvals: deps.approvals,
       });
       driver = activeDriver;

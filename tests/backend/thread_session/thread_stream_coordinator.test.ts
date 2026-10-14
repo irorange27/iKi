@@ -367,6 +367,27 @@ describe('createThreadStreamCoordinator run-keyed executions', () => {
     disposeAlias();
   });
 
+  it('keeps two coordinators independent, so a second service cannot unmount the first', () => {
+    // The desktop embeds the daemon, so two chat services (and two
+    // coordinators) coexist in one process. A child alias registered through
+    // one must only ever reach that one's executions.
+    const first = createThreadStreamCoordinator();
+    const second = createThreadStreamCoordinator();
+
+    const firstReasons: string[] = [];
+    first.registerExecution({ runId: 'run_parent', cancel: r => firstReasons.push(r) });
+    second.registerChildRunAlias('run_parent', 'run_child');
+
+    expect(second.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(false);
+    expect(firstReasons).toEqual([]);
+
+    // The first coordinator owns both: the alias is registered on itself.
+    const dispose = first.registerChildRunAlias('run_parent', 'run_child');
+    expect(first.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(true);
+    expect(firstReasons).toEqual(['run-cancelled']);
+    dispose();
+  });
+
   it('dispose is idempotent and never drops a newer registration for the same run', () => {
     const coordinator = createThreadStreamCoordinator();
     const first = coordinator.registerExecution({ runId: 'run_1', cancel: () => undefined });

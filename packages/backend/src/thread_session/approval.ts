@@ -96,6 +96,7 @@ export const createChatApproval = (deps: {
       cancel: (reason: string) => void;
       runId?: string | null;
     }) => { setRunId: (runId: string | null) => void; dispose: () => void };
+    registerChildRunAlias?: (parentRunId: string, childRunId: string) => () => void;
   };
   memory: ChatMemory;
   conversation: {
@@ -882,6 +883,7 @@ export const createChatApproval = (deps: {
           // follow the chained segment, or a cancel naming it finds nothing
           // (and the `running` row reads as uncancellable).
           onRunIdChanged: runId => execution?.setRunId(runId),
+          registerChildRunAlias: deps.streams.registerChildRunAlias,
           approvals: {
             ensurePendingApprovalSession: (approvalId, approvalSession) =>
               ensurePendingApprovalSession(approvalId, approvalSession),

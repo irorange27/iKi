@@ -94,6 +94,8 @@ export type MessageSendDeps = {
     setRunId: (runId: string | null) => void;
     dispose: () => void;
   };
+  /** Alias a delegated child run onto the execution running it. */
+  registerChildRunAlias?: (parentRunId: string, childRunId: string) => () => void;
   checkThreadRunRate: (threadId: string) => { allowed: boolean; retryAfterMs?: number };
   conversation: {
     createMessage: (input: unknown) => unknown;
@@ -285,6 +287,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             drainSteerMessages: () => [],
             conversationPreview: false,
             onRunIdChanged: runId => execution?.setRunId(runId),
+            registerChildRunAlias: deps.registerChildRunAlias,
             approvals: {
               ensurePendingApprovalSession:
                 deps.approvals?.ensurePendingApprovalSession ?? (() => undefined),
