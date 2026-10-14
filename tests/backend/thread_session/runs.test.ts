@@ -13,9 +13,13 @@ const db = vi.hoisted(() => ({
 const tracker = vi.hoisted(() => ({
   rehydrateAgentRunTracker: vi.fn(),
 }));
+const sessionEvents = vi.hoisted(() => ({
+  getSessionEvents: vi.fn(() => []),
+}));
 
 vi.mock('@iki/backend/db/agent_runs', () => db);
 vi.mock('@iki/backend/thread_session/run_tracker', () => tracker);
+vi.mock('@iki/backend/db/session_events', () => sessionEvents);
 vi.mock('@iki/backend/thread_session/atif_export', () => ({
   buildRunTrajectory: vi.fn(),
 }));
@@ -58,28 +62,139 @@ describe('chat run cancellation', () => {
     db.getAgentRun.mockReturnValue(activeRun);
   });
 
-  it('lets the active execution owner persist cancellation', () => {
+  it('reaches the live execution that owns the run', () => {
     const abortActiveStream = vi.fn(() => true);
-    const runs = createChatRuns({ abortActiveStream });
+    const cancelExecution = vi.fn(() => true);
+    const runs = createChatRuns({ abortActiveStream, cancelExecution });
 
     expect(runs.cancelRun('run_1')).toEqual({ success: true });
-    expect(abortActiveStream).toHaveBeenCalledWith('run_1');
-    expect(tracker.rehydrateAgentRunTracker).not.toHaveBeenCalled();
+    expect(cancelExecution).toHaveBeenCalledWith('run_1', 'run-cancelled');
+    expect(abortActiveStream).not.toHaveBeenCalled();
+    // The execution owner persists its own terminal state; cancelRun must not
+    // write one on its behalf.
     expect(db.updateAgentRun).not.toHaveBeenCalled();
   });
 
-  it('uses the Run lifecycle writer when no stream owns the run', () => {
+  it('refuses when another live process owns the thread', () => {
+    // A live cross-process lease means some other process may be executing
+    // this very run. Writing `cancelled` here would be a terminal fact nobody
+    // caused, so the cancel is refused and the owner is named.
+    db.getAgentRun.mockReturnValue({ ...activeRun, status: 'running' });
+    const markCancelled = vi.fn();
+    tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled });
+    const runs = createChatRuns({
+      abortActiveStream: () => false,
+      cancelExecution: () => false,
+      hasLiveThreadLease: () => true,
+    });
+
+    const result = runs.cancelRun('run_1');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('owned by another live process');
+    expect(markCancelled).not.toHaveBeenCalled();
+    expect(db.updateAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('reclaims a running run nobody owns when no lease is held', () => {
+    // No live execution here AND no live lease anywhere: the row says
+    // `running` but nothing is executing it. Both projections of the outcome
+    // must converge: the row is finalized AND the replay terminal is recorded,
+    // so a repeated cancel cannot look successful while nothing happened.
+    sessionEvents.getSessionEvents.mockReturnValue([{ revision: 1 }]);
+    db.getAgentRun.mockReturnValue({ ...activeRun, status: 'running' });
     const markCancelled = vi.fn();
     tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled });
     const cancelPendingApprovalsForRun = vi.fn(() => 0);
     const runs = createChatRuns({
       abortActiveStream: () => false,
+      cancelExecution: () => false,
+      hasLiveThreadLease: () => false,
+      cancelPendingApprovalsForRun,
+    });
+
+    const result = runs.cancelRun('run_1');
+    expect(result.success).toBe(true);
+    expect(result.error).toContain('reclaimed as cancelled');
+    // The row is finalized, not left `running` while the log says cancelled.
+    expect(markCancelled).toHaveBeenCalledWith({ text: 'partial response' });
+    expect(cancelPendingApprovalsForRun).toHaveBeenCalledWith('run_1');
+    expect(db.updateAgentRun).not.toHaveBeenCalled();
+  });
+
+  it('cancels a paused run through the Run lifecycle writer', () => {
+    // A blocked run waits for an approval decision and is not executing, so
+    // cancelling it is a decision about a paused run, not a fabricated stop.
+    db.getAgentRun.mockReturnValue({ ...activeRun, status: 'blocked' });
+    const markCancelled = vi.fn();
+    tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled });
+    const cancelPendingApprovalsForRun = vi.fn(() => 1);
+    const runs = createChatRuns({
+      abortActiveStream: () => false,
+      cancelExecution: () => false,
       cancelPendingApprovalsForRun,
     });
 
     expect(runs.cancelRun('run_1')).toEqual({ success: true });
-    expect(tracker.rehydrateAgentRunTracker).toHaveBeenCalledWith('run_1');
     expect(markCancelled).toHaveBeenCalledWith({ text: 'partial response' });
+    expect(cancelPendingApprovalsForRun).toHaveBeenCalledWith('run_1');
+  });
+
+  it('cancels a queued run that has not started', () => {
+    db.getAgentRun.mockReturnValue({ ...activeRun, status: 'queued' });
+    const markCancelled = vi.fn();
+    tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled });
+    const runs = createChatRuns({
+      abortActiveStream: () => false,
+      cancelExecution: () => false,
+    });
+
+    expect(runs.cancelRun('run_1')).toEqual({ success: true });
+    expect(markCancelled).toHaveBeenCalled();
+  });
+
+  it('records the terminal fact for a paused run whose start the log holds', () => {
+    // `blocked` runs recorded `turn_started` before pausing, so replay must
+    // be told the pause is over — otherwise the run reads as running forever.
+    sessionEvents.getSessionEvents.mockReturnValue([{ revision: 1 }]);
+    db.getAgentRun.mockReturnValue({ ...activeRun, status: 'blocked' });
+    tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled: vi.fn() });
+    const runs = createChatRuns({
+      abortActiveStream: () => false,
+      cancelExecution: () => false,
+    });
+
+    expect(runs.cancelRun('run_1')).toEqual({ success: true });
+    expect(sessionEvents.getSessionEvents).toHaveBeenCalledWith(
+      'thread_1',
+      ['turn_started'],
+      { path: '$.runId', value: 'run_1' }
+    );
+  });
+
+  it('does not invent a turn in the replay for a run that never started', () => {
+    // A `queued` row records no `turn_started` until it is adopted. Writing a
+    // terminal fact for it would materialize a turn in the replay that nothing
+    // else knows about, with a defaulted kind.
+    sessionEvents.getSessionEvents.mockReturnValue([]);
+    db.getAgentRun.mockReturnValue({ ...activeRun, status: 'queued' });
+    tracker.rehydrateAgentRunTracker.mockReturnValue({ markCancelled: vi.fn() });
+    const runs = createChatRuns({
+      abortActiveStream: () => false,
+      cancelExecution: () => false,
+    });
+
+    expect(runs.cancelRun('run_1')).toEqual({ success: true });
+    // The run row is terminal, but the log gains no terminal fact for it.
+    expect(sessionEvents.getSessionEvents).toHaveBeenCalled();
+  });
+
+  it('falls back to the stream abort for callers without the run-keyed index', () => {
+    const abortActiveStream = vi.fn(() => true);
+    const cancelPendingApprovalsForRun = vi.fn(() => 0);
+    const runs = createChatRuns({ abortActiveStream, cancelPendingApprovalsForRun });
+
+    expect(runs.cancelRun('run_1')).toEqual({ success: true });
+    expect(abortActiveStream).toHaveBeenCalledWith('run_1');
     expect(cancelPendingApprovalsForRun).toHaveBeenCalledWith('run_1');
     expect(db.updateAgentRun).not.toHaveBeenCalled();
   });

@@ -118,6 +118,8 @@ export const createChatStreaming = (deps: {
     usage: deps.usage,
     checkThreadRunRate: coordinator.checkThreadRunRate,
     tryAcquireThreadRun: coordinator.tryAcquireThreadRun,
+    registerExecution: coordinator.registerExecution,
+    registerChildRunAlias: coordinator.registerChildRunAlias,
     conversation: deps.conversation,
     approvals: {
       ensurePendingApprovalSession: deps.approvals.ensurePendingApprovalSession,
@@ -168,6 +170,16 @@ export const createChatStreaming = (deps: {
     };
     const companionThinkingKey = `renderer:${senderId}:${Date.now().toString(36)}`;
     coordinator.registerStream(senderId, streamState);
+    // The stream registry answers "who is subscribed"; this registration
+    // answers "who executes run X" — the question a cancel asks. A stream is
+    // cancelled by run id even when the sender has already moved on.
+    const execution = coordinator.registerExecution({
+      runId: null,
+      cancel: reason => {
+        streamState.cancelled = true;
+        streamState.abortController.abort(reason);
+      },
+    });
 
     let driver: TurnDriverHandle | null = null;
     // The run tracker exists before the driver does; a failure in the
@@ -300,6 +312,7 @@ export const createChatStreaming = (deps: {
         })
       );
       streamState.runId = runTracker.id;
+      execution.setRunId(runTracker.id);
       sessionLogTracker = runTracker;
 
       // Session log: the accepted input and the turn's frozen plan are
@@ -386,6 +399,8 @@ export const createChatStreaming = (deps: {
         notifyRunStatus,
         drainSteerMessages: () => coordinator.takeSteerMessages(senderId),
         onToolActivity: persistTurnProgress,
+        onRunIdChanged: runId => execution.setRunId(runId),
+        registerChildRunAlias: coordinator.registerChildRunAlias,
         approvals: deps.approvals,
       });
       driver = activeDriver;
@@ -605,6 +620,7 @@ export const createChatStreaming = (deps: {
         coordinator.untrackThreadStream(options.threadId, senderId);
       }
       coordinator.unregisterStream(senderId, streamState);
+      execution.dispose();
       release();
     }
   };

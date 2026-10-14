@@ -299,3 +299,105 @@ describe('createThreadStreamCoordinator execution handles', () => {
     release2!();
   });
 });
+
+describe('createThreadStreamCoordinator run-keyed executions', () => {
+  it('cancels the execution registered for a run, without stream membership', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const reasons: string[] = [];
+    const execution = coordinator.registerExecution({
+      runId: 'run_send',
+      cancel: reason => reasons.push(reason),
+    });
+
+    // No registerStream/attachStream call: the send transport shape.
+    expect(coordinator.hasLiveExecutionForRun('run_send')).toBe(true);
+    expect(coordinator.cancelExecutionByRunId('run_send', 'run-cancelled')).toBe(true);
+    expect(reasons).toEqual(['run-cancelled']);
+
+    execution.dispose();
+    expect(coordinator.hasLiveExecutionForRun('run_send')).toBe(false);
+  });
+
+  it('refuses to cancel a run no live execution owns', () => {
+    const coordinator = createThreadStreamCoordinator();
+    expect(coordinator.cancelExecutionByRunId('run_elsewhere', 'run-cancelled')).toBe(false);
+  });
+
+  it('re-keys the index when a handoff chain swaps the executing run', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const execution = coordinator.registerExecution({ runId: 'run_parent', cancel: () => undefined });
+
+    execution.setRunId('run_child');
+    // The parent is no longer executing here: naming it must not reach the
+    // chained segment's execution.
+    expect(coordinator.hasLiveExecutionForRun('run_parent')).toBe(false);
+    expect(coordinator.hasLiveExecutionForRun('run_child')).toBe(true);
+    expect(coordinator.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(true);
+
+    execution.dispose();
+    expect(coordinator.hasLiveExecutionForRun('run_child')).toBe(false);
+  });
+
+  it('cancels a delegated child run through its parent execution', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const reasons: string[] = [];
+    coordinator.registerExecution({
+      runId: 'run_parent',
+      cancel: reason => reasons.push(reason),
+    });
+    coordinator.registerChildRunAlias('run_parent', 'run_child');
+
+    // The child has no execution of its own — it runs inside the parent's
+    // tool call and inherits the parent's abort signal.
+    expect(coordinator.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(true);
+    expect(reasons).toEqual(['run-cancelled']);
+  });
+
+  it('does not alias a child after its parent execution ended', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const parent = coordinator.registerExecution({
+      runId: 'run_parent',
+      cancel: () => undefined,
+    });
+    const disposeAlias = coordinator.registerChildRunAlias('run_parent', 'run_child');
+
+    parent.dispose();
+    expect(coordinator.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(false);
+
+    disposeAlias();
+  });
+
+  it('keeps two coordinators independent, so a second service cannot unmount the first', () => {
+    // The desktop embeds the daemon, so two chat services (and two
+    // coordinators) coexist in one process. A child alias registered through
+    // one must only ever reach that one's executions.
+    const first = createThreadStreamCoordinator();
+    const second = createThreadStreamCoordinator();
+
+    const firstReasons: string[] = [];
+    first.registerExecution({ runId: 'run_parent', cancel: r => firstReasons.push(r) });
+    second.registerChildRunAlias('run_parent', 'run_child');
+
+    expect(second.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(false);
+    expect(firstReasons).toEqual([]);
+
+    // The first coordinator owns both: the alias is registered on itself.
+    const dispose = first.registerChildRunAlias('run_parent', 'run_child');
+    expect(first.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(true);
+    expect(firstReasons).toEqual(['run-cancelled']);
+    dispose();
+  });
+
+  it('dispose is idempotent and never drops a newer registration for the same run', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const first = coordinator.registerExecution({ runId: 'run_1', cancel: () => undefined });
+    const second = coordinator.registerExecution({ runId: 'run_1', cancel: () => undefined });
+
+    first.dispose();
+    // The stale record must not remove the newer owner's entry.
+    expect(coordinator.hasLiveExecutionForRun('run_1')).toBe(true);
+    first.dispose();
+    second.dispose();
+    expect(coordinator.hasLiveExecutionForRun('run_1')).toBe(false);
+  });
+});

@@ -9,16 +9,42 @@ import type {
 } from '@iki/backend/types/agent_run';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { rehydrateAgentRunTracker } from './run_tracker';
+import { recordFailureTerminalEvent, TURN_STARTED, turnFactsToEvents } from './session_log';
+import { getSessionEvents } from '@iki/backend/db/session_events';
 import { buildRunTrajectory, type AtifTrajectory } from './atif_export';
 
 type ChatRunsDeps = {
   /** Aborts the active stream running a run id (owned by the stream coordinator). */
   abortActiveStream: (runId: string) => boolean;
+  /**
+   * Cancels the live execution owning a run id — the run-keyed registration
+   * that covers send and approval-resume executions too, not only streams.
+   * Returns false when no live execution in this process owns the run.
+   */
+  cancelExecution?: (runId: string, reason: string) => boolean;
+  /**
+   * Whether another process holds a live lease for the thread (SQLite-backed
+   * admission shared by desktop + daemon). Distinguishes "this process is
+   * simply not the owner" from "no owner exists anywhere" — the second is an
+   * orphan only local reconciliation can now clear.
+   */
+  hasLiveThreadLease?: (threadId: string) => boolean;
   cancelPendingApprovalsForRun?: (runId: string) => number;
 };
 
 const REVIEW_QUEUE_KINDS: AgentRunKind[] = ['proactive-task', 'awaiter-wake'];
 const SUMMARY_MAX_CHARS = 280;
+
+/**
+ * Whether the session log recorded this run's start. A terminal fact for a
+ * run that never started (a `queued` row awaiting adoption) would create a
+ * turn in the replay that nothing else knows about, with a defaulted kind.
+ */
+const runHasStartedFact = (threadId: string, runId: string): boolean =>
+  getSessionEvents(threadId, [TURN_STARTED], {
+    path: '$.runId',
+    value: runId,
+  }).length > 0;
 
 const buildReviewQueueItem = (run: AgentRun): ReviewQueueItem => {
   const thread = run.threadId ? chatThreadDb.getChatThread(run.threadId) : null;
@@ -80,13 +106,88 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
       return { success: false, error: `Run is already ${run.status}` };
     }
 
-    if (!deps.abortActiveStream(runId)) {
-      const tracker = rehydrateAgentRunTracker(runId);
-      tracker?.markCancelled({
+    // Cancellation names a run and must reach the execution that owns it.
+    // The run-keyed index covers every entry that can execute a run —
+    // stream, send and approval resume — where the stream registry only
+    // covers subscribed senders. The owning execution persists its own
+    // terminal state through the shared finalize path.
+    const reachedExecution = deps.cancelExecution
+      ? deps.cancelExecution(runId, 'run-cancelled')
+      : deps.abortActiveStream(runId);
+    if (reachedExecution) {
+      deps.cancelPendingApprovalsForRun?.(runId);
+      return { success: true };
+    }
+
+    // Nothing is executing the run in this process. What that means depends
+    // on the run's own status and on who else claims it:
+    if (run.status === 'running') {
+      const leaseHeldElsewhere =
+        Boolean(run.threadId) && deps.hasLiveThreadLease?.(run.threadId as string) === true;
+      if (leaseHeldElsewhere) {
+        // Another live process owns this thread's turn right (desktop +
+        // daemon share this database), so it may well be executing this very
+        // run. Writing `cancelled` here would be a terminal fact nobody
+        // caused; refuse and name the owner instead.
+        return {
+          success: false,
+          error:
+            'This run is owned by another live process. Cancel it there — this process cannot stop it.',
+        };
+      }
+
+      // No live lease anywhere, yet the row says `running`: either it died
+      // with a process that left the row behind, or the owner finalized it
+      // while this process was deciding. Nothing is executing it, so this is
+      // a real reclamation, not a fabricated stop. Finalize the row through
+      // the Run lifecycle writer — the row and the session log are two
+      // projections of one outcome and must not disagree — and record the
+      // terminal fact so replay does not show this turn executing forever.
+      const reclaimed = rehydrateAgentRunTracker(runId);
+      if (!reclaimed) {
+        return { success: false, error: `Run ${runId} could not be loaded to cancel.` };
+      }
+      deps.cancelPendingApprovalsForRun?.(runId);
+      reclaimed.markCancelled({
         text: run.output?.text ?? run.working.accumulatedText,
       });
+      if (run.threadId && runHasStartedFact(run.threadId, runId)) {
+        recordFailureTerminalEvent(run.threadId, turnFactsToEvents({
+          terminal: { runId, status: 'cancelled' },
+        }));
+      }
+      return {
+        success: true,
+        error:
+          'No live execution owned this run, so it was reclaimed as cancelled. Nothing was running.',
+      };
     }
+
+    // `blocked` and `queued` runs are not executing by definition: one waits
+    // for an approval decision, the other has not started. Cancelling them is
+    // a real decision about a paused run, not a fabricated stop — so it
+    // finalizes through the Run lifecycle writer, and the run's pending
+    // approvals expire with it.
     deps.cancelPendingApprovalsForRun?.(runId);
+    const tracker = rehydrateAgentRunTracker(runId);
+    if (!tracker) {
+      return { success: false, error: `Run ${runId} could not be loaded to cancel.` };
+    }
+    tracker.markCancelled({
+      text: run.output?.text ?? run.working.accumulatedText,
+    });
+    // Session log: the pause is over and the run is terminal — replay must
+    // not show this run waiting forever. Only a run whose start was recorded
+    // gets a terminal fact: a `queued` row has no `turn_started` yet (that
+    // fact is written when the run is adopted and executes), and a terminal
+    // fact alone would materialize a phantom turn in the replay, defaulted to
+    // the wrong kind. Failure-path terminal: a lost record must not mask the
+    // cancellation the caller is being told about.
+    if (run.threadId && runHasStartedFact(run.threadId, runId)) {
+      recordFailureTerminalEvent(run.threadId, turnFactsToEvents({
+        terminal: { runId, status: 'cancelled' },
+      }));
+    }
 
     return { success: true };
   },

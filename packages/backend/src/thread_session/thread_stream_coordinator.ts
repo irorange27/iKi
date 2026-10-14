@@ -23,9 +23,33 @@ class ThreadSession {
 }
 
 /**
+ * One live execution in this process, indexed by the run it executes.
+ *
+ * A cancel names a RUN. The sender-keyed stream registry is a delivery
+ * surface (who receives chunks, who may steer) and must not be the only way
+ * to reach an execution: the non-streaming send transport holds its own
+ * AbortController and registers no stream at all, so keying cancellation off
+ * stream membership left its execution unreachable while the run row was
+ * rewritten to `cancelled`.
+ *
+ * The run id is mutable — a handoff chain swaps the executing run mid-turn —
+ * so the record re-keys its own index entry instead of leaving a stale key.
+ * `dispose` is idempotent and removes only the entry this record owns.
+ */
+export type LiveRunExecution = {
+  /** Stop this execution. The reason rides the abort signal for the owner to classify. */
+  cancel: (reason: string) => void;
+  /** Point the record at the run it now executes; null = no run identity yet. */
+  setRunId: (runId: string | null) => void;
+  /** Stop indexing this execution; idempotent. */
+  dispose: () => void;
+};
+
+/**
  * Owns all stream coordination state: the sender-keyed transport registry,
  * which senders stream which thread, per-thread rate limiting, per-thread
- * steer queues, and the stop/steer/supersede/abort operations over them.
+ * steer queues, the run-keyed live-execution index, and the
+ * stop/steer/supersede/cancel operations over them.
  *
  * Approval resume attaches session-less streams via attachStream — they are
  * stoppable and run-cancellable but deliberately not steerable.
@@ -101,6 +125,19 @@ export const createThreadStreamCoordinator = (deps?: {
   const activeStreams = new Map<number, ActiveStreamState>();
   const sessionsByThread = new Map<string, ThreadSession>();
   const sessionBySender = new Map<number, ThreadSession>();
+  /**
+   * Live executions by the run they execute. The stream registry answers
+   * "who is subscribed"; this answers "who is executing run X" — the only
+   * question cancellation needs to answer. Stream membership stays a
+   * delivery concern.
+   */
+  const executionsByRunId = new Map<string, LiveRunExecution>();
+  /**
+   * Delegated child runs that execute as part of a parent's tool call. The
+   * child inherits the parent's abort signal, so the parent is the executing
+   * unit; this map only makes the child's id address it.
+   */
+  const childRunAliases = new Map<string, string>();
   const threadRunLimiter = createRateLimiter({
     windowMs: THREAD_RATE_LIMIT_WINDOW_MS,
     maxRequests: THREAD_RATE_LIMIT_MAX_REQUESTS,
@@ -239,6 +276,87 @@ export const createThreadStreamCoordinator = (deps?: {
     return false;
   };
 
+  /**
+   * Register a live execution under the run it owns. Every entry that can
+   * execute a run (stream, send, approval resume) registers one, so a cancel
+   * naming that run reaches the execution regardless of whether it has
+   * stream membership. The entry disposes its record in its own cleanup.
+   */
+  const registerExecution = (execution: {
+    cancel: (reason: string) => void;
+    runId?: string | null;
+  }): LiveRunExecution => {
+    let runId = execution.runId ?? null;
+    let disposed = false;
+    const record: LiveRunExecution = {
+      cancel: execution.cancel,
+      setRunId: next => {
+        if (disposed || next === runId) return;
+        if (runId && executionsByRunId.get(runId) === record) {
+          executionsByRunId.delete(runId);
+        }
+        runId = next;
+        if (runId) executionsByRunId.set(runId, record);
+      },
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        if (runId && executionsByRunId.get(runId) === record) {
+          executionsByRunId.delete(runId);
+        }
+      },
+    };
+    if (runId) executionsByRunId.set(runId, record);
+    return record;
+  };
+
+  /**
+   * Cancel the execution owning `runId`. Returns false when no live execution
+   * in this process owns the run — the caller must then treat the run as
+   * "not executing here" and reconcile it against durable facts instead of
+   * writing a terminal state it did not actually cause.
+   *
+   * A delegated child run has no execution of its own: the parent's tool call
+   * is the executing unit and the child inherits the parent's abort signal,
+   * so cancelling a child run addresses the parent's execution.
+   */
+  const cancelExecutionByRunId = (runId: string, reason: string): boolean => {
+    const execution = executionsByRunId.get(runId);
+    if (execution) {
+      execution.cancel(reason);
+      return true;
+    }
+    const parentRunId = childRunAliases.get(runId);
+    if (!parentRunId) return false;
+    const parent = executionsByRunId.get(parentRunId);
+    if (!parent) return false;
+    parent.cancel(reason);
+    return true;
+  };
+
+  /**
+   * Alias a delegated child run onto its parent's execution. The child
+   * inherits the parent's abort signal, so the parent is the unit a cancel
+   * stops; the alias only makes the child's id ADDRESS it. Disposed when the
+   * parent's execution ends.
+   */
+  const registerChildRunAlias = (parentRunId: string, childRunId: string): (() => void) => {
+    if (!parentRunId || !childRunId || parentRunId === childRunId) return () => undefined;
+    childRunAliases.set(childRunId, parentRunId);
+    return () => {
+      if (childRunAliases.get(childRunId) === parentRunId) {
+        childRunAliases.delete(childRunId);
+      }
+    };
+  };
+
+  /** Whether a live execution in this process currently owns the run. */
+  const hasLiveExecutionForRun = (runId: string): boolean =>
+    executionsByRunId.has(runId) || (() => {
+      const parent = childRunAliases.get(runId);
+      return Boolean(parent && executionsByRunId.has(parent));
+    })();
+
   const steerStream = (
     senderId: number,
     threadId: string | undefined,
@@ -291,6 +409,10 @@ export const createThreadStreamCoordinator = (deps?: {
     stopStream,
     steerStream,
     abortStreamByRunId,
+    registerExecution,
+    registerChildRunAlias,
+    cancelExecutionByRunId,
+    hasLiveExecutionForRun,
     peekStream,
     attachStream,
     detachStream,

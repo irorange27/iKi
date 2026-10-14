@@ -87,6 +87,16 @@ export const createChatApproval = (deps: {
     peek: (senderId: number) => ActiveStreamState | undefined;
     attach: (senderId: number, streamState: ActiveStreamState) => void;
     detach: (senderId: number, streamState: ActiveStreamState) => void;
+    /**
+     * Register the resumed continuation under its run so a cancel naming that
+     * run reaches this execution (a resumed stream has no session membership).
+     * Optional so unit doubles stay small; the composition root wires it.
+     */
+    registerExecution?: (execution: {
+      cancel: (reason: string) => void;
+      runId?: string | null;
+    }) => { setRunId: (runId: string | null) => void; dispose: () => void };
+    registerChildRunAlias: (parentRunId: string, childRunId: string) => () => void;
   };
   memory: ChatMemory;
   conversation: {
@@ -761,6 +771,15 @@ export const createChatApproval = (deps: {
       : undefined;
     streamState.runId = resumeRunTracker?.id;
     deps.streams.attach(resumedSenderId, streamState);
+    // The resumed continuation executes its own run with no stream session;
+    // registering it by run id is what lets a cancel reach it.
+    const execution = deps.streams.registerExecution?.({
+      runId: resumeRunTracker?.id ?? null,
+      cancel: reason => {
+        streamState.cancelled = true;
+        streamState.abortController.abort(reason);
+      },
+    });
     let isAwaitingApproval = false;
     // Set once the driver exists; the catch path must consult the driver's
     // CURRENT tracker (a handoff chain swaps it mid-turn).
@@ -860,6 +879,11 @@ export const createChatApproval = (deps: {
           drainSteerMessages: () => [],
           conversationPreview: false,
           onToolActivity: persistResumeProgress,
+          // A resumed autonomous turn can chain a handoff: the index must
+          // follow the chained segment, or a cancel naming it finds nothing
+          // (and the `running` row reads as uncancellable).
+          onRunIdChanged: runId => execution?.setRunId(runId),
+          registerChildRunAlias: deps.streams.registerChildRunAlias,
           approvals: {
             ensurePendingApprovalSession: (approvalId, approvalSession) =>
               ensurePendingApprovalSession(approvalId, approvalSession),
@@ -996,6 +1020,7 @@ export const createChatApproval = (deps: {
         cleanupPendingSessionsForSender(resumedSenderId, resumeMessageId);
       }
       deps.streams.detach(resumedSenderId, streamState);
+      execution?.dispose();
     }
   };
 

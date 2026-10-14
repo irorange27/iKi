@@ -9,7 +9,10 @@ import { createChatRuns } from './runs';
 import { createChatEval } from './eval';
 import { createChatStreaming } from './session_loop';
 import { createThreadStreamCoordinator } from './thread_stream_coordinator';
-import { tryAcquireCrossProcessThreadRun } from '@iki/backend/db/thread_run_locks';
+import {
+  hasLiveThreadRunLease,
+  tryAcquireCrossProcessThreadRun,
+} from '@iki/backend/db/thread_run_locks';
 import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps, onMessagePersisted } from './platform';
 import { deriveResumeStreamOptions, rebuildResumeHistoryFromEvents } from './run_rehydrator';
@@ -43,6 +46,8 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       peek: streamCoordinator.peekStream,
       attach: streamCoordinator.attachStream,
       detach: streamCoordinator.detachStream,
+      registerExecution: streamCoordinator.registerExecution,
+      registerChildRunAlias: streamCoordinator.registerChildRunAlias,
     },
     memory,
     conversation: persistence,
@@ -52,6 +57,8 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   });
   const runs = createChatRuns({
     abortActiveStream: streamCoordinator.abortStreamByRunId,
+    cancelExecution: streamCoordinator.cancelExecutionByRunId,
+    hasLiveThreadLease: hasLiveThreadRunLease,
     cancelPendingApprovalsForRun: approvals.cancelPendingApprovalsForRun,
   });
   const eval_ = createChatEval({ exportTrace: deps.exportTrace });

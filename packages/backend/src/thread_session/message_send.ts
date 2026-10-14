@@ -82,6 +82,20 @@ export type MessageSendDeps = {
     threadId?: string,
     options?: { onExecutionAbort?: () => void }
   ) => (() => void) | null;
+  /**
+   * Register this execution under the run it owns so a cancel naming that run
+   * reaches it (the send transport has no stream membership). Optional so
+   * unit doubles stay small; the composition root always wires it.
+   */
+  registerExecution?: (execution: {
+    cancel: (reason: string) => void;
+    runId?: string | null;
+  }) => {
+    setRunId: (runId: string | null) => void;
+    dispose: () => void;
+  };
+  /** Alias a delegated child run onto the execution running it. */
+  registerChildRunAlias?: (parentRunId: string, childRunId: string) => () => void;
   checkThreadRunRate: (threadId: string) => { allowed: boolean; retryAfterMs?: number };
   conversation: {
     createMessage: (input: unknown) => unknown;
@@ -104,13 +118,34 @@ export type MessageSendDeps = {
 
 export const createMessageSend = (deps: MessageSendDeps) => {
   const send = async (options: ChatTurnOptions): Promise<MessageSendResult> => {
-    // The execution abort controller exists before admission: the lease-loss
-    // hook registered below must have a live target from the first await on.
+    // The execution's cancel source, set synchronously inside each abort
+    // closure BEFORE the controller is aborted. An AbortSignal latches only
+    // its FIRST reason, so a second abort (a lease loss arriving while a user
+    // cancel is unwinding) would otherwise silently reclassify the turn.
+    // Reading a recorded source rather than the signal's reason keeps the
+    // classification independent of abort ORDER.
+    const cancelSource: { current: 'lease-lost' | 'user-cancel' | null } = { current: null };
     const executionAbort = new AbortController();
     const release = deps.tryAcquireThreadRun(options.threadId, {
-      onExecutionAbort: () => executionAbort.abort('thread-lease-lost'),
+      onExecutionAbort: () => {
+        cancelSource.current = 'lease-lost';
+        executionAbort.abort('thread-lease-lost');
+      },
     });
     if (!release) return { success: false, error: 'A turn is already running on this thread.' };
+
+    // A cancel names a run; this transport registers no stream, so without
+    // this handle `cancelRun` could only rewrite the run row while the tool
+    // handler kept executing. Registered before the first await on purpose:
+    // the run id arrives with the tracker below, and a cancel landing in
+    // between must already find this execution.
+    const execution = deps.registerExecution?.({
+      runId: null,
+      cancel: reason => {
+        cancelSource.current = 'user-cancel';
+        executionAbort.abort(reason);
+      },
+    });
 
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
     // Set once the driver exists; the catch paths must consult the driver's
@@ -172,6 +207,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         })
       );
       runTracker = activeRunTracker;
+      // The run identity exists: index this execution under it. A handoff
+      // chain re-keys through the driver's tracker callback below.
+      execution?.setRunId(activeRunTracker.id);
 
       // Session log: same facts as streaming, from the waiter transport.
       // An id-less send (wake/task transports) records its accepted input as
@@ -248,6 +286,8 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             notifyRunStatus: () => undefined,
             drainSteerMessages: () => [],
             conversationPreview: false,
+            onRunIdChanged: runId => execution?.setRunId(runId),
+            registerChildRunAlias: deps.registerChildRunAlias,
             approvals: {
               ensurePendingApprovalSession:
                 deps.approvals?.ensurePendingApprovalSession ?? (() => undefined),
@@ -269,17 +309,33 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         const finalHarness = driver.getHarness();
 
         if (result.outcome === 'cancelled') {
-          // The only cancel source on this transport is a lost thread lease
-          // (send has no stream membership, so nothing else aborts it).
-          const message = 'Thread run lease was lost; the send was interrupted.';
-          if (finalTracker.getRun().status === 'running') {
-            finalTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
+          // Two cancel sources reach this transport: a lost thread lease
+          // (aborted by the lease hook) and a user/API cancel naming the run
+          // (aborted through the live-execution registration). Both are
+          // terminal; only the lease loss is a retryable interruption, and
+          // only the lease loss is reported as a failure. The source is the
+          // one RECORDED when the abort was issued, not the signal's reason,
+          // which latches whichever abort happened to arrive first.
+          const leaseLost = cancelSource.current === 'lease-lost';
+          const message = leaseLost
+            ? 'Thread run lease was lost; the send was interrupted.'
+            : 'Run cancelled.';
+          if (leaseLost) {
+            if (finalTracker.getRun().status === 'running') {
+              finalTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
+            }
+          } else if (finalTracker.getRun().status === 'running') {
+            finalTracker.markCancelled();
           }
           if (options.threadId) {
             // Session log: a lease loss ends the turn even here. Failure-path
             // terminal — loud-guarded, never masks the reported interruption.
             recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-              terminal: { runId: finalTracker.id, status: 'failed', errorText: message },
+              terminal: {
+                runId: finalTracker.id,
+                status: leaseLost ? 'failed' : 'cancelled',
+                ...(leaseLost ? { errorText: message } : {}),
+              },
             }));
           }
           return {
@@ -470,20 +526,42 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         ...(options.runConfig?.kind ? { runId: runTracker.id } : {}),
       };
     } catch (error: unknown) {
-      if (executionAbort.signal.aborted && executionAbort.signal.reason === 'thread-lease-lost') {
-        // The thread was taken over while this send ran: stop cleanly at the
-        // barrier instead of reporting a provider error or persisting results
-        // from an execution that lost its run right.
-        const message = 'Thread run lease was lost; the send was interrupted.';
-        if (runTracker && runTracker.getRun().status === 'running') {
-          runTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
-        }
-        if (options.threadId && runTracker) {
-          // Session log: both lease-loss shapes end the turn. Failure-path
-          // terminal — loud-guarded, never masks the reported interruption.
-          recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-            terminal: { runId: runTracker.id, status: 'failed', errorText: message },
-          }));
+      // Both cancel sources end the turn here, whichever branch was running
+      // — the tool path finalizes from the driver's `cancelled` outcome, and
+      // this catch covers every path that throws instead. Classifying on the
+      // recorded source (not the signal's latched reason) keeps a user cancel
+      // from being reported as a provider failure when the abort surfaced as
+      // a plain AbortError from a non-tool provider call.
+      const cancelSourceHit = cancelSource.current;
+      if (cancelSourceHit) {
+        const leaseLost = cancelSourceHit === 'lease-lost';
+        const message = leaseLost
+          ? 'Thread run lease was lost; the send was interrupted.'
+          : 'Run cancelled.';
+        if (leaseLost) {
+          // The thread was taken over while this send ran: stop cleanly at the
+          // barrier instead of reporting a provider error or persisting
+          // results from an execution that lost its run right.
+          if (runTracker && runTracker.getRun().status === 'running') {
+            runTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
+          }
+          if (options.threadId && runTracker) {
+            // Session log: both lease-loss shapes end the turn. Failure-path
+            // terminal — loud-guarded, never masks the reported interruption.
+            recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
+              terminal: { runId: runTracker.id, status: 'failed', errorText: message },
+            }));
+          }
+        } else {
+          const cancelledTracker = driverHandle?.getRunTracker() ?? runTracker;
+          if (cancelledTracker && cancelledTracker.getRun().status === 'running') {
+            cancelledTracker.markCancelled();
+          }
+          if (options.threadId && cancelledTracker) {
+            recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
+              terminal: { runId: cancelledTracker.id, status: 'cancelled' },
+            }));
+          }
         }
         return {
           success: false,
@@ -507,6 +585,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         ...(options.runConfig?.kind && failingTracker ? { runId: failingTracker.id } : {}),
       };
     } finally {
+      execution?.dispose();
       release();
     }
   };

@@ -386,6 +386,15 @@ export class DelegatedAgentTool extends BaseTool {
       },
     });
 
+    // The child runs inside this tool call — there is no second executing
+    // unit. Aliasing it onto the parent is what lets a cancel naming the
+    // child reach the execution that is actually running, instead of
+    // refusing a run that is executing right here.
+    const disposeChildAlias = getToolRuntimeContext().registerChildRunAlias?.(
+      runtimeContext.runId ?? '',
+      runTracker.id
+    );
+
     let turnOutput: TurnOutput | undefined;
     try {
       turnOutput = await runWithToolRuntimeContext(
@@ -417,6 +426,8 @@ export class DelegatedAgentTool extends BaseTool {
         message: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      disposeChildAlias?.();
     }
 
     if ((turnOutput.toolApprovalRequests?.length ?? 0) > 0) {

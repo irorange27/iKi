@@ -192,6 +192,69 @@ describe('DelegatedAgentTool', () => {
     );
   });
 
+  it('aliases the child run onto the execution that runs it', async () => {
+    // The child has no execution of its own — it inherits the parent's abort
+    // signal. This alias is what makes a cancel naming the child reach the
+    // executing parent instead of refusing a run that is executing here.
+    setRunResult({ response: 'done.', iterations: 0, toolCalls: [] });
+
+    const aliases: Array<[string, string]> = [];
+    const disposed: Array<[string, string]> = [];
+    const registerChildRunAlias = vi.fn((parentRunId: string, childRunId: string) => {
+      aliases.push([parentRunId, childRunId]);
+      return () => disposed.push([parentRunId, childRunId]);
+    });
+
+    await runWithToolRuntimeContext(
+      {
+        availableTools: [new ReadFileTool().toAgentTool(), new DelegatedAgentTool().toAgentTool()],
+        runId: 'run_parent_1',
+        runTracker: { id: 'run_parent_1', recordChildRun: vi.fn() },
+        conversationModel: { providerType: 'openai', model: 'gpt-4o-mini' },
+        registerChildRunAlias,
+      },
+      async () => await new DelegatedAgentTool().execute({ task: 'Do the subtask.' })
+    );
+
+    expect(registerChildRunAlias).toHaveBeenCalledWith(
+      'run_parent_1',
+      expect.stringMatching(/^run_/)
+    );
+    // Disposed on the success path too, so the alias never outlives the call.
+    expect(disposed).toEqual([['run_parent_1', expect.stringMatching(/^run_/)]]);
+  });
+
+  it('disposes the child alias when the delegation fails', async () => {
+    // The alias must not survive a failed delegation: a stale alias could
+    // route a later cancel to an execution that no longer exists.
+    createSimpleAgentRunnerMock.mockImplementation(() => {
+      throw new Error('delegation boom');
+    });
+
+    let capturedRegister: ((parentRunId: string, childRunId: string) => () => void) | undefined;
+    const disposed: string[] = [];
+    const registerChildRunAlias = vi.fn((parentRunId: string, childRunId: string) => {
+      capturedRegister = registerChildRunAlias;
+      return () => disposed.push(childRunId);
+    });
+
+    await expect(
+      runWithToolRuntimeContext(
+        {
+          availableTools: [new ReadFileTool().toAgentTool(), new DelegatedAgentTool().toAgentTool()],
+          runId: 'run_parent_1',
+          runTracker: { id: 'run_parent_1', recordChildRun: vi.fn() },
+          conversationModel: { providerType: 'openai', model: 'gpt-4o-mini' },
+          registerChildRunAlias,
+        },
+        async () => await new DelegatedAgentTool().execute({ task: 'Do the subtask.' })
+      )
+    ).rejects.toThrow('delegation boom');
+
+    expect(disposed).toHaveLength(1);
+    expect(capturedRegister).toBe(registerChildRunAlias);
+  });
+
   it('rejects explicit tools outside the explorer policy', async () => {
     await expect(
       runWithToolRuntimeContext(
