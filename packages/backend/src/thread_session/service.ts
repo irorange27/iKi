@@ -47,6 +47,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       attach: streamCoordinator.attachStream,
       detach: streamCoordinator.detachStream,
       registerExecution: streamCoordinator.registerExecution,
+      registerChildRunAlias: streamCoordinator.registerChildRunAlias,
     },
     memory,
     conversation: persistence,

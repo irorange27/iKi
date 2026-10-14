@@ -96,7 +96,7 @@ export const createChatApproval = (deps: {
       cancel: (reason: string) => void;
       runId?: string | null;
     }) => { setRunId: (runId: string | null) => void; dispose: () => void };
-    registerChildRunAlias?: (parentRunId: string, childRunId: string) => () => void;
+    registerChildRunAlias: (parentRunId: string, childRunId: string) => () => void;
   };
   memory: ChatMemory;
   conversation: {
