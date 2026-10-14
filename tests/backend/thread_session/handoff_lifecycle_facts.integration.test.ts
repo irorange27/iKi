@@ -44,6 +44,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { addProvider } from '@iki/backend/db/providers';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
+import { getSessionEvents } from '@iki/backend/db/session_events';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
@@ -140,5 +141,19 @@ describe('a handoff chain records the run segment swap in the session log', () =
     expect(childTurn).toBeDefined();
     expect(childTurn?.kind).toBe('handoff-resume');
     expect(childTurn?.status).toBe('completed');
+
+    // Exactly one terminal fact per segment. The driver records the parent's
+    // and the entry records the child's, so a second write for either would
+    // mean one projection being told the outcome twice.
+    const terminalEvents = getSessionEvents('thread_handoff', [
+      'turn_completed',
+      'turn_failed',
+      'turn_cancelled',
+    ]);
+    const terminalRunIds = terminalEvents.map(
+      event => (event.payload as { runId?: string }).runId
+    );
+    expect(terminalRunIds.filter(runId => runId === parent.id)).toHaveLength(1);
+    expect(terminalRunIds.filter(runId => runId === child.id)).toHaveLength(1);
   });
 });
