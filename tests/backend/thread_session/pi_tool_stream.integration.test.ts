@@ -87,6 +87,8 @@ import {
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
+import * as agentRunDb from '@iki/backend/db/agent_runs';
+import { exportRunTrajectory } from '@iki/backend/thread_session/atif_export';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
@@ -278,6 +280,59 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     // Routing proof: the AI SDK was never constructed; both calls rode Pi.
     expect(createModelMock).not.toHaveBeenCalled();
     expect(server.countRequests('read the tool probe file')).toBe(2);
+  }, 30000);
+
+  it('exports the Pi tool observation into the trajectory', async () => {
+    // The Pi harness records a completed inference whose content carries only
+    // the assistant parts — the tool RESULT is a separate tool-result audit
+    // step. The ATIF projection must join them: the trajectory is the export
+    // surface other tools replay from, and a call without its observation is
+    // not a replayable trajectory.
+    server.setScriptSequence('trajectory the probe file', [
+      {
+        chunks: [
+          sse.toolCallDelta('call_traj_1', TOOL_NAME, '{"path":"/traj.txt"}'),
+          sse.finish('tool_calls', { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }),
+        ],
+      },
+      {
+        chunks: [sse.delta('the file says hi'), sse.finish('stop', { prompt_tokens: 40, completion_tokens: 10, total_tokens: 50 })],
+      },
+    ]);
+
+    const target = { id: 806, send: vi.fn() };
+    const streaming = buildStreaming();
+    const result = await streaming.stream(target, {
+      providerType: 'custom-openai',
+      providerId: 'provider_pi_tool_stream',
+      model: 'pi-model',
+      threadId: 'thread_pi_tool_stream',
+      approvalPolicy: 'never',
+      messages: [
+        { id: 'msg_pi_traj', role: 'user', parts: [{ type: 'text', text: 'trajectory the probe file' }] },
+      ],
+      tools: [TOOL_NAME],
+    });
+    expect(result).toMatchObject({ success: true });
+    expect(lastRunStatus(target)).toBe('completed');
+
+    const run = agentRunDb
+      .listAgentRunsByThread('thread_pi_tool_stream')
+      .find(candidate => candidate.status === 'completed')!;
+    const trajectory = exportRunTrajectory(run.id);
+    expect(trajectory.success).toBe(true);
+    expect(trajectory.trajectory).toBeDefined();
+
+    const callStep = trajectory.trajectory!.steps.find(step =>
+      step.tool_calls?.some(call => call.tool_call_id === 'call_traj_1')
+    );
+    expect(callStep, 'the tool call must be exported').toBeDefined();
+    expect(callStep!.observation, 'the call must carry its observation').toBeDefined();
+    expect(
+      (callStep!.observation!.results as Array<{ source_call_id: string; content?: string }>).map(
+        result => result.source_call_id
+      )
+    ).toContain('call_traj_1');
   }, 30000);
 
   it('full cycle: an always-policy turn pauses, the approval decides, the resume completes on Pi', async () => {

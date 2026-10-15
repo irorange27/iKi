@@ -139,6 +139,41 @@ describe('buildRunTrajectory', () => {
     expect(validateAtifTrajectory(buildRunTrajectory(fixtureRun(), steps))).toEqual([]);
   });
 
+  it('joins a tool observation recorded in its own audit step', () => {
+    // The Pi harness records a completed inference with only assistant parts
+    // — text, reasoning, tool-call — and the tool result lands as a separate
+    // `tool-result` audit step. Deriving the observation ONLY from the
+    // inference content therefore drops it: the exported trajectory carries
+    // the call and no observation, so a run cannot be replayed or audited
+    // from the export.
+    const steps = [
+      fixtureSteps()[0],
+      fixtureStep(2, 'model', {}, {
+        inference: true,
+        usage: { inputTokens: 10, outputTokens: 2 },
+        content: [
+          { type: 'text', text: 'Reading the file' },
+          { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'a.txt' } },
+        ],
+      }),
+      fixtureStep(3, 'tool-result', { toolCallId: 'call_1' }, { output: 'file body' }),
+      fixtureStep(4, 'model', {}, { inference: true, usage: { inputTokens: 10, outputTokens: 2 }, content: [
+        { type: 'text', text: 'It is 4.' },
+      ] }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+
+    const callStep = trajectory.steps.find(step =>
+      step.tool_calls?.some(call => call.tool_call_id === 'call_1')
+    );
+    expect(callStep, 'the tool call must be exported').toBeDefined();
+    expect(callStep!.observation).toEqual({
+      results: [{ source_call_id: 'call_1', content: 'file body' }],
+    });
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
   it('projects persisted approval decisions into the trajectory', () => {
     const trajectory = buildRunTrajectory(fixtureRun(), [
       fixtureStep(1, 'approval-request', { approvalId: 'appr_1', toolName: 'shell' }, null),

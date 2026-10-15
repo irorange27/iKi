@@ -186,10 +186,25 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
       const calls = parts.filter(part => part.type === 'tool-call').map(part => ({
         tool_call_id: String(part.toolCallId), function_name: String(part.toolName), arguments: part.input,
       }));
-      const results = parts.filter(part => part.type === 'tool-result' || part.type === 'tool-error').map(part => ({
-        source_call_id: String(part.toolCallId),
-        content: typeof part.output === 'string' ? part.output : JSON.stringify(part.output ?? part.error ?? null),
-      }));
+      // An observation is paired with its call from EITHER source: the result
+      // parts this inference already carries, or the separate tool-audit step
+      // the run recorded. The Pi harness stores the result in that audit step
+      // only, so reading just the inference content silently drops every
+      // observation of a Pi turn.
+      const results = calls.flatMap(call => {
+        const inContent = parts
+          .filter(part =>
+            (part.type === 'tool-result' || part.type === 'tool-error') &&
+            String(part.toolCallId) === call.tool_call_id
+          )
+          .map(part => ({
+            source_call_id: String(part.toolCallId),
+            content: typeof part.output === 'string' ? part.output : JSON.stringify(part.output ?? part.error ?? null),
+          }));
+        if (inContent.length > 0) return inContent;
+        const observed = observationByCallId.get(call.tool_call_id);
+        return observed ? observed.results : [];
+      });
       const usage = isObjectRecord(output.usage) ? output.usage : {};
       trajectorySteps.push({
         ...base, model_name: modelName,
