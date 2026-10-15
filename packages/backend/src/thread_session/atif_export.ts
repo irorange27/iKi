@@ -148,15 +148,53 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
         }
   );
 
-  const observationByCallId = new Map<string, AtifStep['observation']>();
+  // Observations are indexed by the INFERENCE each audit step follows, not by
+  // call id alone. Provider call ids are only unique within a response, so a
+  // run-wide map would let a later turn's result answer an earlier turn's call
+  // whenever an endpoint reuses ids (`call_1` and friends) — attributing a
+  // result to a call that never produced it, which still validates and is
+  // therefore silent. `null` keys the audit steps of a run with no inference
+  // record (the legacy fallback).
+  const observationByInferenceAndCall = new Map<string, AtifStep['observation']>();
+  const observationKey = (inferenceKey: string, callId: string) => `${inferenceKey}\u0000${callId}`;
+  const objectFallbackByCallId = new Map<string, AtifStep['observation']>();
+  let currentInferenceKey: string | null = null;
   for (const step of orderedSteps) {
+    if (step.type === 'model' && stepOutput(step).inference === true) {
+      currentInferenceKey = `run_step:${step.stepIndex}`;
+      continue;
+    }
     if (step.type !== 'tool-result' && !(step.type === 'error' && stepInput(step).toolCallId)) continue;
     const output = stepOutput(step);
     const content = 'error' in output ? output.error : (output.output ?? null);
-    observationByCallId.set(toolCallIdOf(step), {
+    const observation: AtifStep['observation'] = {
       results: [{ source_call_id: toolCallIdOf(step), content: typeof content === 'string' ? content : JSON.stringify(content) }],
-    });
+    };
+    if (currentInferenceKey !== null) {
+      observationByInferenceAndCall.set(observationKey(currentInferenceKey, toolCallIdOf(step)), observation);
+    } else {
+      objectFallbackByCallId.set(toolCallIdOf(step), observation);
+    }
   }
+  /** The observation recorded for a call, looked up under the inference that
+   *  made it; only a run without inference records falls back to the flat map. */
+  const observationFor = (inferenceKey: string | null, callId: string) =>
+    inferenceKey === null
+      ? objectFallbackByCallId.get(callId)
+      : observationByInferenceAndCall.get(observationKey(inferenceKey, callId));
+
+  /** The inference a step's audit records belong to, or null when the run
+   *  recorded no inference at all (the legacy projection path). */
+  const inferenceKeyForStepIndex = (stepIndex: number): string | null => {
+    let key: string | null = null;
+    for (const candidate of orderedSteps) {
+      if (candidate.stepIndex >= stepIndex) break;
+      if (candidate.type === 'model' && stepOutput(candidate).inference === true) {
+        key = `run_step:${candidate.stepIndex}`;
+      }
+    }
+    return key;
+  };
 
   const inferences = orderedSteps.filter(step => step.type === 'model' && stepOutput(step).inference === true);
   const recordedCallIds = new Set(inferences.flatMap(step => {
@@ -169,7 +207,7 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
     const output = stepOutput(step);
     const extra: Record<string, unknown> = { run_step_index: step.stepIndex, run_step_type: step.type };
 
-    if ((step.type === 'tool-result' || (step.type === 'error' && stepInput(step).toolCallId)) && !observationByCallId.has(toolCallIdOf(step))) continue;
+    if ((step.type === 'tool-result' || (step.type === 'error' && stepInput(step).toolCallId)) && !observationFor(inferenceKeyForStepIndex(step.stepIndex), toolCallIdOf(step))) continue;
 
     const base = {
       step_id: trajectorySteps.length + 1,
@@ -202,7 +240,7 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
             content: typeof part.output === 'string' ? part.output : JSON.stringify(part.output ?? part.error ?? null),
           }));
         if (inContent.length > 0) return inContent;
-        const observed = observationByCallId.get(call.tool_call_id);
+        const observed = observationFor(`run_step:${step.stepIndex}`, call.tool_call_id);
         return observed ? observed.results : [];
       });
       const usage = isObjectRecord(output.usage) ? output.usage : {};
@@ -225,8 +263,8 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
     if (step.type === 'tool-call') {
       const input = stepInput(step);
       const callId = toolCallIdOf(step);
-      const observation = observationByCallId.get(callId);
-      if (observation) observationByCallId.delete(callId);
+      const observation = objectFallbackByCallId.get(callId);
+      if (observation) objectFallbackByCallId.delete(callId);
       trajectorySteps.push({
         ...base,
         model_name: modelName,

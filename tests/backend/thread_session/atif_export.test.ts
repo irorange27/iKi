@@ -130,6 +130,35 @@ describe('buildRunTrajectory', () => {
     });
   });
 
+  it('never pairs a call with a later inference reusing the same call id', () => {
+    // Provider call ids are unique only WITHIN a response: compat and
+    // self-hosted endpoints reuse `call_1`-style ids freely. Keying the
+    // observation index by call id alone would answer the first call with the
+    // second call's result — fabricated provenance that still validates, so
+    // nothing else would catch it.
+    const steps = [
+      fixtureStep(1, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'first.txt' } },
+      ] }),
+      fixtureStep(2, 'tool-result', { toolCallId: 'call_1' }, { output: 'FIRST FILE BODY' }),
+      fixtureStep(3, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'second.txt' } },
+      ] }),
+      fixtureStep(4, 'tool-result', { toolCallId: 'call_1' }, { output: 'SECOND FILE BODY' }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    const callSteps = trajectory.steps.filter(step => step.tool_calls?.length);
+    expect(callSteps).toHaveLength(2);
+    expect(callSteps[0]!.observation).toEqual({
+      results: [{ source_call_id: 'call_1', content: 'FIRST FILE BODY' }],
+    });
+    expect(callSteps[1]!.observation).toEqual({
+      results: [{ source_call_id: 'call_1', content: 'SECOND FILE BODY' }],
+    });
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
   it('pairs legacy tool errors and keeps standalone errors valid', () => {
     const steps = [
       fixtureSteps()[0],

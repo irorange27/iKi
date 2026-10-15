@@ -315,6 +315,10 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     });
     expect(result).toMatchObject({ success: true });
     expect(lastRunStatus(target)).toBe('completed');
+    // Routing proof: this must ride Pi, whose inference records carry no
+    // result parts. On the AI SDK harness the observation would come from the
+    // inference itself and the case would pass without exercising the join.
+    expect(createModelMock).not.toHaveBeenCalled();
 
     const run = agentRunDb
       .listAgentRunsByThread('thread_pi_tool_stream')
