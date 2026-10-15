@@ -719,6 +719,16 @@ export const createChatApproval = (deps: {
         )
       : null;
     if (resumePlan?.threadId && resumeRunTracker) {
+      // The parent's terminal half is written only while the parent row is
+      // still mid-flight. `markResumed` refuses a terminal → completed
+      // transition, so a parent already finalized (a cancel or reclaim raced
+      // in) must not be told it completed — the log and the row would then
+      // disagree in the direction this change exists to fix.
+      const parentStatus = baseApprovalContext?.runId
+        ? rehydrateAgentRunTracker(baseApprovalContext.runId)?.getRun().status
+        : undefined;
+      const parentStillResumable =
+        parentStatus === 'running' || parentStatus === 'blocked' || parentStatus === 'queued';
       // Session log: the continuation is its own run under the paused plan, and
       // the parent segment ends with it — recorded together, BEFORE the
       // consume and the parent's markResumed, so one atomic write carries both
@@ -728,7 +738,7 @@ export const createChatApproval = (deps: {
       // running.
       try {
         recordSessionEvents(resumePlan.threadId, turnFactsToEvents({
-          ...(baseApprovalContext?.runId
+          ...(baseApprovalContext?.runId && parentStillResumable
             ? {
                 terminal: {
                   runId: baseApprovalContext.runId,

@@ -156,4 +156,77 @@ describe('a handoff chain records the run segment swap in the session log', () =
     expect(terminalRunIds.filter(runId => runId === parent.id)).toHaveLength(1);
     expect(terminalRunIds.filter(runId => runId === child.id)).toHaveLength(1);
   });
+  it('loses the child segment cleanly when its start write fails', async () => {
+    // The parent's terminal is recorded BEFORE the chained segment's row
+    // exists, so a failure at the segment boundary cannot leave a parent whose
+    // log says completed while its row says failed. What it CAN leave — the
+    // residual tracked against the tracker's id contract — is the abandoned
+    // child row with a `turn_failed` and no `turn_started`; this test pins the
+    // reachable half (the parent) and asserts the residual's shape explicitly.
+    createModelMock.mockReturnValue(
+      new FauxModelProvider([
+        fauxToolCall(HANDOFF, {
+          summary: 'phase one done',
+          next_steps: 'finish phase two',
+          reason: 'context_limit',
+        }),
+        fauxText('phase two complete'),
+      ])
+    );
+
+    const { getDb } = await import('@iki/backend/db/database');
+    getDb().exec(`CREATE TRIGGER handoff_swap_reject_started BEFORE INSERT ON session_events
+      WHEN NEW.type = 'turn_started' AND json_extract(NEW.payload, '$.kind') = 'handoff-resume'
+      BEGIN SELECT RAISE(ABORT, 'handoff swap: started write rejected'); END`);
+    try {
+      await service.stream(
+        target,
+        {
+          providerType: 'openai',
+          providerId: 'provider_handoff',
+          model: 'handoff-model',
+          threadId: 'thread_handoff',
+          approvalPolicy: 'never',
+          autonomous: { maxIterations: 3, continuePrompt: 'continue' },
+          messages: [{ id: 'msg_handoff_fail', role: 'user', parts: [{ type: 'text', text: 'pass the baton' }] }],
+          tools: [HANDOFF],
+        }
+      );
+    } finally {
+      getDb().exec('DROP TRIGGER IF EXISTS handoff_swap_reject_started');
+    }
+
+    const rows = agentRunDb.listAgentRunsByThread('thread_handoff');
+    const replay = rebuildThreadViewFromEvents('thread_handoff');
+
+    // The PARENT never disagrees: its log state matches its row state.
+    const parentRow = rows.find(run => run.kind === 'chat-turn')!;
+    const parentTurn = replay.turns.find(turn => turn.runId === parentRow.id)!;
+    expect(parentTurn).toBeDefined();
+    const parentTerminal = parentTurn.status !== 'running';
+    expect(parentTerminal).toBe(
+      ['completed', 'failed', 'cancelled'].includes(parentRow.status)
+    );
+
+    // The residual, stated not hidden: the abandoned child may carry a terminal
+    // fact its start never preceded. That is the child-side half of S1 and is
+    // blocked on the tracker minting a caller-supplied id — the write ordering
+    // alone cannot close it.
+    const startedRunIds = new Set(
+      getSessionEvents('thread_handoff', ['turn_started']).map(
+        event => (event.payload as { runId?: string }).runId,
+      )
+    );
+    const orphanTerminals = replay.turns.filter(
+      turn => turn.status !== 'running' && !startedRunIds.has(turn.runId)
+    );
+    // The residual is bounded: at most the abandoned chained segment, terminal
+    // as `failed`, and never the parent.
+    for (const turn of orphanTerminals) {
+      const row = rows.find(run => run.id === turn.runId)!;
+      expect(row.kind).toBe('handoff-resume');
+      expect(turn.status).toBe('failed');
+    }
+    expect(orphanTerminals.length).toBeLessThanOrEqual(1);
+  });
 });
