@@ -109,8 +109,6 @@ const undoEditInputShape = {
 };
 
 export const UndoEditInputSchema = z.object(undoEditInputShape);
-export const UndoEditInputSchemaUi = uiSchema(undoEditInputShape);
-
 // ---------------------------------------------------------------------------
 // Delete file schemas
 // ---------------------------------------------------------------------------

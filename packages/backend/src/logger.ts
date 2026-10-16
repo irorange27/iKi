@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -570,11 +569,6 @@ export function setBaseLogContext(context: LogContext): void {
     entity: mergeRecords(baseContext.entity, context.entity),
     data: mergeRecords(baseContext.data, context.data),
   };
-}
-
-export function createLogId(prefix?: string): string {
-  const value = randomUUID().replace(/-/g, '');
-  return prefix ? `${prefix}_${value}` : value;
 }
 
 export function setLoggingEnabled(enabled: boolean): void {

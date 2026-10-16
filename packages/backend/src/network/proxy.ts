@@ -32,9 +32,6 @@ export const getProxyProtocol = (
   network: NetworkConfig | null | undefined
 ): AppConfig['network']['proxy']['type'] => network?.proxy?.type || 'http';
 
-export const isProxyEndpointConfigured = (network: NetworkConfig | null | undefined): boolean =>
-  hasEnabledProxy(network) && Boolean(normalizeHost(network)) && normalizePort(network) !== null;
-
 export const buildProxyUrl = (
   network: NetworkConfig | null | undefined,
   options?: {

@@ -48,11 +48,6 @@ type ToolIndexEntry = {
   toolName: string;
 };
 
-type ManagerEvents = {
-  'status-changed': (serverId: string, status: McpServerStatus) => void;
-  'tools-changed': (serverId: string, toolCount: number) => void;
-};
-
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const MAX_SCHEMA_BYTES = 20000;
 const mcpManagerLogger = createLogger({ module: 'mcp_manager' });
@@ -654,11 +649,3 @@ export class McpManager extends EventEmitter {
     return this.callTool(entry.serverId, entry.toolName, args);
   }
 }
-
-export const onMcpManager = <K extends keyof ManagerEvents>(
-  manager: McpManager,
-  event: K,
-  handler: ManagerEvents[K]
-) => {
-  manager.on(event, handler as (...args: unknown[]) => void);
-};

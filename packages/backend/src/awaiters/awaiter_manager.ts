@@ -284,5 +284,3 @@ export const deleteAwaiter = (
   awaitersDb.deleteAwaiter(awaiter.id);
   return { deleted: true, awaiterId: awaiter.id, awaiterTitle: awaiter.title };
 };
-
-export const getAwaiterRecord = toAwaiterRecord;

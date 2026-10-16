@@ -1,7 +1,6 @@
 import {
   formatAwaiterTriggerSummary,
   parseAwaiterTriggerSpec,
-  type AwaiterTriggerKind,
   type AwaiterTriggerSpec,
 } from '@iki/backend/types/awaiters';
 import { getErrorMessage } from '@iki/backend/utils/errors';
@@ -13,9 +12,6 @@ const parseDateInput = (value: string): Date | null => {
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
-
-export const normalizeAwaiterTriggerKind = (value: unknown): AwaiterTriggerKind | null =>
-  value === 'time_at' || value === 'time_after' ? value : null;
 
 export const normalizeAwaiterTriggerSpec = (value: unknown): AwaiterTriggerSpec | null => {
   const parsed = parseAwaiterTriggerSpec(value);

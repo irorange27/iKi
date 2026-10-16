@@ -362,12 +362,6 @@ export const isAffectSignalPart = (part: unknown): part is AffectSignalPart =>
 export const isTokenUsagePart = (part: unknown): part is TokenUsagePart =>
   isObjectRecord(part) && part.type === 'data-token-usage';
 
-export const isDynamicToolPart = (part: unknown): part is DynamicToolPart =>
-  isObjectRecord(part) &&
-  part.type === 'dynamic-tool' &&
-  typeof part.toolCallId === 'string' &&
-  typeof part.toolName === 'string';
-
 export const isChatUiMetadataPart = (part: unknown): part is ChatUiMetadataPart =>
   isObjectRecord(part) &&
   typeof part.type === 'string' &&

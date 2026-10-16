@@ -410,5 +410,3 @@ export const deleteProactiveTask = (
   tasksDb.deleteProactiveTask(task.id);
   return { deleted: true, taskId: task.id, taskName: task.name };
 };
-
-export const getProactiveTaskRecord = toProactiveTaskRecord;
