@@ -168,6 +168,58 @@ describe('buildRunTrajectory', () => {
     expect(validateAtifTrajectory(buildRunTrajectory(fixtureRun(), steps))).toEqual([]);
   });
 
+  it('joins an AI-SDK-ordered observation (audit step BEFORE its inference)', () => {
+    // The AI SDK emits tool parts DURING the stream and records the inference
+    // at the step's end, so its audit order is tool-call -> tool-result ->
+    // model(inference) — the reverse of the Pi path. The join must not depend
+    // on the order: the observation belongs to whichever inference recorded
+    // the call, in either direction.
+    const steps = [
+      fixtureStep(1, 'tool-call', { toolCallId: 'call_1', toolName: 'read_file', input: { path: 'a.txt' } }, null),
+      fixtureStep(2, 'tool-result', { toolCallId: 'call_1' }, { output: 'AI SDK BODY' }),
+      fixtureStep(3, 'model', {}, { inference: true, usage: { inputTokens: 10, outputTokens: 2 }, content: [
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'a.txt' } },
+      ] }),
+      fixtureStep(4, 'model', {}, { inference: true, usage: { inputTokens: 10, outputTokens: 2 }, content: [
+        { type: 'text', text: 'It is 4.' },
+      ] }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    const callStep = trajectory.steps.find(step =>
+      step.tool_calls?.some(call => call.tool_call_id === 'call_1')
+    );
+    expect(callStep, 'the tool call must be exported').toBeDefined();
+    expect(callStep!.observation).toEqual({
+      results: [{ source_call_id: 'call_1', content: 'AI SDK BODY' }],
+    });
+    // The result's own audit step must not be emitted a second time.
+    expect(trajectory.steps.filter(step => step.extra?.run_step_type === 'tool-result')).toHaveLength(0);
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
+  it('keeps each call its own result when the AI SDK reuses a call id', () => {
+    const steps = [
+      fixtureStep(1, 'tool-call', { toolCallId: 'call_1', toolName: 'read_file', input: { path: 'first.txt' } }, null),
+      fixtureStep(2, 'tool-result', { toolCallId: 'call_1' }, { output: 'FIRST' }),
+      fixtureStep(3, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'first.txt' } },
+      ] }),
+      fixtureStep(4, 'tool-call', { toolCallId: 'call_1', toolName: 'read_file', input: { path: 'second.txt' } }, null),
+      fixtureStep(5, 'tool-result', { toolCallId: 'call_1' }, { output: 'SECOND' }),
+      fixtureStep(6, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'second.txt' } },
+      ] }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    const observations = trajectory.steps.flatMap(step =>
+      (step.observation?.results ?? []).map(result => result.content)
+    );
+    expect(observations).toEqual(['FIRST', 'SECOND']);
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
   it('joins a tool observation recorded in its own audit step', () => {
     // The Pi harness records a completed inference with only assistant parts
     // — text, reasoning, tool-call — and the tool result lands as a separate
