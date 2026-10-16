@@ -305,8 +305,3 @@ export const parseToolOutput = (toolName: string, value: unknown): ParsedToolOut
     ? ({ kind: toolKind, output: parsed } as ParsedToolOutput)
     : { kind: 'unknown', output: value };
 };
-
-export const parseToolPayload = (toolName: string, input: unknown, output: unknown) => ({
-  input: parseToolInput(toolName, input),
-  output: parseToolOutput(toolName, output),
-});

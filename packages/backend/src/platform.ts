@@ -36,8 +36,6 @@ export const setPlatformInfo = (info: PlatformInfo) => {
   platformInfo = next;
 };
 
-export const getPlatformInfo = (): PlatformInfo => ({ ...platformInfo });
-
 export const getUserDataPath = (): string => {
   if (platformInfo.userDataPath && platformInfo.userDataPath.trim()) {
     return platformInfo.userDataPath.trim();

@@ -28,19 +28,6 @@ export const getStreamErrorMessage = (error: unknown): string => {
   return fallback;
 };
 
-const REFUSAL_PATTERNS = [
-  /\bI (?:am unable to|cannot|can't|won't|am not able to) (?:assist|comply|generate|create|write|provide|help|fulfil|engage|participate|do that)\b/i,
-  /\b(?:content policy|safety guidelines?|acceptable use|against my (?:guidelines|policies|terms)|terms of service)\b/i,
-  /\bviolates? (?:my|the|our|content|safety) (?:policy|guidelines)\b/i,
-];
-
-export const looksLikeRefusal = (text: string): boolean => {
-  const trimmed = text.trim();
-  if (trimmed.length === 0) return true;
-  if (trimmed.length > 500) return false;
-  return REFUSAL_PATTERNS.some(pattern => pattern.test(trimmed));
-};
-
 /**
  * Error thrown when the model refuses to respond (content filter, safety, etc.).
  */

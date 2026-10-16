@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 import * as chatMessageDb from '../db/chat_message';
 import * as chatThreadDb from '../db/chat_thread';
 import { extractTextFromMessageParts, isObjectRecord } from './message_parts';
@@ -22,11 +20,6 @@ export type ThreadContentMatch = {
 
 const SNIPPET_CONTEXT = 48;
 const SNIPPET_MAX = 180;
-
-export const threadContentSearchInputSchema = z.object({
-  query: z.string().trim().min(1).max(200),
-  limit: z.number().int().positive().max(50).optional(),
-});
 
 const buildSnippet = (text: string, query: string): string => {
   const lowered = text.toLowerCase();
