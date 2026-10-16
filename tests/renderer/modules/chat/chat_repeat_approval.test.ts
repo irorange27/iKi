@@ -111,12 +111,14 @@ describe('repeat approval across a resume chunk stream', () => {
     expect(toolCallIds).toContain('call_2');
   });
 
-  it('documents that a lost pre-pause seed aborts the stream (the issue signature)', async () => {
+  it('aborts the stream when the pre-pause seed is lost (the issue signature)', async () => {
     // The renderer is NOT timing-proof on its own: correctness depends on the
-    // backend re-seed arriving. If it is ever lost, the AI SDK reducer throws
-    // and aborts the whole stream — the exact issue #71 signature ("second
-    // approval card never rendered"). Pinning that keeps the dependency
-    // explicit rather than implied.
+    // backend re-seed arriving. Drive the REAL approval flow without the
+    // re-seed and the AI SDK reducer throws, aborting the stream — which is
+    // exactly issue #71's 'second approval card never rendered'. This must
+    // go through handleToolApproval (which calls resumeStream), because
+    // emitting onto the transport alone never hands the buffered resume slot
+    // to the Chat and the reducer never runs.
     const api = createElectronApi();
     const instance = createChatInstance({
       electronAPI: api.electronAPI,
@@ -136,18 +138,20 @@ describe('repeat approval across a resume chunk stream', () => {
     await flush();
 
     instance.transport.expectFollowUpStream();
-    // Resume WITHOUT the pre-pause re-seed.
+    const approvalPromise = instance.handleToolApproval(
+      { id: 'assistant_1', parts: [] } as never,
+      { type: 'tool-approval-request', approvalId: 'appr_1', toolCallId: 'call_1', state: 'approval-requested' },
+      true
+    );
+    // Resume WITHOUT the backend re-seeding the paused tool part.
     api.emit({ type: 'start', messageId: 'assistant_1' });
     api.emit({ type: 'tool-output-available', toolCallId: 'call_1', output: 'written' });
+    api.emit({ type: 'finish' });
+    await approvalPromise;
     await flush();
 
-    // The reducer throws inside the SDK's serialized job executor; whether it
-    // surfaces on `error` or is swallowed, the OBSERVABLE contract is that the
-    // pre-pause output never lands on the message — which is what leaves the
-    // user staring at an approval card that can never resolve.
-    const landed = instance.messageStore.messages.flatMap(message =>
-      (message.parts ?? []).map(part => (part as { output?: unknown }).output),
+    expect(instance.error.value?.message).toContain(
+      'No tool invocation found for tool call ID "call_1"'
     );
-    expect(landed).not.toContain('written');
-  });
-});
+    expect(instance.status.value).toBe('error');
+  });});
