@@ -10,7 +10,7 @@ import {
   TOOL_EXECUTED,
   type RebuiltThreadView,
 } from './session_log';
-import { TOOL_EXECUTION_FINISHED } from './tool_execution';
+import { TOOL_EXECUTION_FINISHED, TOOL_EXECUTION_STARTED } from './tool_execution';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { resolveToolCallMaxIterations } from './constants';
 
@@ -156,6 +156,11 @@ export const journaledExchangePairs = (
   if (chainRunIds.length === 0) return [];
   const chain = new Set(chainRunIds);
   const chainApprovalIds = new Set<string>();
+  /** Approvals of the dead chain the owner actually STARTED (effect may have
+   *  run) — their outcomes are required, not optional. */
+  const startedApprovalIds = new Set<string>();
+  /** Approvals of the dead chain whose outcome WAS recorded. */
+  const finishedApprovalIds = new Set<string>();
   for (const event of events) {
     if (event.type !== APPROVAL_REQUESTED) continue;
     const payload = event.payload as { approvalId?: unknown; runId?: unknown };
@@ -201,6 +206,14 @@ export const journaledExchangePairs = (
   const unrepresentable = () =>
     new Error('A journaled tool execution of the dead chain cannot be represented from the log.');
   for (const event of events) {
+    if (event.type === TOOL_EXECUTION_STARTED) {
+      const payload = event.payload as { binding?: { approvalId?: unknown } };
+      const approvalId = payload.binding?.approvalId;
+      if (typeof approvalId === 'string' && chainApprovalIds.has(approvalId)) {
+        startedApprovalIds.add(approvalId);
+      }
+      continue;
+    }
     if (event.type === TOOL_EXECUTION_FINISHED) {
       const payload = event.payload as {
         binding?: {
@@ -230,6 +243,7 @@ export const journaledExchangePairs = (
       ) {
         throw unrepresentable();
       }
+      finishedApprovalIds.add(binding.approvalId);
       pushPair(binding.toolCallId, binding.toolName, binding.args, result.output);
       continue;
     }
@@ -255,6 +269,22 @@ export const journaledExchangePairs = (
         throw unrepresentable();
       }
       pushPair(payload.toolCallId, payload.toolName, payload.args, payload.result.output);
+    }
+  }
+
+  // An execution that STARTED but never recorded an outcome is an UNKNOWN
+  // effect: the tool may have run and the process died before the result
+  // landed. Dropping it would let the retry re-issue the call — and re-issue
+  // means the effect can run twice. The owner already refuses to re-execute
+  // that same approvalId, so a new call id would sidestep that protection
+  // entirely. Refuse loudly instead: the log cannot explain the outcome, so
+  // the recovery is not continuable. (An approval that never STARTED is not
+  // here — nothing happened, and re-asking is correct.)
+  for (const approvalId of startedApprovalIds) {
+    if (!finishedApprovalIds.has(approvalId)) {
+      throw new Error(
+        'A tool execution of the dead chain started but never recorded its outcome; its effect is unknown and the recovery cannot continue.'
+      );
     }
   }
   return pairs;

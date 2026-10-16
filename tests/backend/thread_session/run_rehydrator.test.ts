@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveResumeStreamOptions,
   deriveRunTurnPlan,
+  journaledExchangePairs,
 } from '@iki/backend/thread_session/run_rehydrator';
 import type { AgentRun } from '@iki/backend/types/agent_run';
 
@@ -166,5 +167,67 @@ describe('deriveResumeStreamOptions', () => {
       input: { metadata: { autonomous: { maxIterations: Infinity } } },
     } as never;
     expect(deriveRunTurnPlan(infiniteRun).autonomous).toBeUndefined();
+  });
+});
+
+describe('journaledExchangePairs: an unknown effect is not continuable', () => {
+  const chainRunIds = ['run_dead_1'];
+  const fact = (revision: number, type: string, payload: unknown) =>
+    ({ revision, type, version: 1, createdAt: '2026-10-01T00:00:00.000Z', payload }) as never;
+
+  const binding = {
+    threadId: 'thread_1',
+    approvalId: 'appr_unknown_1',
+    toolCallId: 'call_unknown_1',
+    toolName: 'write_file',
+    args: { path: 'notes.md', content: 'original body' },
+  };
+
+  it('refuses when an execution started but its result was never recorded', () => {
+    // The owner started the effect (a real write is now possible) and the
+    // process died before recording the result. Silently dropping it lets the
+    // retry re-issue the call — and re-issue means the effect may run twice.
+    const events = [
+      fact(1, 'approval_requested', { approvalId: binding.approvalId, runId: 'run_dead_1', toolName: 'write_file', toolCallId: binding.toolCallId, args: binding.args }),
+      fact(2, 'tool_execution_prepared', { binding, decision: 'approved' }),
+      fact(3, 'tool_execution_started', { binding, decision: 'approved' }),
+    ];
+
+    expect(() => journaledExchangePairs(events, chainRunIds)).toThrow(
+      /never finished|unknown|outcome/i
+    );
+  });
+
+  it('still continues an execution whose result WAS recorded', () => {
+    const events = [
+      fact(1, 'approval_requested', { approvalId: binding.approvalId, runId: 'run_dead_1', toolName: 'write_file', toolCallId: binding.toolCallId, args: binding.args }),
+      fact(2, 'tool_execution_prepared', { binding, decision: 'approved' }),
+      fact(3, 'tool_execution_started', { binding, decision: 'approved' }),
+      fact(4, 'tool_execution_finished', {
+        binding,
+        decision: 'approved',
+        result: {
+          type: 'tool-result',
+          toolCallId: binding.toolCallId,
+          toolName: binding.toolName,
+          output: { type: 'text', value: 'written' },
+        },
+      }),
+    ];
+
+    const pairs = journaledExchangePairs(events, chainRunIds);
+    expect(pairs).toHaveLength(2);
+    expect(pairs[0]).toMatchObject({ role: 'assistant' });
+  });
+
+  it('still replays an approval that never started: nothing happened, so nothing to reconcile', () => {
+    // Requested and admitted but never STARTED — the effect never ran, so the
+    // model legitimately re-asks and the current no-pair behavior is right.
+    const events = [
+      fact(1, 'approval_requested', { approvalId: binding.approvalId, runId: 'run_dead_1', toolName: 'write_file', toolCallId: binding.toolCallId, args: binding.args }),
+      fact(2, 'tool_execution_prepared', { binding, decision: 'approved' }),
+    ];
+
+    expect(journaledExchangePairs(events, chainRunIds)).toEqual([]);
   });
 });
