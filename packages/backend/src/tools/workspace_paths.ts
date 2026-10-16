@@ -10,6 +10,22 @@ import { getUserDataPath } from '../platform';
 import { isPathWithinRoot } from '@iki/backend/utils/path_boundary';
 import { getToolRuntimeContext } from '../utils/runtime_context';
 
+/** What a workspace path resolves to.
+ *
+ *  `validated` is the path the boundary check actually examined — realpath
+ *  resolved, every component verified inside the roots. It is the ONLY path
+ *  safe to open: the caller-supplied path may contain a link that is swapped
+ *  between the check and the use (audit H5).
+ *
+ *  `display` is the caller's own path, anchored on the workspace root as the
+ *  caller wrote it. Tool results echo this so a model and a user see the path
+ *  they used, not a host-specific resolved form (e.g. macOS /var vs
+ *  /private/var). */
+export type ResolvedWorkspacePath = {
+  validated: string;
+  display: string;
+};
+
 export type WorkspaceRoot = {
   resolvedPath: string;
   realPath: string;
@@ -170,52 +186,85 @@ const resolveExistingAncestorRealPath = async (targetPath: string): Promise<stri
   throw new Error(`Path "${targetPath}" does not have an existing ancestor`);
 };
 
-export const resolveReadableWorkspacePath = async (inputPath: string): Promise<string> => {
+export const resolveReadableWorkspacePath = async (inputPath: string): Promise<ResolvedWorkspacePath> => {
   const roots = await resolveWorkspaceRoots();
-  const primaryRoot = roots[0]?.resolvedPath;
+  // Resolution and every boundary check run against the VALIDATED root
+  // (realPath — isPathWithinRoot compares against it), so what we hand back
+  // is on the same footing as the check (audit H5). The caller's own root
+  // spelling is kept separately for the display path.
+  const primaryRoot = roots[0]?.realPath;
+  const displayRoot = roots[0]?.resolvedPath;
   if (!primaryRoot) {
     throw getWorkspaceSelectionRequirementError();
   }
   const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot, roots);
   const actualPath = await fs.realpath(absolutePath);
   ensurePathWithinWorkspaceRoots(inputPath, actualPath, roots);
-  return absolutePath;
+  // `validated` is what the check examined. `display` keeps the caller's own
+  // spelling so tool results show the path they used, not a host-resolved form.
+  return { validated: actualPath, display: path.join(displayRoot ?? primaryRoot, path.relative(primaryRoot, absolutePath)) };
 };
 
-export const resolveWritableWorkspacePath = async (inputPath: string): Promise<string> => {
+export const resolveWritableWorkspacePath = async (inputPath: string): Promise<ResolvedWorkspacePath> => {
   const roots = await resolveWorkspaceRoots();
-  const primaryRoot = roots[0]?.resolvedPath;
+  // Resolution and every boundary check run against the VALIDATED root
+  // (realPath — isPathWithinRoot compares against it), so what we hand back
+  // is on the same footing as the check (audit H5). The caller's own root
+  // spelling is kept separately for the display path.
+  const primaryRoot = roots[0]?.realPath;
+  const displayRoot = roots[0]?.resolvedPath;
   if (!primaryRoot) {
     throw getWorkspaceSelectionRequirementError();
   }
   const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot, roots);
 
+  // Same contract as the readable path.
   const existingTargetRealPath = await tryRealpath(absolutePath);
   if (existingTargetRealPath) {
     ensurePathWithinWorkspaceRoots(inputPath, existingTargetRealPath, roots);
-    return absolutePath;
+    return { validated: existingTargetRealPath, display: path.join(displayRoot ?? primaryRoot, path.relative(primaryRoot, absolutePath)) };
   }
 
   const existingAncestorRealPath = await resolveExistingAncestorRealPath(absolutePath);
   ensurePathWithinWorkspaceRoots(inputPath, existingAncestorRealPath, roots);
-  return absolutePath;
+  // A not-yet-existing target: the ancestor is validated, so the target is
+  // that real directory joined with the segments that do not exist yet. Those
+  // segments are the caller's own literal path components — none of them a
+  // link that could have been swapped after the check.
+  const validatedAncestor = path.resolve(existingAncestorRealPath);
+  const missingTail = path.relative(validatedAncestor, path.resolve(absolutePath));
+  return { validated: path.join(validatedAncestor, missingTail), display: path.join(displayRoot ?? primaryRoot, path.relative(primaryRoot, absolutePath)) };
 };
 
-export const resolveDeleteWorkspacePath = async (inputPath: string): Promise<string> => {
+export const resolveDeleteWorkspacePath = async (inputPath: string): Promise<ResolvedWorkspacePath> => {
   const roots = await resolveWorkspaceRoots();
-  const primaryRoot = roots[0]?.resolvedPath;
+  // Resolution and every boundary check run against the VALIDATED root
+  // (realPath — isPathWithinRoot compares against it), so what we hand back
+  // is on the same footing as the check (audit H5). The caller's own root
+  // spelling is kept separately for the display path.
+  const primaryRoot = roots[0]?.realPath;
+  const displayRoot = roots[0]?.resolvedPath;
   if (!primaryRoot) {
     throw getWorkspaceSelectionRequirementError();
   }
   const absolutePath = resolveAbsoluteWorkspacePath(inputPath, primaryRoot, roots);
   const parentRealPath = await resolveExistingAncestorRealPath(path.dirname(absolutePath));
   ensurePathWithinWorkspaceRoots(inputPath, parentRealPath, roots);
-  return absolutePath;
+  // The parent directory is what was validated; the path below it is the
+  // caller's own literal, so the join cannot alias back outside.
+  const validatedParent = path.resolve(parentRealPath);
+  const parentTail = path.relative(validatedParent, path.resolve(absolutePath));
+  return { validated: path.join(validatedParent, parentTail), display: path.join(displayRoot ?? primaryRoot, path.relative(primaryRoot, absolutePath)) };
 };
 
 export const resolveShellWorkingDirectory = async (inputCwd?: string): Promise<string> => {
   const roots = await resolveWorkspaceRoots();
-  const primaryRoot = roots[0]?.resolvedPath;
+  // Resolution and every boundary check run against the VALIDATED root
+  // (realPath — isPathWithinRoot compares against it), so what we hand back
+  // is on the same footing as the check (audit H5). The caller's own root
+  // spelling is kept separately for the display path.
+  const primaryRoot = roots[0]?.realPath;
+  const displayRoot = roots[0]?.resolvedPath;
   if (!primaryRoot) {
     throw getWorkspaceSelectionRequirementError();
   }
