@@ -45,10 +45,6 @@ export const upsertWorkflowProfile = (threadId: string, profile: WorkflowProfile
   });
 };
 
-export const deleteWorkflowProfile = (threadId: string): void => {
-  getDb().prepare('DELETE FROM workflow_profiles WHERE thread_id = ?').run(threadId);
-};
-
 export const clearWorkflowProfiles = (): void => {
   getDb().prepare('DELETE FROM workflow_profiles').run();
 };

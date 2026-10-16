@@ -37,32 +37,6 @@ export const getChatThread = (id: string): ChatThread | null => {
   };
 };
 
-export const getChatThreadsByWorkspace = (workspaceId: string): ChatThread[] => {
-  const rows = getDb()
-    .prepare('SELECT * FROM chat_threads WHERE workspace_id = ? ORDER BY updated_at DESC')
-    .all(workspaceId) as ChatThreadRow[];
-  return rows.map(row => ({
-    ...row,
-    is_generating: Boolean(row.is_generating),
-    is_favorited: row.is_favorited || 0,
-    is_incognito: row.is_incognito || 0,
-    enable_artifacts: row.enable_artifacts || 0,
-  }));
-};
-
-export const getFavoritedChatThreads = (): ChatThread[] => {
-  const rows = getDb()
-    .prepare('SELECT * FROM chat_threads WHERE is_favorited = 1 ORDER BY updated_at DESC')
-    .all() as ChatThreadRow[];
-  return rows.map(row => ({
-    ...row,
-    is_generating: Boolean(row.is_generating),
-    is_favorited: row.is_favorited || 0,
-    is_incognito: row.is_incognito || 0,
-    enable_artifacts: row.enable_artifacts || 0,
-  }));
-};
-
 export const addChatThread = (
   thread: Partial<ChatThread> & { id: string; title: string; metadata: string }
 ) => {
@@ -146,10 +120,4 @@ export const deleteChatThread = (id: string) => {
   // leaves no orphaned plaintext payloads.
   deleteSessionEvents(id);
   return getDb().prepare('DELETE FROM chat_threads WHERE id = ?').run(id);
-};
-
-export const toggleFavoriteChatThread = (id: string) => {
-  const thread = getChatThread(id);
-  if (!thread) return null;
-  return updateChatThread(id, { is_favorited: thread.is_favorited === 1 ? 0 : 1 });
 };

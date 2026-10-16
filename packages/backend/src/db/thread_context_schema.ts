@@ -11,5 +11,3 @@ export const CHAT_THREAD_CONTEXT_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_chat_thread_context_updated
   ON chat_thread_context(updated_at);
 `;
-
-export const DROP_CHAT_THREAD_CONTEXT_SCHEMA_SQL = 'DROP TABLE IF EXISTS chat_thread_context;';

@@ -14,8 +14,6 @@ export const getChatServicePlatformDeps = (): ChatServicePlatformDeps => _platfo
 
 export const getCompanion = (): ChatCompanionBridge => _platform.companion ?? noopCompanionBridge;
 
-export const getExportTrace = (): ChatServicePlatformDeps['exportTrace'] => _platform.exportTrace;
-
 export const getAssistantProfileContextMessage = (): string =>
   _platform.getAssistantProfileContextMessage?.() ?? '';
 

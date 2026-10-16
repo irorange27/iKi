@@ -25,16 +25,6 @@ export const getProvider = (id: string): Provider | null => {
   };
 };
 
-export const getProviderIsEnabled = (id: string): { enabled: boolean } | null => {
-  const provider = getDb().prepare('SELECT enabled FROM providers WHERE id = ?').get(id) as
-    | { enabled: number | boolean }
-    | undefined;
-  if (!provider) return null;
-  return {
-    enabled: Boolean(provider.enabled),
-  };
-};
-
 export const addProvider = (
   provider: Partial<Provider> & {
     id: string;
