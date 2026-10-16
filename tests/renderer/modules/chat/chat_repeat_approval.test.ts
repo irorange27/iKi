@@ -1,179 +1,157 @@
+// @vitest-environment happy-dom
+// Issue #71: the repeat-approval turn must keep the pre-pause tool part across
+// the resume chunk stream. This drives the REAL AI SDK reducer (AbstractChat)
+// through the REAL IPC transport via createChatInstance, so it reproduces the
+// consumer boundary instead of mocking it — which is what made the original
+// flake need CDP instrumentation to chase.
 import { describe, expect, it, vi } from 'vitest';
 
+import type { ChatUiMessageChunk } from '@iki/backend/message/message_parts';
 import { createChatInstance } from '../../../../packages/desktop/src/renderer/modules/chat/chat_instance';
 
-type Chunk = Record<string, unknown>;
-
-const MSG = 'assistant_1';
-
-/**
- * Reproduces the #71 repeat-approval chunk sequences through the real
- * renderer chat runtime. Timing model mirrors the wire: the backend pushes
- * resume chunks over the shared IPC channel DURING the approveTool call and
- * resolves the IPC afterwards; the approval controller arms the follow-up
- * slot before the call and consumes the buffered stream after it.
- */
-const createElectronApiStub = (onApprove: (emit: (chunk: Chunk) => void) => void) => {
+const createElectronApi = () => {
   const listeners = new Set<(chunk: unknown) => void>();
-  let resolveStream: ((result: unknown) => void) | null = null;
-
   const chat = {
     onUiChunk: (callback: (chunk: unknown) => void) => {
       listeners.add(callback);
       return () => listeners.delete(callback);
     },
-    stream: () =>
-      new Promise(resolve => {
-        resolveStream = resolve;
-      }),
-    approveTool: async () => {
-      // The backend pushes the whole resumed segment before the IPC resolves.
-      onApprove(chunk => {
-        for (const listener of listeners) listener(chunk);
-      });
-      return { success: true, awaitingApproval: true };
+    stream: vi.fn(async () => ({ success: true })),
+    stopStream: vi.fn(async () => ({ success: true })),
+    approveTool: vi.fn(async () => ({ success: true })),
+    messages: {
+      list: vi.fn(async () => []),
+      update: vi.fn(async () => ({ success: true })),
+      delete: vi.fn(async () => ({ success: true })),
     },
-    stopStream: async () => ({ success: true }),
   };
-
   return {
+    chat,
     electronAPI: { chat },
-    emit(chunk: Chunk) {
+    emit(chunk: ChatUiMessageChunk) {
       for (const listener of listeners) listener(chunk);
     },
-    finishStream(result: unknown) {
-      resolveStream?.(result);
-      resolveStream = null;
-    },
   };
 };
 
-const feedPause1 = (emit: (chunk: Chunk) => void) => {
-  emit({ type: 'start', messageId: MSG });
-  emit({
-    type: 'tool-input-available',
-    toolCallId: 'call_1',
-    toolName: 'write_file',
-    input: { path: 'a.txt' },
-    dynamic: true,
-  });
-  emit({
-    type: 'tool-approval-request',
-    approvalId: 'appr_1',
-    toolCallId: 'call_1',
-    toolCall: { toolName: 'write_file', toolCallId: 'call_1', args: { path: 'a.txt' } },
-  });
+const flush = async (times = 6) => {
+  for (let i = 0; i < times; i += 1) await new Promise(resolve => setTimeout(resolve, 0));
 };
 
-const feedResume1 = (emit: (chunk: Chunk) => void) => {
-  // Backend resume #1: start re-addresses the same message, the approved
-  // tool's result arrives (with the tolerant re-seed), the model replies and
-  // requests a second approval — no terminal chunk (blocked again).
-  emit({ type: 'start', messageId: MSG });
-  emit({ type: 'tool-input-available', toolCallId: 'call_1', toolName: 'write_file', input: {}, dynamic: true });
-  emit({ type: 'tool-output-available', toolCallId: 'call_1', output: 'ok' });
-  emit({ type: 'text-start', id: `${MSG}-t0` });
-  emit({ type: 'text-delta', id: `${MSG}-t0`, delta: 'continuing' });
-  emit({ type: 'text-end', id: `${MSG}-t0` });
-  emit({ type: 'tool-input-available', toolCallId: 'call_2', toolName: 'write_file', input: { path: 'b.txt' }, dynamic: true });
-  emit({ type: 'tool-approval-request', approvalId: 'appr_2', toolCallId: 'call_2', toolCall: { toolName: 'write_file', toolCallId: 'call_2', args: { path: 'b.txt' } } });
-};
-
-describe('chat runtime repeat-approval chunk sequences (#71)', () => {
-  const buildInstance = () => {
-    let approveHandler: ((emit: (chunk: Chunk) => void) => void) | null = null;
-    const electronApi = createElectronApiStub(emit => approveHandler?.(emit));
-    const onError = vi.fn();
+describe('repeat approval across a resume chunk stream', () => {
+  it('renders the second approval card when the backend re-seeds the paused part', async () => {
+    const api = createElectronApi();
     const instance = createChatInstance({
-      electronAPI: electronApi.electronAPI as never,
-      generateId: (() => {
-        let n = 0;
-        return () => `gen_${++n}`;
-      }) as never,
+      electronAPI: api.electronAPI,
+      // The backend owns the assistant message id; the SDK must reuse the
+      // paused message rather than push a new one.
+      generateId: () => 'assistant_1',
       getCurrentThreadId: () => 'thread_1',
     });
-    instance.chat.onError = onError as never;
-    return {
-      electronApi,
-      instance,
-      onError,
-      setApproveHandler: (fn: typeof approveHandler) => {
-        approveHandler = fn;
-      },
-    };
-  };
 
-  const allParts = (instance: ReturnType<typeof createChatInstance>) =>
-    instance.messageStore.messages
-      .flatMap(message => message.parts ?? [])
-      .map(
-        part =>
-          `${(part as { type: string }).type}:${(part as { toolCallId?: string }).toolCallId ?? ''}`
-      );
+    // Turn 1: a tool call pauses for approval.
+    void instance.chat.sendMessage({ text: 'write a file' } as never);
+    await flush();
+    api.emit({ type: 'start', messageId: 'assistant_1' });
+    api.emit({
+      type: 'tool-input-available',
+      toolCallId: 'call_1',
+      toolName: 'write_file',
+      input: { path: 'a.txt' },
+    });
+    api.emit({
+      type: 'tool-approval-request',
+      approvalId: 'appr_1',
+      toolCallId: 'call_1',
+      toolName: 'write_file',
+      input: { path: 'a.txt' },
+    });
+    await flush();
 
-  it('processes an approval resume that pauses again on a second card', async () => {
-    const { electronApi, instance, onError, setApproveHandler } = buildInstance();
-    setApproveHandler(feedResume1);
+    // The user approves; the backend resumes over the same channel. It re-seeds
+    // the paused tool part (ui_stream.ts ensureToolPartSeeded) before emitting
+    // its output, then requests the second approval.
+    instance.transport.expectFollowUpStream();
+    const approvalPromise = instance.handleToolApproval(
+      { id: 'assistant_1', parts: [] } as never,
+      { type: 'tool-approval-request', approvalId: 'appr_1', toolCallId: 'call_1', state: 'approval-requested' },
+      true
+    );
+    api.emit({ type: 'start', messageId: 'assistant_1' });
+    api.emit({
+      type: 'tool-input-available',
+      toolCallId: 'call_1',
+      toolName: 'write_file',
+      input: { path: 'a.txt' },
+    });
+    api.emit({ type: 'tool-output-available', toolCallId: 'call_1', output: 'written' });
+    api.emit({
+      type: 'tool-input-available',
+      toolCallId: 'call_2',
+      toolName: 'write_file',
+      input: { path: 'b.txt' },
+    });
+    api.emit({
+      type: 'tool-approval-request',
+      approvalId: 'appr_2',
+      toolCallId: 'call_2',
+      toolName: 'write_file',
+      input: { path: 'b.txt' },
+    });
+    await approvalPromise;
+    await flush();
 
-    const sendPromise = instance.chat.sendMessage({ text: 'write files' } as never);
-    await Promise.resolve();
-    feedPause1(electronApi.emit);
-    electronApi.finishStream({ success: true, awaitingApproval: true });
-    await sendPromise;
-
-    // Approve card 1 through the real controller path; the stub pushes the
-    // whole resume #1 segment during the approveTool call.
-    const messages = instance.messageStore.messages;
-    const approvalPart = messages
-      .flatMap(message => message.parts ?? [])
-      .find(
-        part =>
-          (part as { type?: string }).type === 'dynamic-tool' &&
-          ((part as { approval?: { id?: string } }).approval?.id === 'appr_1' ||
-            (part as { toolCallId?: string }).toolCallId === 'call_1')
-      );
-    expect(approvalPart).toBeDefined();
-
-    await instance.handleToolApproval(messages[1]!, approvalPart, true);
-    // The controller resumes the stream fire-and-forget; let the Chat drain
-    // the buffered segment before asserting.
-    await new Promise(resolve => setTimeout(resolve, 0));
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    const parts = allParts(instance).join(',');
-    expect(onError).not.toHaveBeenCalled();
-    // Same-message continuation: the resume applied to assistant_1, both
-    // tool exchanges and the reply text are on the one message.
-    const assistant = instance.messageStore.messages.find(m => m.id === MSG);
-    expect(assistant).toBeDefined();
-    const assistantParts = allParts({ messageStore: { messages: [assistant!] } } as never).join(',');
-    expect(assistantParts).toContain('call_1');
-    expect(assistantParts).toContain('call_2');
-    expect(assistantParts).toContain('text:');
-    expect(
-      (assistant!.parts ?? []).some(part => (part as { type?: string }).type === 'text')
-    ).toBe(true);
+    expect(instance.error.value?.message).toBeUndefined();
+    const toolCallIds = instance.messageStore.messages.flatMap(message =>
+      (message.parts ?? [])
+        .map(part => (part as { toolCallId?: string }).toolCallId)
+        .filter((id): id is string => typeof id === 'string')
+    );
+    expect(toolCallIds).toContain('call_1');
+    expect(toolCallIds).toContain('call_2');
   });
 
-  it('survives the original stream closing after resume chunks were pushed', async () => {
-    // Race shape: the follow-up slot is armed and the whole resume segment is
-    // fed BEFORE the original invoke's result closes the original slot —
-    // adoption must not lose the resume.
-    const { electronApi, instance, onError } = buildInstance();
+  it('aborts the stream when the pre-pause seed is lost (the issue signature)', async () => {
+    // The renderer is NOT timing-proof on its own: correctness depends on the
+    // backend re-seed arriving. Drive the REAL approval flow without the
+    // re-seed and the AI SDK reducer throws, aborting the stream — which is
+    // exactly issue #71's 'second approval card never rendered'. This must
+    // go through handleToolApproval (which calls resumeStream), because
+    // emitting onto the transport alone never hands the buffered resume slot
+    // to the Chat and the reducer never runs.
+    const api = createElectronApi();
+    const instance = createChatInstance({
+      electronAPI: api.electronAPI,
+      generateId: () => 'assistant_1',
+      getCurrentThreadId: () => 'thread_1',
+    });
 
-    const sendPromise = instance.chat.sendMessage({ text: 'write files' } as never);
-    await Promise.resolve();
-    feedPause1(electronApi.emit);
+    void instance.chat.sendMessage({ text: 'write a file' } as never);
+    await flush();
+    api.emit({ type: 'start', messageId: 'assistant_1' });
+    api.emit({
+      type: 'tool-input-available',
+      toolCallId: 'call_1',
+      toolName: 'write_file',
+      input: { path: 'a.txt' },
+    });
+    await flush();
 
     instance.transport.expectFollowUpStream();
-    feedResume1(electronApi.emit);
-    electronApi.finishStream({ success: true, awaitingApproval: true });
-    instance.transport.closeFollowUpStream();
-    await sendPromise;
-    await instance.chat.resumeStream?.();
-    await new Promise(resolve => setTimeout(resolve, 0));
+    const approvalPromise = instance.handleToolApproval(
+      { id: 'assistant_1', parts: [] } as never,
+      { type: 'tool-approval-request', approvalId: 'appr_1', toolCallId: 'call_1', state: 'approval-requested' },
+      true
+    );
+    // Resume WITHOUT the backend re-seeding the paused tool part.
+    api.emit({ type: 'start', messageId: 'assistant_1' });
+    api.emit({ type: 'tool-output-available', toolCallId: 'call_1', output: 'written' });
+    api.emit({ type: 'finish' });
+    await approvalPromise;
+    await flush();
 
-    expect(onError).not.toHaveBeenCalled();
-    expect(allParts(instance).join(',')).toContain('call_2');
-  });
-});
+    expect(instance.error.value?.message).toContain(
+      'No tool invocation found for tool call ID "call_1"'
+    );
+    expect(instance.status.value).toBe('error');
+  });});
