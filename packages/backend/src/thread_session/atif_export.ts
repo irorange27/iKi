@@ -200,10 +200,6 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
     })
   );
 
-  /** The inference an audit step at `index` belongs to: the previous
-   *  inference if this call id is not one it recorded is impossible — so the
-   *  previous inference wins when it recorded the id, otherwise the next one
-   *  does; a call id no inference recorded falls back to the flat map. */
   // Precompute each inference's position among ALL steps: `index` is a
   // position in orderedSteps, not in indexedInferences.
   const inferencePositionById = new Map<string, number>();
@@ -216,27 +212,33 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
    *  is spread across the inferences that recorded it rather than piling onto
    *  the nearest one. */
   const assignedPerOwner = new Map<string, number>();
+  /** The inference an audit step belongs to: the CLOSEST inference that
+   *  recorded this call id and still has an unserved call for it. Every
+   *  inference that recorded the id is a candidate, not just the two adjacent
+   *  ones — a result can be recorded after several later inferences (the AI
+   *  SDK records a step's tool parts before its inference, and a run can hold
+   *  several such steps), and restricting to neighbours silently dropped real
+   *  observations. A call id no inference recorded returns null, and its
+   *  result goes to the flat map. */
   const ownerInferenceForAuditStep = (callId: string, index: number): string | null => {
-    let previousId: string | null = null;
-    let nextId: string | null = null;
+    let bestId: string | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
     for (const [stepId, position] of inferencePositionById) {
-      if (position < index) previousId = stepId;
-      if (position > index && nextId === null) nextId = stepId;
-    }
-    // Serve the nearest inference that recorded the id AND still has an
-    // unserved call for it.
-    for (const candidate of [previousId, nextId]) {
-      if (!candidate) continue;
-      const total = inferenceCallCounts.get(candidate)?.get(callId) ?? 0;
+      const total = inferenceCallCounts.get(stepId)?.get(callId) ?? 0;
       if (total === 0) continue;
-      const key = observationKey(candidate, callId);
-      const assigned = assignedPerOwner.get(key) ?? 0;
-      if (assigned < total) {
-        assignedPerOwner.set(key, assigned + 1);
-        return candidate;
+      const assigned = assignedPerOwner.get(observationKey(stepId, callId)) ?? 0;
+      if (assigned >= total) continue;
+      const distance = Math.abs(position - index);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestId = stepId;
       }
     }
-    return null;
+    if (bestId) {
+      const key = observationKey(bestId, callId);
+      assignedPerOwner.set(key, (assignedPerOwner.get(key) ?? 0) + 1);
+    }
+    return bestId;
   };
   for (const [index, step] of orderedSteps.entries()) {
     if (step.type !== 'tool-result' && !(step.type === 'error' && stepInput(step).toolCallId)) continue;

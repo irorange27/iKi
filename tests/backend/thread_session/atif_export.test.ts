@@ -222,6 +222,54 @@ describe('buildRunTrajectory', () => {
     expect(validateAtifTrajectory(trajectory)).toEqual([]);
   });
 
+  it('keeps a result whose owner inference is not adjacent', () => {
+    // Ownership must consider EVERY inference that recorded the id, not just
+    // the two adjacent ones: the AI SDK records a step's tool parts BEFORE its
+    // inference, so a run holding two such steps leaves both results after
+    // both inferences. Restricting ownership to neighbours silently dropped
+    // the non-adjacent result, and a call exported without its observation is
+    // not a replayable trajectory.
+    const steps = [
+      fixtureStep(1, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_a', toolName: 'read_file', input: { path: 'a.txt' } },
+      ] }),
+      fixtureStep(2, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_b', toolName: 'read_file', input: { path: 'b.txt' } },
+      ] }),
+      fixtureStep(3, 'tool-result', { toolCallId: 'call_a' }, { output: 'BODY A' }),
+      fixtureStep(4, 'tool-result', { toolCallId: 'call_b' }, { output: 'BODY B' }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    expect(observationsOf(trajectory).map(result => result.content).sort()).toEqual([
+      'BODY A',
+      'BODY B',
+    ]);
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
+  it('spreads a recurring id across every inference that recorded it', () => {
+    const twoCalls = (callId: string) => ({
+      type: 'tool-call',
+      toolCallId: callId,
+      toolName: 'read_file',
+      input: { path: callId + '.txt' },
+    });
+    const steps = [
+      fixtureStep(1, 'model', {}, { inference: true, usage: {}, content: [twoCalls('call_1')] }),
+      fixtureStep(2, 'model', {}, { inference: true, usage: {}, content: [twoCalls('call_1')] }),
+      fixtureStep(3, 'tool-result', { toolCallId: 'call_1' }, { output: 'FIRST' }),
+      fixtureStep(4, 'tool-result', { toolCallId: 'call_1' }, { output: 'SECOND' }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    expect(observationsOf(trajectory).map(result => result.content).sort()).toEqual([
+      'FIRST',
+      'SECOND',
+    ]);
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
   it('pairs legacy tool errors and keeps standalone errors valid', () => {
     const steps = [
       fixtureSteps()[0],
