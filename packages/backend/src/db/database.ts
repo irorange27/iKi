@@ -179,6 +179,12 @@ export const closeDatabase = () => {
     db = null;
     initialized = false;
     initializing = false;
+    // Drop the per-open override too. A caller that passed an explicit path
+    // owns that decision for its own open; leaving it behind makes the next
+    // implicit getDb() resolve to the PREVIOUS open's database — which, with
+    // per-file temp databases in tests, makes a later file write into an
+    // earlier file's rows (duplicate provider ids, foreign-key churn).
+    dbPathOverride = null;
   }
 };
 
