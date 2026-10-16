@@ -54,6 +54,32 @@ describe('resolveTools honours a tool\'s declared approval requirement', () => {
     expect(needsApprovalFor(false, false, 'read_file')).toBe(false);
   });
 
+  it('treats only an explicit false/undefined declaration as approval-free', () => {
+    // `AgentTool.needsApproval` is `boolean | ToolApprovalFunction`
+    // (agent/types.ts:70). A predicate of `!== true` would classify a FUNCTION
+    // as approval-free and clear it, so the branch mirrors the existing
+    // isApprovalFreeTool (tools/agent_tools.ts:113-115): free means an
+    // explicit false or undefined, nothing else.
+    const isApprovalFree = (needsApproval: unknown) =>
+      needsApproval === false || needsApproval === undefined;
+
+    expect(isApprovalFree(true)).toBe(false);
+    expect(isApprovalFree(() => true)).toBe(false);
+    expect(isApprovalFree(false)).toBe(true);
+    expect(isApprovalFree(undefined)).toBe(true);
+
+    // And the live write tool is NOT classified free.
+    const tools = resolveTools({
+      enableTools: true,
+      enabledToolNames: ['write_file'],
+      availableSkillIds: [],
+      guardActive: false,
+      requireApproval: false,
+      autoApproveToolRequests: false,
+    });
+    expect(tools.find(t => t.name === 'write_file')?.needsApproval).toBe(true);
+  });
+
   it('still requires approval for writes when the guard is active', () => {
     expect(needsApprovalFor(true, true, 'write_file')).toBe(true);
   });
