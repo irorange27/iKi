@@ -141,6 +141,14 @@ const wrapDatabase = (raw: DatabaseSync): SqliteDatabase => ({
 
 export const initializeDatabase = (options?: { dbPath?: string }) => {
   if (options?.dbPath) {
+    // An explicit path names a DIFFERENT database. Returning the handle that
+    // is already open would silently ignore the request and send later writes
+    // into the previous file — which, once that file is removed, surfaces as
+    // SQLite's `attempt to write a readonly database` (issue #152, second
+    // face). Close first so the named file is the one actually opened.
+    if (dbPathOverride !== options.dbPath && db) {
+      closeDatabase();
+    }
     dbPathOverride = options.dbPath;
   }
   if (initialized && db) return db;
