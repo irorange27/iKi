@@ -169,9 +169,9 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
   // Position therefore cannot decide the owner; the call id inside each
   // inference can. Each audit step belongs to whichever inference recorded
   // ITS call id — for a call id that appears once, unambiguously; for one
-  // that recurs, the audit step belongs to the inference it sits adjacent to
-  // (the inference immediately preceding it, or the inference immediately
-  // following it when none precedes).
+  // that recurs, ownership spreads across every inference that recorded it
+  // (count-aware): the closest one with an unserved call for that id wins, so
+  // where a result lands relative to its inference cannot change the pairing.
   // One queue per (inference, call id): a provider may repeat a call id
   // WITHIN a single response, so two calls can share an id inside one
   // inference. A single value there would answer both calls with whichever
