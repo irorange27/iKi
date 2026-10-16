@@ -28,7 +28,6 @@ export const getStreamErrorMessage = (error: unknown): string => {
   return fallback;
 };
 
-
 /**
  * Error thrown when the model refuses to respond (content filter, safety, etc.).
  */

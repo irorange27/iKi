@@ -1,4 +1,3 @@
-
 import * as chatMessageDb from '../db/chat_message';
 import * as chatThreadDb from '../db/chat_thread';
 import { extractTextFromMessageParts, isObjectRecord } from './message_parts';
