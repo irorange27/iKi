@@ -91,6 +91,17 @@ export type TurnStartedPayload = {
   plan: ExecutionPlan;
 };
 
+/** A mid-turn steering input (audit H6). `messageId` is the rebuilt user
+ * message's id and must differ from the assistant's, or the assistant's
+ * MODEL_OUTPUT_COMMITTED fact overwrites this message in the replay. */
+export type SteeringInputAcceptedPayload = {
+  runId: string;
+  messageId: string;
+  /** The batch the steer was drained in, so the id is unique per turn. */
+  batchIndex: number;
+  text: string;
+};
+
 export type ModelTextCommittedPayload = {
   runId: string;
   messageId: string;
