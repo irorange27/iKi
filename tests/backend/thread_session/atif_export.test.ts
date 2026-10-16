@@ -17,6 +17,28 @@ import {
   validateAtifTrajectory,
 } from '@iki/backend/thread_session/atif_export';
 
+const toolCall = (toolCallId: string, path: string) => ({
+  type: 'tool-call',
+  toolCallId,
+  toolName: 'read_file',
+  input: { path },
+});
+
+/** Every permutation of a list, so an exhaustive ordering scan is cheap. */
+const permutationsOf = <T>(items: T[]): T[][] => {
+  if (items.length <= 1) return [items];
+  const out: T[][] = [];
+  items.forEach((item, index) => {
+    const rest = [...items.slice(0, index), ...items.slice(index + 1)];
+    for (const tail of permutationsOf(rest)) out.push([item, ...tail]);
+  });
+  return out;
+};
+
+/** Every observation the trajectory exports, in step order. */
+const observationsOf = (trajectory: ReturnType<typeof buildRunTrajectory>) =>
+  trajectory.steps.flatMap(step => step.observation?.results ?? []);
+
 const fixtureRun = (): AgentRun => ({
   id: 'run_1',
   kind: 'chat-turn',
@@ -130,6 +152,172 @@ describe('buildRunTrajectory', () => {
     });
   });
 
+  it('never pairs a call with a later inference reusing the same call id', () => {
+    // Provider call ids are unique only WITHIN a response: compat and
+    // self-hosted endpoints reuse `call_1`-style ids freely. Keying the
+    // observation index by call id alone would answer the first call with the
+    // second call's result — fabricated provenance that still validates, so
+    // nothing else would catch it.
+    const steps = [
+      fixtureStep(1, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'first.txt' } },
+      ] }),
+      fixtureStep(2, 'tool-result', { toolCallId: 'call_1' }, { output: 'FIRST FILE BODY' }),
+      fixtureStep(3, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'second.txt' } },
+      ] }),
+      fixtureStep(4, 'tool-result', { toolCallId: 'call_1' }, { output: 'SECOND FILE BODY' }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    const callSteps = trajectory.steps.filter(step => step.tool_calls?.length);
+    expect(callSteps).toHaveLength(2);
+    expect(callSteps[0]!.observation).toEqual({
+      results: [{ source_call_id: 'call_1', content: 'FIRST FILE BODY' }],
+    });
+    expect(callSteps[1]!.observation).toEqual({
+      results: [{ source_call_id: 'call_1', content: 'SECOND FILE BODY' }],
+    });
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
+  it('pairs a repeated call id inside one inference in recorded order', () => {
+    // A provider can repeat a call id WITHIN a single response: two tool-call
+    // parts sharing one id, then two tool-result audit steps. Keying the
+    // scoped index by (inference, call id) alone would collapse them, so both
+    // calls report whichever result was indexed first — fabricated provenance
+    // that still validates. The per-inference queue pairs the Nth call with
+    // the Nth result.
+    const duplicateCalls = [
+      { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'first.txt' } },
+      { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'second.txt' } },
+    ];
+    const buildRun = (first: string, second: string) => buildRunTrajectory(fixtureRun(), [
+      fixtureStep(1, 'model', {}, { inference: true, usage: {}, content: duplicateCalls }),
+      fixtureStep(2, 'tool-result', { toolCallId: 'call_1' }, { output: first }),
+      fixtureStep(3, 'tool-result', { toolCallId: 'call_1' }, { output: second }),
+    ]);
+
+    const inOperandOrder = buildRun('FIRST FILE BODY', 'SECOND FILE BODY');
+    expect(observationsOf(inOperandOrder)).toEqual([
+      { source_call_id: 'call_1', content: 'FIRST FILE BODY' },
+      { source_call_id: 'call_1', content: 'SECOND FILE BODY' },
+    ]);
+    expect(validateAtifTrajectory(inOperandOrder)).toEqual([]);
+
+    // Reversed audit order: still two DISTINCT results, never one twice.
+    const reversed = buildRun('SECOND FILE BODY', 'FIRST FILE BODY');
+    expect(observationsOf(reversed).map(result => result.content).sort()).toEqual([
+      'FIRST FILE BODY',
+      'SECOND FILE BODY',
+    ]);
+    expect(validateAtifTrajectory(reversed)).toEqual([]);
+  });
+
+  it('never credits an inference call with a flat observation from a recurring id', () => {
+    // An inference that recorded the call owns its pairing: when its own
+    // results run out, the call is exported with NO observation rather than
+    // one taken from the flat map — a flat entry for a recurring id may
+    // belong to a different call, and crediting it here is the same
+    // fabricated provenance this join exists to prevent.
+    const steps = [
+      fixtureStep(1, 'tool-call', { toolCallId: 'call_1', toolName: 'read_file', input: { path: 'legacy.txt' } }, null),
+      fixtureStep(2, 'tool-result', { toolCallId: 'call_1' }, { output: 'LEGACY BODY' }),
+      fixtureStep(3, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'a.txt' } },
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'b.txt' } },
+      ] }),
+      fixtureStep(4, 'tool-result', { toolCallId: 'call_1' }, { output: 'ONE' }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    // With ownership resolved, ONE pairs with the inference's FIRST call
+    // (the previous inference records the id), so it is used once and once
+    // only — never handed to the trailing call as a duplicated observation.
+    const contents = observationsOf(trajectory).map(o => o.content);
+    expect(contents).toEqual(['LEGACY BODY', 'ONE']);
+    expect(observationsOf(trajectory).filter(o => o.content === 'ONE')).toHaveLength(1);
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
+  it('keeps a result whose owner inference is not adjacent', () => {
+    // Ownership must consider EVERY inference that recorded the id, not just
+    // the two adjacent ones: the AI SDK records a step's tool parts BEFORE its
+    // inference, so a run holding two such steps leaves both results after
+    // both inferences. Restricting ownership to neighbours silently dropped
+    // the non-adjacent result, and a call exported without its observation is
+    // not a replayable trajectory.
+    const steps = [
+      fixtureStep(1, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_a', toolName: 'read_file', input: { path: 'a.txt' } },
+      ] }),
+      fixtureStep(2, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_b', toolName: 'read_file', input: { path: 'b.txt' } },
+      ] }),
+      fixtureStep(3, 'tool-result', { toolCallId: 'call_a' }, { output: 'BODY A' }),
+      fixtureStep(4, 'tool-result', { toolCallId: 'call_b' }, { output: 'BODY B' }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    expect(observationsOf(trajectory).map(result => result.content).sort()).toEqual([
+      'BODY A',
+      'BODY B',
+    ]);
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
+  it('spreads a recurring id across every inference that recorded it', () => {
+    const twoCalls = (callId: string) => ({
+      type: 'tool-call',
+      toolCallId: callId,
+      toolName: 'read_file',
+      input: { path: callId + '.txt' },
+    });
+    const steps = [
+      fixtureStep(1, 'model', {}, { inference: true, usage: {}, content: [twoCalls('call_1')] }),
+      fixtureStep(2, 'model', {}, { inference: true, usage: {}, content: [twoCalls('call_1')] }),
+      fixtureStep(3, 'tool-result', { toolCallId: 'call_1' }, { output: 'FIRST' }),
+      fixtureStep(4, 'tool-result', { toolCallId: 'call_1' }, { output: 'SECOND' }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    expect(observationsOf(trajectory).map(result => result.content).sort()).toEqual([
+      'FIRST',
+      'SECOND',
+    ]);
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
+  it('pairs both observations in every interleaving of two inferences and two results', () => {
+    // Ownership must not depend on where a result lands relative to its
+    // inference: the AI SDK records a step's tool parts BEFORE its inference,
+    // and a run can hold several such steps. An exhaustive ordering scan
+    // pins that no interleaving loses, fabricates or duplicates an
+    // observation — the previous nearest-neighbour rule failed 14 of these 24
+    // orderings, silently dropping a real result.
+    const stepTokens: Array<(index: number) => AgentRunStep> = [
+      i => fixtureStep(i, 'model', {}, { inference: true, usage: {}, content: [toolCall('call_a', 'a.txt')] }),
+      i => fixtureStep(i, 'model', {}, { inference: true, usage: {}, content: [toolCall('call_b', 'b.txt')] }),
+      i => fixtureStep(i, 'tool-result', { toolCallId: 'call_a' }, { output: 'BODY A' }),
+      i => fixtureStep(i, 'tool-result', { toolCallId: 'call_b' }, { output: 'BODY B' }),
+    ];
+
+    for (const ordering of permutationsOf(stepTokens)) {
+      const steps = ordering.map(token => token(0)).map((step, index) => ({
+        ...step,
+        id: `step_${index + 1}`,
+        stepIndex: index + 1,
+      }));
+      const contents = observationsOf(buildRunTrajectory(fixtureRun(), steps))
+        .map(result => result.content)
+        .sort();
+      expect(
+        contents,
+        `ordering ${ordering.map(token => token.name || 'anon').join(' > ')} lost or mis-paired an observation`
+      ).toEqual(['BODY A', 'BODY B']);
+    }
+  });
+
   it('pairs legacy tool errors and keeps standalone errors valid', () => {
     const steps = [
       fixtureSteps()[0],
@@ -137,6 +325,93 @@ describe('buildRunTrajectory', () => {
       fixtureStep(3, 'error', null, { error: 'model failed' }),
     ];
     expect(validateAtifTrajectory(buildRunTrajectory(fixtureRun(), steps))).toEqual([]);
+  });
+
+  it('joins an AI-SDK-ordered observation (audit step BEFORE its inference)', () => {
+    // The AI SDK emits tool parts DURING the stream and records the inference
+    // at the step's end, so its audit order is tool-call -> tool-result ->
+    // model(inference) — the reverse of the Pi path. The join must not depend
+    // on the order: the observation belongs to whichever inference recorded
+    // the call, in either direction.
+    const steps = [
+      fixtureStep(1, 'tool-call', { toolCallId: 'call_1', toolName: 'read_file', input: { path: 'a.txt' } }, null),
+      fixtureStep(2, 'tool-result', { toolCallId: 'call_1' }, { output: 'AI SDK BODY' }),
+      fixtureStep(3, 'model', {}, { inference: true, usage: { inputTokens: 10, outputTokens: 2 }, content: [
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'a.txt' } },
+      ] }),
+      fixtureStep(4, 'model', {}, { inference: true, usage: { inputTokens: 10, outputTokens: 2 }, content: [
+        { type: 'text', text: 'It is 4.' },
+      ] }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    const callStep = trajectory.steps.find(step =>
+      step.tool_calls?.some(call => call.tool_call_id === 'call_1')
+    );
+    expect(callStep, 'the tool call must be exported').toBeDefined();
+    expect(callStep!.observation).toEqual({
+      results: [{ source_call_id: 'call_1', content: 'AI SDK BODY' }],
+    });
+    // The result's own audit step must not be emitted a second time.
+    expect(trajectory.steps.filter(step => step.extra?.run_step_type === 'tool-result')).toHaveLength(0);
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
+  it('keeps each call its own result when the AI SDK reuses a call id', () => {
+    const steps = [
+      fixtureStep(1, 'tool-call', { toolCallId: 'call_1', toolName: 'read_file', input: { path: 'first.txt' } }, null),
+      fixtureStep(2, 'tool-result', { toolCallId: 'call_1' }, { output: 'FIRST' }),
+      fixtureStep(3, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'first.txt' } },
+      ] }),
+      fixtureStep(4, 'tool-call', { toolCallId: 'call_1', toolName: 'read_file', input: { path: 'second.txt' } }, null),
+      fixtureStep(5, 'tool-result', { toolCallId: 'call_1' }, { output: 'SECOND' }),
+      fixtureStep(6, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'second.txt' } },
+      ] }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    const observations = trajectory.steps.flatMap(step =>
+      (step.observation?.results ?? []).map(result => result.content)
+    );
+    expect(observations).toEqual(['FIRST', 'SECOND']);
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
+  it('joins a tool observation recorded in its own audit step', () => {
+    // The Pi harness records a completed inference with only assistant parts
+    // — text, reasoning, tool-call — and the tool result lands as a separate
+    // `tool-result` audit step. Deriving the observation ONLY from the
+    // inference content therefore drops it: the exported trajectory carries
+    // the call and no observation, so a run cannot be replayed or audited
+    // from the export.
+    const steps = [
+      fixtureSteps()[0],
+      fixtureStep(2, 'model', {}, {
+        inference: true,
+        usage: { inputTokens: 10, outputTokens: 2 },
+        content: [
+          { type: 'text', text: 'Reading the file' },
+          { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'a.txt' } },
+        ],
+      }),
+      fixtureStep(3, 'tool-result', { toolCallId: 'call_1' }, { output: 'file body' }),
+      fixtureStep(4, 'model', {}, { inference: true, usage: { inputTokens: 10, outputTokens: 2 }, content: [
+        { type: 'text', text: 'It is 4.' },
+      ] }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+
+    const callStep = trajectory.steps.find(step =>
+      step.tool_calls?.some(call => call.tool_call_id === 'call_1')
+    );
+    expect(callStep, 'the tool call must be exported').toBeDefined();
+    expect(callStep!.observation).toEqual({
+      results: [{ source_call_id: 'call_1', content: 'file body' }],
+    });
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
   });
 
   it('projects persisted approval decisions into the trajectory', () => {

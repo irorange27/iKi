@@ -148,16 +148,156 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
         }
   );
 
-  const observationByCallId = new Map<string, AtifStep['observation']>();
-  for (const step of orderedSteps) {
+  // Observations are indexed by the INFERENCE each audit step follows, not by
+  // call id alone. Provider call ids are only unique within a response, so a
+  // run-wide map would let a later turn's result answer an earlier turn's call
+  // whenever an endpoint reuses ids (`call_1` and friends) — attributing a
+  // result to a call that never produced it, which still validates and is
+  // therefore silent. `null` keys the audit steps of a run with no inference
+  // record (the legacy fallback).
+  // Observations are matched to the call they belong to, in BOTH recorded
+  // orderings, and never across two calls that share a call id.
+  //
+  // Providers only guarantee call ids within a single response, so the same
+  // id recurs freely across inferences (compat/self-hosted endpoints use
+  // `call_1` and friends). The two supplies also record a step's events in
+  // OPPOSITE order relative to the inference:
+  //   - Pi records the inference first (assistant parts only), then the tool
+  //     audit step — the result FOLLOWS its inference.
+  //   - The AI SDK emits tool parts DURING the stream and the inference record
+  //     at the step's end — the result PRECEDES its inference.
+  // Position therefore cannot decide the owner; the call id inside each
+  // inference can. Each audit step belongs to whichever inference recorded
+  // ITS call id — for a call id that appears once, unambiguously; for one
+  // that recurs, ownership spreads across every inference that recorded it
+  // (count-aware): the closest one with an unserved call for that id wins, so
+  // where a result lands relative to its inference cannot change the pairing.
+  // One queue per (inference, call id): a provider may repeat a call id
+  // WITHIN a single response, so two calls can share an id inside one
+  // inference. A single value there would answer both calls with whichever
+  // result happened to be indexed first — fabricated provenance that still
+  // validates. Ids that recur ACROSS inferences get a separate queue per
+  // inference, so an earlier call can never be answered by a later result.
+  const observationsByInferenceAndCall = new Map<string, Array<AtifStep['observation']>>();
+  const observationsByCallId = new Map<string, AtifStep['observation']>();
+  const observationKey = (inferenceStepId: string, callId: string) => `${inferenceStepId}\u0000${callId}`;
+
+  const indexedInferences = orderedSteps.filter(
+    step => step.type === 'model' && stepOutput(step).inference === true
+  );
+  /** Call ids each inference records. */
+  const inferenceCallCounts = new Map<string, Map<string, number>>(
+    indexedInferences.map(step => {
+      const content = stepOutput(step).content;
+      const parts = Array.isArray(content) ? content.filter(isObjectRecord) : [];
+      const counts = new Map<string, number>();
+      for (const part of parts) {
+        if (part.type !== 'tool-call' || typeof part.toolCallId !== 'string') continue;
+        const id = String(part.toolCallId);
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+      return [step.id, counts] as [string, Map<string, number>];
+    })
+  );
+
+  // Precompute each inference's position among ALL steps: `index` is a
+  // position in orderedSteps, not in indexedInferences.
+  const inferencePositionById = new Map<string, number>();
+  orderedSteps.forEach((step, position) => {
+    if (step.type === 'model' && stepOutput(step).inference === true) {
+      inferencePositionById.set(step.id, position);
+    }
+  });
+  /** Results already assigned to each (inference, call id), so a recurring id
+   *  is spread across the inferences that recorded it rather than piling onto
+   *  the nearest one. */
+  const assignedPerOwner = new Map<string, number>();
+  /** The inference an audit step belongs to: the CLOSEST inference that
+   *  recorded this call id and still has an unserved call for it. Every
+   *  inference that recorded the id is a candidate, not just the two adjacent
+   *  ones — a result can be recorded after several later inferences (the AI
+   *  SDK records a step's tool parts before its inference, and a run can hold
+   *  several such steps), and restricting to neighbours silently dropped real
+   *  observations. A call id no inference recorded returns null, and its
+   *  result goes to the flat map. */
+  const ownerInferenceForAuditStep = (callId: string, index: number): string | null => {
+    let bestId: string | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const [stepId, position] of inferencePositionById) {
+      const total = inferenceCallCounts.get(stepId)?.get(callId) ?? 0;
+      if (total === 0) continue;
+      const assigned = assignedPerOwner.get(observationKey(stepId, callId)) ?? 0;
+      if (assigned >= total) continue;
+      const distance = Math.abs(position - index);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestId = stepId;
+      }
+    }
+    if (bestId) {
+      const key = observationKey(bestId, callId);
+      assignedPerOwner.set(key, (assignedPerOwner.get(key) ?? 0) + 1);
+    }
+    return bestId;
+  };
+  for (const [index, step] of orderedSteps.entries()) {
     if (step.type !== 'tool-result' && !(step.type === 'error' && stepInput(step).toolCallId)) continue;
+    const callId = toolCallIdOf(step);
     const output = stepOutput(step);
     const content = 'error' in output ? output.error : (output.output ?? null);
-    observationByCallId.set(toolCallIdOf(step), {
-      results: [{ source_call_id: toolCallIdOf(step), content: typeof content === 'string' ? content : JSON.stringify(content) }],
-    });
+    const observation: AtifStep['observation'] = {
+      results: [{ source_call_id: callId, content: typeof content === 'string' ? content : JSON.stringify(content) }],
+    };
+    const ownerInference = ownerInferenceForAuditStep(callId, index);
+    if (ownerInference) {
+      const key = observationKey(ownerInference, callId);
+      const queue = observationsByInferenceAndCall.get(key) ?? [];
+      queue.push(observation);
+      observationsByInferenceAndCall.set(key, queue);
+    } else {
+      // Only the first observation per call id: a second one for the same id
+      // has no inference to anchor it, and last-write-wins would answer an
+      // earlier call with a later result.
+      if (!observationsByCallId.has(callId)) observationsByCallId.set(callId, observation);
+    }
   }
 
+  /** The observation recorded for a call, looked up under the inference that
+   *  made it and then by call id. The scoped entry is checked first so a
+   *  reused id resolves within its own inference rather than answering an
+   *  earlier call with a later result. */
+  // The queue is consumed (not peeked) so a repeated id inside one inference
+  // pairs the Nth call with the Nth result. The flat map is only consulted
+  // when the inference has no recorded result at all, and is never consumed
+  // there because the legacy path owns its own delete.
+  const observationFor = (inferenceStepId: string | null, callId: string) => {
+    if (!inferenceStepId) return observationsByCallId.get(callId);
+    const queue = observationsByInferenceAndCall.get(observationKey(inferenceStepId, callId));
+    const scoped = queue?.shift();
+    if (scoped) return scoped;
+    // This inference recorded the call, so no fallback: a flat entry for a
+    // recurring id may belong to a different call, and answering this one
+    // with it would credit the call with a result it never produced — the
+    // same fabricated provenance this join exists to prevent. The call is
+    // exported with no observation instead, which is honest.
+    if ((inferenceCallCounts.get(inferenceStepId)?.get(callId) ?? 0) > 0) return undefined;
+    return observationsByCallId.get(callId);
+  };
+
+  /** Whether some inference step already carries this call's observation, so a
+   *  later audit step for the same call would duplicate it. */
+  const observationClaimedByInference = (callId: string): boolean => {
+    for (const inferenceStepId of inferenceCallCounts.keys()) {
+      const queue = observationsByInferenceAndCall.get(observationKey(inferenceStepId, callId));
+      if (queue && queue.length > 0) return true;
+    }
+    return false;
+  };
+
+  /** Whether a legacy `tool-call` audit step will emit this call (and so
+   *  consume its observation). Only the no-inference shape has these. */
+  const stepIndexHasLegacyCallStep = (callId: string, steps: typeof orderedSteps): boolean =>
+    steps.some(step => step.type === 'tool-call' && toolCallIdOf(step) === callId);
   const inferences = orderedSteps.filter(step => step.type === 'model' && stepOutput(step).inference === true);
   const recordedCallIds = new Set(inferences.flatMap(step => {
     const content = stepOutput(step).content;
@@ -169,7 +309,18 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
     const output = stepOutput(step);
     const extra: Record<string, unknown> = { run_step_index: step.stepIndex, run_step_type: step.type };
 
-    if ((step.type === 'tool-result' || (step.type === 'error' && stepInput(step).toolCallId)) && !observationByCallId.has(toolCallIdOf(step))) continue;
+    // An audit step whose observation was already joined into an inference
+    // step must not be emitted twice. The scoped map is consulted for every
+    // inference that recorded this call id, and the flat map covers the
+    // shape where no inference ever claimed it.
+    if (step.type === 'tool-result' || (step.type === 'error' && stepInput(step).toolCallId)) {
+      // The observation is emitted by the step that owns the CALL — either the
+      // inference that recorded it, or the legacy `tool-call` step below — so
+      // this audit step is a duplicate and drops out. Non-consuming: the
+      // emitter decides on its own whether the observation exists.
+      if (observationClaimedByInference(toolCallIdOf(step))) continue;
+      if (stepIndexHasLegacyCallStep(toolCallIdOf(step), orderedSteps)) continue;
+    }
 
     const base = {
       step_id: trajectorySteps.length + 1,
@@ -186,10 +337,25 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
       const calls = parts.filter(part => part.type === 'tool-call').map(part => ({
         tool_call_id: String(part.toolCallId), function_name: String(part.toolName), arguments: part.input,
       }));
-      const results = parts.filter(part => part.type === 'tool-result' || part.type === 'tool-error').map(part => ({
-        source_call_id: String(part.toolCallId),
-        content: typeof part.output === 'string' ? part.output : JSON.stringify(part.output ?? part.error ?? null),
-      }));
+      // An observation is paired with its call from EITHER source: the result
+      // parts this inference already carries, or the separate tool-audit step
+      // the run recorded. The Pi harness stores the result in that audit step
+      // only, so reading just the inference content silently drops every
+      // observation of a Pi turn.
+      const results = calls.flatMap(call => {
+        const inContent = parts
+          .filter(part =>
+            (part.type === 'tool-result' || part.type === 'tool-error') &&
+            String(part.toolCallId) === call.tool_call_id
+          )
+          .map(part => ({
+            source_call_id: String(part.toolCallId),
+            content: typeof part.output === 'string' ? part.output : JSON.stringify(part.output ?? part.error ?? null),
+          }));
+        if (inContent.length > 0) return inContent;
+        const observed = observationFor(step.id, call.tool_call_id);
+        return observed ? observed.results : [];
+      });
       const usage = isObjectRecord(output.usage) ? output.usage : {};
       trajectorySteps.push({
         ...base, model_name: modelName,
@@ -210,8 +376,8 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
     if (step.type === 'tool-call') {
       const input = stepInput(step);
       const callId = toolCallIdOf(step);
-      const observation = observationByCallId.get(callId);
-      if (observation) observationByCallId.delete(callId);
+      const observation = observationsByCallId.get(callId);
+      if (observation) observationsByCallId.delete(callId);
       trajectorySteps.push({
         ...base,
         model_name: modelName,
