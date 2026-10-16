@@ -61,6 +61,7 @@ import {
   TOOL_EXECUTED,
   MODEL_TEXT_COMMITTED,
   MODEL_OUTPUT_COMMITTED,
+  STEERING_INPUT_ACCEPTED,
   TURN_COMPLETED,
 } from '@iki/backend/thread_session/session_log';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
@@ -122,6 +123,7 @@ describe('session log turn facts and pure replay', () => {
       onContinuityMessagePersisted: async () => undefined,
     });
     conversation.createThread({ id: 'thread_log' });
+    conversation.createThread({ id: 'thread_steer' });
     defaultToolRegistry.register(
       createTool({
         name: 'replay_probe',
@@ -148,6 +150,73 @@ describe('session log turn facts and pure replay', () => {
         fauxText('probe done'),
       ])
     );
+  });
+
+  it('records a steering input as a session-log fact (H6)', async () => {
+    // A steering input reaches the model's NEXT prompt (the driver splices it
+    // into streamHistory) and must ALSO be recorded as a session-log fact.
+    // Before the fix the log held only the original INPUT_ACCEPTED, so a
+    // recovery replay could not see that the human ever steered: the two
+    // projections of one conversation disagreed.
+    const coordinator = createThreadStreamCoordinator();
+    const stream = createChatStreaming({
+      streamCoordinator: coordinator,
+      memory: memory as never,
+      conversation: conversation as never,
+      usage: { recordUsageEvent: vi.fn() },
+      approvals: {
+        ensurePendingApprovalSession: vi.fn(),
+        registerApprovalBatch: vi.fn(),
+        cleanupPendingSessionsForSender: vi.fn(),
+      },
+      getThreadTitle: () => 'Replay',
+    });
+
+    const faux = new FauxModelProvider([
+      fauxToolCall('replay_probe', {}, { id: 'call_steer_1' }),
+      fauxText('interrupted'),
+      fauxText('steered response'),
+    ]);
+    createModelMock.mockReturnValue(faux);
+    const original = faux.doStream.bind(faux);
+    let calls = 0;
+    const spy = vi.spyOn(faux, 'doStream').mockImplementation(options => {
+      calls += 1;
+      if (calls === 2) coordinator.steerStream(83, 'thread_steer', 'change course');
+      return original(options);
+    });
+
+    const result = await stream.stream({ id: 83, send: vi.fn() }, {
+      providerType: 'openai',
+      providerId: 'provider_primary',
+      model: 'test-model',
+      threadId: 'thread_steer',
+      approvalPolicy: 'never',
+      messages: [{ id: 'msg_steer_1', role: 'user', parts: [{ type: 'text', text: 'run the probe' }] }],
+      tools: ['replay_probe'],
+      autonomous: { maxIterations: 3 },
+    });
+    const lastPrompt = JSON.stringify(spy.mock.calls.at(-1)?.[0]?.prompt ?? []);
+    spy.mockRestore();
+
+    // The steering text DID reach the model — the bug is not that steering
+    // fails, it is that the log never records it.
+    expect(lastPrompt).toContain('change course');
+    expect(result).toMatchObject({ success: true });
+
+    // The steering input is now a recorded fact, so a replay reconstructs
+    // what the human asked for mid-turn.
+    const view = rebuildThreadViewFromEvents('thread_steer');
+    const inputFacts = view.events
+      .filter(event => event.type === INPUT_ACCEPTED || event.type === STEERING_INPUT_ACCEPTED)
+      .map(event => JSON.stringify((event as { payload?: unknown }).payload ?? ''));
+    expect(inputFacts.join(' ')).toContain('run the probe');
+    expect(inputFacts.join(' ')).toContain('change course');
+
+    // The fact must also reach the rebuilt CONVERSATION, not just the event
+    // stream: recovery consumers derive history from view.messages, so a fact
+    // with no reducer arm would still leave the steer invisible to them.
+    expect(JSON.stringify(view.messages)).toContain('change course');
   });
 
   it('records the turn facts and rebuilds the view from events alone', async () => {

@@ -15,7 +15,9 @@ import { selectTurnHarness } from './turn_supply_selection';
 import {
   MODEL_TEXT_COMMITTED,
   recordSessionEvents,
+  STEERING_INPUT_ACCEPTED,
   SESSION_EVENT_VERSION,
+  type SteeringInputAcceptedPayload,
   SessionLogCommitError,
   SessionLogWriteError,
   turnFactsToEvents,
@@ -512,6 +514,27 @@ const runTurnBatches = async (
             drained.length === 1
               ? drained[0]
               : drained.join('\n\n---\n\n');
+          // The steering input is a business fact like any other accepted
+          // input: recording it keeps the session log the authority for what
+          // the human asked for, so a recovery replay reconstructs the same
+          // conversation the live turn saw (audit H6).
+          const steeringPayload: SteeringInputAcceptedPayload = {
+            runId: state.runTracker.id,
+            // Distinct from the assistant message id: the assistant's
+            // MODEL_OUTPUT_COMMITTED fact carries its own id, and reusing it
+            // here would let that later fact overwrite this message in the
+            // rebuilt conversation — losing the steer again.
+            messageId: `steer_${state.runTracker.id}_${state.batchIndex}`,
+            batchIndex: state.batchIndex,
+            text: steerPrompt,
+          };
+          recordSessionEvents(threadId, [
+            {
+              type: STEERING_INPUT_ACCEPTED,
+              version: SESSION_EVENT_VERSION,
+              payload: steeringPayload as unknown as Record<string, unknown>,
+            },
+          ]);
           state.streamHistory = [
             ...state.streamHistory,
             { role: 'user' as const, content: `[STEERING INPUT]\n\n${steerPrompt}` },

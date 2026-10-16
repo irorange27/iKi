@@ -49,6 +49,11 @@ export const TURN_STARTED = 'turn_started';
  * no cross-process admission to record. Additive event type: old readers
  * degrade unknown types to no-ops. */
 export const TOOL_EXECUTED = 'tool_executed';
+/** A steering input the human sent mid-turn (audit H6). The driver splices
+ * it into the next prompt; without this fact the log holds only the original
+ * INPUT_ACCEPTED, so a recovery replay cannot see that the human ever
+ * steered. Additive: old readers degrade unknown types to no-ops. */
+export const STEERING_INPUT_ACCEPTED = 'steering_input_accepted';
 export const MODEL_TEXT_COMMITTED = 'model_text_committed';
 export const MODEL_OUTPUT_COMMITTED = 'model_output_committed';
 export const TURN_COMPLETED = 'turn_completed';
@@ -84,6 +89,17 @@ export type TurnStartedPayload = {
   runId: string;
   kind: string;
   plan: ExecutionPlan;
+};
+
+/** A mid-turn steering input (audit H6). `messageId` is the rebuilt user
+ * message's id and must differ from the assistant's, or the assistant's
+ * MODEL_OUTPUT_COMMITTED fact overwrites this message in the replay. */
+export type SteeringInputAcceptedPayload = {
+  runId: string;
+  messageId: string;
+  /** The batch the steer was drained in, so the id is unique per turn. */
+  batchIndex: number;
+  text: string;
 };
 
 export type ModelTextCommittedPayload = {
@@ -301,6 +317,30 @@ export const rebuildThreadViewFromEvents = (
               : [];
           inputRunId = typeof payload.runId === 'string' ? payload.runId : undefined;
         }
+        break;
+      }
+      case STEERING_INPUT_ACCEPTED: {
+        // A mid-turn steering input becomes a user message in the rebuilt
+        // conversation. Without this arm the log carried the fact but no
+        // recovery consumer could reconstruct it — the steer existed only in
+        // the live turn's streamHistory, so a replay rebuilt a conversation
+        // where the human never steered.
+        const steerText = typeof payload.text === 'string' ? payload.text : '';
+        const steerMessageId =
+          typeof payload.messageId === 'string' && payload.messageId
+            ? payload.messageId
+            : typeof payload.runId === 'string' && payload.runId
+              ? `steer_${payload.runId}`
+              : '';
+        if (!steerMessageId || !steerText.trim()) break;
+        const steerMessage = {
+          id: steerMessageId,
+          role: 'user' as const,
+          parts: [{ type: 'text' as const, text: `[STEERING INPUT]\n\n${steerText}` }],
+        };
+        const steerExisting = messages.findIndex(item => item.id === steerMessageId);
+        if (steerExisting >= 0) messages[steerExisting] = steerMessage;
+        else messages.push(steerMessage);
         break;
       }
       case MODEL_TEXT_COMMITTED: {
