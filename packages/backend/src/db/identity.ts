@@ -33,16 +33,6 @@ const clearActiveIdentityProfiles = () => {
   getDb().prepare('UPDATE identity_profiles SET active = 0 WHERE active != 0').run();
 };
 
-export const listIdentityProfiles = (): IdentityProfile[] => {
-  const rows = getDb()
-    .prepare('SELECT * FROM identity_profiles ORDER BY active DESC, updated_at DESC')
-    .all() as IdentityProfile[];
-  return rows.map(row => ({
-    ...row,
-    active: row.active ? 1 : 0,
-  }));
-};
-
 export const getIdentityProfile = (id: string): IdentityProfile | null => {
   if (!id) return null;
   const row = getDb().prepare('SELECT * FROM identity_profiles WHERE id = ?').get(id) as
@@ -117,28 +107,4 @@ export const addIdentityProfile = (entry: {
   });
 
   return insert();
-};
-
-export const setActiveIdentityProfile = (id: string): IdentityProfile | null => {
-  const normalizedId = id.trim();
-  if (!normalizedId) return null;
-
-  const update = getDb().transaction(() => {
-    clearActiveIdentityProfiles();
-    getDb()
-      .prepare(
-        `
-        UPDATE identity_profiles
-        SET active = 1, updated_at = @updated_at
-        WHERE id = @id
-      `
-      )
-      .run({
-        id: normalizedId,
-        updated_at: toIsoNow(),
-      });
-    return getIdentityProfile(normalizedId);
-  });
-
-  return update();
 };

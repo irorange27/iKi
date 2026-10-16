@@ -37,33 +37,6 @@ export const getChatMessage = (id: string): ChatMessage | null => {
   return row;
 };
 
-export const getChatMessagesByParent = (parentId: string): ChatMessage[] => {
-  const rows = getDb()
-    .prepare(
-      'SELECT * FROM chat_messages WHERE parent_id = ? ORDER BY timestamp ASC, created_at ASC, id ASC'
-    )
-    .all(parentId) as ChatMessage[];
-  return rows;
-};
-
-export const getChatMessagesBySlot = (slotId: string): ChatMessage[] => {
-  const rows = getDb()
-    .prepare(
-      'SELECT * FROM chat_messages WHERE slot_id = ? ORDER BY timestamp ASC, created_at ASC, id ASC'
-    )
-    .all(slotId) as ChatMessage[];
-  return rows;
-};
-
-export const getChatMessagesByDepth = (threadId: string, depth: number): ChatMessage[] => {
-  const rows = getDb()
-    .prepare(
-      'SELECT * FROM chat_messages WHERE thread_id = ? AND depth = ? ORDER BY timestamp ASC, created_at ASC, id ASC'
-    )
-    .all(threadId, depth) as ChatMessage[];
-  return rows;
-};
-
 export const addChatMessage = (
   message: Partial<ChatMessage> & {
     id: string;
@@ -125,12 +98,4 @@ export const updateChatMessage = (id: string, message: Partial<ChatMessage>) => 
 
 export const deleteChatMessage = (id: string) => {
   return getDb().prepare('DELETE FROM chat_messages WHERE id = ?').run(id);
-};
-
-export const deleteChatMessagesByThread = (threadId: string) => {
-  return getDb().prepare('DELETE FROM chat_messages WHERE thread_id = ?').run(threadId);
-};
-
-export const deleteChatMessagesByParent = (parentId: string) => {
-  return getDb().prepare('DELETE FROM chat_messages WHERE parent_id = ?').run(parentId);
 };

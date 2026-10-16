@@ -20,19 +20,6 @@ export type ToolAllowlistEntry = {
 // point query without it is ~0.005 ms.
 const patternMemo = new Map<string, string[]>();
 
-const mapRow = (row: Record<string, unknown>): ToolAllowlistEntry => ({
-  id: row.id as string,
-  toolName: row.tool_name as string,
-  pattern: row.pattern as string,
-  createdAt: row.created_at as string,
-});
-
-export const listToolAllowlist = (): ToolAllowlistEntry[] => {
-  const rows = getDb()
-    .prepare('SELECT id, tool_name, pattern, created_at FROM tool_allowlist ORDER BY created_at DESC')
-    .all() as Record<string, unknown>[];
-  return rows.map(mapRow);
-};
 
 export const addToolAllowlistEntry = (input: {
   toolName: string;

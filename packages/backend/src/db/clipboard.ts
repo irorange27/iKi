@@ -83,17 +83,6 @@ export const listRecentClipboardSnapshots = (limit = 20): ClipboardSnapshotEntry
     .all(limit) as ClipboardSnapshotEntry[];
 };
 
-export const listClipboardSnapshotsSince = (
-  since: string,
-  limit = 20
-): ClipboardSnapshotEntry[] => {
-  return getDb()
-    .prepare(
-      'SELECT * FROM clipboard_snapshots WHERE captured_at > ? ORDER BY captured_at DESC LIMIT ?'
-    )
-    .all(since, limit) as ClipboardSnapshotEntry[];
-};
-
 export const pruneClipboardSnapshots = (maxCount = MAX_SNAPSHOTS) => {
   return getDb()
     .prepare(
