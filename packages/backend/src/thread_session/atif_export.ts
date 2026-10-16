@@ -172,9 +172,17 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
   // that recurs, the audit step belongs to the inference it sits adjacent to
   // (the inference immediately preceding it, or the inference immediately
   // following it when none precedes).
-  const observationsByInferenceAndCall = new Map<string, AtifStep['observation']>();
+  // One queue per (inference, call id): a provider may repeat a call id
+  // WITHIN a single response, so two calls can share an id inside one
+  // inference. A single value there would answer both calls with whichever
+  // result happened to be indexed first — fabricated provenance that still
+  // validates. Ids that recur ACROSS inferences get a separate queue per
+  // inference, so an earlier call can never be answered by a later result.
+  const observationsByInferenceAndCall = new Map<string, Array<AtifStep['observation']>>();
   const observationsByCallId = new Map<string, AtifStep['observation']>();
   const observationKey = (inferenceStepId: string, callId: string) => `${inferenceStepId}\u0000${callId}`;
+  const claimScopedObservation = (observation: AtifStep['observation'] | undefined) =>
+    observation ? observation : undefined;
 
   const indexedInferences = orderedSteps.filter(
     step => step.type === 'model' && stepOutput(step).inference === true
@@ -214,7 +222,10 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
     };
     const ownerInference = ownerInferenceForAuditStep(callId, index);
     if (ownerInference) {
-      observationsByInferenceAndCall.set(observationKey(ownerInference, callId), observation);
+      const key = observationKey(ownerInference, callId);
+      const queue = observationsByInferenceAndCall.get(key) ?? [];
+      queue.push(observation);
+      observationsByInferenceAndCall.set(key, queue);
     } else {
       // Only the first observation per call id: a second one for the same id
       // has no inference to anchor it, and last-write-wins would answer an
@@ -227,17 +238,25 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
    *  made it and then by call id. The scoped entry is checked first so a
    *  reused id resolves within its own inference rather than answering an
    *  earlier call with a later result. */
-  const observationFor = (inferenceStepId: string | null, callId: string) =>
-    inferenceStepId
-      ? (observationsByInferenceAndCall.get(observationKey(inferenceStepId, callId)) ??
-         observationsByCallId.get(callId))
-      : observationsByCallId.get(callId);
+  // The queue is consumed (not peeked) so a repeated id inside one inference
+  // pairs the Nth call with the Nth result. The flat map is only consulted
+  // when the inference has no recorded result at all, and is never consumed
+  // there because the legacy path owns its own delete.
+  const observationFor = (inferenceStepId: string | null, callId: string) => {
+    if (!inferenceStepId) return observationsByCallId.get(callId);
+    const key = observationKey(inferenceStepId, callId);
+    const queue = observationsByInferenceAndCall.get(key);
+    const scoped = queue?.shift();
+    if (scoped) return scoped;
+    return observationsByCallId.get(callId);
+  };
 
   /** Whether some inference step already carries this call's observation, so a
    *  later audit step for the same call would duplicate it. */
   const observationClaimedByInference = (callId: string): boolean => {
     for (const inferenceStepId of inferenceCallIds.keys()) {
-      if (observationsByInferenceAndCall.has(observationKey(inferenceStepId, callId))) return true;
+      const queue = observationsByInferenceAndCall.get(observationKey(inferenceStepId, callId));
+      if (queue && queue.length > 0) return true;
     }
     return false;
   };

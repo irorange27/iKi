@@ -17,6 +17,10 @@ import {
   validateAtifTrajectory,
 } from '@iki/backend/thread_session/atif_export';
 
+/** Every observation the trajectory exports, in step order. */
+const observationsOf = (trajectory: ReturnType<typeof buildRunTrajectory>) =>
+  trajectory.steps.flatMap(step => step.observation?.results ?? []);
+
 const fixtureRun = (): AgentRun => ({
   id: 'run_1',
   kind: 'chat-turn',
@@ -157,6 +161,39 @@ describe('buildRunTrajectory', () => {
       results: [{ source_call_id: 'call_1', content: 'SECOND FILE BODY' }],
     });
     expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
+  it('pairs a repeated call id inside one inference in recorded order', () => {
+    // A provider can repeat a call id WITHIN a single response: two tool-call
+    // parts sharing one id, then two tool-result audit steps. Keying the
+    // scoped index by (inference, call id) alone would collapse them, so both
+    // calls report whichever result was indexed first — fabricated provenance
+    // that still validates. The per-inference queue pairs the Nth call with
+    // the Nth result.
+    const duplicateCalls = [
+      { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'first.txt' } },
+      { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'second.txt' } },
+    ];
+    const buildRun = (first: string, second: string) => buildRunTrajectory(fixtureRun(), [
+      fixtureStep(1, 'model', {}, { inference: true, usage: {}, content: duplicateCalls }),
+      fixtureStep(2, 'tool-result', { toolCallId: 'call_1' }, { output: first }),
+      fixtureStep(3, 'tool-result', { toolCallId: 'call_1' }, { output: second }),
+    ]);
+
+    const inOperandOrder = buildRun('FIRST FILE BODY', 'SECOND FILE BODY');
+    expect(observationsOf(inOperandOrder)).toEqual([
+      { source_call_id: 'call_1', content: 'FIRST FILE BODY' },
+      { source_call_id: 'call_1', content: 'SECOND FILE BODY' },
+    ]);
+    expect(validateAtifTrajectory(inOperandOrder)).toEqual([]);
+
+    // Reversed audit order: still two DISTINCT results, never one twice.
+    const reversed = buildRun('SECOND FILE BODY', 'FIRST FILE BODY');
+    expect(observationsOf(reversed).map(result => result.content).sort()).toEqual([
+      'FIRST FILE BODY',
+      'SECOND FILE BODY',
+    ]);
+    expect(validateAtifTrajectory(reversed)).toEqual([]);
   });
 
   it('pairs legacy tool errors and keeps standalone errors valid', () => {
