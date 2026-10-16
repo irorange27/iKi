@@ -61,7 +61,12 @@ const resolveStaticTool = (
     };
   } else if (requireApproval) {
     resolved = { ...tool, needsApproval: true };
-  } else if (!guardActive && tool.approvalMode !== 'always') {
+  } else if (!guardActive && tool.approvalMode !== 'always' && tool.needsApproval !== true) {
+    // Clear approval only for tools that never asked for it. This branch used
+    // to force needsApproval false on ANY tool without approvalMode 'always',
+    // which discarded the write tools' own `needsApproval = true`
+    // (file_tools.ts) — so a tool was made LESS safe than its declaration and
+    // affect state alone decided whether writes were auto-approved (#166).
     resolved = { ...tool, needsApproval: false };
   }
 

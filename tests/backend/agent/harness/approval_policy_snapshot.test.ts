@@ -93,7 +93,7 @@ describe('approval policy snapshots', () => {
     const box = createApprovalPolicyBox(undefined);
     const tools = resolveTools({
       enableTools: true,
-      enabledToolNames: ['write_file'],
+      enabledToolNames: ['write_file', 'read_file'],
       availableSkillIds: [],
       guardActive: false,
       requireApproval: false,
@@ -101,8 +101,9 @@ describe('approval policy snapshots', () => {
       approvalPolicyBox: box,
     });
 
-    // Merely having a snapshot must not turn an unconfigured turn into
-    // escalate-everything (which silently gates every tool behind an approval).
-    expect(need(tools, 'write_file')({ path: 'a.txt' })).toBe(false);
+    // Two halves of the same intent: a snapshot must not escalate a tool that
+    // never asked for approval, AND it must not silently clear one that did.
+    expect(need(tools, 'read_file')({ path: 'a.txt' })).toBe(false);
+    expect(need(tools, 'write_file')({ path: 'a.txt' })).toBe(true);
   });
 });
