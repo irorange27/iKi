@@ -17,6 +17,24 @@ import {
   validateAtifTrajectory,
 } from '@iki/backend/thread_session/atif_export';
 
+const toolCall = (toolCallId: string, path: string) => ({
+  type: 'tool-call',
+  toolCallId,
+  toolName: 'read_file',
+  input: { path },
+});
+
+/** Every permutation of a list, so an exhaustive ordering scan is cheap. */
+const permutationsOf = <T>(items: T[]): T[][] => {
+  if (items.length <= 1) return [items];
+  const out: T[][] = [];
+  items.forEach((item, index) => {
+    const rest = [...items.slice(0, index), ...items.slice(index + 1)];
+    for (const tail of permutationsOf(rest)) out.push([item, ...tail]);
+  });
+  return out;
+};
+
 /** Every observation the trajectory exports, in step order. */
 const observationsOf = (trajectory: ReturnType<typeof buildRunTrajectory>) =>
   trajectory.steps.flatMap(step => step.observation?.results ?? []);
@@ -268,6 +286,36 @@ describe('buildRunTrajectory', () => {
       'SECOND',
     ]);
     expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
+  it('pairs both observations in every interleaving of two inferences and two results', () => {
+    // Ownership must not depend on where a result lands relative to its
+    // inference: the AI SDK records a step's tool parts BEFORE its inference,
+    // and a run can hold several such steps. An exhaustive ordering scan
+    // pins that no interleaving loses, fabricates or duplicates an
+    // observation — the previous nearest-neighbour rule failed 14 of these 24
+    // orderings, silently dropping a real result.
+    const stepTokens: Array<(index: number) => AgentRunStep> = [
+      i => fixtureStep(i, 'model', {}, { inference: true, usage: {}, content: [toolCall('call_a', 'a.txt')] }),
+      i => fixtureStep(i, 'model', {}, { inference: true, usage: {}, content: [toolCall('call_b', 'b.txt')] }),
+      i => fixtureStep(i, 'tool-result', { toolCallId: 'call_a' }, { output: 'BODY A' }),
+      i => fixtureStep(i, 'tool-result', { toolCallId: 'call_b' }, { output: 'BODY B' }),
+    ];
+
+    for (const ordering of permutationsOf(stepTokens)) {
+      const steps = ordering.map(token => token(0)).map((step, index) => ({
+        ...step,
+        id: `step_${index + 1}`,
+        stepIndex: index + 1,
+      }));
+      const contents = observationsOf(buildRunTrajectory(fixtureRun(), steps))
+        .map(result => result.content)
+        .sort();
+      expect(
+        contents,
+        `ordering ${ordering.map(token => token.name || 'anon').join(' > ')} lost or mis-paired an observation`
+      ).toEqual(['BODY A', 'BODY B']);
+    }
   });
 
   it('pairs legacy tool errors and keeps standalone errors valid', () => {
