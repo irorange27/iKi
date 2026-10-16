@@ -49,6 +49,11 @@ export const TURN_STARTED = 'turn_started';
  * no cross-process admission to record. Additive event type: old readers
  * degrade unknown types to no-ops. */
 export const TOOL_EXECUTED = 'tool_executed';
+/** A steering input the human sent mid-turn (audit H6). The driver splices
+ * it into the next prompt; without this fact the log holds only the original
+ * INPUT_ACCEPTED, so a recovery replay cannot see that the human ever
+ * steered. Additive: old readers degrade unknown types to no-ops. */
+export const STEERING_INPUT_ACCEPTED = 'steering_input_accepted';
 export const MODEL_TEXT_COMMITTED = 'model_text_committed';
 export const MODEL_OUTPUT_COMMITTED = 'model_output_committed';
 export const TURN_COMPLETED = 'turn_completed';

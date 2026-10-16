@@ -15,6 +15,7 @@ import { selectTurnHarness } from './turn_supply_selection';
 import {
   MODEL_TEXT_COMMITTED,
   recordSessionEvents,
+  STEERING_INPUT_ACCEPTED,
   SESSION_EVENT_VERSION,
   SessionLogCommitError,
   SessionLogWriteError,
@@ -512,6 +513,22 @@ const runTurnBatches = async (
             drained.length === 1
               ? drained[0]
               : drained.join('\n\n---\n\n');
+          // The steering input is a business fact like any other accepted
+          // input: recording it keeps the session log the authority for what
+          // the human asked for, so a recovery replay reconstructs the same
+          // conversation the live turn saw (audit H6).
+          recordSessionEvents(threadId, [
+            {
+              type: STEERING_INPUT_ACCEPTED,
+              version: SESSION_EVENT_VERSION,
+              payload: {
+                runId: state.runTracker.id,
+                messageId: uiChunkEmitter.messageId,
+                batchIndex: state.batchIndex,
+                text: steerPrompt,
+              },
+            },
+          ]);
           state.streamHistory = [
             ...state.streamHistory,
             { role: 'user' as const, content: `[STEERING INPUT]\n\n${steerPrompt}` },
