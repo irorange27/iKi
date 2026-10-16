@@ -148,6 +148,13 @@ type ResumeKind = NonNullable<NonNullable<ChatTurnOptions['runConfig']>['kind']>
  * shape cannot be represented — missing/non-object args, a result that does
  * not match its binding — throws: the recovery refuses loudly, an effect
  * the log cannot explain is not continuable.
+ *
+ * Coverage boundary: the unknown-effect barrier fires for every approval the
+ * chain has an `approval_requested` fact for, which is every approval the
+ * production writers create (the run tracker supplies the runId). A legacy
+ * thread whose request lacks a runId, or a STARTED fact whose binding has no
+ * approvalId, is skipped — matching the long-standing TOOL_EXECUTION_FINISHED
+ * branch, which ignores the same shapes.
  */
 export const journaledExchangePairs = (
   events: RebuiltThreadView['events'],
