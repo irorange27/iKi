@@ -16,6 +16,7 @@ import {
   resolveDeleteWorkspacePath,
   resolveReadableWorkspacePath,
   resolveWritableWorkspacePath,
+  type ResolvedWorkspacePath,
 } from './workspace_paths';
 
 const MAX_EDIT_UNDO_DEPTH = 10;
@@ -255,9 +256,9 @@ export class ReadFileTool extends BaseTool {
   override paramSchema = ReadFileInputSchema;
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = await resolveReadableWorkspacePath(args.path);
-    const content = await fs.readFile(absolutePath, { encoding: args.encoding as BufferEncoding });
-    return { path: absolutePath, content };
+    const resolved = await resolveReadableWorkspacePath(args.path);
+    const content = await fs.readFile(resolved.validated, { encoding: args.encoding as BufferEncoding });
+    return { path: resolved.display, content };
   }
 }
 
@@ -273,16 +274,19 @@ export class WriteFileTool extends BaseTool {
   override paramSchema = WriteFileInputSchema;
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = await resolveWritableWorkspacePath(args.path);
+    const resolved = await resolveWritableWorkspacePath(args.path);
 
-    return await withPathWriteLock(absolutePath, async () => {
+    return await withPathWriteLock(resolved.validated, async () => {
       getToolRuntimeContext().abortSignal?.throwIfAborted();
       // Ensure directory exists
-      await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+      await fs.mkdir(path.dirname(resolved.validated), { recursive: true });
 
       getToolRuntimeContext().abortSignal?.throwIfAborted();
-      await writeFileAtomically(absolutePath, args.content, args.encoding as BufferEncoding);
-      return { path: absolutePath, success: true };
+      // WRITE to the validated path: the lock, the mkdir and the write must
+      // all name the file the boundary check examined.
+      await writeFileAtomically(resolved.validated, args.content, args.encoding as BufferEncoding);
+      // REPORT the caller's spelling.
+      return { path: resolved.display, success: true };
     });
   }
 }
@@ -300,23 +304,23 @@ export class EditFileTool extends BaseTool {
   override paramSchema = EditFileInputSchema;
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = await resolveWritableWorkspacePath(args.path);
-    return await withPathWriteLock(absolutePath, () => this.applyEdits(absolutePath, args));
+    const resolved = await resolveWritableWorkspacePath(args.path);
+    return await withPathWriteLock(resolved.validated, () => this.applyEdits(resolved, args));
   }
 
   private async applyEdits(
-    absolutePath: string,
+    resolved: ResolvedWorkspacePath,
     args: z.infer<typeof this.paramSchema>
   ) {
     let originalContent: string;
     try {
-      originalContent = await fs.readFile(absolutePath, {
+      originalContent = await fs.readFile(resolved.validated, {
         encoding: args.encoding as BufferEncoding,
       });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return {
-          path: absolutePath,
+          path: resolved.display,
           success: false,
           changed: false,
           error: true,
@@ -342,7 +346,7 @@ export class EditFileTool extends BaseTool {
 
       if (result.index < 0 && 'error' in result) {
         return {
-          path: absolutePath,
+          path: resolved.display,
           success: false,
           changed: false,
           error: true,
@@ -361,7 +365,7 @@ export class EditFileTool extends BaseTool {
 
         if (!edit.replaceAll && occurrences > 1 && result.matchType === 'exact') {
           return {
-            path: absolutePath,
+            path: resolved.display,
             success: false,
             changed: false,
             error: true,
@@ -387,10 +391,13 @@ export class EditFileTool extends BaseTool {
       : '';
 
     if (changed) {
-      const syntaxVerdict = await checkEditedFileSyntax(absolutePath, updatedContent);
+      // The extension is all this reads off the path (the checker writes the
+      // content to its own temp file), so either half works; `validated` keeps
+      // the convention that only validated paths reach filesystem-facing code.
+      const syntaxVerdict = await checkEditedFileSyntax(resolved.validated, updatedContent);
       if (syntaxVerdict.status === 'failed') {
         return {
-          path: absolutePath,
+          path: resolved.display,
           success: false,
           changed: false,
           error: true,
@@ -403,18 +410,18 @@ export class EditFileTool extends BaseTool {
       }
 
       getToolRuntimeContext().abortSignal?.throwIfAborted();
-      await writeFileAtomically(absolutePath, updatedContent, args.encoding as BufferEncoding);
-      const undoStack = editUndoStacks.get(undoKey(absolutePath)) ?? [];
+      await writeFileAtomically(resolved.validated, updatedContent, args.encoding as BufferEncoding);
+      const undoStack = editUndoStacks.get(undoKey(resolved.validated)) ?? [];
       undoStack.push({
         previousContent: originalContent,
         writtenContent: updatedContent,
         encoding: args.encoding as BufferEncoding,
       });
       if (undoStack.length > MAX_EDIT_UNDO_DEPTH) undoStack.shift();
-      editUndoStacks.set(undoKey(absolutePath), undoStack);
+      editUndoStacks.set(undoKey(resolved.validated), undoStack);
 
       return {
-        path: absolutePath,
+        path: resolved.display,
         success: true,
         changed,
         appliedEditCount: args.edits.length,
@@ -425,7 +432,7 @@ export class EditFileTool extends BaseTool {
     }
 
     return {
-      path: absolutePath,
+      path: resolved.display,
       success: true,
       changed,
       appliedEditCount: args.edits.length,
@@ -448,16 +455,16 @@ export class UndoEditTool extends BaseTool {
   override paramSchema = UndoEditInputSchema;
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = await resolveWritableWorkspacePath(args.path);
-    return await withPathWriteLock(absolutePath, () => this.applyUndo(absolutePath, args));
+    const resolved = await resolveWritableWorkspacePath(args.path);
+    return await withPathWriteLock(resolved.validated, () => this.applyUndo(resolved, args));
   }
 
-  private async applyUndo(absolutePath: string, args: z.infer<typeof this.paramSchema>) {
-    const undoStack = editUndoStacks.get(undoKey(absolutePath));
+  private async applyUndo(resolved: ResolvedWorkspacePath, args: z.infer<typeof this.paramSchema>) {
+    const undoStack = editUndoStacks.get(undoKey(resolved.validated));
     const entry = undoStack?.at(-1);
     if (!undoStack || !entry) {
       return {
-        path: absolutePath,
+        path: resolved.display,
         success: false,
         error: true,
         message: `No edit_file changes to undo for "${args.path}" in this session.`,
@@ -467,15 +474,15 @@ export class UndoEditTool extends BaseTool {
       };
     }
 
-    const currentContent = await fs.readFile(absolutePath, { encoding: entry.encoding });
+    const currentContent = await fs.readFile(resolved.validated, { encoding: entry.encoding });
     if (currentContent !== entry.writtenContent) {
-      return { path: absolutePath, success: false, error: true, message: 'File changed since this edit; refusing to overwrite newer changes.' };
+      return { path: resolved.display, success: false, error: true, message: 'File changed since this edit; refusing to overwrite newer changes.' };
     }
     getToolRuntimeContext().abortSignal?.throwIfAborted();
-    await writeFileAtomically(absolutePath, entry.previousContent, entry.encoding);
+    await writeFileAtomically(resolved.validated, entry.previousContent, entry.encoding);
     undoStack.pop();
     return {
-      path: absolutePath,
+      path: resolved.display,
       success: true,
       restored: true,
       editsRemaining: undoStack.length,
@@ -495,10 +502,10 @@ export class DeleteFileTool extends BaseTool {
   override paramSchema = DeleteFileInputSchema;
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = await resolveDeleteWorkspacePath(args.path);
+    const resolved = await resolveDeleteWorkspacePath(args.path);
 
     getToolRuntimeContext().abortSignal?.throwIfAborted();
-    await fs.unlink(absolutePath);
-    return { path: absolutePath, deleted: true };
+    await fs.unlink(resolved.validated);
+    return { path: resolved.display, deleted: true };
   }
 }

@@ -94,6 +94,44 @@ describe('file tools workspace boundaries', () => {
     expect(result.content).toBe('hello workspace');
   });
 
+  it('writes through the validated path, not a symlinked alias', async () => {
+    // Audit H5 regression, write side. WriteFileTool must write to the path
+    // the boundary check examined, not the caller's spelling. For a symlinked
+    // alias the two differ: resolveWritableWorkspacePath returns the LINK
+    // TARGET as `validated` and the alias as `display`, so writing to
+    // `display` would rename the temp file onto the alias path.
+    //
+    // Note what that does and does not prove. writeFileAtomically ends in
+    // fs.rename, and rename(2) REPLACES a symlink at the destination rather
+    // than following it — so the wrong-target write would not corrupt the link
+    // target; it would destroy the alias, replacing the symlink with a regular
+    // file. The first cut of the H5 fix left the write on `display` and this
+    // suite did not notice, so the assertions below pin both halves: the bytes
+    // land on the validated target, and the alias is left alone.
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    await fs.mkdir(workspaceRoot, { recursive: true });
+    const realFile = path.join(workspaceRoot, 'real.txt');
+    const aliasFile = path.join(workspaceRoot, 'alias.txt');
+    await fs.writeFile(realFile, 'original', 'utf8');
+    await fs.symlink(realFile, aliasFile);
+    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({ id: 'thread_1', workspace_id: 'workspace_1' });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+
+    const writer = new WriteFileTool();
+    const result = (await runInWorkspaceContext('thread_1', async () =>
+      writer.execute({ path: 'alias.txt', content: 'via alias' })
+    )) as { path: string; success: boolean };
+
+    // The bytes land on the validated target (the link target)...
+    expect(await fs.readFile(realFile, 'utf8')).toBe('via alias');
+    // ...and the alias is left untouched, still a symlink: had the write used
+    // `display`, rename(2) would have replaced the alias with a regular file.
+    expect((await fs.lstat(aliasFile)).isSymbolicLink()).toBe(true);
+    // ...and the result reports the caller's own spelling.
+    expect(result.path).toBe(aliasFile);
+  });
+
   it('reads current content after external and tool writes', async () => {
     const workspaceRoot = path.join(tempRoot, 'workspace');
     const filePath = path.join(workspaceRoot, 'docs', 'note.txt');
