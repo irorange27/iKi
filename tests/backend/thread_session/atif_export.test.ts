@@ -196,6 +196,32 @@ describe('buildRunTrajectory', () => {
     expect(validateAtifTrajectory(reversed)).toEqual([]);
   });
 
+  it('never credits an inference call with a flat observation from a recurring id', () => {
+    // An inference that recorded the call owns its pairing: when its own
+    // results run out, the call is exported with NO observation rather than
+    // one taken from the flat map — a flat entry for a recurring id may
+    // belong to a different call, and crediting it here is the same
+    // fabricated provenance this join exists to prevent.
+    const steps = [
+      fixtureStep(1, 'tool-call', { toolCallId: 'call_1', toolName: 'read_file', input: { path: 'legacy.txt' } }, null),
+      fixtureStep(2, 'tool-result', { toolCallId: 'call_1' }, { output: 'LEGACY BODY' }),
+      fixtureStep(3, 'model', {}, { inference: true, usage: {}, content: [
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'a.txt' } },
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'read_file', input: { path: 'b.txt' } },
+      ] }),
+      fixtureStep(4, 'tool-result', { toolCallId: 'call_1' }, { output: 'ONE' }),
+    ];
+
+    const trajectory = buildRunTrajectory(fixtureRun(), steps);
+    // With ownership resolved, ONE pairs with the inference's FIRST call
+    // (the previous inference records the id), so it is used once and once
+    // only — never handed to the trailing call as a duplicated observation.
+    const contents = observationsOf(trajectory).map(o => o.content);
+    expect(contents).toEqual(['LEGACY BODY', 'ONE']);
+    expect(observationsOf(trajectory).filter(o => o.content === 'ONE')).toHaveLength(1);
+    expect(validateAtifTrajectory(trajectory)).toEqual([]);
+  });
+
   it('pairs legacy tool errors and keeps standalone errors valid', () => {
     const steps = [
       fixtureSteps()[0],
