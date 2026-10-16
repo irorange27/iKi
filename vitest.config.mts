@@ -24,6 +24,7 @@ export default defineConfig({
     exclude: ['**/node_modules/**', 'tests/integration/**'],
     setupFiles: [
       'tests/setup/wire_core_context.ts',
+      'tests/setup/default_db_path.ts',
       'tests/setup/renderer_storage_fallback.ts',
       'tests/setup/strict_error_logs.ts',
     ],
