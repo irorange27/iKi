@@ -276,13 +276,16 @@ export class WriteFileTool extends BaseTool {
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
     const resolved = await resolveWritableWorkspacePath(args.path);
 
-    return await withPathWriteLock(resolved.display, async () => {
+    return await withPathWriteLock(resolved.validated, async () => {
       getToolRuntimeContext().abortSignal?.throwIfAborted();
       // Ensure directory exists
       await fs.mkdir(path.dirname(resolved.validated), { recursive: true });
 
       getToolRuntimeContext().abortSignal?.throwIfAborted();
-      await writeFileAtomically(resolved.display, args.content, args.encoding as BufferEncoding);
+      // WRITE to the validated path: the lock, the mkdir and the write must
+      // all name the file the boundary check examined.
+      await writeFileAtomically(resolved.validated, args.content, args.encoding as BufferEncoding);
+      // REPORT the caller's spelling.
       return { path: resolved.display, success: true };
     });
   }
@@ -388,7 +391,10 @@ export class EditFileTool extends BaseTool {
       : '';
 
     if (changed) {
-      const syntaxVerdict = await checkEditedFileSyntax(resolved.display, updatedContent);
+      // The extension is all this reads off the path (the checker writes the
+      // content to its own temp file), so either half works; `validated` keeps
+      // the convention that only validated paths reach filesystem-facing code.
+      const syntaxVerdict = await checkEditedFileSyntax(resolved.validated, updatedContent);
       if (syntaxVerdict.status === 'failed') {
         return {
           path: resolved.display,

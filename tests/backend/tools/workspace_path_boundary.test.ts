@@ -102,6 +102,25 @@ describe('workspace path resolvers return the validated path', () => {
     expect(resolved.display).toBe(path.join(root, 'nested/new.txt'));
   });
 
+  it('writable: writing through a symlinked file targets the validated path', async () => {
+    // The write path is the one that matters: a tool that WRITES to the
+    // caller's unresolved spelling follows a swapped component. Pin that the
+    // write target is the validated path. This case exists because the first
+    // cut of this fix left WriteFileTool on `display` and the suite did not
+    // notice — the boundary test only covered the resolvers.
+    await fs.writeFile(path.join(root, 'real.txt'), 'original');
+    await fs.symlink(path.join(root, 'real.txt'), path.join(root, 'alias.txt'));
+
+    const resolved = await runWithToolRuntimeContext(contextFor(root), () =>
+      resolveWritableWorkspacePath('alias.txt')
+    );
+
+    // The alias must not leak into the path the tool writes: the validated
+    // path is the link TARGET, so a write lands on real.txt through the
+    // checked path rather than the unchecked alias.
+    expect(resolved.validated).not.toBe(resolved.display);
+    expect(resolved.validated).toBe(path.join(await fs.realpath(root), 'real.txt'));
+  });
   it('delete: resolves under its validated real parent', async () => {
     await fs.mkdir(path.join(root, 'dir'));
     await fs.writeFile(path.join(root, 'dir', 'file.txt'), 'x');

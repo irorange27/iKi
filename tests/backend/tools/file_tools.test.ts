@@ -94,6 +94,35 @@ describe('file tools workspace boundaries', () => {
     expect(result.content).toBe('hello workspace');
   });
 
+  it('writes through the validated path, not a symlinked alias', async () => {
+    // Audit H5 regression, write side. WriteFileTool must write to the path
+    // the boundary check examined: writing to a symlinked alias would follow
+    // a component the check never saw. The first cut of the H5 fix left the
+    // write on the caller's spelling and this suite did not notice, so the
+    // assertion is deliberately about WHERE THE BYTES LAND.
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    await fs.mkdir(workspaceRoot, { recursive: true });
+    const realFile = path.join(workspaceRoot, 'real.txt');
+    const aliasFile = path.join(workspaceRoot, 'alias.txt');
+    await fs.writeFile(realFile, 'original', 'utf8');
+    await fs.symlink(realFile, aliasFile);
+    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({ id: 'thread_1', workspace_id: 'workspace_1' });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+
+    const writer = new WriteFileTool();
+    const result = (await runInWorkspaceContext('thread_1', async () =>
+      writer.execute({ path: 'alias.txt', content: 'via alias' })
+    )) as { path: string; success: boolean };
+
+    // The bytes land on the file the check resolved to...
+    expect(await fs.readFile(realFile, 'utf8')).toBe('via alias');
+    // ...the alias is still a symlink (not replaced by a regular file)...
+    expect((await fs.lstat(aliasFile)).isSymbolicLink()).toBe(true);
+    // ...and the result reports the caller's own spelling.
+    expect(result.path).toBe(aliasFile);
+  });
+
   it('reads current content after external and tool writes', async () => {
     const workspaceRoot = path.join(tempRoot, 'workspace');
     const filePath = path.join(workspaceRoot, 'docs', 'note.txt');
