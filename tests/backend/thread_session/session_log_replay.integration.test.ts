@@ -212,6 +212,11 @@ describe('session log turn facts and pure replay', () => {
       .map(event => JSON.stringify((event as { payload?: unknown }).payload ?? ''));
     expect(inputFacts.join(' ')).toContain('run the probe');
     expect(inputFacts.join(' ')).toContain('change course');
+
+    // The fact must also reach the rebuilt CONVERSATION, not just the event
+    // stream: recovery consumers derive history from view.messages, so a fact
+    // with no reducer arm would still leave the steer invisible to them.
+    expect(JSON.stringify(view.messages)).toContain('change course');
   });
 
   it('records the turn facts and rebuilds the view from events alone', async () => {

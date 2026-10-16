@@ -308,6 +308,30 @@ export const rebuildThreadViewFromEvents = (
         }
         break;
       }
+      case STEERING_INPUT_ACCEPTED: {
+        // A mid-turn steering input becomes a user message in the rebuilt
+        // conversation. Without this arm the log carried the fact but no
+        // recovery consumer could reconstruct it — the steer existed only in
+        // the live turn's streamHistory, so a replay rebuilt a conversation
+        // where the human never steered.
+        const steerText = typeof payload.text === 'string' ? payload.text : '';
+        const steerMessageId =
+          typeof payload.messageId === 'string' && payload.messageId
+            ? payload.messageId
+            : typeof payload.runId === 'string' && payload.runId
+              ? `steer_${payload.runId}`
+              : '';
+        if (!steerMessageId || !steerText.trim()) break;
+        const steerMessage = {
+          id: steerMessageId,
+          role: 'user' as const,
+          parts: [{ type: 'text' as const, text: `[STEERING INPUT]\n\n${steerText}` }],
+        };
+        const steerExisting = messages.findIndex(item => item.id === steerMessageId);
+        if (steerExisting >= 0) messages[steerExisting] = steerMessage;
+        else messages.push(steerMessage);
+        break;
+      }
       case MODEL_TEXT_COMMITTED: {
         const messageId = typeof payload.messageId === 'string' ? payload.messageId : '';
         const text = typeof payload.text === 'string' ? payload.text : '';

@@ -523,7 +523,11 @@ const runTurnBatches = async (
               version: SESSION_EVENT_VERSION,
               payload: {
                 runId: state.runTracker.id,
-                messageId: uiChunkEmitter.messageId,
+                // Distinct from the assistant message id: the assistant's
+                // MODEL_OUTPUT_COMMITTED fact carries its own id, and reusing
+                // it here would let that later fact overwrite this message in
+                // the rebuilt conversation — losing the steer again.
+                messageId: `steer_${state.runTracker.id}_${state.batchIndex}`,
                 batchIndex: state.batchIndex,
                 text: steerPrompt,
               },
