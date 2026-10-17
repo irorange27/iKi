@@ -67,8 +67,11 @@ describe('resolveTools approvalPolicy (ADR 005)', () => {
 
   it('defaults to the legacy guard behavior when no policy is set', () => {
     const tools = resolve(undefined);
+    // A tool that never asked for approval stays auto-approved.
     expect(needsApproval(tools, 'read_file')).toBe(false);
-    // write_file's own registry flag is false — legacy default leaves it alone
-    expect(needsApproval(tools, 'write_file')).toBe(false);
+    // A tool that DOES ask for approval keeps it. write_file's registry flag
+    // is true (tools/file_tools.ts) — the legacy default must not discard a
+    // tool's own declaration and make it less safe than it says it is (#166).
+    expect(needsApproval(tools, 'write_file')).toBe(true);
   });
 });

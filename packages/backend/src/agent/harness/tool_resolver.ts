@@ -61,7 +61,20 @@ const resolveStaticTool = (
     };
   } else if (requireApproval) {
     resolved = { ...tool, needsApproval: true };
-  } else if (!guardActive && tool.approvalMode !== 'always') {
+  } else if (
+    !guardActive &&
+    tool.approvalMode !== 'always' &&
+    (tool.needsApproval === false || tool.needsApproval === undefined)
+  ) {
+    // Clear approval only for tools that are EXPLICITLY approval-free — the
+    // same predicate as isApprovalFreeTool (tools/agent_tools.ts). Testing
+    // `!== true` would also clear a tool that declares a ToolApprovalFunction
+    // (agent/types.ts allows boolean | function), i.e. one that computes its
+    // own answer. This branch used to force needsApproval false on ANY tool
+    // without approvalMode 'always', discarding the write tools' own
+    // `needsApproval = true` (file_tools.ts) — so a tool was made LESS safe
+    // than its declaration and affect state alone decided whether writes were
+    // auto-approved (#166).
     resolved = { ...tool, needsApproval: false };
   }
 

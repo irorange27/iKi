@@ -256,9 +256,12 @@ export const createChatStreaming = (deps: {
 
       const approvalPolicy = parseApprovalPolicy(options.approvalPolicy);
       if (preparedTurn.enableTools && !approvalPolicy && !preparedTurn.requireApproval) {
-        // The legacy fallback below auto-runs workspace writes for tool turns
-        // with no policy; that is exactly how a frontend wiring gap silently
-        // became "approvals never asked" once. Make the degradation loud.
+        // A tool turn with no explicit policy. This used to ALSO auto-run
+        // workspace writes — exactly how a frontend wiring gap silently became
+        // "approvals never asked" once. The resolver no longer clears a tool's
+        // own declared approval (#166), so writes that ask for approval still
+        // get it; the warning stays because the missing policy is still a
+        // wiring gap worth surfacing.
         chatStreamingLogger.event({
           level: 'warn',
           event: 'chat.stream.approval_policy',
