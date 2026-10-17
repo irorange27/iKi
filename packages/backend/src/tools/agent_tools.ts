@@ -264,15 +264,20 @@ const resolveDelegableTools = (
   // delegable. Returning [] there built the child with `enabledTools: []`, so
   // it ran, answered without tooling and reported nothing (issue #170).
   //
-  // Four different situations produce an empty set, so the message names the
+  // Five different situations produce an empty set, so the message names the
   // category rather than guessing one:
-  //   - an explicit askRisky/trustWorkspace policy, which makes the resolver
-  //     put a per-call `needsApproval` FUNCTION on every tool (a function
-  //     cannot be proven safe without an input);
-  //   - approvalPolicy 'always' or requireApproval, which set a boolean
-  //     `needsApproval: true`;
-  //   - the subagent type's own allow-list excluding every candidate
-  //     (an 'explorer' asked for write-only tools);
+  //   - the tool itself is not approval-free, which covers both an explicit
+  //     askRisky/trustWorkspace policy (the resolver installs a per-call
+  //     `needsApproval` FUNCTION — a function cannot be proven safe without an
+  //     input) and approvalPolicy 'always' / requireApproval (a boolean
+  //     `needsApproval: true`);
+  //   - the tool is approval-free-in-principle but its own `approvalMode` is
+  //     'always' (shell/skill/proactive/awaiter tools, and MCP servers opened
+  //     under defaultApprovalMode 'always'), with no policy involved at all;
+  //   - the subagent type's own allow-list covers no candidate — the guard
+  //     fires on the default enumeration path, i.e. an 'explorer' whose
+  //     available tools all fall outside EXPLORER_TOOL_NAMES (naming tools
+  //     explicitly fails earlier, per tool, at the allow-list check);
   //   - the parent exposing only the `agent` tool, which is skipped for
   //     recursion.
   if (toolMap.size > 0 && delegable.length === 0) {
