@@ -253,12 +253,25 @@ const resolveDelegableTools = (
     return resolved;
   }
 
-  return Array.from(toolMap.values()).filter(
+  const delegable = Array.from(toolMap.values()).filter(
     tool =>
       tool.name !== AGENT_TOOL_NAME &&
       isApprovalFreeTool(tool) &&
       (!policy.allowedTools || policy.allowedTools.has(tool.name))
   );
+  // A turn that exposes NO tools is a legitimate tool-free delegation and is
+  // left alone. The surprise is the other shape: tools exist, yet every one
+  // is rejected — which is what an explicit approval policy produces, since
+  // the resolver then puts a per-call `needsApproval` FUNCTION on each tool
+  // and isApprovalFreeTool cannot prove a function safe without an input.
+  // Returning [] there built the child with `enabledTools: []`, so it ran,
+  // answered without tooling and reported nothing (issue #170).
+  if (toolMap.size > 0 && delegable.length === 0) {
+    throw new Error(
+      'No tool is delegable to the subagent: every available tool needs a per-call approval decision, which a delegated run cannot surface. Narrow the task to one without tools, drop the explicit approval policy, or pass tools: [] for a tool-free subagent.'
+    );
+  }
+  return delegable;
 };
 
 const SCRATCHPAD_MAX_FILES = 20;
