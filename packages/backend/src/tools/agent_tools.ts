@@ -253,12 +253,38 @@ const resolveDelegableTools = (
     return resolved;
   }
 
-  return Array.from(toolMap.values()).filter(
+  const delegable = Array.from(toolMap.values()).filter(
     tool =>
       tool.name !== AGENT_TOOL_NAME &&
       isApprovalFreeTool(tool) &&
       (!policy.allowedTools || policy.allowedTools.has(tool.name))
   );
+  // A turn that exposes NO tools is a legitimate tool-free delegation and is
+  // left alone. The surprise is the other shape: tools exist, yet none is
+  // delegable. Returning [] there built the child with `enabledTools: []`, so
+  // it ran, answered without tooling and reported nothing (issue #170).
+  //
+  // State the causes as the NEGATION of the filter below rather than as a
+  // census: an available tool is delegable only when it is approval-free
+  // (`needsApproval` explicitly false/undefined), its `approvalMode` is not
+  // 'always', it is not `agent` itself (recursion), and the subagent type
+  // permits it. So the set empties whenever, for every candidate, one of those
+  // fails — most often because the tool genuinely asks for approval, which
+  // covers a static `needsApproval: true` (write/edit/delete tools), an
+  // `approvalMode` of 'always' (shell, skill, proactive-task and awaiter
+  // tools; MCP servers under defaultApprovalMode 'always'), and a per-call
+  // `needsApproval` function installed by an explicit askRisky/trustWorkspace
+  // policy. The other two are an allow-list that covers no candidate, and a
+  // parent exposing only `agent`.
+  // Naming tools explicitly never reaches here: that path fails earlier, per
+  // tool, at the allow-list and approval checks.
+
+  if (toolMap.size > 0 && delegable.length === 0) {
+    throw new Error(
+      'No tool is delegable to the subagent: none of this turn\'s available tools is approval-free for this subagent type. Either the tools themselves require an approval decision, or this subagent type may not use them. Narrow the task to one without tools, or pass tools: [] for a tool-free subagent.'
+    );
+  }
+  return delegable;
 };
 
 const SCRATCHPAD_MAX_FILES = 20;
