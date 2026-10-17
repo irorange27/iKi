@@ -92,6 +92,39 @@ describe('resolveTools honours a tool\'s declared approval requirement', () => {
     }
   });
 
+  it('preserves declared approval for EVERY tool in the window, not just writes', () => {
+    // The window is no-policy + guard-inactive + no-requireApproval. Six tools
+    // declare `needsApproval = true` without `approvalMode: 'always'` — the
+    // four file tools AND two todo tools. Measured against the live registry
+    // rather than listed by hand, so a newly added declaring tool is covered.
+    const declaring = defaultToolRegistry
+      .getAll()
+      .filter(t => t.needsApproval === true && t.approvalMode !== 'always')
+      .map(t => t.name)
+      .sort();
+    expect(declaring).toEqual([
+      'delete_file',
+      'delete_todo_list',
+      'edit',
+      'undo_edit',
+      'write_file',
+      'write_todo_list',
+    ]);
+
+    const tools = resolveTools({
+      enableTools: true,
+      enabledToolNames: declaring,
+      availableSkillIds: [],
+      guardActive: false,
+      requireApproval: false,
+      autoApproveToolRequests: false,
+    });
+    // Every one keeps its requirement through the resolver.
+    expect(tools.map(t => `${t.name}:${String(t.needsApproval)}`).sort()).toEqual(
+      declaring.map(name => `${name}:true`)
+    );
+  });
+
   it('still requires approval for writes when the guard is active', () => {
     expect(needsApprovalFor(true, true, 'write_file')).toBe(true);
   });
