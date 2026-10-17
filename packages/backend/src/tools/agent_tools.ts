@@ -264,25 +264,24 @@ const resolveDelegableTools = (
   // delegable. Returning [] there built the child with `enabledTools: []`, so
   // it ran, answered without tooling and reported nothing (issue #170).
   //
-  // Five different situations produce an empty set, so the message names the
-  // category rather than guessing one:
-  //   - the tool itself is not approval-free, which covers both an explicit
-  //     askRisky/trustWorkspace policy (the resolver installs a per-call
-  //     `needsApproval` FUNCTION — a function cannot be proven safe without an
-  //     input) and approvalPolicy 'always' / requireApproval (a boolean
-  //     `needsApproval: true`);
-  //   - the tool is approval-free-in-principle but its own `approvalMode` is
-  //     'always' (shell/skill/proactive/awaiter tools, and MCP servers opened
-  //     under defaultApprovalMode 'always'), with no policy involved at all;
-  //   - the subagent type's own allow-list covers no candidate — the guard
-  //     fires on the default enumeration path, i.e. an 'explorer' whose
-  //     available tools all fall outside EXPLORER_TOOL_NAMES (naming tools
-  //     explicitly fails earlier, per tool, at the allow-list check);
-  //   - the parent exposing only the `agent` tool, which is skipped for
-  //     recursion.
+  // State the causes as the NEGATION of the filter below rather than as a
+  // census: an available tool is delegable only when it is approval-free
+  // (`needsApproval` explicitly false/undefined), its `approvalMode` is not
+  // 'always', it is not `agent` itself (recursion), and the subagent type
+  // permits it. So the set empties whenever, for every candidate, one of those
+  // fails — most often because the tool genuinely asks for approval, which
+  // covers a static `needsApproval: true` (write/edit/delete tools), an
+  // `approvalMode` of 'always' (shell, skill, proactive-task and awaiter
+  // tools; MCP servers under defaultApprovalMode 'always'), and a per-call
+  // `needsApproval` function installed by an explicit askRisky/trustWorkspace
+  // policy. The other two are an allow-list that covers no candidate, and a
+  // parent exposing only `agent`.
+  // Naming tools explicitly never reaches here: that path fails earlier, per
+  // tool, at the allow-list and approval checks.
+
   if (toolMap.size > 0 && delegable.length === 0) {
     throw new Error(
-      'No tool is delegable to the subagent: none of this turn\'s available tools is approval-free for this subagent type. Either the tools need an approval decision (an explicit approval policy or requireApproval), or this subagent type may not use them. Narrow the task to one without tools, or pass tools: [] for a tool-free subagent.'
+      'No tool is delegable to the subagent: none of this turn\'s available tools is approval-free for this subagent type. Either the tools themselves require an approval decision, or this subagent type may not use them. Narrow the task to one without tools, or pass tools: [] for a tool-free subagent.'
     );
   }
   return delegable;
