@@ -260,15 +260,24 @@ const resolveDelegableTools = (
       (!policy.allowedTools || policy.allowedTools.has(tool.name))
   );
   // A turn that exposes NO tools is a legitimate tool-free delegation and is
-  // left alone. The surprise is the other shape: tools exist, yet every one
-  // is rejected — which is what an explicit approval policy produces, since
-  // the resolver then puts a per-call `needsApproval` FUNCTION on each tool
-  // and isApprovalFreeTool cannot prove a function safe without an input.
-  // Returning [] there built the child with `enabledTools: []`, so it ran,
-  // answered without tooling and reported nothing (issue #170).
+  // left alone. The surprise is the other shape: tools exist, yet none is
+  // delegable. Returning [] there built the child with `enabledTools: []`, so
+  // it ran, answered without tooling and reported nothing (issue #170).
+  //
+  // Four different situations produce an empty set, so the message names the
+  // category rather than guessing one:
+  //   - an explicit askRisky/trustWorkspace policy, which makes the resolver
+  //     put a per-call `needsApproval` FUNCTION on every tool (a function
+  //     cannot be proven safe without an input);
+  //   - approvalPolicy 'always' or requireApproval, which set a boolean
+  //     `needsApproval: true`;
+  //   - the subagent type's own allow-list excluding every candidate
+  //     (an 'explorer' asked for write-only tools);
+  //   - the parent exposing only the `agent` tool, which is skipped for
+  //     recursion.
   if (toolMap.size > 0 && delegable.length === 0) {
     throw new Error(
-      'No tool is delegable to the subagent: every available tool needs a per-call approval decision, which a delegated run cannot surface. Narrow the task to one without tools, drop the explicit approval policy, or pass tools: [] for a tool-free subagent.'
+      'No tool is delegable to the subagent: none of this turn\'s available tools is approval-free for this subagent type. Either the tools need an approval decision (an explicit approval policy or requireApproval), or this subagent type may not use them. Narrow the task to one without tools, or pass tools: [] for a tool-free subagent.'
     );
   }
   return delegable;

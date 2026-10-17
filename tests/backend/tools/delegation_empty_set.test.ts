@@ -58,8 +58,10 @@ describe('a delegation with no usable tool fails loudly', () => {
   it('refuses when an approval policy makes every tool non-delegable', async () => {
     const error = await delegate('askRisky');
     expect(error?.message).toContain('No tool is delegable to the subagent');
-    // The message must point at the real cause, not just say "failed".
-    expect(error?.message).toContain('per-call approval');
+    // The message must name a category that is TRUE in every firing path,
+    // not guess one: an approval policy, an allow-list, or the recursion skip
+    // can all empty the set.
+    expect(error?.message).toContain('approval-free for this subagent type');
   });
 
   it('leaves a turn that exposes NO tools alone', async () => {
@@ -82,8 +84,10 @@ describe('a delegation with no usable tool fails loudly', () => {
     expect(error?.message ?? '').not.toContain('No tool is delegable');
   });
 
-  it('still delegates normally when tools are delegable', async () => {
-    // The guard must not fire on the ordinary path. No policy: registry tools
+  it('does not fire when tools are delegable', async () => {
+    // The guard must not fire on the ordinary path (it reaches child-harness
+    // construction and stops there without a provider, so only the ABSENCE of
+    // this guard message is assertable). No policy: registry tools
     // carry boolean needsApproval, so read_file qualifies and write_file does
     // not. This reaches the child-harness construction, which is where it
     // stops without a reachable provider — so assert the failure is NOT the
