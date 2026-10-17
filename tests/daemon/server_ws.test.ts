@@ -484,11 +484,20 @@ describe('configureDaemonWebSockets', () => {
   it('relays the approval-request chunk unwrapped so a client can discover the id', () => {
     // A daemon turn that blocks on approval is only actionable if the client
     // can learn the approval id. The desktop renderer reads it off the
-    // `tool-approval-request` UI chunk, and this relay is the daemon's only
-    // equivalent path — the stream RESULT carries `awaitingApproval` but no
-    // ids, and there is no route that lists pending approvals. The existing
-    // approve-tool test cannot catch a regression here: it hardcodes
-    // 'approval_1' and mocks the service.
+    // `tool-approval-request` UI chunk, and this relay is the same mechanism:
+    // it is the only PUSH path, and the only discovery path available to a
+    // `chat:write`-only client — the stream RESULT carries `awaitingApproval`
+    // but no ids (message_send.ts).
+    //
+    // It is NOT the only path overall: `GET /v1/chat/runs` spreads the whole
+    // run row (server_http.ts), so `working.pendingApprovalIds` is readable for
+    // a blocked run by a client holding `chat:read`. And after a first
+    // approve, `waitingForApprovals` carries sibling ids back on the
+    // approve result (approval.ts). This test pins the chunk relay because it
+    // is the one a write-only client depends on.
+    //
+    // The existing approve-tool test cannot catch a regression here: it
+    // hardcodes 'approval_1' and mocks the service.
     const harness = createHarness({ scopes: ['chat:write', 'tools:approve'] });
     const session = harness.sessions.get(1) as { target: { send: (c: string, ...a: unknown[]) => void } };
     expect(session).toBeDefined();
