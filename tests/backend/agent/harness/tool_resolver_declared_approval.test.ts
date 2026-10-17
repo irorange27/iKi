@@ -12,8 +12,9 @@
 // claim by measuring exactly this, and the earlier attempt to correct the
 // audit was wrong.)
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
-import { registerStandardTools } from '@iki/backend/tools';
+import { createTool, defaultToolRegistry, registerStandardTools } from '@iki/backend/tools';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import { startTurnHarness } from '@iki/backend/agent/harness';
 import { getToolModel } from '@iki/backend/provider/tool_model';
@@ -54,30 +55,41 @@ describe('resolveTools honours a tool\'s declared approval requirement', () => {
     expect(needsApprovalFor(false, false, 'read_file')).toBe(false);
   });
 
-  it('treats only an explicit false/undefined declaration as approval-free', () => {
-    // `AgentTool.needsApproval` is `boolean | ToolApprovalFunction`
-    // (agent/types.ts:70). A predicate of `!== true` would classify a FUNCTION
-    // as approval-free and clear it, so the branch mirrors the existing
-    // isApprovalFreeTool (tools/agent_tools.ts:113-115): free means an
-    // explicit false or undefined, nothing else.
-    const isApprovalFree = (needsApproval: unknown) =>
-      needsApproval === false || needsApproval === undefined;
-
-    expect(isApprovalFree(true)).toBe(false);
-    expect(isApprovalFree(() => true)).toBe(false);
-    expect(isApprovalFree(false)).toBe(true);
-    expect(isApprovalFree(undefined)).toBe(true);
-
-    // And the live write tool is NOT classified free.
-    const tools = resolveTools({
-      enableTools: true,
-      enabledToolNames: ['write_file'],
-      availableSkillIds: [],
-      guardActive: false,
-      requireApproval: false,
-      autoApproveToolRequests: false,
-    });
-    expect(tools.find(t => t.name === 'write_file')?.needsApproval).toBe(true);
+  it('does not clear a tool that declares a FUNCTION-valued needsApproval', () => {
+    // The predicate must mirror isApprovalFreeTool (tools/agent_tools.ts): only
+    // an explicit false/undefined is approval-free. A `!== true` test would
+    // classify a ToolApprovalFunction as free and clear it, silently
+    // discarding the tool's own answer. This registers a REAL tool through the
+    // live registry and resolves it, so it fails if the predicate regresses to
+    // the weak form — the earlier version of this case asserted on a local
+    // copy of the predicate and could not detect its own removal.
+    const probeName = 'zz_fn_approval_probe';
+    defaultToolRegistry.register(
+      createTool({
+        name: probeName,
+        type: 'function',
+        description: 'probe',
+        paramSchema: z.object({}),
+        needsApproval: () => true,
+        handler: async () => 'ok',
+      })
+    );
+    try {
+      const tools = resolveTools({
+        enableTools: true,
+        enabledToolNames: [probeName],
+        availableSkillIds: [],
+        guardActive: false,
+        requireApproval: false,
+        autoApproveToolRequests: false,
+      });
+      const resolved = tools.find(t => t.name === probeName);
+      expect(resolved).toBeDefined();
+      // A function declaration computes its own answer; it is NOT approval-free.
+      expect(typeof resolved!.needsApproval).not.toBe('boolean');
+    } finally {
+      defaultToolRegistry.remove(probeName);
+    }
   });
 
   it('still requires approval for writes when the guard is active', () => {
