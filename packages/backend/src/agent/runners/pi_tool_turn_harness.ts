@@ -288,6 +288,7 @@ const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
   });
   const model = buildPiModel({
     id: config.model,
+    providerType: config.providerType,
     baseUrl: provider.baseURL,
     contextWindow: capability?.contextWindow ?? 128000,
     maxTokens: config.maxOutputTokens ?? capability?.maxTokens ?? 4096,
@@ -490,7 +491,7 @@ export class PiToolTurnHarness {
       ...(signal ? { signal } : {}),
     });
 
-    const projected = projectHistoryToPiContext(requestHistory, this.config.model);
+    const projected = projectHistoryToPiContext(requestHistory, this.config.model, this.config.providerType);
     const { prompt: systemPrompt } = assembleRequestSystemPrompt([
       { slot: 'persona', text: personaPrompt },
       { slot: 'planPrompt', text: this.config.systemPrompt },
@@ -678,7 +679,8 @@ export class PiToolTurnHarness {
           { role: 'system', content: PER_REQUEST_COMPACT_PLACEHOLDER },
           ...requestView,
         ],
-        this.config.model
+        this.config.model,
+        this.config.providerType
       );
       transcript.splice(
         0,

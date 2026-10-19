@@ -90,6 +90,7 @@ const defaultPiTextModelCall: PiTextModelCall = (config, request) => {
   });
   const model = buildPiModel({
     id: config.model,
+    providerType: config.providerType,
     baseUrl: provider.baseURL,
     // Same convention as the factory's Pi branch: the catalog's window is
     // informational here (the harness enforces the input budget from the
@@ -172,7 +173,7 @@ export class PiTextTurnHarness {
       ...(signal ? { signal } : {}),
     });
 
-    const projected = projectHistoryToPiContext(requestHistory, this.config.model);
+    const projected = projectHistoryToPiContext(requestHistory, this.config.model, this.config.providerType);
     // Persona, then the plan's system prompt, then the transcript's own
     // leading system message — placement owned by the assembly module, the
     // same join every other request path uses.
@@ -197,7 +198,7 @@ export class PiTextTurnHarness {
       signal?.throwIfAborted();
       const attemptStartedAt = Date.now();
       const attemptHistory = [...requestHistory, ...recoveryNotes];
-      const attemptProjection = projectHistoryToPiContext(attemptHistory, this.config.model);
+      const attemptProjection = projectHistoryToPiContext(attemptHistory, this.config.model, this.config.providerType);
       const attemptRequest = {
         systemPrompt,
         messages: attemptProjection.messages,

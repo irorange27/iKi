@@ -95,7 +95,12 @@ describe('Pi supply adapter — projection', () => {
     // the synthesis exists for type validity, not as a drop-guard, and its
     // fields are compatibility assumptions, not recorded facts.
     expect(assistant.api).toBe('openai-completions');
-    expect(assistant.provider).toBe('iki-custom');
+    // The REAL provider identity, not a synthetic one: Pi treats this as an
+    // identity for its same-model test, so a fake value would make every
+    // history entry look same-model and let encrypted signatures pass
+    // unchallenged. 'unknown' when the caller names no provider — which is
+    // NOT a claim that any signature belongs to this model.
+    expect(assistant.provider).toBe('unknown');
     expect(assistant.model).toBe('scripted-model');
     expect(assistant.stopReason).toBe('stop');
     expect(assistant.usage.totalTokens).toBe(0);
@@ -316,8 +321,8 @@ describe('Pi supply adapter — projection', () => {
     expect(assistant.stopReason).toBe('stop');
   });
 
-  it('projects reasoning parts to thinking blocks with best-effort signature passthrough', () => {
-    const history = [
+  const reasoningHistory = (signature?: string) =>
+    [
       { role: 'user', content: 'think it through' },
       {
         role: 'assistant',
@@ -325,23 +330,53 @@ describe('Pi supply adapter — projection', () => {
           {
             type: 'reasoning',
             text: 'weighing the options',
-            providerOptions: { anthropic: { signature: 'sig-abc' } },
+            ...(signature ? { providerOptions: { anthropic: { signature } } } : {}),
           },
           { type: 'text', text: 'the answer' },
         ],
       },
     ] as unknown as ChatInputMessage[];
 
-    const { messages } = projectHistoryToPiContext(history, 'scripted-model');
-    const assistant = messages[1] as Extract<(typeof messages)[number], { role: 'assistant' }>;
-    const thinking = assistant.content.find(b => b.type === 'thinking') as {
-      type: 'thinking';
-      thinking: string;
-      thinkingSignature?: string;
-    };
-    expect(thinking).toMatchObject({ type: 'thinking', thinking: 'weighing the options' });
-    expect(thinking.thinkingSignature).toBe('sig-abc');
-    expect(assistant.content.some(b => b.type === 'text' && b.text === 'the answer')).toBe(true);
+  it('keeps a thinking signature only when the provider identity is Anthropic on both sides', () => {
+    // Anthropic signs its thinking so it can be replayed unmodified, and the
+    // signature is only meaningful to Anthropic. iKi's persisted format
+    // records no model provenance, so a stored signature is provably valid
+    // for the SAME provider+model only — sending it anywhere else is an API
+    // error at best and silent garbage at worst.
+    const sameProvider = projectHistoryToPiContext(
+      reasoningHistory('sig-abc'),
+      'scripted-model',
+      'anthropic'
+    );
+    const kept = (sameProvider.messages[1] as { content: Array<Record<string, unknown>> }).content.find(
+      b => b.type === 'thinking'
+    ) as { thinkingSignature?: string };
+    expect(kept).toMatchObject({ type: 'thinking', thinking: 'weighing the options' });
+    expect(kept.thinkingSignature).toBe('sig-abc');
+  });
+
+  it('degrades a signature-carrying thinking block to plain text for any other target', () => {
+    // The content survives as context; the signature is dropped. This is
+    // what Pi itself does with cross-model thinking (transform-messages.js).
+    for (const target of [undefined, 'openai', 'deepseek', 'custom-openai']) {
+      const { messages } = projectHistoryToPiContext(
+        reasoningHistory('sig-abc'),
+        'scripted-model',
+        target
+      );
+      const assistant = messages[1] as { content: Array<Record<string, unknown>> };
+      expect(assistant.content.some(b => b.type === 'thinking')).toBe(false);
+      expect(assistant.content).toContainEqual({ type: 'text', text: 'weighing the options' });
+      expect(assistant.content.some(b => b.type === 'text' && b.text === 'the answer')).toBe(true);
+      // No signature survives anywhere in the projected message.
+      expect(JSON.stringify(assistant.content)).not.toContain('sig-abc');
+    }
+  });
+
+  it('projects unsigned reasoning to a thinking block with no signature', () => {
+    const { messages } = projectHistoryToPiContext(reasoningHistory(), 'scripted-model', 'anthropic');
+    const assistant = messages[1] as { content: Array<Record<string, unknown>> };
+    expect(assistant.content).toContainEqual({ type: 'thinking', thinking: 'weighing the options' });
   });
 
   it('projects tool-result outputs exhaustively — content text in, media refused (rereview G3)', () => {
@@ -622,6 +657,54 @@ describe('Pi supply adapter — wire behaviors over the scripted server', () => 
     expect(textWire).not.toContain('image_url');
     expect(textWire).toContain('(image omitted: model does not support images)');
     expect(textWire).toContain('image vision'); // the text part still ships
+  });
+
+  it('PINNED wire shape: a stored thinking signature never reaches a non-Anthropic target, and the text survives', async () => {
+    // The provenance fix at the HTTP boundary. Anthropic signs its thinking;
+    // the signature is only decryptable by Anthropic, and iKi's persisted
+    // format records no model provenance, so a stored signature is provably
+    // valid for the same provider+model only. Everything else must see the
+    // thinking as ordinary text. Observed on the wire, not just in the
+    // projection, so a Pi-side change that starts honoring foreign
+    // signatures fails here.
+    server.setScript('sig check', { chunks: [sse.delta('ok'), sse.finish('stop')] });
+    const { systemPrompt, messages } = projectHistoryToPiContext(
+      [
+        { role: 'user', content: 'sig check' },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'reasoning',
+              text: 'SECRET-THINKING',
+              providerOptions: { anthropic: { signature: 'SECRET-SIG' } },
+            },
+            { type: 'text', text: 'answer' },
+          ],
+        },
+      ] as unknown as ChatInputMessage[],
+      'sig-model',
+      'deepseek'
+    );
+
+    const model = buildPiModel({
+      id: 'sig-model',
+      providerType: 'deepseek',
+      baseUrl: `http://127.0.0.1:${server.port}/v1`,
+      contextWindow: 100000,
+      maxTokens: 2000,
+    });
+    // The model and the synthesized envelope both carry the REAL provider.
+    expect(model.provider).toBe('deepseek');
+    expect((messages.find(m => m.role === 'assistant') as { provider: string }).provider).toBe('deepseek');
+
+    const final = await collectFinal({ systemPrompt, messages }, model);
+    expect(final.stopReason).toBe('stop');
+
+    const wire = JSON.stringify(server.getWire('sig check').messages);
+    expect(wire).not.toContain('SECRET-SIG');
+    expect(wire).toContain('SECRET-THINKING');
+    expect(wire).not.toContain('iki-custom');
   });
 
   it('PINNED wire shape: the system prompt goes out as role "system" and no thinking block is injected', async () => {

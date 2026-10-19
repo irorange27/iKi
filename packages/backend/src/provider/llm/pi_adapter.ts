@@ -18,8 +18,9 @@
  * Projection rules (review F4/F5, corrected by rereview G2/G6):
  * - Covered input domain: the text + tools subset of ModelMessage shapes —
  *   user text parts AND plain strings, assistant text/tool-call/reasoning
- *   parts (reasoning maps to a Pi thinking block; a provider signature rides
- *   along when the source part carries one), tool result parts. NOT
+ *   parts (reasoning maps to a Pi thinking block; an Anthropic signature
+ *   rides along ONLY when the request targets anthropic — see the reasoning
+ *   branch for why that is the only provably legal case), tool result parts. NOT
  *   projected (throws): approval parts (the approval-resume replay stays on
  *   the existing engine until flip — its continuation semantics are the
  *   flip redesign's input).
@@ -80,6 +81,11 @@ import type {
 } from '@earendil-works/pi-ai';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 
+/** The providerType whose AI SDK surface records thinking signatures in
+ * `providerOptions.anthropic.signature`. Only this provider's signature can
+ * ever remain valid for a later request, so it is the only one honored. */
+const ANTHROPIC_PROVIDER_TYPE = 'anthropic';
+
 export class PiProjectionError extends Error {
   constructor(message: string) {
     super(message);
@@ -90,6 +96,8 @@ export class PiProjectionError extends Error {
 /** A Pi chat model as iKi's provider config produces it. */
 export type PiModelConfig = {
   id: string;
+  /** iKi's providerType — carried onto the Pi model as its provider. */
+  providerType?: string;
   baseUrl: string;
   contextWindow: number;
   maxTokens: number;
@@ -107,6 +115,14 @@ export type PiModel = {
   id: string;
   name: string;
   api: 'openai-completions';
+  /** The REAL provider identity (iKi's providerType), not a synthetic one.
+   * Pi reads this as an identity, not a label: its transform decides "is
+   * this the same model that produced this history?" by comparing
+   * provider + api + model, and several adapter branches special-case
+   * provider ids (openai, github-copilot, opencode-go). A fake value makes
+   * every history entry look same-model — so encrypted signatures pass
+   * unchallenged — and can trip a special case no caller asked for. The API
+   * key is passed explicitly at call time, so this never drives auth. */
   provider: string;
   baseUrl: string;
   /** Mutable so it satisfies Pi's Model type verbatim (its API needs the
@@ -187,7 +203,7 @@ export const buildPiModel = (config: PiModelConfig): PiModel => ({
   id: config.id,
   name: config.id,
   api: 'openai-completions',
-  provider: 'iki-custom',
+  provider: config.providerType?.trim() || 'unknown',
   baseUrl: config.baseUrl,
   input: piInputModalities(config.input),
   reasoning: false,
@@ -249,9 +265,9 @@ export const projectUsageToIki = (usage: PiUsage) => ({
  * history — partial TEXT however can be present (cancel-branch persistence)
  * and is projected as-is.
  */
-const synthesizedEnvelope = (modelId: string) => ({
+const synthesizedEnvelope = (modelId: string, providerType?: string) => ({
   api: 'openai-completions',
-  provider: 'iki-custom',
+  provider: providerType?.trim() || 'unknown',
   model: modelId,
   usage: {
     input: 0,
@@ -387,13 +403,20 @@ const imageDataForPi = (part: {
  * The FIRST system message becomes `systemPrompt`; mid-conversation system
  * messages map to Pi SystemMessages (Pi replays them as additional
  * instructions). Unrepresentable parts throw — the projection never drops.
+ *
+ * `providerType` is the real provider identity, carried onto synthesized
+ * assistant envelopes so Pi's same-model test (provider + api + model) has
+ * something true to compare against. Absent it is 'unknown', which is NOT a
+ * claim that any signature belongs to the target model.
  */
 export const projectHistoryToPiContext = (
   messages: ChatInputMessage[],
-  modelId: string
+  modelId: string,
+  providerType?: string
 ): { systemPrompt: string; messages: PiMessage[] } => {
   const piMessages: PiMessage[] = [];
   let systemPrompt = '';
+  const projectionProviderType = providerType?.trim() || undefined;
 
   const stringContent = (role: string, content: unknown): string => {
     if (typeof content === 'string') return content;
@@ -485,15 +508,42 @@ export const projectHistoryToPiContext = (
             if (p.type === 'text' && typeof p.text === 'string') {
               content.push({ type: 'text', text: p.text });
             } else if (p.type === 'reasoning' && typeof p.text === 'string') {
-              // Reasoning projects to a Pi thinking block. A provider signature
-              // rides along when the source part carries one (best-effort
-              // provenance — flip-time work owns the full cross-model story).
-              const thinking: ThinkingContent = { type: 'thinking', thinking: p.text };
+              // Reasoning projects to a Pi thinking block.
+              //
+              // A provider signature (Anthropic's encrypted proof that this
+              // thinking is authentic and unmodified) is carried ONLY when it
+              // can still be true: the recorded provider names Anthropic AND
+              // this request targets that same provider and model. iKi's
+              // persisted format records no provider/api/model provenance, so
+              // a stored signature is provably valid for the same model only;
+              // sending it to any other model is an API error at best and
+              // silent garbage at worst.
+              //
+              // Otherwise the thinking degrades to PLAIN TEXT — the content
+              // survives as context, the signature is dropped. This mirrors
+              // what Pi itself does with cross-model thinking
+              // (transform-messages.js: thinking → text). The alternative
+              // (dropping the block entirely) loses information the user paid
+              // tokens for.
               const signature = p.providerOptions?.anthropic?.signature;
-              if (typeof signature === 'string' && signature) {
-                thinking.thinkingSignature = signature;
+              const hasSignature = typeof signature === 'string' && signature.length > 0;
+              // The signature's home provider must also be the target: iKi
+              // records it under the Anthropic key, so only an Anthropic
+              // target can honor it.
+              const signatureStillValid =
+                hasSignature &&
+                projectionProviderType === ANTHROPIC_PROVIDER_TYPE &&
+                providerType === ANTHROPIC_PROVIDER_TYPE;
+              if (signatureStillValid) {
+                content.push({ type: 'thinking', thinking: p.text, thinkingSignature: signature });
+              } else if (hasSignature) {
+                // Signed but not for this target: the ciphertext is useless
+                // here, the words are not — degrade to plain text.
+                content.push({ type: 'text', text: p.text });
+              } else {
+                // Unsigned thinking is ordinary content any model can read.
+                content.push({ type: 'thinking', thinking: p.text });
               }
-              content.push(thinking);
             } else if (p.type === 'tool-call') {
               if (typeof p.toolCallId !== 'string' || typeof p.toolName !== 'string') {
                 throw new PiProjectionError('tool-call part missing toolCallId/toolName');
@@ -515,7 +565,7 @@ export const projectHistoryToPiContext = (
         piMessages.push({
           role: 'assistant',
           content,
-          ...synthesizedEnvelope(modelId),
+          ...synthesizedEnvelope(modelId, projectionProviderType),
         } satisfies AssistantMessage);
         break;
       }

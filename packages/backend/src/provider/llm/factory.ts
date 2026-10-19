@@ -552,7 +552,7 @@ export const supportsPiTurnSupply = (params: {
   }
   if (!supportsPiGeneration(params.providerType, config)) return false;
   try {
-    projectHistoryToPiContext(params.history, params.modelId);
+    projectHistoryToPiContext(params.history, params.modelId, params.providerType);
     return true;
   } catch (error) {
     factoryLogger.event({
@@ -603,6 +603,7 @@ const generateViaPi = async (
   });
   const model = buildPiModel({
     id: options.modelId,
+    providerType: config.type,
     baseUrl: config.baseURL,
     // Single-shot generation enforces no context budget in the AI SDK path
     // either (only maxOutputTokens), so the window here is informational;
@@ -615,7 +616,8 @@ const generateViaPi = async (
   const personaPrompt = resolvePersonaPrompt(options.providerType, options.providerId);
   const { systemPrompt: transcriptSystem, messages } = projectHistoryToPiContext(
     options.messages,
-    options.modelId
+    options.modelId,
+    options.providerType
   );
   const assembled = assembleRequestSystemPrompt([
     { slot: 'persona', text: personaPrompt },
@@ -760,7 +762,7 @@ export const generateChatWithModelMessages = async (options: {
     // projection itself is the domain test — coverage widening automatically
     // re-routes, and the fallback never sees a projection throw.
     try {
-      projectHistoryToPiContext(options.messages, options.modelId);
+      projectHistoryToPiContext(options.messages, options.modelId, options.providerType);
     } catch (error) {
       usePi = false;
       factoryLogger.event({
