@@ -69,7 +69,6 @@ export const resolvePiModelCapability = (params: {
   providerId?: string | null;
 }): {
   input?: string[];
-  reasoning?: boolean | null;
   contextWindow?: number | null;
   maxTokens?: number | null;
   cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
@@ -95,10 +94,20 @@ export const resolvePiModelCapability = (params: {
     );
     if (!capability) return null;
 
+    // A stored maxInputTokens override can be TIGHTER than the catalog's
+    // context window (the budget then uses the tighter one). Advertising the
+    // larger number on the Pi model would let the model object claim room
+    // the budget will not grant, so the Pi window is the min of the two —
+    // the consumer can only be wrong in the safe direction.
+    const storedInputLimit = capability.maxInputTokens;
+    const catalogWindow = capability.contextWindow;
+
     return {
       ...(capability.modalities ? { input: capability.modalities } : {}),
-      reasoning: capability.supportsReasoning ?? null,
-      contextWindow: capability.contextWindow,
+      contextWindow:
+        typeof storedInputLimit === 'number' && typeof catalogWindow === 'number'
+          ? Math.min(storedInputLimit, catalogWindow)
+          : (catalogWindow ?? storedInputLimit ?? null),
       maxTokens: capability.maxOutputTokens,
       ...(capability.costPerMillionTokens ? { cost: capability.costPerMillionTokens } : {}),
     };
@@ -510,7 +519,10 @@ export const resolvePersonaPrompt = (providerType: string, providerId?: string |
  * Wire deltas vs the AI SDK path (documented, tracked): maxTokens rides
  * max_completion_tokens for unknown baseUrls (no compat escape yet), the
  * request is streaming-shaped, and createInstrumentedFetch's unconditional
- * reasoning-disabled injection does not apply. */
+ * reasoning-disabled injection does not apply. Everything else is held equal
+ * by buildPiModel's pinned protocol fields (system role, no `thinking`
+ * injection, no reasoning_effort) — see the adapter for why the catalog's
+ * reasoning flag must never drive the Pi model. */
 const supportsPiGeneration = (providerType: string, config: ProviderConfig): boolean =>
   !STATIC_PROVIDER_MODEL_FACTORIES[providerType] &&
   !config.isResponseApi &&
@@ -598,7 +610,6 @@ const generateViaPi = async (
     contextWindow: capability?.contextWindow ?? PI_DEFAULT_CONTEXT_WINDOW,
     maxTokens: options.maxOutputTokens ?? capability?.maxTokens ?? 4096,
     ...(capability?.input ? { input: capability.input } : {}),
-    reasoning: capability?.reasoning ?? false,
     ...(capability?.cost ? { cost: capability.cost } : {}),
   });
   const personaPrompt = resolvePersonaPrompt(options.providerType, options.providerId);

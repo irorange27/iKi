@@ -27,6 +27,7 @@ import {
   projectHistoryToPiContext,
   projectToolsToPiTools,
   projectUsageToIki,
+  type PiModel,
 } from '@iki/backend/provider/llm/pi_adapter';
 import { createScriptedPiServer, sse, type ScriptedPiServer } from '../pi_candidate/helpers/scripted_pi_server';
 
@@ -39,8 +40,8 @@ const model = buildPiModel({
   maxTokens: 2000,
 });
 
-const collectFinal = async (context: Parameters<typeof callPiChat>[1]) => {
-  const eventStream = callPiChat(model, context, { apiKey: 'test-key' });
+const collectFinal = async (context: Parameters<typeof callPiChat>[1], overModel?: PiModel) => {
+  const eventStream = callPiChat(overModel ?? model, context, { apiKey: 'test-key' });
   const resultPromise = eventStream.result();
   for await (const _event of eventStream) {
     void _event;
@@ -623,6 +624,48 @@ describe('Pi supply adapter — wire behaviors over the scripted server', () => 
     expect(textWire).toContain('image vision'); // the text part still ships
   });
 
+  it('PINNED wire shape: the system prompt goes out as role "system" and no thinking block is injected', async () => {
+    // Regression guard for the D35 wiring. Pi reads `model.reasoning` as a
+    // PROTOCOL switch, not as "does this model think": with it true the
+    // system message ships as role `developer` (openai-completions.js:896)
+    // and a deepseek-family base URL additionally gets
+    // `thinking:{type:'disabled'}` injected (same file:668). The AI SDK path
+    // — which these requests are differentially compared against — never
+    // does either: @ai-sdk/openai-compatible pushes exactly one `system`
+    // role and has no developer branch. buildPiModel therefore pins both,
+    // and this test observes them at the HTTP boundary so a future
+    // catalog-driven flip fails here instead of silently changing the wire.
+    server.setScript('role probe', { chunks: [sse.delta('ok'), sse.finish('stop')] });
+    // A system-prompted history (the shape a real turn carries — the
+    // projection hoists the first system message). An EMPTY prompt would be
+    // dropped by Pi's own length guard and prove nothing about the role.
+    const { systemPrompt, messages } = projectHistoryToPiContext(
+      [
+        { role: 'system', content: 'PERSONA SYSTEM PROMPT' },
+        { role: 'user', content: 'role probe' },
+      ] as unknown as ChatInputMessage[],
+      'reasoning-model'
+    );
+    // A catalog capability that WOULD have asked for reasoning — the old
+    // wiring took it from here. It must not move the protocol fields.
+    const model = buildPiModel({
+      id: 'reasoning-model',
+      baseUrl: `http://127.0.0.1:${server.port}/v1`,
+      contextWindow: 200000,
+      maxTokens: 64000,
+      input: ['text', 'image'],
+      cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+    });
+
+    const final = await collectFinal({ systemPrompt, messages }, model);
+    expect(final.stopReason).toBe('stop');
+
+    const wire = server.getWire('role probe');
+    expect(wire.messages.map((m: { role: string }) => m.role)).toEqual(['system', 'user']);
+    expect(wire).not.toHaveProperty('thinking');
+    expect(JSON.stringify(wire)).not.toContain('developer');
+  });
+
   it('buildPiModel translates catalog modalities and cost rates into the Pi model, and defaults cleanly', () => {
     // D35: the factory hands the catalog capability in; buildPiModel maps it
     // to Pi's field vocabulary. Modality names Pi does not know are dropped
@@ -633,18 +676,27 @@ describe('Pi supply adapter — wire behaviors over the scripted server', () => 
       contextWindow: 200000,
       maxTokens: 64000,
       input: ['text', 'image', 'pdf', 'video'],
-      reasoning: true,
       cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
     });
     expect(vision.input).toEqual(['text', 'image']);
-    expect(vision.reasoning).toBe(true);
     expect(vision.cost).toEqual({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 });
 
     // No capability (unknown model / cold catalog): the pre-D35 behavior.
     const plain = buildPiModel({ id: 'm', baseUrl: 'http://x/v1', contextWindow: 1000, maxTokens: 100 });
     expect(plain.input).toEqual(['text']);
-    expect(plain.reasoning).toBe(false);
     expect(plain.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+
+    // The PROTOCOL fields are pinned, never catalog-driven: reasoning stays
+    // false and the compat capabilities that would change the wire shape are
+    // off. A catalog capability cannot flip them (there is no field to pass).
+    expect(vision.reasoning).toBe(false);
+    expect(vision.compat).toEqual({
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: false,
+      supportsMidConvoSystemMessages: false,
+      requiresReasoningContentOnAssistantMessages: false,
+    });
+    expect(plain.compat).toEqual(vision.compat);
 
     // Negative/garbage rates are clamped to 0 — never a NaN on the wire.
     const bad = buildPiModel({

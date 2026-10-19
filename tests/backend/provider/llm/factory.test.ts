@@ -104,6 +104,7 @@ vi.mock('@iki/backend/utils/runtime_context', () => ({
 import {
   createModel,
   disposeLanguageModel,
+  resolvePiModelCapability,
   fetchModelCapabilityFromDev,
   getModelCallSettings,
   getModelGenerationSettings,
@@ -400,6 +401,79 @@ describe('llm factory', () => {
       supportsToolCalls: true,
       supportsReasoning: false,
       source: 'models.dev',
+    });
+  });
+
+  it('resolvePiModelCapability: catalog modality/cost/window, and the stored-limit clamp', async () => {
+    // The D35 bridge, pinned at the factory boundary (the three Pi call sites
+    // consume this). A regression in any term here is invisible to the
+    // harnesses' own suites because they inject scripted models.
+    resetModelsDevCatalogCacheForTests();
+    fetchWithTimeoutMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          anthropic: {
+            models: {
+              'claude-sonnet-4-5': {
+                name: 'Claude Sonnet 4.5',
+                tool_call: true,
+                reasoning: true,
+                modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
+                limit: { context: 200000, input: 200000, output: 64000 },
+                cost: { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } }
+      )
+    );
+    getProvidersMock.mockReturnValue([
+      { id: 'p_anthropic', type: 'anthropic', enabled: true, api_key: 'k', base_url: 'https://x/v1', models: '["claude-sonnet-4-5"]', model_options: '{}' },
+    ]);
+
+    // Prime the cached snapshot explicitly. The read path itself is
+    // synchronous off the snapshot by design (a model call never waits on
+    // the network) — that is exactly what resolvePiModelCapability consumes.
+    await refreshModelsDevCatalog();
+
+    expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'claude-sonnet-4-5' })).toEqual({
+      input: ['text', 'image', 'pdf'],
+      contextWindow: 200000,
+      maxTokens: 64000,
+      cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+    });
+
+    // A stored maxInputTokens TIGHTER than the catalog window wins: the
+    // budget uses the tighter number, so the Pi model must not advertise the
+    // larger one.
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'p_anthropic',
+        type: 'anthropic',
+        enabled: true,
+        api_key: 'k',
+        base_url: 'https://x/v1',
+        models: '["claude-sonnet-4-5"]',
+        model_options: JSON.stringify({ 'claude-sonnet-4-5': { maxInputTokens: 4096 } }),
+      },
+    ]);
+    expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'claude-sonnet-4-5' })).toMatchObject({
+      contextWindow: 4096,
+    });
+
+    // Unknown model: no catalog record and no stored options → null, and the
+    // callers fall back to their documented defaults (128000 / zero cost).
+    expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'no-such-model' })).toBeNull();
+
+    // Cold cache (catalog unreachable / not yet fetched): the STORED options
+    // still produce a capability — only the catalog-derived terms
+    // (modalities, cost) drop out, so a Pi call degrades to
+    // text-only/zero-cost rather than to nothing.
+    resetModelsDevCatalogCacheForTests();
+    expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'claude-sonnet-4-5' })).toEqual({
+      contextWindow: 4096,
+      maxTokens: null,
     });
   });
 

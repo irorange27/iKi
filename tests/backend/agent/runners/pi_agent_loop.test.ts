@@ -600,4 +600,112 @@ describe('differential: same scenario through the real harness', () => {
     expect(executed).toEqual(['/diff.txt']);
     expect(outcome.finalText).toBe('diff done');
   });
+  it('reports one settled observation per model call, carrying that call’s usage and cost', async () => {
+    // The Langfuse seam (observability item of PR #173): the tool path is
+    // several calls per turn, and per-call cost is what the cost views
+    // compare. Without this the hook could be dropped — or the bucket
+    // mapping regressed to zeros — and nothing would fail.
+    const observed: Array<{
+      step: number;
+      text: string;
+      toolCallCount: number;
+      usage: { input: number; output: number; costUsd: number; totalTokens: number };
+    }> = [];
+
+    const callModel = scriptedCall([
+      {
+        content: [toolCallBlock('call_o', 'probe', {})],
+        deltas: ['first'],
+        usage: { input: 1000, output: 500, totalTokens: 1500, cacheRead: 400, cacheWrite: 600 },
+      },
+      {
+        content: [textBlock('done')],
+        deltas: ['done'],
+        usage: { input: 100, output: 50, totalTokens: 150 },
+      },
+    ]);
+
+    const iterator = runPiAgentLoop({
+      systemPrompt: 'loop',
+      messages: [{ role: 'user', content: 'observe', timestamp: Date.now() }],
+      maxSteps: 3,
+      callModel,
+      executeTool: async () => ({ type: 'text', value: 'ok' }),
+      onModelCall: settled => {
+        observed.push({
+          step: settled.step,
+          text: settled.text,
+          toolCallCount: settled.toolCallCount,
+          usage: {
+            input: settled.usage.input,
+            output: settled.usage.output,
+            costUsd: settled.usage.costUsd,
+            totalTokens: settled.usage.totalTokens,
+          },
+        });
+      },
+    });
+
+    let next = await iterator.next();
+    while (!next.done) next = await iterator.next();
+    const outcome = next.value;
+
+    expect(outcome.status).toBe('completed');
+    // Exactly one observation per model call — no more, no fewer.
+    expect(observed).toEqual([
+      {
+        step: 0,
+        text: '',
+        toolCallCount: 1,
+        usage: { input: 1000, output: 500, costUsd: 0, totalTokens: 1500 },
+      },
+      {
+        step: 1,
+        text: 'done',
+        toolCallCount: 0,
+        usage: { input: 100, output: 50, costUsd: 0, totalTokens: 150 },
+      },
+    ]);
+  });
+
+  it('accumulates usage across steps including the per-call cost the catalog rates produce', async () => {
+    // mapBuckets' costUsd term: the loop must SUM the per-call cost (not drop
+    // it), so a multi-step tool turn's total cost is the sum of its calls.
+    // The scripted doubles carry the cost as Pi's calculateCost would report
+    // it for a priced model.
+    const withCall = scriptedCall([
+      { content: [toolCallBlock('call_c', 'probe', {})], usage: { input: 1000, output: 500, totalTokens: 1500 } },
+      { content: [textBlock('end')], usage: { input: 100, output: 50, totalTokens: 150 } },
+    ]);
+    // Patch the cost onto each finalized assistant message via a wrapper.
+    let calls = 0;
+    const callModel: PiLoopModelCall = () => {
+      const inner = withCall();
+      const final = inner.final.then(message => {
+        calls += 1;
+        (message.usage.cost as { total: number }).total = calls === 1 ? 0.0105 : 0.0006;
+        return message;
+      });
+      return { events: inner.events, final };
+    };
+
+    const iterator = runPiAgentLoop({
+      systemPrompt: 'loop',
+      messages: [{ role: 'user', content: 'cost', timestamp: Date.now() }],
+      maxSteps: 3,
+      callModel,
+      executeTool: async () => ({ type: 'text', value: 'ok' }),
+      onModelCall: settled => {
+        void settled;
+      },
+    });
+
+    let next = await iterator.next();
+    while (!next.done) next = await iterator.next();
+    const outcome = next.value;
+
+    expect(outcome.status).toBe('completed');
+    // 0.0105 + 0.0006 — the per-call costs are summed, not last-write-wins.
+    expect(outcome.usage.costUsd).toBeCloseTo(0.0111, 10);
+  });
 });

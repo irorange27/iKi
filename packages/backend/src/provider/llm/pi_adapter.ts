@@ -93,12 +93,10 @@ export type PiModelConfig = {
   baseUrl: string;
   contextWindow: number;
   maxTokens: number;
-  /** Modalities the model accepts, in Pi's vocabulary. Drives two behaviors
-   * inside Pi: whether user image parts project to image_url or get
-   * downgraded to a placeholder, and reasoning-block handling. Absent means
-   * text-only (Pi's own default). */
+  /** Modalities the model accepts, in Pi's vocabulary: drives whether user
+   * image parts project to image_url or get downgraded to Pi's placeholder.
+   * Absent means text-only (Pi's own default). */
   input?: readonly string[];
-  reasoning?: boolean;
   /** USD per million tokens, from the models.dev catalog record when one
    * exists. Pi's calculateCost turns these into usage.cost.total; all
    * zeros keeps cost at 0 (the pre-D35 behavior). */
@@ -117,7 +115,26 @@ export type PiModel = {
    * are dropped at the MODEL BUILD (not here), so this stays the exact
    * literal union Pi declares. */
   input: Array<'text' | 'image'>;
-  reasoning: boolean;
+  /** ALWAYS false — deliberately not catalog-driven. Pi reads this flag as
+   * a PROTOCOL-SHAPE switch, not as "does the model think": with it true the
+   * system message goes on the wire as role `developer` instead of `system`
+   * (openai-completions.js:896) and deepseek-family base URLs get
+   * `thinking:{type:'disabled'}` injected (same file:668). Both would make
+   * the Pi and AI SDK paths send DIFFERENT requests for the same
+   * provider+model — the AI SDK path never does either. iKi's reasoning
+   * controls are per-turn string options (thinking/reasoningEffort) owned by
+   * the callers, not a model-identity flag. */
+  reasoning: false;
+  /** Protocol capabilities pinned to the shapes iKi's traffic relies on.
+   * Pi would otherwise autodetect these from the base URL/model id and
+   * change the wire (developer role, reasoning_effort, thinking) without
+   * any caller asking for it. */
+  compat: {
+    supportsDeveloperRole: false;
+    supportsReasoningEffort: false;
+    supportsMidConvoSystemMessages: false;
+    requiresReasoningContentOnAssistantMessages: false;
+  };
   contextWindow: number;
   maxTokens: number;
   cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
@@ -173,7 +190,13 @@ export const buildPiModel = (config: PiModelConfig): PiModel => ({
   provider: 'iki-custom',
   baseUrl: config.baseUrl,
   input: piInputModalities(config.input),
-  reasoning: config.reasoning === true,
+  reasoning: false,
+  compat: {
+    supportsDeveloperRole: false,
+    supportsReasoningEffort: false,
+    supportsMidConvoSystemMessages: false,
+    requiresReasoningContentOnAssistantMessages: false,
+  },
   contextWindow: config.contextWindow,
   maxTokens: config.maxTokens,
   cost: {
@@ -346,6 +369,11 @@ const imageDataForPi = (part: {
       if (comma > 0) return candidate.slice(comma + 1);
       continue;
     }
+    // A non-data: string is passed through as-is. In practice only the
+    // renderer's readAsDataURL output exists today (it is always a data
+    // URL), so an http(s) URL here would reach the provider undecodable —
+    // unreachable, and the AI SDK path wraps such data identically, so it
+    // is not a differential defect.
     return candidate;
   }
 

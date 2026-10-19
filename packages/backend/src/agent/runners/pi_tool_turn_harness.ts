@@ -292,7 +292,6 @@ const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
     contextWindow: capability?.contextWindow ?? 128000,
     maxTokens: config.maxOutputTokens ?? capability?.maxTokens ?? 4096,
     ...(capability?.input ? { input: capability.input } : {}),
-    reasoning: capability?.reasoning ?? false,
     ...(capability?.cost ? { cost: capability.cost } : {}),
   });
   return withPiRetry(
