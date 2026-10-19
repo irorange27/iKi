@@ -38,12 +38,10 @@ export const addProvider = (
   const stmt = getDb().prepare(`
     INSERT INTO providers (
       id, name, type, api_key, models, model_options, base_url, enabled, created_at, updated_at,
-      available_models, api_version, is_response_api, acp_command, acp_args,
-      acp_mcp_server_ids, acp_auth_method_id, acp_api_provider_id, acp_model_mapping
+      available_models, api_version, is_response_api
     ) VALUES (
       @id, @name, @type, @api_key, @models, @model_options, @base_url, @enabled, @created_at, @updated_at,
-      @available_models, @api_version, @is_response_api, @acp_command, @acp_args,
-      @acp_mcp_server_ids, @acp_auth_method_id, @acp_api_provider_id, @acp_model_mapping
+      @available_models, @api_version, @is_response_api
     )
   `);
 
@@ -62,12 +60,6 @@ export const addProvider = (
     available_models: provider.available_models || '[]',
     api_version: provider.api_version || null,
     is_response_api: provider.is_response_api ? 1 : 0,
-    acp_command: provider.acp_command || null,
-    acp_args: provider.acp_args || null,
-    acp_mcp_server_ids: provider.acp_mcp_server_ids || null,
-    acp_auth_method_id: provider.acp_auth_method_id || null,
-    acp_api_provider_id: provider.acp_api_provider_id || null,
-    acp_model_mapping: provider.acp_model_mapping || null,
   };
 
   return stmt.run(data);
@@ -75,8 +67,7 @@ export const addProvider = (
 
 const PROVIDER_COLUMNS = new Set([
   'name', 'type', 'api_key', 'models', 'model_options', 'base_url', 'enabled',
-  'available_models', 'api_version', 'is_response_api', 'acp_command', 'acp_args',
-  'acp_mcp_server_ids', 'acp_auth_method_id', 'acp_api_provider_id', 'acp_model_mapping',
+  'available_models', 'api_version', 'is_response_api',
 ]);
 
 export const updateProvider = (id: string, provider: Partial<Provider>) => {

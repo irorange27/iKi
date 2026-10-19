@@ -77,15 +77,6 @@ export type RunStatusEvent = {
   timestamp: string;
 };
 
-export type AcpAuthMethod = {
-  id: string;
-  name: string;
-  description?: string | null;
-  type: 'env_var' | 'terminal' | 'agent';
-  link?: string | null;
-  vars?: Array<{ name: string; description?: string | null; secret?: boolean }>;
-};
-
 export type ToolModelConfig = {
   providerId?: string;
   providerType?: string;
@@ -170,11 +161,6 @@ export interface ElectronApi {
       providerId?: string,
       providerOverride?: ProviderModelDiscoveryOverride | null
     ) => Promise<ProviderModelDescriptor[]>;
-    getAcpAuthMethods: (
-      providerType: string,
-      providerId?: string,
-      providerOverride?: ProviderModelDiscoveryOverride | null
-    ) => Promise<AcpAuthMethod[]>;
     isProviderConfigured: (providerType: string, providerId?: string) => Promise<boolean>;
     send: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stream: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;

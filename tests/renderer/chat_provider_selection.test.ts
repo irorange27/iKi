@@ -36,12 +36,6 @@ const buildProvider = (
   available_models: overrides.available_models ?? '[]',
   api_version: overrides.api_version,
   is_response_api: overrides.is_response_api,
-  acp_command: overrides.acp_command,
-  acp_args: overrides.acp_args,
-  acp_mcp_server_ids: overrides.acp_mcp_server_ids,
-  acp_auth_method_id: overrides.acp_auth_method_id,
-  acp_api_provider_id: overrides.acp_api_provider_id,
-  acp_model_mapping: overrides.acp_model_mapping,
 });
 
 describe('chat provider selection', () => {
@@ -185,36 +179,6 @@ describe('chat provider selection', () => {
     expect(result).toEqual({
       ok: false,
       message: 'Please configure the OpenAI API key in Settings.',
-    });
-  });
-
-  it('surfaces ACP command configuration failures before send', async () => {
-    const acpProvider = buildProvider({
-      id: 'acp_1',
-      name: 'ACP Agent',
-      type: 'acp',
-      models: '["codex-mini-latest"]',
-    });
-
-    const providerList = vi.fn(async () => [acpProvider]);
-    const isProviderConfigured = vi.fn(async () => false);
-    const selection = useChatProviderSelection({
-      electronAPI: {
-        providers: {
-          list: providerList,
-        },
-        chat: {
-          isProviderConfigured,
-        },
-      } as never,
-    });
-
-    await selection.loadAvailableProviders();
-    const result = await selection.ensureProviderReady();
-
-    expect(result).toEqual({
-      ok: false,
-      message: 'Please configure the Codex CLI ACP command in Settings.',
     });
   });
 

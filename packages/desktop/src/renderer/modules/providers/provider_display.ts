@@ -5,10 +5,6 @@ const BUILTIN_PROVIDER_NAME_BY_ID = new Map(
   BUILTIN_PROVIDERS.map(provider => [provider.id, provider.name])
 );
 
-const BUILTIN_PROVIDER_LEGACY_NAMES_BY_ID = new Map<string, Set<string>>([
-  ['acp', new Set(['ACP Agent'])],
-]);
-
 const normalizeProviderField = (value?: string | null) => value?.trim() || '';
 
 export const getCanonicalBuiltInProviderName = (
@@ -19,11 +15,7 @@ export const getCanonicalBuiltInProviderName = (
   if (!canonicalName) return null;
 
   const normalizedName = normalizeProviderField(provider.name);
-  const legacyNames = BUILTIN_PROVIDER_LEGACY_NAMES_BY_ID.get(normalizedType);
-  if (
-    normalizedName === canonicalName ||
-    (legacyNames && legacyNames.has(normalizedName))
-  ) {
+  if (normalizedName === canonicalName) {
     return canonicalName;
   }
 

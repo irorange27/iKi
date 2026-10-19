@@ -7,15 +7,10 @@ import { getProviderDisplayName } from '../../../modules/providers/provider_disp
 type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
 
 const BUILTIN_PROVIDER_ORDER = new Map(
-  [
-    'openai',
-    'anthropic',
-    'deepseek',
-    'kimi',
-    'minimax',
-    'ollama',
-    'acp',
-  ].map((providerId, index) => [providerId, index])
+  ['openai', 'anthropic', 'deepseek', 'kimi', 'minimax', 'ollama'].map((providerId, index) => [
+    providerId,
+    index,
+  ])
 );
 
 export const buildSidebarProviders = (params: {
@@ -88,7 +83,6 @@ export const buildSelectedProviderInfo = (params: {
       kimi: params.t('settings.providers.description.kimi'),
       minimax: params.t('settings.providers.description.minimax'),
       ollama: params.t('settings.providers.description.ollama'),
-      acp: params.t('settings.providers.description.acp'),
     };
     return {
       ...builtIn,
@@ -137,14 +131,7 @@ export const buildProviderSupportLink = (
   return null;
 };
 
-export const buildProviderBaseUrlHelp = (
-  info: BuiltInProvider | null,
-  acpProviderType: string,
-  t: TranslateFn
-) => {
-  if (info?.id === acpProviderType) {
-    return t('settings.providers.acp.baseUrlHelp');
-  }
+export const buildProviderBaseUrlHelp = (info: BuiltInProvider | null, t: TranslateFn) => {
   if (!info?.defaultBaseUrl) {
     return t('settings.providers.baseUrlHelp.optionalOverride');
   }

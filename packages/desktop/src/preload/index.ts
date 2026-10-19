@@ -95,11 +95,6 @@ const electronApi: ElectronApi = {
       providerId?: string,
       providerOverride?: ProviderModelDiscoveryOverride | null
     ) => ipcRenderer.invoke('chat:getModels', providerType, providerId, providerOverride ?? null),
-    getAcpAuthMethods: (
-      providerType: string,
-      providerId?: string,
-      providerOverride?: ProviderModelDiscoveryOverride | null
-    ) => ipcRenderer.invoke('chat:acp:auth-methods', providerType, providerId, providerOverride ?? null),
     isProviderConfigured: (providerType: string, providerId?: string) =>
       ipcRenderer.invoke('chat:isProviderConfigured', providerType, providerId),
     send: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:send', options),

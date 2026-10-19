@@ -76,6 +76,10 @@ export type PiUsageBuckets = {
   cacheWrite: number;
   reasoning: number;
   totalTokens: number;
+  /** USD cost of this call, computed by Pi from the model's catalog rates
+   * (usage.cost.total). 0 when the model carries no rates — the loop never
+   * invents a price. */
+  costUsd: number;
 };
 
 /** Event discriminators for the loop's event stream. The wiring maps these
@@ -157,6 +161,7 @@ const EMPTY_USAGE: PiUsageBuckets = {
   cacheWrite: 0,
   reasoning: 0,
   totalTokens: 0,
+  costUsd: 0,
 };
 
 const addUsage = (a: PiUsageBuckets, b: PiUsageBuckets): PiUsageBuckets => ({
@@ -166,6 +171,7 @@ const addUsage = (a: PiUsageBuckets, b: PiUsageBuckets): PiUsageBuckets => ({
   cacheWrite: a.cacheWrite + b.cacheWrite,
   reasoning: a.reasoning + b.reasoning,
   totalTokens: a.totalTokens + b.totalTokens,
+  costUsd: a.costUsd + b.costUsd,
 });
 
 const usageOf = (message: AssistantMessage): PiUsageBuckets => ({
@@ -175,6 +181,7 @@ const usageOf = (message: AssistantMessage): PiUsageBuckets => ({
   cacheWrite: message.usage?.cacheWrite ?? 0,
   reasoning: message.usage?.reasoning ?? 0,
   totalTokens: message.usage?.totalTokens ?? 0,
+  costUsd: message.usage?.cost?.total ?? 0,
 });
 
 export const runPiAgentLoop = async function* (
@@ -192,9 +199,18 @@ export const runPiAgentLoop = async function* (
     executeTool: PiLoopToolExecutor;
     requestApproval?: PiLoopApprovalRequester;
     signal?: AbortSignal;
+    /** Observability hook, called once per settled model call with that
+     * call's usage. Injected (not imported) so this module keeps owning
+     * orchestration only. */
+    onModelCall?: (settled: {
+      step: number;
+      text: string;
+      toolCallCount: number;
+      usage: PiUsageBuckets;
+    }) => void;
   }
 ): AsyncGenerator<PiLoopEvent, PiLoopOutcome> {
-  const { callModel, executeTool, requestApproval, signal, terminalToolNames } = params;
+  const { callModel, executeTool, requestApproval, signal, terminalToolNames, onModelCall } = params;
   const maxSteps = Number.isFinite(params.maxSteps) ? Math.max(1, Math.trunc(params.maxSteps)) : 1;
   const messages: PiMessage[] = params.messages;
   const steps: PiLoopStep[] = [];
@@ -244,6 +260,15 @@ export const runPiAgentLoop = async function* (
     usage = addUsage(usage, stepUsage);
     const step: PiLoopStep = { index, text, thinking, toolCalls, usage: stepUsage };
     steps.push(step);
+    // One generation observation per model call (Langfuse cost views need
+    // per-call usage, and a tool turn is several calls). Injected so the
+    // loop stays free of the observability import; a no-op when off.
+    onModelCall?.({
+      step: index,
+      text,
+      toolCallCount: toolCalls.length,
+      usage: stepUsage,
+    });
     yield { type: PiLoopEventType.StepEnd, step };
     lastText = text;
 

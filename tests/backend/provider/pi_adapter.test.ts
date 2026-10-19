@@ -27,6 +27,7 @@ import {
   projectHistoryToPiContext,
   projectToolsToPiTools,
   projectUsageToIki,
+  type PiModel,
 } from '@iki/backend/provider/llm/pi_adapter';
 import { createScriptedPiServer, sse, type ScriptedPiServer } from '../pi_candidate/helpers/scripted_pi_server';
 
@@ -39,8 +40,8 @@ const model = buildPiModel({
   maxTokens: 2000,
 });
 
-const collectFinal = async (context: Parameters<typeof callPiChat>[1]) => {
-  const eventStream = callPiChat(model, context, { apiKey: 'test-key' });
+const collectFinal = async (context: Parameters<typeof callPiChat>[1], overModel?: PiModel) => {
+  const eventStream = callPiChat(overModel ?? model, context, { apiKey: 'test-key' });
   const resultPromise = eventStream.result();
   for await (const _event of eventStream) {
     void _event;
@@ -144,13 +145,123 @@ describe('Pi supply adapter — projection', () => {
     expect(messages[0]).toMatchObject({ role: 'user', content: 'part-array question' });
   });
 
-  it('throws on user part types outside the covered domain (image/file)', () => {
-    const history = [
-      { role: 'user', content: [{ type: 'image', image: 'data:image/png;base64,x' }] },
-    ] as unknown as ChatInputMessage[];
+  it('projects IMAGE file parts through the REAL pipeline: renderer attachment → toModelInputMessages → projection', async () => {
+    // The boundary that matters, end to end: what the renderer attaches
+    // (a readAsDataURL data URL in the UI message part), what the real
+    // converter emits, and what the projection hands Pi. The first version
+    // of this projection unwrapped only a `url` field the real pipeline
+    // never emits — convertToModelMessages puts the data URL in `data` — so
+    // every attached image reached Pi double-wrapped
+    // (`data:image/png;base64,data:image/png;base64,...`). Drive the actual
+    // converter so that shape cannot drift again.
+    const modelMessages = await toModelInputMessages([
+      {
+        id: 'msg_image',
+        role: 'user',
+        parts: [
+          { type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,iVBORw0KGgo=' },
+          { type: 'text', text: 'what is in this image?' },
+        ],
+      },
+    ]);
+    // Pin the shape we are relying on — if the SDK changes its field name,
+    // this test says so instead of silently passing.
+    expect(modelMessages[0]).toMatchObject({
+      role: 'user',
+      content: [
+        { type: 'file', mediaType: 'image/png' },
+        { type: 'text', text: 'what is in this image?' },
+      ],
+    });
 
-    expect(() => projectHistoryToPiContext(history, 'scripted-model')).toThrow(PiProjectionError);
-    expect(() => projectHistoryToPiContext(history, 'scripted-model')).toThrow(/image/);
+    const { messages } = projectHistoryToPiContext(modelMessages, 'scripted-model');
+    expect(messages[0]).toEqual({
+      role: 'user',
+      timestamp: expect.any(Number),
+      // Part order is preserved from the source message — the projection
+      // reorders nothing.
+      content: [
+        // The RAW base64 payload — Pi wraps it exactly once on the wire.
+        { type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' },
+        { type: 'text', text: 'what is in this image?' },
+      ],
+    });
+  });
+
+  it('unwraps a data URL in EITHER field and passes raw bytes through', () => {
+    // The hand-built/rehydration shape (`url`) and the converter's shape
+    // (`data`) are both complete data URLs; raw bytes stay bytes.
+    const viaUrl = projectHistoryToPiContext(
+      [
+        {
+          role: 'user',
+          content: [{ type: 'file', url: 'data:image/png;base64,iVBORw0KGgo=', mediaType: 'image/png' }],
+        },
+      ] as unknown as ChatInputMessage[],
+      'scripted-model'
+    );
+    expect(viaUrl.messages[0]).toMatchObject({
+      content: [{ type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' }],
+    });
+
+    const viaData = projectHistoryToPiContext(
+      [
+        {
+          role: 'user',
+          content: [{ type: 'file', data: 'data:image/png;base64,iVBORw0KGgo=', mediaType: 'image/png' }],
+        },
+      ] as unknown as ChatInputMessage[],
+      'scripted-model'
+    );
+    expect(viaData.messages[0]).toMatchObject({
+      content: [{ type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' }],
+    });
+
+    // RAW BYTES are refused, not coerced: Pi's ImageContent.data is a base64
+    // STRING by type and its adapter interpolates it verbatim, so a
+    // Uint8Array would land on the wire as "137,80,78,71" — silent
+    // corruption. The projection throws instead.
+    expect(() =>
+      projectHistoryToPiContext(
+        [
+          {
+            role: 'user',
+            content: [{ type: 'file', data: new Uint8Array([0x89, 0x50]), mediaType: 'image/jpeg' }],
+          },
+        ] as unknown as ChatInputMessage[],
+        'scripted-model'
+      )
+    ).toThrow(PiProjectionError);
+  });
+
+  it('refuses non-image media instead of silently dropping it', () => {
+    // pdf/audio have no Pi part on the openai-completions API, so they throw
+    // rather than becoming a stringified blob that hides type semantics.
+    expect(() =>
+      projectHistoryToPiContext(
+        [
+          {
+            role: 'user',
+            content: [{ type: 'file', data: 'x', mediaType: 'application/pdf' }],
+          },
+        ] as unknown as ChatInputMessage[],
+        'scripted-model'
+      )
+    ).toThrow(PiProjectionError);
+
+    // An image mediaType with NO payload at all is unresolvable — also a
+    // throw, never a fabricated empty image.
+    expect(() =>
+      projectHistoryToPiContext(
+        [
+          {
+            role: 'user',
+            content: [{ type: 'file', mediaType: 'image/png' }],
+          },
+        ] as unknown as ChatInputMessage[],
+        'scripted-model'
+      )
+    ).toThrow(PiProjectionError);
   });
 
   it('regression (real pipeline boundary): toModelInputMessages output projects without error', async () => {
@@ -444,5 +555,157 @@ describe('Pi supply adapter — wire behaviors over the scripted server', () => 
     const serialized = JSON.stringify(wire.messages);
     expect(serialized).not.toContain('PRESERVED_PARTIAL'); // error-assistant withheld from the wire
     expect(serialized).toContain('No result provided'); // orphan call synthesized an error result
+  });
+
+  it('multimodal end-to-end: a vision-capable model receives the image on the wire; a text-only one gets Pi’s placeholder', async () => {
+    // The whole capability decision, observed at the HTTP boundary: the
+    // projection hands an image part to Pi, and Pi's own transform maps
+    // model.input → image_url or → its placeholder text. iKi adds no custom
+    // warning or error of its own (2026-10-19 decision).
+    // The scripted server keys its script off the last user message as a
+    // STRING, so the image rides its own (text-free) user message — the
+    // projection handles both shapes; only the server's keying differs.
+    server.setScript('default', { chunks: [sse.delta('a cat'), sse.finish('stop')] });
+    // The REAL converter's field (`data`), not the hand-built `url` variant:
+    // the wire-level assertion is only meaningful on the shape the pipeline
+    // actually produces.
+    const { systemPrompt, messages } = projectHistoryToPiContext(
+      [
+        { role: 'user', content: 'image vision' },
+        {
+          role: 'user',
+          content: [
+            { type: 'file', data: 'data:image/png;base64,iVBORw0KGgo=', mediaType: 'image/png' },
+          ],
+        },
+      ] as unknown as ChatInputMessage[],
+      'vision-model'
+    );
+
+    const visionModel = buildPiModel({
+      id: 'vision-model',
+      baseUrl: `http://127.0.0.1:${server.port}/v1`,
+      contextWindow: 100000,
+      maxTokens: 2000,
+      input: ['text', 'image'],
+    });
+    const visionStream = callPiChat(visionModel, { systemPrompt, messages }, { apiKey: 'test-key' });
+    const visionResult = visionStream.result();
+    for await (const _event of visionStream) {
+      void _event;
+    }
+    expect((await visionResult).stopReason).toBe('stop');
+
+    const visionWire = JSON.stringify(server.getWire('default').messages);
+    expect(visionWire).toContain('image_url');
+    expect(visionWire).toContain('data:image/png;base64,iVBORw0KGgo=');
+    // Unwrapped exactly once — no nested data: prefix.
+    expect(visionWire).not.toContain('base64,data:image');
+
+    // Same history, text-only model: Pi downgrades the image itself.
+    server.setScript('default', { chunks: [sse.delta('no idea'), sse.finish('stop')] });
+    const textModel = buildPiModel({
+      id: 'vision-model',
+      baseUrl: `http://127.0.0.1:${server.port}/v1`,
+      contextWindow: 100000,
+      maxTokens: 2000,
+      input: ['text'],
+    });
+    const textStream = callPiChat(textModel, { systemPrompt, messages }, { apiKey: 'test-key' });
+    const textResult = textStream.result();
+    for await (const _event of textStream) {
+      void _event;
+    }
+    expect((await textResult).stopReason).toBe('stop');
+
+    const textWire = JSON.stringify(server.getWire('default', 1).messages);
+    expect(textWire).not.toContain('image_url');
+    expect(textWire).toContain('(image omitted: model does not support images)');
+    expect(textWire).toContain('image vision'); // the text part still ships
+  });
+
+  it('PINNED wire shape: the system prompt goes out as role "system" and no thinking block is injected', async () => {
+    // Regression guard for the D35 wiring. Pi reads `model.reasoning` as a
+    // PROTOCOL switch, not as "does this model think": with it true the
+    // system message ships as role `developer` (openai-completions.js:896)
+    // and a deepseek-family base URL additionally gets
+    // `thinking:{type:'disabled'}` injected (same file:668). The AI SDK path
+    // — which these requests are differentially compared against — never
+    // does either: @ai-sdk/openai-compatible pushes exactly one `system`
+    // role and has no developer branch. buildPiModel therefore pins both,
+    // and this test observes them at the HTTP boundary so a future
+    // catalog-driven flip fails here instead of silently changing the wire.
+    server.setScript('role probe', { chunks: [sse.delta('ok'), sse.finish('stop')] });
+    // A system-prompted history (the shape a real turn carries — the
+    // projection hoists the first system message). An EMPTY prompt would be
+    // dropped by Pi's own length guard and prove nothing about the role.
+    const { systemPrompt, messages } = projectHistoryToPiContext(
+      [
+        { role: 'system', content: 'PERSONA SYSTEM PROMPT' },
+        { role: 'user', content: 'role probe' },
+      ] as unknown as ChatInputMessage[],
+      'reasoning-model'
+    );
+    // A catalog capability that WOULD have asked for reasoning — the old
+    // wiring took it from here. It must not move the protocol fields.
+    const model = buildPiModel({
+      id: 'reasoning-model',
+      baseUrl: `http://127.0.0.1:${server.port}/v1`,
+      contextWindow: 200000,
+      maxTokens: 64000,
+      input: ['text', 'image'],
+      cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+    });
+
+    const final = await collectFinal({ systemPrompt, messages }, model);
+    expect(final.stopReason).toBe('stop');
+
+    const wire = server.getWire('role probe');
+    expect(wire.messages.map((m: { role: string }) => m.role)).toEqual(['system', 'user']);
+    expect(wire).not.toHaveProperty('thinking');
+    expect(JSON.stringify(wire)).not.toContain('developer');
+  });
+
+  it('buildPiModel translates catalog modalities and cost rates into the Pi model, and defaults cleanly', () => {
+    // D35: the factory hands the catalog capability in; buildPiModel maps it
+    // to Pi's field vocabulary. Modality names Pi does not know are dropped
+    // (they have no wire form on this API and the projection refuses them).
+    const vision = buildPiModel({
+      id: 'm',
+      baseUrl: 'http://x/v1',
+      contextWindow: 200000,
+      maxTokens: 64000,
+      input: ['text', 'image', 'pdf', 'video'],
+      cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+    });
+    expect(vision.input).toEqual(['text', 'image']);
+    expect(vision.cost).toEqual({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 });
+
+    // No capability (unknown model / cold catalog): the pre-D35 behavior.
+    const plain = buildPiModel({ id: 'm', baseUrl: 'http://x/v1', contextWindow: 1000, maxTokens: 100 });
+    expect(plain.input).toEqual(['text']);
+    expect(plain.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+
+    // The PROTOCOL fields are pinned, never catalog-driven: reasoning stays
+    // false and the compat capabilities that would change the wire shape are
+    // off. A catalog capability cannot flip them (there is no field to pass).
+    expect(vision.reasoning).toBe(false);
+    expect(vision.compat).toEqual({
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: false,
+      supportsMidConvoSystemMessages: false,
+      requiresReasoningContentOnAssistantMessages: false,
+    });
+    expect(plain.compat).toEqual(vision.compat);
+
+    // Negative/garbage rates are clamped to 0 — never a NaN on the wire.
+    const bad = buildPiModel({
+      id: 'm',
+      baseUrl: 'http://x/v1',
+      contextWindow: 1000,
+      maxTokens: 100,
+      cost: { input: -5, output: Number.NaN, cacheRead: 0.25, cacheWrite: Number.POSITIVE_INFINITY },
+    });
+    expect(bad.cost).toEqual({ input: 0, output: 0, cacheRead: 0.25, cacheWrite: 0 });
   });
 });

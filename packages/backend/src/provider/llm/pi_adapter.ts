@@ -19,10 +19,17 @@
  * - Covered input domain: the text + tools subset of ModelMessage shapes —
  *   user text parts AND plain strings, assistant text/tool-call/reasoning
  *   parts (reasoning maps to a Pi thinking block; a provider signature rides
- *   along when the source part carries one), tool result parts. NOT yet
+ *   along when the source part carries one), tool result parts. NOT
  *   projected (throws): approval parts (the approval-resume replay stays on
  *   the existing engine until flip — its continuation semantics are the
- *   flip redesign's input), image/file parts (multimodal undecided).
+ *   flip redesign's input).
+ * - IMAGE file parts project to Pi ImageContent (2026-10-19, multimodal).
+ *   The capability decision belongs to the model owner: buildPiModel carries
+ *   the catalog's modalities.input, and Pi applies them — image_url on the
+ *   wire for a vision-capable model, its own placeholder text for a
+ *   text-only one. iKi adds no custom warning or error on top of Pi's
+ *   default. Non-image file parts (pdf/audio) still throw — Pi has no
+ *   part for them on the openai-completions path.
  * - Assistant envelopes are SYNTHESIZED as a compatibility assumption for
  *   Pi's type contract — they are not recorded facts. iKi history CAN
  *   contain partial assistant text: the cancel branch persists interrupted
@@ -62,7 +69,9 @@ import { normalizeContext } from '@earendil-works/pi-ai';
 import { stream as openaiCompletionsStream } from '@earendil-works/pi-ai/api/openai-completions';
 import type {
   AssistantMessage,
+  ImageContent,
   Message as PiMessage,
+  TextContent,
   ThinkingContent,
   Tool as PiTool,
   ToolCall,
@@ -84,6 +93,14 @@ export type PiModelConfig = {
   baseUrl: string;
   contextWindow: number;
   maxTokens: number;
+  /** Modalities the model accepts, in Pi's vocabulary: drives whether user
+   * image parts project to image_url or get downgraded to Pi's placeholder.
+   * Absent means text-only (Pi's own default). */
+  input?: readonly string[];
+  /** USD per million tokens, from the models.dev catalog record when one
+   * exists. Pi's calculateCost turns these into usage.cost.total; all
+   * zeros keeps cost at 0 (the pre-D35 behavior). */
+  cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 };
 
 export type PiModel = {
@@ -92,17 +109,79 @@ export type PiModel = {
   api: 'openai-completions';
   provider: string;
   baseUrl: string;
-  input: ('text' | 'image')[];
-  reasoning: boolean;
+  /** Mutable so it satisfies Pi's Model type verbatim (its API needs the
+   * concrete `('text' | 'image')[]`, not a readonly view). The catalog's
+   * modality names are a wider set; values outside the two Pi understands
+   * are dropped at the MODEL BUILD (not here), so this stays the exact
+   * literal union Pi declares. */
+  input: Array<'text' | 'image'>;
+  /** ALWAYS false — deliberately not catalog-driven. Pi reads this flag as
+   * a PROTOCOL-SHAPE switch, not as "does the model think": with it true the
+   * system message goes on the wire as role `developer` instead of `system`
+   * (openai-completions.js:896) and deepseek-family base URLs get
+   * `thinking:{type:'disabled'}` injected (same file:668). Both would make
+   * the Pi and AI SDK paths send DIFFERENT requests for the same
+   * provider+model — the AI SDK path never does either. iKi's reasoning
+   * controls are per-turn string options (thinking/reasoningEffort) owned by
+   * the callers, not a model-identity flag. */
+  reasoning: false;
+  /** Protocol capabilities pinned to the shapes iKi's traffic relies on.
+   * Pi would otherwise autodetect these from the base URL/model id and
+   * change the wire (developer role, reasoning_effort, thinking) without
+   * any caller asking for it. */
+  compat: {
+    supportsDeveloperRole: false;
+    supportsReasoningEffort: false;
+    supportsMidConvoSystemMessages: false;
+    requiresReasoningContentOnAssistantMessages: false;
+  };
   contextWindow: number;
   maxTokens: number;
   cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
 };
 
+/** The catalog half of a Pi model: what the model accepts and what it
+ * costs. Produced by the capability owner (resolveModelCapability in the
+ * factory) and passed to buildPiModel — the adapter never fetches. */
+export type PiModelCapability = {
+  /** Catalog modality names ('text' | 'image' | 'pdf' | ...). */
+  input?: string[];
+  reasoning?: boolean | null;
+  contextWindow?: number | null;
+  maxTokens?: number | null;
+  /** USD per million tokens; absent keys mean 0 (no cost reported). */
+  cost?: { input?: number | null; output?: number | null; cacheRead?: number | null; cacheWrite?: number | null };
+};
+
 /**
- * Build a Pi model object from iKi provider settings. The explicit-field
- * shape mirrors the scripted models used in tests; provider catalog
- * integration (D35) arrives with the factory wiring at flip time.
+ * Translate the catalog's modality names into Pi's input vocabulary. Pi's
+ * openai-completions path understands exactly text and image; the catalog
+ * additionally reports pdf/audio/video (2,280/845/1,561 models), which the
+ * projection rejects anyway. Anything unrecognized is dropped rather than
+ * passed through, so Pi's downgrade logic only ever sees a real modality.
+ * Absent or empty input means text-only — the pre-D35 behavior.
+ */
+const piInputModalities = (input: readonly string[] | undefined): Array<'text' | 'image'> => {
+  const modalities = new Set<'text' | 'image'>();
+  for (const value of input ?? []) {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'text' || normalized === 'image') modalities.add(normalized);
+  }
+  if (modalities.size === 0) return ['text'];
+  // text first: the wire reads more naturally and Pi's own models list it first.
+  return modalities.has('text') ? ['text', ...(modalities.has('image') ? ['image' as const] : [])] : ['image'];
+};
+
+const nonNegativeOrZero = (value: number | null | undefined): number =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+
+/**
+ * Build a Pi model object from iKi provider settings plus the catalog
+ * capability the factory resolved (D35). The capability owner is
+ * resolveModelCapability — models.dev first, stored provider options over
+ * it — so this function only TRANSLATES that decision into Pi's field
+ * vocabulary; it never re-fetches or re-decides. Missing capability data
+ * degrades exactly like before: text-only input and zero cost rates.
  */
 export const buildPiModel = (config: PiModelConfig): PiModel => ({
   id: config.id,
@@ -110,11 +189,22 @@ export const buildPiModel = (config: PiModelConfig): PiModel => ({
   api: 'openai-completions',
   provider: 'iki-custom',
   baseUrl: config.baseUrl,
-  input: ['text'],
+  input: piInputModalities(config.input),
   reasoning: false,
+  compat: {
+    supportsDeveloperRole: false,
+    supportsReasoningEffort: false,
+    supportsMidConvoSystemMessages: false,
+    requiresReasoningContentOnAssistantMessages: false,
+  },
   contextWindow: config.contextWindow,
   maxTokens: config.maxTokens,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  cost: {
+    input: nonNegativeOrZero(config.cost?.input),
+    output: nonNegativeOrZero(config.cost?.output),
+    cacheRead: nonNegativeOrZero(config.cost?.cacheRead),
+    cacheWrite: nonNegativeOrZero(config.cost?.cacheWrite),
+  },
 });
 
 /**
@@ -223,6 +313,74 @@ const projectToolOutput = (output: unknown): { text: string; isError: boolean } 
 };
 
 /**
+ * Pi's ImageContent carries `data` as a base64 string (or a Uint8Array) and
+ * builds the wire data-URL itself as `data:<mimeType>;base64,<data>`. iKi's
+ * file parts arrive in two real shapes from convertToModelMessages:
+ *
+ * - `data` bytes (Uint8Array from a pasted/dropped image), or
+ * - `url` — the renderer's readAsDataURL output, an ALREADY COMPLETE
+ *   `data:image/png;base64,...` string. Pi would wrap that a second time
+ *   (`data:image/png;base64,data:image/png;base64,...`), so the payload
+ *   after the comma is extracted here.
+ *
+ * Returns null for non-image media types and unresolvable payloads: the
+ * caller then throws, exactly as it does for every other unrepresentable
+ * part — a silent drop would hide type semantics.
+ */
+/**
+ * Pi's ImageContent carries `data` as a base64 string (or a Uint8Array) and
+ * builds the wire data-URL itself as `data:<mimeType>;base64,<data>`. iKi's
+ * file parts arrive with the payload in a STRING field, and which field
+ * name carries it depends on the producer:
+ *
+ * - `data` — what `convertToModelMessages` emits for a renderer-attached
+ *   image (ai@6 dist: `{type:'file', mediaType, data: <data-URL or bytes>}`).
+ *   The renderer's readAsDataURL output is a COMPLETE `data:image/png;base64,...`
+ *   string, so it must be UNWRAPPED here or Pi double-wraps it into
+ *   `data:image/png;base64,data:image/png;base64,...` — a URL no provider
+ *   decodes. (This exact shape was the first version's bug: only `url` was
+ *   unwrapped, and the real pipeline never emits `url`.)
+ * - `url` — the hand-built/rehydration shape that predates that field name;
+ *   treated identically.
+ * - `data: Uint8Array` — raw bytes, passed through for Pi to encode.
+ *
+ * Returns null for non-image media types and unresolvable payloads: the
+ * caller then throws, exactly as it does for every other unrepresentable
+ * part — a silent drop would hide type semantics.
+ */
+const imageDataForPi = (part: {
+  mediaType?: unknown;
+  data?: unknown;
+  url?: unknown;
+}): string | null => {
+  if (typeof part.mediaType !== 'string' || !part.mediaType.startsWith('image/')) return null;
+
+  // Pi's ImageContent.data is a base64 STRING by type, and its adapter
+  // builds the wire URL as `data:<mimeType>;base64,<data>` verbatim — so a
+  // Uint8Array would be coerced to "137,80,78,71" and reach the provider as
+  // garbage. Only a string payload is projectable; bytes are refused by the
+  // caller's throw rather than silently corrupted.
+  for (const candidate of [part.data, part.url]) {
+    if (typeof candidate !== 'string' || candidate.length === 0) continue;
+    // A data URL in EITHER field is a complete envelope, not a payload:
+    // take what follows the comma (raw base64) so Pi wraps it exactly once.
+    if (candidate.startsWith('data:')) {
+      const comma = candidate.indexOf(',');
+      if (comma > 0) return candidate.slice(comma + 1);
+      continue;
+    }
+    // A non-data: string is passed through as-is. In practice only the
+    // renderer's readAsDataURL output exists today (it is always a data
+    // URL), so an http(s) URL here would reach the provider undecodable —
+    // unreachable, and the AI SDK path wraps such data identically, so it
+    // is not a differential defect.
+    return candidate;
+  }
+
+  return null;
+};
+
+/**
  * Project iKi's prepared history (ChatInputMessage — the AI SDK ModelMessage
  * shapes toModelInputMessages emits) into Pi messages.
  *
@@ -248,19 +406,43 @@ export const projectHistoryToPiContext = (
   // single text part (ai@6 dist: `content: message.parts.map(...)`). The
   // string form never occurs from the real pipeline; it is accepted because
   // tests (and rehydration paths) hand it to the projection directly.
-  const userContent = (content: unknown): string => {
+  //
+  // File parts (attached images) project to Pi ImageContent — the adapter
+  // does NOT decide whether the model can see them. Pi owns that decision
+  // from model.input: a vision-capable model gets the image on the wire as
+  // image_url, a text-only model gets Pi's own placeholder text. iKi adds no
+  // custom error or warning of its own — the library's default behavior is
+  // the product decision (2026-10-19).
+  const userContent = (content: unknown): string | Array<TextContent | ImageContent> => {
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
-      const texts: string[] = [];
+      const parts: Array<TextContent | ImageContent> = [];
       for (const part of content) {
-        const p = part as { type?: string; text?: unknown };
+        const p = part as {
+          type?: string;
+          text?: unknown;
+          mediaType?: unknown;
+          data?: unknown;
+          url?: unknown;
+        };
         if (p.type === 'text' && typeof p.text === 'string') {
-          texts.push(p.text);
+          parts.push({ type: 'text', text: p.text });
           continue;
+        }
+        if (p.type === 'file' && typeof p.mediaType === 'string') {
+          const data = imageDataForPi(p);
+          if (data !== null) {
+            parts.push({ type: 'image', data, mimeType: p.mediaType });
+            continue;
+          }
         }
         throw new PiProjectionError(`unsupported user part type: ${String(p.type ?? typeof part)}`);
       }
-      return texts.join('');
+      // A single text part keeps the plain-string form — identical wire
+      // content, and the shape tests/storage already expect.
+      return parts.length === 1 && parts[0].type === 'text'
+        ? parts[0].text
+        : parts;
     }
     throw new PiProjectionError(`unsupported user content shape: ${typeof content}`);
   };

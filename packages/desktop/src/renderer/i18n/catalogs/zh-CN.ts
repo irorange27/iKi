@@ -299,8 +299,6 @@ export const zhCN = defineLocaleCatalog<typeof en>({
     `校验 ${asText(provider)} Provider 配置失败，请重试。`,
   'chat.provider.configureApiKey': ({ provider }) =>
     `请先在设置中配置 ${asText(provider)} 的 API Key。`,
-  'chat.provider.configureCommand': ({ provider }) =>
-    `请先在设置中配置 ${asText(provider)} 的 ACP 命令。`,
   'chat.provider.modelRequired': ({ provider }) =>
     `请先在设置中为 ${asText(provider)} 添加至少一个模型。`,
   'chat.thread.newTitle': '新对话',
@@ -1226,33 +1224,6 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.providers.baseUrlHelp.optionalOverride': '可选，用于覆盖 Provider 默认端点。',
   'settings.providers.baseUrlHelp.useDefault': ({ name }) =>
     `留空以使用默认的 ${asText(name)} API 端点。`,
-  'settings.providers.acp.command': 'Command',
-  'settings.providers.acp.commandPlaceholder': '例如：codex-acp',
-  'settings.providers.acp.commandHelp':
-    '用于通过 ACP 启动 Codex CLI 的可执行命令。请把命令本体和参数分开填写。',
-  'settings.providers.acp.args': 'Arguments',
-  'settings.providers.acp.argsPlaceholder': '--profile default\n--sandbox workspace-write',
-  'settings.providers.acp.argsHelp':
-    '这里按 shell 风格填写参数即可（支持引号）；如果需要精确 argv 顺序，也可以直接粘贴 JSON 字符串数组。',
-  'settings.providers.acp.apiProvider': 'API Provider',
-  'settings.providers.acp.apiProviderAuto': 'None（使用内置认证）',
-  'settings.providers.acp.apiProviderHelp':
-    '只有在 Codex CLI 需要复用某个已有 Provider 的 API 凭据时才选择这里；留空即可使用内置认证。',
-  'settings.providers.acp.authMethodId': 'Authentication Method',
-  'settings.providers.acp.authMethodPlaceholder': '可选的 authentication method id',
-  'settings.providers.acp.authMethodHelp':
-    '可选。当 Codex CLI 暴露多个登录方式时，可在这里指定默认使用的 ACP authentication method id。',
-  'settings.providers.acp.authMethodAuto': '自动（无偏好）',
-  'settings.providers.acp.discoverAuthMethods': '发现',
-  'settings.providers.acp.mcpServers': 'MCP Servers',
-  'settings.providers.acp.mcpServersHelp': '选择这个 Codex CLI 会话应连接哪些已配置的 MCP 服务器。',
-  'settings.providers.acp.mcpServersEmpty': '还没有配置 MCP 服务器。请先到 Settings -> MCP 添加。',
-  'settings.providers.acp.mcpServersEnabled': '已启用',
-  'settings.providers.acp.mcpServersDisabled': '已在 MCP 设置中禁用',
-  'settings.providers.acp.mcpServersMissing': '已保存的服务器已不存在',
-  'settings.providers.acp.mcpServersMissingName': ({ id }) => `不可用服务器（${asText(id)}）`,
-  'settings.providers.acp.baseUrlHelp':
-    '可选。会把 OpenAI 兼容的 Base URL 注入到 ACP 命令环境中，适用于 Codex / OpenAI 风格适配器。',
   'settings.providers.promptModelName': '输入模型名称：',
   'settings.providers.confirmRemove': '确定要移除这个 Provider 配置吗？',
   'settings.providers.modelOptions.edit': '模型选项',
@@ -1292,8 +1263,6 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.providers.description.kimi': 'Moonshot AI 模型，例如支持超长上下文的 Kimi',
   'settings.providers.description.minimax': '通过 AI SDK 的 MiniMax Provider 使用官方 MiniMax 模型',
   'settings.providers.description.ollama': '通过 Ollama 在本地运行开源大模型',
-  'settings.providers.description.acp':
-    '通过 Agent Client Protocol 对接 Codex CLI，并兼容 Claude Code、Gemini 等其他 ACP agent',
   'settings.mcp.title': 'MCP（Model Context Protocol）',
   'settings.mcp.description':
     '连接外部工具服务器，并将它们的工具暴露给 iKi。远程服务器默认禁用，需要显式启用。',

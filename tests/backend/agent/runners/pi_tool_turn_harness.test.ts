@@ -25,12 +25,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
       models: ['pi-model'],
       modelOptions: {},
       isResponseApi: false,
-      acpCommand: '',
-      acpArgs: '',
-      acpMcpServerIds: '',
-      acpAuthMethodId: '',
-      acpApiProviderId: '',
-      acpModelMapping: '',
     })),
   };
 });
@@ -82,7 +76,7 @@ type CapturedRequest = {
   tools?: Array<{ name: string; parameters: unknown }>;
 };
 
-type ScriptedStep = { content: AssistantMessage['content']; deltas?: string[]; usage?: Record<string, number> };
+type ScriptedStep = { content: AssistantMessage['content']; deltas?: string[]; usage?: Record<string, number>; costUsd?: number };
 
 const scriptedModelCall = (
   steps: ScriptedStep[]
@@ -107,7 +101,7 @@ const scriptedModelCall = (
     for (const delta of step.deltas ?? []) {
       stream.push({ type: 'text_delta', contentIndex: 0, delta, partial: finalMessage() } as AssistantMessageEvent);
     }
-    stream.push({ type: 'done', reason: 'stop', message: finalMessage({ content: step.content, ...(step.usage ? { usage: { input: step.usage.input ?? 0, output: step.usage.output ?? 0, cacheRead: step.usage.cacheRead ?? 0, cacheWrite: 0, reasoning: 0, totalTokens: step.usage.totalTokens ?? 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } } : {}) }) });
+    stream.push({ type: 'done', reason: 'stop', message: finalMessage({ content: step.content, ...(step.usage ? { usage: { input: step.usage.input ?? 0, output: step.usage.output ?? 0, cacheRead: step.usage.cacheRead ?? 0, cacheWrite: 0, reasoning: 0, totalTokens: step.usage.totalTokens ?? 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: step.costUsd ?? 0 } } } : {}) }) });
     // The PiToolModelCall contract: a live delta stream + the final promise.
     return {
       events: (async function* () {
@@ -225,6 +219,28 @@ describe('pi tool turn harness (switch item 3a)', () => {
     // Total-prompt convention: 80 = 20 + 60 cached.
     expect(done.output.usage).toMatchObject({ inputTokens: 80, outputTokens: 4 });
     expect(done.output.perf).toMatchObject({ toolCalls: 1, steps: 2 });
+  });
+
+  it('carries the catalog-derived cost through to the turn usage', async () => {
+    // The D35 cost term: Pi's calculateCost fills usage.cost.total per call
+    // from the model's catalog rates, and mapBuckets must land it on
+    // estimatedCostUsd. Before that wiring this was hardcoded 0 — a silent
+    // regression there (or a future refactor dropping the term) is invisible
+    // to every other assertion in this suite.
+    const modelCall = scriptedModelCall([
+      { content: [toolCallBlock('call_cost', 'probe_read', { path: '/a.txt' })], usage: { input: 1000, output: 500, totalTokens: 1500 }, costUsd: 0.0105 },
+      { content: [textBlock('done')], usage: { input: 20, output: 4, totalTokens: 24 }, costUsd: 0.0006 },
+    ]);
+    const harness = new PiToolTurnHarness(harnessConfig(), { modelCall });
+
+    const events = await collect(harness, { prompt: 'probe' });
+    const done = events.at(-1);
+    assert(done && done.event === 'done');
+
+    // 0.0105 + 0.0006 — the per-call costs are summed, not last-write-wins.
+    expect(done.output.usage.estimatedCostUsd).toBeCloseTo(0.0111, 10);
+    // Unpriced models keep 0 (the pre-D35 default), never NaN.
+    expect(done.output.usage.inputTokens).toBe(1020);
   });
 
   it('mirrors the trajectory as ModelMessage parts: assistant once per step, tool results after effects', async () => {

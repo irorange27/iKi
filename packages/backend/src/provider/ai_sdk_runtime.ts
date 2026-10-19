@@ -8,7 +8,6 @@ import {
   type ToolApprovalResponse,
   type ToolSet,
 } from 'ai';
-import { acpTools } from '@mcpc-tech/acp-ai-provider';
 
 import { createLogger } from '@iki/backend/logger';
 import { withRetry } from '@iki/backend/utils/retry';
@@ -17,8 +16,6 @@ import {
   assembleRequestSystemPrompt,
   type RequestSystemPromptPart,
 } from '@iki/backend/message/system_prompt';
-import { ACP_PROVIDER_TYPE } from '@iki/backend/constants/acp';
-import { unwrapAcpDynamicToolCall } from '@iki/backend/utils/acp';
 import {
   extractTextFromModelMessageContent,
   sanitizeModelConversationMessages,
@@ -28,13 +25,10 @@ import type { AgentConfig, AgentTool, ToolApprovalRequest } from '@iki/backend/a
 const logger = createLogger({ module: 'ai_sdk_runtime' });
 
 export const buildAiToolSet = (
-  config: Pick<AgentConfig, 'enableTools' | 'providerType'>,
+  config: Pick<AgentConfig, 'enableTools'>,
   registeredTools: AgentTool[]
 ): ToolSet | undefined => {
-  const requiresAcpDynamicTool =
-    config.enableTools && config.providerType.trim().toLowerCase() === ACP_PROVIDER_TYPE;
-
-  if (!config.enableTools || (registeredTools.length === 0 && !requiresAcpDynamicTool)) {
+  if (!config.enableTools || registeredTools.length === 0) {
     logger.event({
       level: 'debug',
       event: 'agent.tools.build',
@@ -131,13 +125,8 @@ export const buildAiToolSet = (
     data: {
       built_tool_count: Object.keys(tools).length,
       tool_names: Object.keys(tools),
-      acp_dynamic_tool: requiresAcpDynamicTool,
     },
   });
-
-  if (requiresAcpDynamicTool) {
-    return acpTools(tools);
-  }
 
   return Object.keys(tools).length > 0 ? tools : undefined;
 };
@@ -257,17 +246,10 @@ export const normalizeCollectedToolCall = (toolCall: {
   toolName: string;
   input?: unknown;
   args?: unknown;
-}): { toolName: string; args: Record<string, unknown> } => {
-  const acpDynamicTool = unwrapAcpDynamicToolCall({
-    toolName: toolCall.toolName,
-    input: getToolCallInput(toolCall),
-  });
-
-  return {
-    toolName: acpDynamicTool?.toolName ?? toolCall.toolName,
-    args: normalizeToolArgs(acpDynamicTool ? acpDynamicTool.args : getToolCallInput(toolCall)),
-  };
-};
+}): { toolName: string; args: Record<string, unknown> } => ({
+  toolName: toolCall.toolName,
+  args: normalizeToolArgs(getToolCallInput(toolCall)),
+});
 
 export const collectToolCalls = (
   steps?: Array<{ toolCalls?: unknown[] }> | null,

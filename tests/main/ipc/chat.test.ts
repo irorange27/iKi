@@ -38,7 +38,6 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
       },
     ]),
     isProviderConfigured: vi.fn((providerType: string) => providerType === 'openai'),
-    getAcpAuthMethods: vi.fn(async () => [{ id: 'agent', name: 'agent', type: 'agent' }]),
     stopStream: vi.fn((senderId: number) => ({ success: true, senderId })),
     send: vi.fn(async (options: Record<string, unknown>) => ({ success: true, options })),
     stream: vi.fn(async (target: unknown, options: Record<string, unknown>) => ({

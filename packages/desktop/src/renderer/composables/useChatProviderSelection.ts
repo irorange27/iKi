@@ -6,7 +6,6 @@ import type {
   Provider,
   ProviderModelDescriptor,
 } from '@iki/backend/types/provider';
-import { ACP_PROVIDER_TYPE } from '@iki/backend/constants/acp';
 import { createLogger } from '../logger';
 import {
   getProviderModelOptions,
@@ -302,10 +301,7 @@ export const useChatProviderSelection = (deps: {
     if (!configured) {
       return {
         ok: false,
-        message:
-          selectedProvider.value.type === ACP_PROVIDER_TYPE
-            ? translate('chat.provider.configureCommand', { provider: selectedProviderName })
-            : translate('chat.provider.configureApiKey', { provider: selectedProviderName }),
+        message: translate('chat.provider.configureApiKey', { provider: selectedProviderName }),
       };
     }
 

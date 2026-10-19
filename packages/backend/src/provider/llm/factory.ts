@@ -10,10 +10,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { getProviders } from '../../db/providers';
 import { createLogger } from '@iki/backend/logger';
-import { langfuseTelemetry } from '@iki/backend/observability/langfuse';
+import { langfuseTelemetry, tracePiGeneration } from '@iki/backend/observability/langfuse';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
-import { getToolRuntimeContext } from '../../utils/runtime_context';
 import {
   getProviderModelOptions,
   listModelsDevProviderModels,
@@ -30,16 +29,6 @@ import type {
   ProviderModelOptionsMap,
 } from '@iki/backend/types/provider';
 import type { TokenUsageMetrics } from '@iki/backend/types/chat_usage';
-import {
-  createAcpLanguageModel,
-  disposeAcpLanguageModel,
-  fetchAcpAuthMethods as fetchAcpAuthMethodsFromSession,
-  fetchAcpModels as fetchAcpModelsFromSession,
-  isAcpProviderType,
-  type AcpAuthMethod,
-} from './acp';
-
-export type { AcpAuthMethod };
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { normalizeLanguageModelUsage } from './usage';
@@ -55,6 +44,81 @@ const MODELS_DEV_CACHE_TTL_MS = 3600000;
 const MODELS_DEV_TIMEOUT_MS = 1200;
 const MODELS_DEV_FAILURE_COOLDOWN_MS = 300000;
 
+/**
+ * Context window assumed when the catalog has no record for the model
+ * (custom openai-compatible endpoints, catalog unreachable). Large enough
+ * that the window itself never truncates a legit request; the token
+ * budget the harnesses enforce comes from the capability resolver, not
+ * from here.
+ */
+const PI_DEFAULT_CONTEXT_WINDOW = 128000;
+
+/**
+ * The D35 bridge: peek the CACHED catalog for this model and build the
+ * capability half of a Pi model from it. Synchronous by design — a model
+ * call must never block on the network for a price list. Uses the same
+ * in-memory snapshot every other capability consumer reads, refreshed in
+ * the background by startModelsDevCatalogRefresh; a cold cache simply
+ * yields no capability and the pre-D35 defaults (text-only, zero cost)
+ * apply for this call. Stored provider/model options DO override the
+ * catalog, exactly as resolveModelCapability composes them.
+ */
+export const resolvePiModelCapability = (params: {
+  providerType: string;
+  modelId: string;
+  providerId?: string | null;
+}): {
+  input?: string[];
+  contextWindow?: number | null;
+  maxTokens?: number | null;
+  cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+} | null => {
+  const trimmedModelId = params.modelId.trim();
+  if (!trimmedModelId) return null;
+
+  try {
+    const modelOptions = getStoredProviderModelOptions(
+      params.providerType,
+      trimmedModelId,
+      params.providerId
+    );
+    const catalog = getModelsDevCatalogSnapshot();
+    const catalogCapability = catalog
+      ? lookupModelsDevModelCapability(catalog, params.providerType, trimmedModelId)
+      : null;
+    const capability = mergeModelCapability(
+      catalogCapability,
+      params.providerType,
+      trimmedModelId,
+      modelOptions
+    );
+    if (!capability) return null;
+
+    // A stored maxInputTokens override can be TIGHTER than the catalog's
+    // context window (the budget then uses the tighter one). Advertising the
+    // larger number on the Pi model would let the model object claim room
+    // the budget will not grant, so the Pi window is the min of the two —
+    // the consumer can only be wrong in the safe direction.
+    const storedInputLimit = capability.maxInputTokens;
+    const catalogWindow = capability.contextWindow;
+
+    return {
+      ...(capability.modalities ? { input: capability.modalities } : {}),
+      contextWindow:
+        typeof storedInputLimit === 'number' && typeof catalogWindow === 'number'
+          ? Math.min(storedInputLimit, catalogWindow)
+          : (catalogWindow ?? storedInputLimit ?? null),
+      maxTokens: capability.maxOutputTokens,
+      ...(capability.costPerMillionTokens ? { cost: capability.costPerMillionTokens } : {}),
+    };
+  } catch {
+    // A provider row that cannot be read (not configured, DB unavailable)
+    // must not turn a working AI-SDK-path model into a Pi-path failure:
+    // return null so buildPiModel falls back to its defaults.
+    return null;
+  }
+};
+
 let cachedModelsDevCatalog: ModelsDevCatalog | null = null;
 let cachedModelsDevFetchedAt = 0;
 let cachedModelsDevUnavailableUntil = 0;
@@ -68,12 +132,6 @@ export interface ProviderConfig {
   models: string[];
   modelOptions: ProviderModelOptionsMap;
   isResponseApi: boolean;
-  acpCommand: string;
-  acpArgs: string;
-  acpMcpServerIds: string;
-  acpAuthMethodId: string;
-  acpApiProviderId: string;
-  acpModelMapping: string;
 }
 
 export interface ChatGenerationResult {
@@ -112,12 +170,6 @@ const readBootstrapAuthConfig = (providerType: string): ProviderConfig | null =>
       models: [],
       modelOptions: {},
       isResponseApi: false,
-      acpCommand: '',
-      acpArgs: '',
-      acpMcpServerIds: '',
-      acpAuthMethodId: '',
-      acpApiProviderId: '',
-      acpModelMapping: '',
     };
   } catch {
     return null;
@@ -163,12 +215,6 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
     models,
     modelOptions: parseProviderModelOptionsMap(provider.model_options),
     isResponseApi: provider.is_response_api === true,
-    acpCommand: provider.acp_command || '',
-    acpArgs: provider.acp_args || '',
-    acpMcpServerIds: provider.acp_mcp_server_ids || '',
-    acpAuthMethodId: provider.acp_auth_method_id || '',
-    acpApiProviderId: provider.acp_api_provider_id || '',
-    acpModelMapping: provider.acp_model_mapping || '',
   };
 };
 
@@ -176,81 +222,6 @@ const normalizeOptionalString = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-};
-
-const buildProviderConfigForDiscovery = (params: {
-  providerType: string;
-  providerId?: string | null;
-  providerOverride?: ProviderModelDiscoveryOverride | null;
-}): ProviderConfig => {
-  const override = params.providerOverride;
-  if (!override) {
-    return getProviderConfig(params.providerType, params.providerId);
-  }
-
-  let persisted: ProviderConfig | null = null;
-  try {
-    persisted = getProviderConfig(params.providerType, params.providerId);
-  } catch {
-    persisted = null;
-  }
-
-  const resolvedType =
-    normalizeOptionalString(override.type) ?? normalizeOptionalString(persisted?.type) ?? params.providerType;
-  const resolvedId =
-    normalizeOptionalString(override.id) ??
-    normalizeOptionalString(persisted?.id) ??
-    normalizeOptionalString(params.providerId) ??
-    `${resolvedType}_draft`;
-
-  return {
-    id: resolvedId,
-    type: resolvedType,
-    apiKey:
-      normalizeOptionalString(override.api_key) ?? normalizeOptionalString(persisted?.apiKey) ?? '',
-    baseURL:
-      normalizeOptionalString(override.base_url) ??
-      normalizeOptionalString(persisted?.baseURL) ??
-      '',
-    models:
-      override.models !== undefined
-        ? parseModelList(override.models)
-        : persisted?.models
-          ? [...persisted.models]
-          : [],
-    modelOptions:
-      override.model_options !== undefined
-        ? parseProviderModelOptionsMap(override.model_options)
-        : persisted?.modelOptions
-          ? structuredClone(persisted.modelOptions)
-          : {},
-    isResponseApi:
-      typeof override.is_response_api === 'boolean'
-        ? override.is_response_api
-        : persisted?.isResponseApi === true,
-    acpCommand:
-      normalizeOptionalString(override.acp_command) ??
-      normalizeOptionalString(persisted?.acpCommand) ??
-      '',
-    acpArgs:
-      normalizeOptionalString(override.acp_args) ?? normalizeOptionalString(persisted?.acpArgs) ?? '',
-    acpMcpServerIds:
-      normalizeOptionalString(override.acp_mcp_server_ids) ??
-      normalizeOptionalString(persisted?.acpMcpServerIds) ??
-      '',
-    acpAuthMethodId:
-      normalizeOptionalString(override.acp_auth_method_id) ??
-      normalizeOptionalString(persisted?.acpAuthMethodId) ??
-      '',
-    acpApiProviderId:
-      normalizeOptionalString(override.acp_api_provider_id) ??
-      normalizeOptionalString(persisted?.acpApiProviderId) ??
-      '',
-    acpModelMapping:
-      normalizeOptionalString(override.acp_model_mapping) ??
-      normalizeOptionalString(persisted?.acpModelMapping) ??
-      '',
-  };
 };
 
 const getStoredProviderModelOptions = (
@@ -419,7 +390,7 @@ const createInstrumentedFetch = (): typeof globalThis.fetch => {
 };
 
 /**
- * Per-provider model wiring for the static (non-ACP) provider types. Each entry
+ * Per-provider model wiring for the static provider types. Each entry
  * owns its SDK client construction and default endpoint; providers absent from
  * this table fall through to isResponseApi handling or the OpenAI-compatible path.
  */
@@ -491,25 +462,6 @@ export const createModel = (
 
   const storedModelOptions = getProviderModelOptions(config.modelOptions, modelId);
 
-  if (isAcpProviderType(providerType)) {
-    const toolRuntimeContext = getToolRuntimeContext();
-    return createAcpLanguageModel(
-      {
-        id: config.id,
-        apiKey: config.apiKey,
-        baseURL: config.baseURL,
-        acpCommand: config.acpCommand,
-        acpArgs: config.acpArgs,
-        acpMcpServerIds: config.acpMcpServerIds,
-        acpAuthMethodId: config.acpAuthMethodId,
-        acpApiProviderId: config.acpApiProviderId,
-        acpModelMapping: config.acpModelMapping,
-      },
-      modelId,
-      toolRuntimeContext.threadId
-    );
-  }
-
   const staticFactory = STATIC_PROVIDER_MODEL_FACTORIES[providerType];
   if (staticFactory) {
     return staticFactory(config, modelId);
@@ -540,8 +492,14 @@ export const createModel = (
   return client(modelId);
 };
 
-export const disposeLanguageModel = (model: LanguageModel): void => {
-  disposeAcpLanguageModel(model);
+/**
+ * Dispose a language model after a call. The AI SDK model objects are inert
+ * today, so this is a deliberate no-op — kept as the caller-side teardown
+ * point the runners already call in `finally` (ACP's model needed cleanup;
+ * that path is gone, and a future one re-implements this body).
+ */
+export const disposeLanguageModel = (_model: LanguageModel): void => {
+  // Intentionally empty: see the doc comment above.
 };
 
 /** The persona SECTION of a request system prompt — named for exactly what
@@ -556,14 +514,16 @@ export const resolvePersonaPrompt = (providerType: string, providerId?: string |
 };
 /** Providers whose default openai-compatible branch the Pi supply layer
  * serves (ADR 007 first switch path). Static-factory providers (openai,
- * anthropic, anthropic-compatible, deepseek, minimax), ACP and the
- * Responses API stay on the AI SDK until their own switch items land.
+ * anthropic, anthropic-compatible, deepseek, minimax) and the Responses API
+ * stay on the AI SDK until their own switch items land.
  * Wire deltas vs the AI SDK path (documented, tracked): maxTokens rides
  * max_completion_tokens for unknown baseUrls (no compat escape yet), the
  * request is streaming-shaped, and createInstrumentedFetch's unconditional
- * reasoning-disabled injection does not apply. */
+ * reasoning-disabled injection does not apply. Everything else is held equal
+ * by buildPiModel's pinned protocol fields (system role, no `thinking`
+ * injection, no reasoning_effort) — see the adapter for why the catalog's
+ * reasoning flag must never drive the Pi model. */
 const supportsPiGeneration = (providerType: string, config: ProviderConfig): boolean =>
-  !isAcpProviderType(providerType) &&
   !STATIC_PROVIDER_MODEL_FACTORIES[providerType] &&
   !config.isResponseApi &&
   typeof config.baseURL === 'string' &&
@@ -614,9 +574,8 @@ export const supportsPiTurnSupply = (params: {
  * Single-shot generation over the Pi supply layer (ADR 007, switch item 1).
  * Text-only: no tools, no inner loop. The transcript is projected by
  * projectHistoryToPiContext; usage maps onto the total-prompt convention
- * (projectUsageToIki). Known gap, tracked: estimatedCostUsd is 0 here —
- * the catalog cost rates are not wired into the Pi model yet — and
- * Langfuse tracing is not attached on this path.
+ * (projectUsageToIki). The model carries the catalog capability (D35:
+ * modalities for image projection, cost rates so estimatedCostUsd is real).
  */
 const generateViaPi = async (
   options: {
@@ -637,14 +596,21 @@ const generateViaPi = async (
   },
   config: ProviderConfig
 ): Promise<ChatGenerationResult> => {
+  const capability = resolvePiModelCapability({
+    providerType: options.providerType,
+    ...(options.providerId ? { providerId: options.providerId } : {}),
+    modelId: options.modelId,
+  });
   const model = buildPiModel({
     id: options.modelId,
     baseUrl: config.baseURL,
     // Single-shot generation enforces no context budget in the AI SDK path
-    // either (only maxOutputTokens), so catalog-window resolution is not
-    // needed here and would be a network dependency.
-    contextWindow: 128000,
-    maxTokens: options.maxOutputTokens ?? 4096,
+    // either (only maxOutputTokens), so the window here is informational;
+    // the catalog's own value is used when the snapshot has one.
+    contextWindow: capability?.contextWindow ?? PI_DEFAULT_CONTEXT_WINDOW,
+    maxTokens: options.maxOutputTokens ?? capability?.maxTokens ?? 4096,
+    ...(capability?.input ? { input: capability.input } : {}),
+    ...(capability?.cost ? { cost: capability.cost } : {}),
   });
   const personaPrompt = resolvePersonaPrompt(options.providerType, options.providerId);
   const { systemPrompt: transcriptSystem, messages } = projectHistoryToPiContext(
@@ -661,36 +627,73 @@ const generateViaPi = async (
   const systemPrompt = options.systemPromptOverride ?? assembled.prompt;
 
   try {
-    const eventStream = callPiChat(
-      model,
-      { systemPrompt, messages },
+    const settle = await tracePiGeneration(
       {
-        apiKey: config.apiKey,
-        signal: options.abortSignal,
-        ...(typeof options.maxOutputTokens === 'number'
-          ? { maxTokens: options.maxOutputTokens }
+        name: 'pi.chat.generate',
+        model: options.modelId,
+        provider: options.providerType,
+        ...(options.threadId ? { sessionId: options.threadId } : {}),
+        ...(typeof options.temperature === 'number'
+          ? { modelParameters: { temperature: options.temperature } }
           : {}),
-        ...(typeof options.temperature === 'number' ? { temperature: options.temperature } : {}),
-      }
+        input: messages.map(message => ({ role: message.role })),
+      },
+      onSettle =>
+        (async () => {
+          const eventStream = callPiChat(
+            model,
+            { systemPrompt, messages },
+            {
+              apiKey: config.apiKey,
+              signal: options.abortSignal,
+              ...(typeof options.maxOutputTokens === 'number'
+                ? { maxTokens: options.maxOutputTokens }
+                : {}),
+              ...(typeof options.temperature === 'number'
+                ? { temperature: options.temperature }
+                : {}),
+            }
+          );
+          const resultPromise = eventStream.result();
+          for await (const _event of eventStream) {
+            void _event; // drain: the final message carries text and usage
+          }
+          const final = await resultPromise;
+
+          const settledText = final.content
+            .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+            .map(block => block.text)
+            .join('');
+          // Pi resolves provider failures into a result message — the event
+          // stream never rejects. The stopReason is the failure surface:
+          // swallowing it would surface a dead upstream as an empty-text
+          // success.
+          if (final.stopReason === 'aborted' || final.stopReason === 'error') {
+            const failure =
+              final.stopReason === 'aborted'
+                ? new DOMException(final.errorMessage || 'Generation aborted', 'AbortError')
+                : new Error(final.errorMessage || 'Provider returned an error stop reason');
+            onSettle({ errorMessage: getErrorMessage(failure) });
+            throw failure;
+          }
+
+          const mapped = projectUsageToIki(final.usage);
+          onSettle({
+            output: settledText,
+            usageDetails: {
+              input: mapped.inputTokens,
+              output: mapped.outputTokens,
+              total: mapped.totalTokens,
+              ...(mapped.cacheReadTokens ? { cacheRead: mapped.cacheReadTokens } : {}),
+              ...(mapped.cacheWriteTokens ? { cacheWrite: mapped.cacheWriteTokens } : {}),
+              ...(mapped.reasoningTokens ? { reasoning: mapped.reasoningTokens } : {}),
+            },
+            costUsd: final.usage.cost.total,
+          });
+          return { final, text: settledText, usage: mapped };
+        })()
     );
-    const resultPromise = eventStream.result();
-    for await (const _event of eventStream) {
-      void _event; // drain: the final message carries text and usage
-    }
-    const final = await resultPromise;
-    // Pi resolves provider failures into a result message — the event stream
-    // never rejects. The stopReason is the failure surface: swallowing it
-    // would surface a dead upstream as an empty-text success.
-    if (final.stopReason === 'aborted') {
-      throw new DOMException(final.errorMessage || 'Generation aborted', 'AbortError');
-    }
-    if (final.stopReason === 'error') {
-      throw new Error(final.errorMessage || 'Provider returned an error stop reason');
-    }
-    const text = final.content
-      .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
-      .map(block => block.text)
-      .join('');
+    const { final, text, usage } = settle;
     if (!text) {
       factoryLogger.event({
         level: 'warn',
@@ -700,7 +703,6 @@ const generateViaPi = async (
         data: { providerType: options.providerType, modelId: options.modelId, supply: 'pi' },
       });
     }
-    const usage = projectUsageToIki(final.usage);
     return {
       text,
       usage: {
@@ -710,7 +712,8 @@ const generateViaPi = async (
         cacheReadTokens: usage.cacheReadTokens,
         cacheWriteTokens: usage.cacheWriteTokens,
         reasoningTokens: usage.reasoningTokens,
-        // Catalog cost rates are not wired into the Pi model yet (tracked).
+        // Pi computed this from the model's catalog rates (D35); 0 when the
+        // model carries none.
         estimatedCostUsd: final.usage.cost.total,
       },
     };
@@ -829,8 +832,6 @@ export const generateChatWithModelMessages = async (options: {
       data: { providerType: options.providerType, modelId: options.modelId },
     });
     throw error;
-  } finally {
-    disposeLanguageModel(model);
   }
 };
 
@@ -841,60 +842,6 @@ export const fetchModelsFromDev = async (providerType: string) => {
   } catch {
     return [];
   }
-};
-
-export const fetchAcpModels = async (
-  providerType: string,
-  providerId?: string | null,
-  providerOverride?: ProviderModelDiscoveryOverride | null
-) => {
-  const config = buildProviderConfigForDiscovery({
-    providerType,
-    providerId,
-    providerOverride,
-  });
-  if (!isAcpProviderType(config.type)) {
-    return [];
-  }
-
-  return await fetchAcpModelsFromSession({
-    id: config.id,
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-    acpCommand: config.acpCommand,
-    acpArgs: config.acpArgs,
-    acpMcpServerIds: config.acpMcpServerIds,
-    acpAuthMethodId: config.acpAuthMethodId,
-    acpApiProviderId: config.acpApiProviderId,
-    acpModelMapping: config.acpModelMapping,
-  });
-};
-
-export const fetchAcpAuthMethods = async (
-  providerType: string,
-  providerId?: string | null,
-  providerOverride?: ProviderModelDiscoveryOverride | null
-) => {
-  const config = buildProviderConfigForDiscovery({
-    providerType,
-    providerId,
-    providerOverride,
-  });
-  if (!isAcpProviderType(config.type)) {
-    return [];
-  }
-
-  return await fetchAcpAuthMethodsFromSession({
-    id: config.id,
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-    acpCommand: config.acpCommand,
-    acpArgs: config.acpArgs,
-    acpMcpServerIds: config.acpMcpServerIds,
-    acpAuthMethodId: config.acpAuthMethodId,
-    acpApiProviderId: config.acpApiProviderId,
-    acpModelMapping: config.acpModelMapping,
-  });
 };
 
 const hasFreshModelsDevCatalog = (now = Date.now()) =>
@@ -978,7 +925,6 @@ export const fetchModelCapabilityFromDev = async (
 ): Promise<ModelCapability | null> => {
   const trimmedModelId = modelId.trim();
   if (!trimmedModelId) return null;
-  if (isAcpProviderType(providerType)) return null;
 
   const catalog = getModelsDevCatalogSnapshot();
   return catalog ? lookupModelsDevModelCapability(catalog, providerType, trimmedModelId) : null;

@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  createACPProviderMock,
   createAnthropicMock,
   createDeepSeekMock,
   createLoggerMock,
@@ -19,7 +18,6 @@ const {
   listMcpServersMock,
   streamTextMock,
 } = vi.hoisted(() => ({
-  createACPProviderMock: vi.fn(),
   createAnthropicMock: vi.fn(),
   createDeepSeekMock: vi.fn(),
   createLoggerMock: vi.fn(() => ({
@@ -48,10 +46,6 @@ vi.mock('ai', () => ({
   generateText: generateTextMock,
   smoothStream: vi.fn(),
   streamText: streamTextMock,
-}));
-
-vi.mock('@mcpc-tech/acp-ai-provider', () => ({
-  createACPProvider: createACPProviderMock,
 }));
 
 vi.mock('@ai-sdk/openai', () => ({
@@ -110,8 +104,8 @@ vi.mock('@iki/backend/utils/runtime_context', () => ({
 import {
   createModel,
   disposeLanguageModel,
+  resolvePiModelCapability,
   fetchModelCapabilityFromDev,
-  fetchAcpModels,
   getModelCallSettings,
   getModelGenerationSettings,
   refreshModelsDevCatalog,
@@ -289,302 +283,6 @@ describe('llm factory', () => {
     });
   });
 
-  it('instantiates ACP models through the ACP provider bridge with persistent sessions', () => {
-    const acpLanguageModel = {
-      specificationVersion: 'v3' as const,
-      provider: 'acp',
-      modelId: 'codex-mini-latest',
-      supportedUrls: {},
-      doGenerate: vi.fn(),
-      doStream: vi.fn(),
-      forceCleanup: vi.fn(),
-    };
-    const acpProvider = {
-      languageModel: vi.fn(() => acpLanguageModel),
-    };
-    createACPProviderMock.mockReturnValue(acpProvider);
-    getProvidersMock.mockReturnValue([
-      {
-        id: 'provider_acp',
-        type: 'acp',
-        enabled: true,
-        api_key: '',
-        base_url: '',
-        models: JSON.stringify(['codex-mini-latest']),
-        acp_command: 'codex-acp',
-        acp_args: '["--sandbox","workspace-write"]',
-      },
-    ]);
-
-    expect(createModel('acp', 'codex-mini-latest')).toBe(acpLanguageModel);
-    expect(createACPProviderMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: 'codex-acp',
-        args: ['--sandbox', 'workspace-write'],
-        persistSession: true,
-        session: {
-          cwd: '/tmp/iki-user-data/acp-session',
-          mcpServers: [],
-        },
-      })
-    );
-    expect(acpProvider.languageModel).toHaveBeenCalledWith('codex-mini-latest', undefined);
-  });
-
-  it('shell-splits ACP argument strings before launching the ACP bridge', () => {
-    const acpLanguageModel = {
-      specificationVersion: 'v3' as const,
-      provider: 'acp',
-      modelId: 'codex-mini-latest',
-      supportedUrls: {},
-      doGenerate: vi.fn(),
-      doStream: vi.fn(),
-      forceCleanup: vi.fn(),
-    };
-    const acpProvider = {
-      languageModel: vi.fn(() => acpLanguageModel),
-    };
-    createACPProviderMock.mockReturnValue(acpProvider);
-    getProvidersMock.mockReturnValue([
-      {
-        id: 'provider_acp',
-        type: 'acp',
-        enabled: true,
-        api_key: '',
-        base_url: '',
-        models: JSON.stringify(['codex-mini-latest']),
-        acp_command: 'codex-acp',
-        acp_args: '--profile default\n--label "Codex Mini"',
-      },
-    ]);
-
-    expect(createModel('acp', 'codex-mini-latest')).toBe(acpLanguageModel);
-    expect(createACPProviderMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        args: ['--profile', 'default', '--label', 'Codex Mini'],
-      })
-    );
-  });
-
-  it('passes selected MCP servers into the ACP session configuration', () => {
-    const acpLanguageModel = {
-      specificationVersion: 'v3' as const,
-      provider: 'acp',
-      modelId: 'codex-mini-latest',
-      supportedUrls: {},
-      doGenerate: vi.fn(),
-      doStream: vi.fn(),
-      forceCleanup: vi.fn(),
-    };
-    const acpProvider = {
-      languageModel: vi.fn(() => acpLanguageModel),
-    };
-    createACPProviderMock.mockReturnValue(acpProvider);
-    listMcpServersMock.mockReturnValue([
-      {
-        id: 'docs_server',
-        name: 'Repo Docs',
-        transport: 'streamable-http',
-        base_url: 'https://mcp.example.com',
-        headers: {
-          Authorization: 'Bearer token',
-        },
-        auth_ref: null,
-        enabled: true,
-        command: null,
-        args: null,
-        cwd: null,
-        env: null,
-        tool_allowlist: null,
-        approval_mode: null,
-        created_at: '2026-03-21T12:00:00.000Z',
-        updated_at: '2026-03-21T12:00:00.000Z',
-      },
-      {
-        id: 'fs_server',
-        name: 'Filesystem',
-        transport: 'stdio',
-        command: 'npx',
-        args: ['-y', '@example/filesystem'],
-        cwd: null,
-        env: {
-          MCP_LOG_LEVEL: 'debug',
-        },
-        base_url: null,
-        headers: null,
-        auth_ref: null,
-        enabled: true,
-        tool_allowlist: null,
-        approval_mode: null,
-        created_at: '2026-03-21T12:00:00.000Z',
-        updated_at: '2026-03-21T12:00:00.000Z',
-      },
-    ]);
-    getProvidersMock.mockReturnValue([
-      {
-        id: 'provider_acp',
-        type: 'acp',
-        enabled: true,
-        api_key: '',
-        base_url: '',
-        models: JSON.stringify(['codex-mini-latest']),
-        acp_command: 'codex-acp',
-        acp_mcp_server_ids: '["docs_server","fs_server"]',
-      },
-    ]);
-
-    expect(createModel('acp', 'codex-mini-latest')).toBe(acpLanguageModel);
-    expect(createACPProviderMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        session: {
-          cwd: '/tmp/iki-user-data/acp-session',
-          mcpServers: [
-            {
-              type: 'http',
-              name: 'Repo Docs',
-              url: 'https://mcp.example.com',
-              headers: [{ name: 'Authorization', value: 'Bearer token' }],
-            },
-            {
-              name: 'Filesystem',
-              command: 'npx',
-              args: ['-y', '@example/filesystem'],
-              env: [{ name: 'MCP_LOG_LEVEL', value: 'debug' }],
-            },
-          ],
-        },
-      })
-    );
-  });
-
-  it('discovers ACP models through session initialization', async () => {
-    const acpProvider = {
-      languageModel: vi.fn(),
-      initSession: vi.fn(async () => ({
-        sessionId: 'session_1',
-        models: {
-          availableModels: [
-            {
-              modelId: 'codex-mini-latest',
-              name: 'Codex Mini',
-            },
-          ],
-          currentModelId: 'codex-mini-latest',
-        },
-      })),
-      cleanup: vi.fn(),
-    };
-    createACPProviderMock.mockReturnValue(acpProvider);
-    getProvidersMock.mockReturnValue([
-      {
-        id: 'provider_acp',
-        type: 'acp',
-        enabled: true,
-        api_key: '',
-        base_url: '',
-        models: JSON.stringify([]),
-        acp_command: 'codex-acp',
-      },
-    ]);
-
-    await expect(fetchAcpModels('acp')).resolves.toEqual([
-      {
-        id: 'codex-mini-latest',
-        displayName: 'Codex Mini',
-        supportsToolCalls: true,
-        source: 'provider',
-      },
-    ]);
-    expect(acpProvider.initSession).toHaveBeenCalledTimes(1);
-    expect(acpProvider.cleanup).toHaveBeenCalledTimes(1);
-  });
-
-  it('discovers ACP models from an unsaved draft override without requiring a persisted provider', async () => {
-    const acpProvider = {
-      languageModel: vi.fn(),
-      initSession: vi.fn(async () => ({
-        sessionId: 'session_draft',
-        models: {
-          availableModels: [
-            {
-              modelId: 'codex-mini-latest',
-              name: 'Codex Mini',
-            },
-          ],
-        },
-      })),
-      cleanup: vi.fn(),
-    };
-    createACPProviderMock.mockReturnValue(acpProvider);
-    getProvidersMock.mockReturnValue([]);
-
-    await expect(
-      fetchAcpModels('acp', undefined, {
-        type: 'acp',
-        acp_command: 'codex',
-        acp_args: '--profile default',
-      })
-    ).resolves.toEqual([
-      {
-        id: 'codex-mini-latest',
-        displayName: 'Codex Mini',
-        supportsToolCalls: true,
-        source: 'provider',
-      },
-    ]);
-    expect(createACPProviderMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: 'codex',
-        args: ['--profile', 'default'],
-      })
-    );
-  });
-
-  it('cleans up ACP language models explicitly after a turn finishes', () => {
-    const forceCleanup = vi.fn();
-    disposeLanguageModel({
-      specificationVersion: 'v3',
-      provider: 'acp',
-      modelId: 'codex-mini-latest',
-      supportedUrls: {},
-      doGenerate: vi.fn(),
-      doStream: vi.fn(),
-      forceCleanup,
-    });
-
-    expect(forceCleanup).toHaveBeenCalledTimes(1);
-  });
-
-  it('skips models.dev capability fetches for ACP models and relies on stored overrides', async () => {
-    getProvidersMock.mockReturnValue([
-      {
-        id: 'provider_acp',
-        type: 'acp',
-        enabled: true,
-        api_key: '',
-        base_url: '',
-        models: JSON.stringify(['codex-mini-latest']),
-        model_options: JSON.stringify({
-          'codex-mini-latest': {
-            displayName: 'Codex Mini',
-            maxOutputTokens: 16384,
-            supportsToolCalls: true,
-          },
-        }),
-        acp_command: 'codex-acp',
-      },
-    ]);
-
-    await expect(resolveModelCapability('acp', 'codex-mini-latest')).resolves.toEqual(
-      expect.objectContaining({
-        displayName: 'Codex Mini',
-        maxOutputTokens: 16384,
-        supportsToolCalls: true,
-      })
-    );
-    expect(fetchWithTimeoutMock).not.toHaveBeenCalled();
-  });
-
   it('rejects invalid anthropic adapter results at the runtime boundary', () => {
     createAnthropicMock.mockReturnValue(() => ({ provider: 'anthropic' }));
     getProvidersMock.mockReturnValue([
@@ -703,6 +401,79 @@ describe('llm factory', () => {
       supportsToolCalls: true,
       supportsReasoning: false,
       source: 'models.dev',
+    });
+  });
+
+  it('resolvePiModelCapability: catalog modality/cost/window, and the stored-limit clamp', async () => {
+    // The D35 bridge, pinned at the factory boundary (the three Pi call sites
+    // consume this). A regression in any term here is invisible to the
+    // harnesses' own suites because they inject scripted models.
+    resetModelsDevCatalogCacheForTests();
+    fetchWithTimeoutMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          anthropic: {
+            models: {
+              'claude-sonnet-4-5': {
+                name: 'Claude Sonnet 4.5',
+                tool_call: true,
+                reasoning: true,
+                modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
+                limit: { context: 200000, input: 200000, output: 64000 },
+                cost: { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
+              },
+            },
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } }
+      )
+    );
+    getProvidersMock.mockReturnValue([
+      { id: 'p_anthropic', type: 'anthropic', enabled: true, api_key: 'k', base_url: 'https://x/v1', models: '["claude-sonnet-4-5"]', model_options: '{}' },
+    ]);
+
+    // Prime the cached snapshot explicitly. The read path itself is
+    // synchronous off the snapshot by design (a model call never waits on
+    // the network) — that is exactly what resolvePiModelCapability consumes.
+    await refreshModelsDevCatalog();
+
+    expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'claude-sonnet-4-5' })).toEqual({
+      input: ['text', 'image', 'pdf'],
+      contextWindow: 200000,
+      maxTokens: 64000,
+      cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+    });
+
+    // A stored maxInputTokens TIGHTER than the catalog window wins: the
+    // budget uses the tighter number, so the Pi model must not advertise the
+    // larger one.
+    getProvidersMock.mockReturnValue([
+      {
+        id: 'p_anthropic',
+        type: 'anthropic',
+        enabled: true,
+        api_key: 'k',
+        base_url: 'https://x/v1',
+        models: '["claude-sonnet-4-5"]',
+        model_options: JSON.stringify({ 'claude-sonnet-4-5': { maxInputTokens: 4096 } }),
+      },
+    ]);
+    expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'claude-sonnet-4-5' })).toMatchObject({
+      contextWindow: 4096,
+    });
+
+    // Unknown model: no catalog record and no stored options → null, and the
+    // callers fall back to their documented defaults (128000 / zero cost).
+    expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'no-such-model' })).toBeNull();
+
+    // Cold cache (catalog unreachable / not yet fetched): the STORED options
+    // still produce a capability — only the catalog-derived terms
+    // (modalities, cost) drop out, so a Pi call degrades to
+    // text-only/zero-cost rather than to nothing.
+    resetModelsDevCatalogCacheForTests();
+    expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'claude-sonnet-4-5' })).toEqual({
+      contextWindow: 4096,
+      maxTokens: null,
     });
   });
 

@@ -43,6 +43,11 @@ describe('provider_models helpers', () => {
             },
             tool_call: true,
             reasoning: false,
+            // The REAL models.dev shape for vision: a modalities object with
+            // an input array. The flat vision/supportsVision keys do not
+            // exist in the live catalog (verified across all 9048 records),
+            // so vision must be read from here.
+            modalities: { input: ['text', 'image'], output: ['text'] },
           },
         },
       },
@@ -89,6 +94,8 @@ describe('provider_models helpers', () => {
       maxOutputTokens: 16384,
       supportsToolCalls: true,
       supportsReasoning: false,
+      supportsVision: true,
+      modalities: ['text', 'image'],
       source: 'models.dev',
     });
 
@@ -223,6 +230,106 @@ describe('provider_models helpers', () => {
       supportsReasoning: true,
       source: 'provider',
     });
+  });
+
+  it('reads modalities and per-million-token cost rates from a live models.dev record', () => {
+    // The exact record shape models.dev serves for anthropic's Sonnet:
+    // modalities.input carries the vision signal, cost carries USD per
+    // MILLION tokens in snake_case (cache_read/cache_write), and both are
+    // absent from every stored-options path.
+    const capability = lookupModelsDevModelCapability(
+      {
+        anthropic: {
+          models: {
+            'claude-sonnet-4-5': {
+              name: 'Claude Sonnet 4.5 (latest)',
+              tool_call: true,
+              reasoning: true,
+              modalities: { input: ['text', 'image', 'pdf'], output: ['text'] },
+              limit: { context: 200000, output: 64000 },
+              cost: { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 },
+            },
+          },
+        },
+      },
+      'anthropic',
+      'claude-sonnet-4-5'
+    );
+
+    expect(capability).toEqual({
+      providerType: 'anthropic',
+      providerKey: 'anthropic',
+      modelId: 'claude-sonnet-4-5',
+      displayName: 'Claude Sonnet 4.5 (latest)',
+      contextWindow: 200000,
+      maxInputTokens: 200000,
+      maxOutputTokens: 64000,
+      supportsToolCalls: true,
+      supportsReasoning: true,
+      supportsVision: true,
+      modalities: ['text', 'image', 'pdf'],
+      costPerMillionTokens: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+      source: 'models.dev',
+    });
+
+    // Stored options can flip the vision FLAG; the modality list and the
+    // cost rates have no stored counterpart and ride the catalog record.
+    // (displayName falls back to the model id: the stored options carry
+    // none, and an empty string is not a display name.)
+    expect(
+      mergeModelCapability(capability, 'anthropic', 'claude-sonnet-4-5', {
+        supportsVision: false,
+        contextWindow: 150000,
+      })
+    ).toEqual({
+      providerType: 'anthropic',
+      providerKey: 'anthropic',
+      modelId: 'claude-sonnet-4-5',
+      displayName: 'claude-sonnet-4-5',
+      contextWindow: 150000,
+      maxInputTokens: 150000,
+      maxOutputTokens: 64000,
+      supportsToolCalls: true,
+      supportsReasoning: true,
+      supportsVision: false,
+      modalities: ['text', 'image', 'pdf'],
+      costPerMillionTokens: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+      source: 'provider',
+    });
+  });
+
+  it('leaves cost and modalities absent for unpriced and provider-only models', () => {
+    // A catalog model with no cost record (5% of the catalog) — "unpriced"
+    // must stay distinguishable from "free".
+    const unpriced = lookupModelsDevModelCapability(
+      {
+        openai: {
+          models: {
+            'free-model': { name: 'Free', modalities: { input: ['text'] } },
+          },
+        },
+      },
+      'openai',
+      'free-model'
+    );
+    expect(unpriced?.costPerMillionTokens).toBeUndefined();
+    expect(unpriced?.modalities).toEqual(['text']);
+
+    // Stored-options capabilities carry neither field.
+    expect(createModelCapabilityFromProviderModelOptions('openai', 'm', { displayName: 'M' })).toEqual(
+      {
+        providerType: 'openai',
+        providerKey: 'openai',
+        modelId: 'm',
+        displayName: 'M',
+        contextWindow: null,
+        maxInputTokens: null,
+        maxOutputTokens: null,
+        supportsToolCalls: null,
+        supportsReasoning: null,
+        source: 'provider',
+      }
+    );
   });
 
   it('normalizes missing capability limits to the modern large-window defaults', () => {

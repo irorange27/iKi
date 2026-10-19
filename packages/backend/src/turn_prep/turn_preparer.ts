@@ -10,7 +10,6 @@ import { shouldGuardTools } from '@iki/backend/affect/affect_policy';
 import * as llmFactory from '../provider/llm/factory';
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { buildThreadWorkspaceSystemMessage } from '@iki/backend/workspaces/thread_workspace';
-import { ACP_PROVIDER_TYPE } from '@iki/backend/constants/acp';
 import type { AffectSignal } from '@iki/backend/types/affect';
 import type {
   ChatAffectExperimentMode,
@@ -448,10 +447,7 @@ export const createChatTurnPreparer = (deps: {
       affectSignal,
       interventionPolicy,
       guardedTools,
-      enableTools:
-        guardedTools.length > 0 ||
-        selectedSkillIds.length > 0 ||
-        options.providerType.trim().toLowerCase() === ACP_PROVIDER_TYPE,
+      enableTools: guardedTools.length > 0 || selectedSkillIds.length > 0,
     };
   };
 

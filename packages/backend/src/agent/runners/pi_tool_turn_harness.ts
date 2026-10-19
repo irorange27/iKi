@@ -3,12 +3,13 @@ import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-
 import type { ModelMessage, ToolResultPart } from 'ai';
 
 import { createLogger } from '@iki/backend/logger';
+import { isLangfuseEnabled, tracePiGeneration } from '@iki/backend/observability/langfuse';
 import { RefusalError, getErrorMessage, isContextOverflowError, isRetryableError } from '@iki/backend/utils/errors';
 import type { ToolApprovalRequest } from '../types';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { withRetry } from '@iki/backend/utils/retry';
 import { appendUserPromptToHistory, cloneModelMessages } from '../../provider/ai_sdk_runtime';
-import { resolvePersonaPrompt, getProviderConfig } from '../../provider/llm/factory';
+import { resolvePersonaPrompt, getProviderConfig, resolvePiModelCapability } from '../../provider/llm/factory';
 import {
   buildPiModel,
   callPiChat,
@@ -280,11 +281,18 @@ export type PiStreamEvent = { type: 'text_delta' | 'thinking_delta'; delta: stri
 
 const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
   const provider = getProviderConfig(config.providerType, config.providerId);
+  const capability = resolvePiModelCapability({
+    providerType: config.providerType,
+    ...(config.providerId ? { providerId: config.providerId } : {}),
+    modelId: config.model,
+  });
   const model = buildPiModel({
     id: config.model,
     baseUrl: provider.baseURL,
-    contextWindow: 128000,
-    maxTokens: config.maxOutputTokens ?? 4096,
+    contextWindow: capability?.contextWindow ?? 128000,
+    maxTokens: config.maxOutputTokens ?? capability?.maxTokens ?? 4096,
+    ...(capability?.input ? { input: capability.input } : {}),
+    ...(capability?.cost ? { cost: capability.cost } : {}),
   });
   return withPiRetry(
     () => {
@@ -726,6 +734,47 @@ export class PiToolTurnHarness {
       ...(loopTools ? { tools: loopTools } : {}),
       maxSteps: this.config.maxIterations,
       terminalToolNames: TERMINAL_TOOL_NAMES,
+      // One Langfuse generation per model call — the tool path is several
+      // calls per turn, and per-call cost is what the cost views compare.
+      onModelCall: settled => {
+        if (!isLangfuseEnabled()) return;
+        void tracePiGeneration(
+          {
+            name: 'pi.tool.turn',
+            model: this.config.model,
+            provider: this.config.providerType,
+            ...(this.config.threadId ? { sessionId: this.config.threadId } : {}),
+            ...(typeof this.config.maxOutputTokens === 'number'
+              ? { modelParameters: { maxTokens: this.config.maxOutputTokens } }
+              : {}),
+          },
+          onSettle => {
+            onSettle({
+              output: settled.text,
+              usageDetails: {
+                input: settled.usage.input,
+                output: settled.usage.output,
+                total: settled.usage.totalTokens,
+                ...(settled.usage.cacheRead ? { cacheRead: settled.usage.cacheRead } : {}),
+                ...(settled.usage.cacheWrite ? { cacheWrite: settled.usage.cacheWrite } : {}),
+                ...(settled.usage.reasoning ? { reasoning: settled.usage.reasoning } : {}),
+              },
+              costUsd: settled.usage.costUsd,
+            });
+            return Promise.resolve();
+          }
+          // A lost span is the cheap failure — never an unhandled rejection
+          // that takes the turn down.
+        ).catch(error => {
+          logger.event({
+            level: 'warn',
+            event: 'langfuse.span.failed',
+            outcome: 'degraded',
+            message: 'Failed to record the Pi generation observation.',
+            error,
+          });
+        });
+      },
       requestApproval: async call => {
         pendingApprovalRequests.push({
           approvalId: randomUUID(),
@@ -964,7 +1013,8 @@ export class PiToolTurnHarness {
 }
 
 /** The linear bucket mapping (projectUsageToIki) over the loop's raw
- * buckets — no cost table on the Pi model yet (tracked). */
+ * buckets, plus the per-call cost Pi computed from the model's catalog
+ * rates (0 when the model carries none — the pre-D35 behavior). */
 const mapBuckets = (buckets: PiUsageBuckets): AgentUsage => ({
   inputTokens: buckets.input + buckets.cacheRead + buckets.cacheWrite,
   outputTokens: buckets.output,
@@ -972,7 +1022,7 @@ const mapBuckets = (buckets: PiUsageBuckets): AgentUsage => ({
   cacheWriteTokens: buckets.cacheWrite,
   reasoningTokens: buckets.reasoning,
   totalTokens: buckets.totalTokens,
-  estimatedCostUsd: 0,
+  estimatedCostUsd: buckets.costUsd,
 });
 
 const toolOutputText = (output: unknown): string => {

@@ -117,16 +117,14 @@ describe('preload task IPC payload serialization', () => {
   it('forwards model discovery overrides when fetching models from the renderer', async () => {
     invokeMock.mockResolvedValue([]);
 
-    await exposedApi.chat.getModels('acp', undefined, {
-      type: 'acp',
-      acp_command: 'codex',
-      acp_args: '--profile default',
+    await exposedApi.chat.getModels('custom-openai', undefined, {
+      type: 'custom-openai',
+      base_url: 'http://127.0.0.1:9/v1',
     });
 
-    expect(invokeMock).toHaveBeenCalledWith('chat:getModels', 'acp', undefined, {
-      type: 'acp',
-      acp_command: 'codex',
-      acp_args: '--profile default',
+    expect(invokeMock).toHaveBeenCalledWith('chat:getModels', 'custom-openai', undefined, {
+      type: 'custom-openai',
+      base_url: 'http://127.0.0.1:9/v1',
     });
   });
 
