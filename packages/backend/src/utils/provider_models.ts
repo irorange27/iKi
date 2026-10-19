@@ -67,9 +67,19 @@ type ModelsDevModelRecord = {
   reasoning?: unknown;
   supportsReasoning?: unknown;
   supports_reasoning?: unknown;
+  /** The catalog's REAL vision signal: a modalities.input array containing
+   * 'image'. The flat vision/supportsVision keys the older readers looked for
+   * do not exist in models.dev (checked across all 9048 records), so vision
+   * rides the same modality list that drives Pi's model.input. */
+  modalities?: unknown;
   vision?: unknown;
   supportsVision?: unknown;
   supports_vision?: unknown;
+  /** USD per million tokens. Ratios already (OpenAI's gpt-5 = 1.25 means
+   * $1.25 per 1M input tokens), so the consumer multiplies by tokens/1e6.
+   * cache_read/cache_write are optional in the catalog; audio tiers and
+   * `tiers[]` context-size tiers are out of scope. */
+  cost?: unknown;
 };
 
 type ModelsDevProviderRecord = {
@@ -89,6 +99,14 @@ export type ModelCapability = {
   supportsToolCalls: boolean | null;
   supportsReasoning: boolean | null;
   supportsVision?: boolean | null;
+  /** Catalog modality names for this model ('text' | 'image' | 'pdf' ...).
+   * Models.dev-only: stored provider options can override the vision FLAG
+   * but there is no modality list to store. Absent for provider/default
+   * sources. */
+  modalities?: string[];
+  /** USD per million tokens from the catalog's cost record. Absent for
+   * provider/default sources — only models.dev prices a model. */
+  costPerMillionTokens?: { input: number; output: number; cacheRead: number; cacheWrite: number };
   source: 'models.dev' | 'provider' | 'default';
 };
 
@@ -180,6 +198,62 @@ const getLimitRecord = (model: ModelsDevModelRecord): ModelsDevLimitRecord | nul
   if (alternate) return alternate as ModelsDevLimitRecord;
 
   return null;
+};
+
+/** Vision support read from the catalog's real shape: `modalities.input`
+ * is an array of modality names and 'image' is the one that matters.
+ * Returns null when the record carries no usable modality list, so the
+ * legacy flat keys and the unknown-model default still apply. */
+const modalitiesIncludeImage = (modalities: unknown): boolean | null => {
+  const record = asRecord(modalities);
+  const input = Array.isArray(record?.input) ? record!.input : Array.isArray(modalities) ? modalities : null;
+  if (!input) return null;
+
+  const normalized = input.filter((value): value is string => typeof value === 'string');
+  if (normalized.length === 0) return null;
+
+  return normalized.some(value => value.trim().toLowerCase() === 'image');
+};
+
+/** The catalog's modality names, in record order. Returns null when the
+ * record carries no usable list. */
+const readModalityList = (modalities: unknown): string[] | null => {
+  const record = asRecord(modalities);
+  const input = Array.isArray(record?.input) ? record!.input : Array.isArray(modalities) ? modalities : null;
+  if (!input) return null;
+
+  const normalized = input
+    .filter((value): value is string => typeof value === 'string')
+    .map(value => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  return normalized.length > 0 ? normalized : null;
+};
+
+const readNonNegativeNumber = (value: unknown): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
+  return value;
+};
+
+/**
+ * models.dev `cost` record → per-million-token rates. Only the four buckets
+ * the usage projection reads; missing keys become 0 so the consumer's
+ * buckets stay integers. Returns null when the model has no cost record at
+ * all (5% of catalog models), so callers can distinguish "free" from
+ * "unpriced" — the unpriced case keeps cost at 0.
+ */
+const readModelCostPerMillionTokens = (
+  cost: unknown
+): { input: number; output: number; cacheRead: number; cacheWrite: number } | null => {
+  const record = asRecord(cost);
+  if (!record) return null;
+
+  return {
+    input: readNonNegativeNumber(record.input) ?? 0,
+    output: readNonNegativeNumber(record.output) ?? 0,
+    cacheRead: readNonNegativeNumber(record.cache_read ?? record.cacheRead) ?? 0,
+    cacheWrite: readNonNegativeNumber(record.cache_write ?? record.cacheWrite) ?? 0,
+  };
 };
 
 const getProviderModelsRecord = (
@@ -386,9 +460,12 @@ export const lookupModelsDevModelCapability = (
     normalizeOptionalBoolean(model.supportsReasoning) ??
     normalizeOptionalBoolean(model.supports_reasoning);
   const supportsVision =
+    modalitiesIncludeImage(model.modalities) ??
     normalizeOptionalBoolean(model.vision) ??
     normalizeOptionalBoolean(model.supportsVision) ??
     normalizeOptionalBoolean(model.supports_vision);
+  const modalities = readModalityList(model.modalities);
+  const costPerMillionTokens = readModelCostPerMillionTokens(model.cost);
 
   return {
     providerType,
@@ -404,6 +481,8 @@ export const lookupModelsDevModelCapability = (
     supportsToolCalls,
     supportsReasoning,
     ...(supportsVision !== null ? { supportsVision } : {}),
+    ...(modalities ? { modalities } : {}),
+    ...(costPerMillionTokens ? { costPerMillionTokens } : {}),
     source: 'models.dev',
   };
 };
@@ -462,6 +541,16 @@ export const mergeModelCapability = (
     supportsToolCalls: providerCapability.supportsToolCalls ?? baseCapability.supportsToolCalls,
     supportsReasoning: providerCapability.supportsReasoning ?? baseCapability.supportsReasoning,
     ...(supportsVision !== undefined ? { supportsVision } : {}),
+    // Modalities/cost have no stored-options counterpart: only the catalog
+    // carries them, so they ride the base record unchanged. A stored
+    // supportsVision override flips the FLAG the renderer reads, but the
+    // Pi model still sees the catalog's modality list — that mismatch is
+    // the documented residual of "vision is a flag in settings, a list in
+    // the catalog" (the renderer warning is the only consumer today).
+    ...(baseCapability.modalities ? { modalities: baseCapability.modalities } : {}),
+    ...(baseCapability.costPerMillionTokens
+      ? { costPerMillionTokens: baseCapability.costPerMillionTokens }
+      : {}),
     source: 'provider',
   };
 };

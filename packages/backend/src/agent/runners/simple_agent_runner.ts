@@ -954,14 +954,11 @@ export class SimpleAgentRunner {
   }
 
   private buildToolSet(
-    config: { enableTools: boolean; providerType: string },
+    config: { enableTools: boolean },
     tools: AgentTool[] | undefined,
   ): ToolSet | undefined {
     if (!config.enableTools || !tools || tools.length === 0) return undefined;
-    return buildAiToolSet(
-      { enableTools: config.enableTools, providerType: config.providerType },
-      tools
-    ) as ToolSet | undefined;
+    return buildAiToolSet({ enableTools: config.enableTools }, tools) as ToolSet | undefined;
   }
 }
 

@@ -28,12 +28,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
       models: ['pi-model'],
       modelOptions: {},
       isResponseApi: false,
-      acpCommand: '',
-      acpArgs: '',
-      acpMcpServerIds: '',
-      acpAuthMethodId: '',
-      acpApiProviderId: '',
-      acpModelMapping: '',
     })),
   };
 });

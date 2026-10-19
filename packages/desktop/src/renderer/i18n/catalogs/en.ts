@@ -305,8 +305,6 @@ export const en = defineCatalog({
     `Failed to verify the ${asText(provider)} provider configuration. Please try again.`,
   'chat.provider.configureApiKey': ({ provider }) =>
     `Please configure the ${asText(provider)} API key in Settings.`,
-  'chat.provider.configureCommand': ({ provider }) =>
-    `Please configure the ${asText(provider)} ACP command in Settings.`,
   'chat.provider.modelRequired': ({ provider }) =>
     `Please add at least one model for ${asText(provider)} in Settings.`,
   'chat.thread.newTitle': 'New Chat',
@@ -1278,35 +1276,6 @@ export const en = defineCatalog({
   'settings.providers.baseUrlHelp.optionalOverride': 'Optional override for the provider endpoint.',
   'settings.providers.baseUrlHelp.useDefault': ({ name }) =>
     `Leave empty to use the default ${asText(name)} API endpoint.`,
-  'settings.providers.acp.command': 'Command',
-  'settings.providers.acp.commandPlaceholder': 'e.g. codex-acp',
-  'settings.providers.acp.commandHelp':
-    'Executable used to launch Codex CLI through ACP. Keep the command itself separate from its arguments.',
-  'settings.providers.acp.args': 'Arguments',
-  'settings.providers.acp.argsPlaceholder': '--profile default\n--sandbox workspace-write',
-  'settings.providers.acp.argsHelp':
-    'Use shell-style arguments here (quotes allowed), or paste a JSON string array for exact argv ordering.',
-  'settings.providers.acp.apiProvider': 'API Provider',
-  'settings.providers.acp.apiProviderAuto': 'None (use built-in authentication)',
-  'settings.providers.acp.apiProviderHelp':
-    "Select an existing provider only when Codex CLI should reuse that provider's API credentials. Leave this as None to rely on built-in authentication.",
-  'settings.providers.acp.authMethodId': 'Authentication Method',
-  'settings.providers.acp.authMethodPlaceholder': 'Optional authentication method id',
-  'settings.providers.acp.authMethodHelp':
-    'Optional ACP authentication method id to use when Codex CLI advertises multiple login flows.',
-  'settings.providers.acp.authMethodAuto': 'Auto (no preference)',
-  'settings.providers.acp.discoverAuthMethods': 'Discover',
-  'settings.providers.acp.mcpServers': 'MCP Servers',
-  'settings.providers.acp.mcpServersHelp':
-    'Choose which configured MCP servers this Codex CLI session should connect to.',
-  'settings.providers.acp.mcpServersEmpty':
-    'No MCP servers are configured yet. Add them in Settings -> MCP.',
-  'settings.providers.acp.mcpServersEnabled': 'Enabled',
-  'settings.providers.acp.mcpServersDisabled': 'Disabled in MCP settings',
-  'settings.providers.acp.mcpServersMissing': 'Saved server no longer exists',
-  'settings.providers.acp.mcpServersMissingName': ({ id }) => `Unavailable server (${asText(id)})`,
-  'settings.providers.acp.baseUrlHelp':
-    'Optional OpenAI-compatible base URL injected into the ACP command environment for Codex/OpenAI-style adapters.',
   'settings.providers.promptModelName': 'Enter model name:',
   'settings.providers.confirmRemove':
     'Are you sure you want to remove this provider configuration?',
@@ -1351,8 +1320,6 @@ export const en = defineCatalog({
   'settings.providers.description.minimax':
     'Official MiniMax models via the AI SDK MiniMax provider',
   'settings.providers.description.ollama': 'Run open-source LLMs locally with Ollama',
-  'settings.providers.description.acp':
-    'Codex CLI via Agent Client Protocol, with compatibility for Claude Code, Gemini, and other ACP-capable agents',
   'settings.mcp.title': 'MCP (Model Context Protocol)',
   'settings.mcp.description':
     'Connect external tool servers and expose their tools in iKi. Remote servers are disabled by default and require explicit opt-in.',

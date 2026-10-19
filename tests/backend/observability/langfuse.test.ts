@@ -22,9 +22,9 @@ describe('langfuse helpers', () => {
 
   afterEach(async () => {
     await shutdownLangfuseTracing();
-    if (original.pub) process.env.LANGFUSE_PUBLIC_KEY = original.pub;
+    if (original.pub) process.env.LANGFUSE_PUBLIC_KEY = 'pk';
     else delete process.env.LANGFUSE_PUBLIC_KEY;
-    if (original.sec) process.env.LANGFUSE_SECRET_KEY = original.sec;
+    if (original.sec) process.env.LANGFUSE_SECRET_KEY = 'sk';
     else delete process.env.LANGFUSE_SECRET_KEY;
   });
 
@@ -50,5 +50,75 @@ describe('langfuse helpers', () => {
       functionId: 'chat.stream',
       metadata: { sessionId: 'thread-1' },
     });
+  });
+
+  it('records a real generation span with usage and cost through tracePiGeneration', async () => {
+    process.env.LANGFUSE_PUBLIC_KEY = 'pk-test';
+    process.env.LANGFUSE_SECRET_KEY = 'sk-test';
+    initLangfuseTracing();
+    expect(isLangfuseEnabled()).toBe(true);
+
+    // END-TO-END: install an in-memory exporter on the global tracer
+    // provider that Langfuse's NodeSDK started, then assert the exported
+    // span actually carries the generation type, model, usage and cost.
+    // Without this the wiring is only "it returned without throwing".
+    const { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } = await import(
+      '@opentelemetry/sdk-trace-base'
+    );
+    const { setLangfuseTracerProvider } = await import('@langfuse/tracing');
+    const exporter = new InMemorySpanExporter();
+    // An ISOLATED tracer provider installed as Langfuse's own: its spans
+    // record to memory instead of exporting. That is the whole point of the
+    // test — no Langfuse network call, but the real span pipeline (start →
+    // update → end → process) runs on the same helper the app uses.
+    setLangfuseTracerProvider(
+      new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] })
+    );
+
+    const { tracePiGeneration } = await import('@iki/backend/observability/langfuse');
+    const settleArgs: unknown[] = [];
+    const result = await tracePiGeneration(
+      {
+        name: 'pi.chat.generate',
+        model: 'gpt-5-mini',
+        provider: 'openai',
+        sessionId: 'thread-langfuse',
+        modelParameters: { maxTokens: 2048 },
+        input: [{ role: 'user', content: 'hi' }],
+      },
+      onSettle => {
+        onSettle({
+          output: 'hello there',
+          usageDetails: { input: 12, output: 5, total: 17 },
+          costUsd: 0.0042,
+        });
+        settleArgs.push('settled');
+        return Promise.resolve('the-answer');
+      }
+    );
+
+    expect(result).toBe('the-answer');
+    expect(settleArgs).toEqual(['settled']);
+
+    const spans = exporter.getFinishedSpans();
+    expect(spans).toHaveLength(1);
+    const span = spans[0];
+    expect(span.name).toBe('pi.chat.generate');
+    expect(span.spanContext().traceId).toBeTruthy();
+    // Langfuse generation-specific attributes, as the SDK maps them.
+    const attrs = span.attributes as Record<string, unknown>;
+    expect(attrs['langfuse.observation.type']).toBe('generation');
+    expect(attrs['langfuse.observation.model.name']).toBe('gpt-5-mini');
+    // The helper's own metadata keys (supply/provider/session), flattened by
+    // the SDK as metadata.<key>.
+    expect(attrs['langfuse.observation.metadata.supply']).toBe('pi');
+    expect(attrs['langfuse.observation.metadata.provider']).toBe('openai');
+    // usage + cost land on the span as parsed JSON payloads.
+    const usage = JSON.parse(String(attrs['langfuse.observation.usage_details'] ?? '{}'));
+    expect(usage).toMatchObject({ input: 12, output: 5, total: 17 });
+    const cost = JSON.parse(String(attrs['langfuse.observation.cost_details'] ?? '{}'));
+    expect(cost).toMatchObject({ total: 0.0042 });
+    // A string output lands verbatim (not JSON-encoded).
+    expect(attrs['langfuse.observation.output']).toBe('hello there');
   });
 });

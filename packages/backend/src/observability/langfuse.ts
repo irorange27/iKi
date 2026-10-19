@@ -4,6 +4,7 @@ import {
   setActiveTraceIO,
   propagateAttributes,
   type LangfuseAgent,
+  type LangfuseGeneration,
 } from '@langfuse/tracing';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 
@@ -143,4 +144,83 @@ export const traceChatTurn = async <T>(
     },
     { asType: 'agent' }
   );
+};
+
+/**
+ * Wrap ONE model call made through the Pi supply layer as a Langfuse
+ * `generation` observation — the Pi-path counterpart of the AI SDK's
+ * `experimental_telemetry`. Pi is a bare stream with no telemetry hook, so
+ * the span is created by hand and its fields updated when the call settles.
+ *
+ * Why a generation and not a span: generations carry model/usage/cost in
+ * Langfuse's cost views, which is exactly what a per-turn supply switch
+ * needs to compare against the AI SDK's own generated spans.
+ *
+ * The trace tree comes from the caller: inside `traceChatTurn`'s active
+ * `chat.turn` agent span this becomes its child, so a Pi turn shows the
+ * same session grouping as an AI SDK turn. Outside any active trace it
+ * still records as a standalone generation.
+ *
+ * `onSettle` receives the generation so the caller can attach model usage
+ * and cost once the stream resolve — the observation must not be updated
+ * after the callback returns (the span ends then).
+ */
+export const tracePiGeneration = async <T>(
+  params: {
+    /** Observation name — the supply + entry, e.g. `pi.chat.generate`. */
+    name: string;
+    model: string;
+    provider?: string;
+    sessionId?: string;
+    /** Request parameters worth recording (maxTokens, temperature...). */
+    modelParameters?: Record<string, string | number>;
+    input?: unknown;
+  },
+  run: (onSettle: (usage: PiGenerationSettle) => void) => Promise<T>
+): Promise<T> => {
+  if (!isLangfuseEnabled()) {
+    // No-op path: the call still runs, nothing is recorded.
+    return run(() => undefined);
+  }
+
+  return startActiveObservation(
+    params.name,
+    async (generation: LangfuseGeneration) => {
+      generation.update({
+        ...(params.input !== undefined ? { input: params.input } : {}),
+        model: params.model,
+        ...(params.modelParameters ? { modelParameters: params.modelParameters } : {}),
+        metadata: {
+          supply: 'pi',
+          ...(params.provider ? { provider: params.provider } : {}),
+          ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+        },
+      });
+
+      const result = await run(usage => {
+        generation.update({
+          ...(usage.output !== undefined ? { output: usage.output } : {}),
+          ...(usage.usageDetails ? { usageDetails: usage.usageDetails } : {}),
+          ...(usage.costUsd !== undefined ? { costDetails: { total: usage.costUsd } } : {}),
+          ...(usage.errorMessage ? { level: 'ERROR', statusMessage: usage.errorMessage } : {}),
+        });
+      });
+
+      return result;
+    },
+    {
+      asType: 'generation',
+      ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+    }
+  );
+};
+
+/** The usage/cost summary a Pi caller hands back when its stream settles. */
+export type PiGenerationSettle = {
+  output?: unknown;
+  /** Token counts in Langfuse's own vocabulary (prompt/completion/total). */
+  usageDetails?: Record<string, number>;
+  /** USD, from the model's catalog rates via Pi's calculateCost. */
+  costUsd?: number;
+  errorMessage?: string;
 };

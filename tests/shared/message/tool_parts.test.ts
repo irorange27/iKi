@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   getApprovalId,
-  getToolInput,
-  getToolName,
   isToolResultPart,
   normalizeDynamicToolPart,
 } from '@iki/backend/message/tool_parts';
@@ -78,23 +76,4 @@ describe('tool_parts', () => {
     ).toBe(true);
   });
 
-  it('unwraps ACP dynamic tool payloads into the actual tool name and args', () => {
-    const part = {
-      type: 'tool-call',
-      toolCallId: 'tool_5',
-      toolName: 'acp.acp_provider_agent_dynamic_tool',
-      input: JSON.stringify({
-        toolCallId: 'tool_5',
-        toolName: 'write_file',
-        args: {
-          path: 'notes.md',
-        },
-      }),
-    };
-
-    expect(getToolName(part)).toBe('write_file');
-    expect(getToolInput(part)).toEqual({
-      path: 'notes.md',
-    });
-  });
 });

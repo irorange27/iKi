@@ -630,7 +630,6 @@ export const createChatStreaming = (deps: {
 
   return {
     getModels: streamingModels.getModels,
-    getAcpAuthMethods: streamingModels.getAcpAuthMethods,
     isProviderConfigured: streamingModels.isProviderConfigured,
     send,
     stream,

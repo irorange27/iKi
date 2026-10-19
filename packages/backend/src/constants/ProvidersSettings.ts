@@ -51,12 +51,4 @@ export const BUILTIN_PROVIDERS: BuiltInProvider[] = [
     docsUrl: 'https://ollama.com',
     requiresApiKey: false,
   },
-  {
-    id: 'acp',
-    name: 'Codex CLI',
-    description:
-      'Codex CLI via Agent Client Protocol, with compatibility for Claude Code, Gemini, and other ACP-capable agents',
-    docsUrl: 'https://agentclientprotocol.com/libraries/typescript',
-    requiresApiKey: false,
-  },
 ];

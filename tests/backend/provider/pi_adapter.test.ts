@@ -144,13 +144,68 @@ describe('Pi supply adapter — projection', () => {
     expect(messages[0]).toMatchObject({ role: 'user', content: 'part-array question' });
   });
 
-  it('throws on user part types outside the covered domain (image/file)', () => {
+  it('projects IMAGE file parts to Pi image content — the shape convertToModelMessages emits', () => {
+    // An attached image: the renderer's readAsDataURL puts a COMPLETE data
+    // URL in `url`, and convertToModelMessages passes it through as a file
+    // part. The projection must unwrap the payload (Pi would otherwise wrap
+    // it a second time) and hand it to Pi, which decides from model.input
+    // whether it reaches the wire or becomes its own placeholder.
     const history = [
-      { role: 'user', content: [{ type: 'image', image: 'data:image/png;base64,x' }] },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'what is in this image?' },
+          { type: 'file', url: 'data:image/png;base64,iVBORw0KGgo=', mediaType: 'image/png' },
+        ],
+      },
     ] as unknown as ChatInputMessage[];
 
-    expect(() => projectHistoryToPiContext(history, 'scripted-model')).toThrow(PiProjectionError);
-    expect(() => projectHistoryToPiContext(history, 'scripted-model')).toThrow(/image/);
+    const { messages } = projectHistoryToPiContext(history, 'scripted-model');
+    expect(messages[0]).toEqual({
+      role: 'user',
+      timestamp: expect.any(Number),
+      content: [
+        { type: 'text', text: 'what is in this image?' },
+        { type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' },
+      ],
+    });
+  });
+
+  it('projects raw image bytes as well as data URLs, and still refuses other media', () => {
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const { messages } = projectHistoryToPiContext(
+      [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'photo' },
+            { type: 'file', data: bytes, mediaType: 'image/jpeg' },
+          ],
+        },
+      ] as unknown as ChatInputMessage[],
+      'scripted-model'
+    );
+    expect(messages[0]).toMatchObject({
+      role: 'user',
+      content: [
+        { type: 'text', text: 'photo' },
+        { type: 'image', data: bytes, mimeType: 'image/jpeg' },
+      ],
+    });
+
+    // Non-image media stays out of the covered domain — pdf/audio have no
+    // Pi part on this API, so they throw rather than silently drop.
+    expect(() =>
+      projectHistoryToPiContext(
+        [
+          {
+            role: 'user',
+            content: [{ type: 'file', data: 'x', mediaType: 'application/pdf' }],
+          },
+        ] as unknown as ChatInputMessage[],
+        'scripted-model'
+      )
+    ).toThrow(PiProjectionError);
   });
 
   it('regression (real pipeline boundary): toModelInputMessages output projects without error', async () => {
@@ -444,5 +499,103 @@ describe('Pi supply adapter — wire behaviors over the scripted server', () => 
     const serialized = JSON.stringify(wire.messages);
     expect(serialized).not.toContain('PRESERVED_PARTIAL'); // error-assistant withheld from the wire
     expect(serialized).toContain('No result provided'); // orphan call synthesized an error result
+  });
+
+  it('multimodal end-to-end: a vision-capable model receives the image on the wire; a text-only one gets Pi’s placeholder', async () => {
+    // The whole capability decision, observed at the HTTP boundary: the
+    // projection hands an image part to Pi, and Pi's own transform maps
+    // model.input → image_url or → its placeholder text. iKi adds no custom
+    // warning or error of its own (2026-10-19 decision).
+    // The scripted server keys its script off the last user message as a
+    // STRING, so the image rides its own (text-free) user message — the
+    // projection handles both shapes; only the server's keying differs.
+    server.setScript('default', { chunks: [sse.delta('a cat'), sse.finish('stop')] });
+    const { systemPrompt, messages } = projectHistoryToPiContext(
+      [
+        { role: 'user', content: 'image vision' },
+        {
+          role: 'user',
+          content: [
+            { type: 'file', url: 'data:image/png;base64,iVBORw0KGgo=', mediaType: 'image/png' },
+          ],
+        },
+      ] as unknown as ChatInputMessage[],
+      'vision-model'
+    );
+
+    const visionModel = buildPiModel({
+      id: 'vision-model',
+      baseUrl: `http://127.0.0.1:${server.port}/v1`,
+      contextWindow: 100000,
+      maxTokens: 2000,
+      input: ['text', 'image'],
+    });
+    const visionStream = callPiChat(visionModel, { systemPrompt, messages }, { apiKey: 'test-key' });
+    const visionResult = visionStream.result();
+    for await (const _event of visionStream) {
+      void _event;
+    }
+    expect((await visionResult).stopReason).toBe('stop');
+
+    const visionWire = JSON.stringify(server.getWire('default').messages);
+    expect(visionWire).toContain('image_url');
+    expect(visionWire).toContain('data:image/png;base64,iVBORw0KGgo=');
+    // Unwrapped exactly once — no nested data: prefix.
+    expect(visionWire).not.toContain('base64,data:image');
+
+    // Same history, text-only model: Pi downgrades the image itself.
+    server.setScript('default', { chunks: [sse.delta('no idea'), sse.finish('stop')] });
+    const textModel = buildPiModel({
+      id: 'vision-model',
+      baseUrl: `http://127.0.0.1:${server.port}/v1`,
+      contextWindow: 100000,
+      maxTokens: 2000,
+      input: ['text'],
+    });
+    const textStream = callPiChat(textModel, { systemPrompt, messages }, { apiKey: 'test-key' });
+    const textResult = textStream.result();
+    for await (const _event of textStream) {
+      void _event;
+    }
+    expect((await textResult).stopReason).toBe('stop');
+
+    const textWire = JSON.stringify(server.getWire('default', 1).messages);
+    expect(textWire).not.toContain('image_url');
+    expect(textWire).toContain('(image omitted: model does not support images)');
+    expect(textWire).toContain('image vision'); // the text part still ships
+  });
+
+  it('buildPiModel translates catalog modalities and cost rates into the Pi model, and defaults cleanly', () => {
+    // D35: the factory hands the catalog capability in; buildPiModel maps it
+    // to Pi's field vocabulary. Modality names Pi does not know are dropped
+    // (they have no wire form on this API and the projection refuses them).
+    const vision = buildPiModel({
+      id: 'm',
+      baseUrl: 'http://x/v1',
+      contextWindow: 200000,
+      maxTokens: 64000,
+      input: ['text', 'image', 'pdf', 'video'],
+      reasoning: true,
+      cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+    });
+    expect(vision.input).toEqual(['text', 'image']);
+    expect(vision.reasoning).toBe(true);
+    expect(vision.cost).toEqual({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 });
+
+    // No capability (unknown model / cold catalog): the pre-D35 behavior.
+    const plain = buildPiModel({ id: 'm', baseUrl: 'http://x/v1', contextWindow: 1000, maxTokens: 100 });
+    expect(plain.input).toEqual(['text']);
+    expect(plain.reasoning).toBe(false);
+    expect(plain.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+
+    // Negative/garbage rates are clamped to 0 — never a NaN on the wire.
+    const bad = buildPiModel({
+      id: 'm',
+      baseUrl: 'http://x/v1',
+      contextWindow: 1000,
+      maxTokens: 100,
+      cost: { input: -5, output: Number.NaN, cacheRead: 0.25, cacheWrite: Number.POSITIVE_INFINITY },
+    });
+    expect(bad.cost).toEqual({ input: 0, output: 0, cacheRead: 0.25, cacheWrite: 0 });
   });
 });

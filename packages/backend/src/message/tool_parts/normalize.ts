@@ -3,18 +3,12 @@ import type { ProviderMetadata } from 'ai';
 import type { DynamicToolPart, DynamicToolState } from '../message_parts';
 import { isObjectRecord } from '../message_parts';
 import { getApprovalIdValue, getToolCallIdFromPart } from './ids';
-import { unwrapAcpDynamicToolCall } from '@iki/backend/utils/acp';
 
 export const normalizeToolNameKey = (value: string): string =>
   value.trim().toLowerCase().replace(/[-\s]+/g, '_');
 
 export const getToolName = (part: unknown): string => {
   if (!isObjectRecord(part)) return 'tool';
-
-  const acpDynamicTool = getAcpDynamicToolInput(part);
-  if (acpDynamicTool?.toolName) {
-    return acpDynamicTool.toolName;
-  }
 
   if (typeof part.toolName === 'string' && part.toolName.trim()) {
     return part.toolName;
@@ -56,11 +50,6 @@ const getRawToolInput = (part: unknown): unknown => {
 };
 
 export const getToolInput = (part: unknown): unknown => {
-  const acpDynamicTool = getAcpDynamicToolInput(part);
-  if (acpDynamicTool) {
-    return acpDynamicTool.args ?? {};
-  }
-
   return getRawToolInput(part);
 };
 
@@ -135,24 +124,6 @@ const getCallProviderMetadata = (part: Record<string, unknown>): ProviderMetadat
   isObjectRecord(part.callProviderMetadata)
     ? (part.callProviderMetadata as ProviderMetadata)
     : undefined;
-
-const getAcpDynamicToolInput = (
-  part: unknown
-): { toolCallId?: string; toolName: string; args: unknown } | null => {
-  if (!isObjectRecord(part)) return null;
-
-  const partToolName = typeof part.toolName === 'string' ? part.toolName.trim() : '';
-  const toolCallToolName =
-    isObjectRecord(part.toolCall) && typeof part.toolCall.toolName === 'string'
-      ? part.toolCall.toolName.trim()
-      : '';
-  const effectiveToolName = partToolName || toolCallToolName;
-
-  return unwrapAcpDynamicToolCall({
-    toolName: effectiveToolName,
-    input: getRawToolInput(part),
-  });
-};
 
 const toNormalizedDynamicToolState = (
   part: Record<string, unknown>

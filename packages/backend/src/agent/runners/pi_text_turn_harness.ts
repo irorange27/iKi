@@ -3,9 +3,14 @@ import type { ModelMessage } from 'ai';
 
 import { createLogger } from '@iki/backend/logger';
 import { RefusalError, getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
+import { isLangfuseEnabled, tracePiGeneration } from '@iki/backend/observability/langfuse';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { appendUserPromptToHistory, cloneModelMessages } from '../../provider/ai_sdk_runtime';
-import { resolvePersonaPrompt, getProviderConfig } from '../../provider/llm/factory';
+import {
+  resolvePersonaPrompt,
+  getProviderConfig,
+  resolvePiModelCapability,
+} from '../../provider/llm/factory';
 import {
   buildPiModel,
   callPiChat,
@@ -78,14 +83,23 @@ export type PiTextModelCall = (
 
 const defaultPiTextModelCall: PiTextModelCall = (config, request) => {
   const provider = getProviderConfig(config.providerType, config.providerId);
+  const capability = resolvePiModelCapability({
+    providerType: config.providerType,
+    ...(config.providerId ? { providerId: config.providerId } : {}),
+    modelId: config.model,
+  });
   const model = buildPiModel({
     id: config.model,
     baseUrl: provider.baseURL,
-    // Same convention as the factory's Pi branch: catalog-window resolution
-    // would be a network dependency; the input budget is enforced by the
-    // harness and the output cap rides the call options.
-    contextWindow: 128000,
-    maxTokens: config.maxOutputTokens ?? 4096,
+    // Same convention as the factory's Pi branch: the catalog's window is
+    // informational here (the harness enforces the input budget from the
+    // capability the turn preparer resolved), and the output cap rides the
+    // call options.
+    contextWindow: capability?.contextWindow ?? 128000,
+    maxTokens: config.maxOutputTokens ?? capability?.maxTokens ?? 4096,
+    ...(capability?.input ? { input: capability.input } : {}),
+    reasoning: capability?.reasoning ?? false,
+    ...(capability?.cost ? { cost: capability.cost } : {}),
   });
   return callPiChat(
     model,
@@ -185,14 +199,15 @@ export class PiTextTurnHarness {
       const attemptStartedAt = Date.now();
       const attemptHistory = [...requestHistory, ...recoveryNotes];
       const attemptProjection = projectHistoryToPiContext(attemptHistory, this.config.model);
-      const eventStream = this.modelCall(this.config, {
+      const attemptRequest = {
         systemPrompt,
         messages: attemptProjection.messages,
         ...(signal ? { signal } : {}),
         ...(typeof this.config.maxOutputTokens === 'number'
           ? { maxTokens: this.config.maxOutputTokens }
           : {}),
-      });
+      };
+      const eventStream = this.modelCall(this.config, attemptRequest);
 
       let final: AssistantMessage;
       try {
@@ -257,6 +272,9 @@ export class PiTextTurnHarness {
           undefined
         );
       }
+      // The generation observation records the SETTLED call — success or
+      // failure — before the turn continues or retries.
+      this.traceCall(attemptRequest, eventStream, final, failure);
       if (!failure) {
         yield* this.finishTurn(input, final, finalText, systemPrompt, {
           requestHistory: attemptHistory,
@@ -316,6 +334,48 @@ export class PiTextTurnHarness {
 
   getHistory(): ModelMessage[] {
     return cloneModelMessages(this.history);
+  }
+
+  /**
+   * One attempt's model call, recorded as a Langfuse generation when
+   * tracing is on. The drain stays with the caller (it needs the live
+   * deltas); this wrapper only observes the settle: the final message's
+   * text, usage buckets and cost. A no-op when tracing is off, so the
+   * hot path pays one boolean check.
+   */
+  private traceCall(
+    request: { systemPrompt: string; messages: PiMessage[]; maxTokens?: number; signal?: AbortSignal },
+    stream: ReturnType<PiTextModelCall>,
+    final: AssistantMessage,
+    failure?: Error
+  ): void {
+    if (!isLangfuseEnabled()) return;
+    void tracePiGeneration(
+      {
+        name: 'pi.text.turn',
+        model: this.config.model,
+        provider: this.config.providerType,
+        ...(this.config.threadId ? { sessionId: this.config.threadId } : {}),
+        ...(typeof request.maxTokens === 'number' ? { modelParameters: { maxTokens: request.maxTokens } } : {}),
+      },
+      onSettle => {
+        onSettle({
+          output: final.content
+            .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+            .map(block => block.text)
+            .join(''),
+          usageDetails: {
+            input: final.usage?.input ?? 0,
+            output: final.usage?.output ?? 0,
+            total: final.usage?.totalTokens ?? 0,
+          },
+          costUsd: final.usage?.cost?.total ?? 0,
+          ...(failure ? { errorMessage: getErrorMessage(failure) } : {}),
+        });
+        return Promise.resolve();
+      }
+    );
+    void stream;
   }
 
   private buildTurnHistory(history: ModelMessage[] | undefined, prompt: string): ModelMessage[] {

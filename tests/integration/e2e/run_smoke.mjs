@@ -252,8 +252,8 @@ const seedProviderAndWorkspace = () => {
   const db = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'));
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT OR REPLACE INTO providers (id, name, type, api_key, models, model_options, base_url, enabled, created_at, updated_at, available_models, api_version, is_response_api, acp_command, acp_args, acp_mcp_server_ids, acp_auth_method_id, acp_api_provider_id, acp_model_mapping)
-     VALUES (?, ?, 'openai-compatible', 'sk-e2e', ?, '{}', ?, 1, ?, ?, '[]', NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL)`
+    `INSERT OR REPLACE INTO providers (id, name, type, api_key, models, model_options, base_url, enabled, created_at, updated_at, available_models, api_version, is_response_api)
+     VALUES (?, ?, 'openai-compatible', 'sk-e2e', ?, '{}', ?, 1, ?, ?, '[]', NULL, 0)`
   ).run('provider-faux-e2e', 'Faux E2E', JSON.stringify(['faux-e2e-model']), `http://127.0.0.1:${FAUX_PORT}/v1`, now, now);
   db.prepare(
     `INSERT OR REPLACE INTO workspaces (id, path, name, is_temporary, show_in_list, created_at, updated_at)

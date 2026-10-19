@@ -42,7 +42,7 @@
       <div class="provider-details-scroll">
         <div class="provider-config-form">
           <div class="provider-config-group provider-form-stack">
-            <div v-if="!isSelectedAcpProvider" class="provider-field">
+            <div class="provider-field">
               <label class="input-label provider-field-label">
                 <span class="provider-field-title">{{ t('settings.providers.apiKey') }}</span>
                 <div class="provider-secret-input">
@@ -78,7 +78,7 @@
               </p>
             </div>
 
-            <div v-if="!isSelectedAcpProvider" class="provider-field">
+            <div class="provider-field">
               <label class="input-label provider-field-label">
                 <span class="provider-field-title">{{
                   t('settings.providers.baseUrlOptional')
@@ -93,149 +93,6 @@
                 {{ selectedProviderBaseUrlHelp }}
               </p>
             </div>
-
-            <template v-if="isSelectedAcpProvider">
-              <div class="provider-field">
-                <label class="input-label provider-field-label">
-                  <span class="provider-field-title">{{ t('settings.providers.acp.command') }}</span>
-                  <input
-                    type="text"
-                    v-model="selectedProviderDraft.acp_command"
-                    :placeholder="t('settings.providers.acp.commandPlaceholder')"
-                  />
-                </label>
-                <p class="provider-field-help">
-                  {{ t('settings.providers.acp.commandHelp') }}
-                </p>
-              </div>
-
-              <div class="provider-field">
-                <label class="input-label provider-field-label">
-                  <span class="provider-field-title">{{ t('settings.providers.acp.args') }}</span>
-                  <textarea
-                    v-model="selectedProviderDraft.acp_args"
-                    :placeholder="t('settings.providers.acp.argsPlaceholder')"
-                    class="provider-multiline-input"
-                    rows="4"
-                  ></textarea>
-                </label>
-                <p class="provider-field-help">
-                  {{ t('settings.providers.acp.argsHelp') }}
-                </p>
-              </div>
-
-              <div class="provider-field">
-                <label class="input-label provider-field-label">
-                  <span class="provider-field-title">{{
-                    t('settings.providers.acp.authMethodId')
-                  }}</span>
-                  <div class="provider-acp-auth-row">
-                    <select
-                      v-if="acpAuthMethods.length > 0"
-                      class="settings-select"
-                      :value="selectedProviderDraft.acp_auth_method_id"
-                      @change="emit('update-acp-auth-method-id', ($event.target as HTMLSelectElement).value)"
-                    >
-                      <option value="">
-                        {{ t('settings.providers.acp.authMethodAuto') }}
-                      </option>
-                      <option
-                        v-for="method in acpAuthMethods"
-                        :key="method.id"
-                        :value="method.id"
-                      >
-                        {{ method.name }} ({{ method.type }})
-                      </option>
-                    </select>
-                    <input
-                      v-else
-                      type="text"
-                      v-model="selectedProviderDraft.acp_auth_method_id"
-                      :placeholder="t('settings.providers.acp.authMethodPlaceholder')"
-                    />
-                    <button
-                      type="button"
-                      class="secondary-btn provider-acp-auth-fetch-btn"
-                      :disabled="isFetchingAcpAuthMethods"
-                      @click="emit('fetch-acp-auth-methods')"
-                    >
-                      {{ isFetchingAcpAuthMethods ? t('common.loading') : t('settings.providers.acp.discoverAuthMethods') }}
-                    </button>
-                  </div>
-                </label>
-                <p v-if="acpAuthMethods.length > 0 && selectedProviderDraft.acp_auth_method_id" class="provider-field-help">
-                  <template v-for="method in acpAuthMethods" :key="method.id">
-                    <span v-if="method.id === selectedProviderDraft.acp_auth_method_id && method.description">
-                      {{ method.description }}
-                    </span>
-                  </template>
-                </p>
-                <p v-else class="provider-field-help">
-                  {{ t('settings.providers.acp.authMethodHelp') }}
-                </p>
-              </div>
-
-              <div class="provider-field">
-                <label class="input-label provider-field-label">
-                  <span class="provider-field-title">{{
-                    t('settings.providers.acp.apiProvider')
-                  }}</span>
-                  <SettingsSelect
-                    :model-value="selectedProviderDraft.acp_api_provider_id"
-                    :options="acpCredentialProviderOptions"
-                    :aria-label="t('settings.providers.acp.apiProvider')"
-                    @update:model-value="emit('update-acp-api-provider-id', String($event || ''))"
-                  />
-                </label>
-                <p class="provider-field-help">
-                  {{ t('settings.providers.acp.apiProviderHelp') }}
-                </p>
-              </div>
-
-              <div class="provider-field">
-                <span class="provider-field-title">{{ t('settings.providers.acp.mcpServers') }}</span>
-                <div class="provider-mcp-list">
-                  <p v-if="mcpServersLoading" class="provider-field-help">
-                    {{ t('common.loading') }}
-                  </p>
-                  <p v-else-if="mcpServersError" class="provider-field-help provider-field-error">
-                    {{ mcpServersError }}
-                  </p>
-                  <template v-else-if="acpMcpServerEntries.length > 0">
-                    <label
-                      v-for="server in acpMcpServerEntries"
-                      :key="server.id"
-                      class="provider-mcp-option"
-                      :class="{
-                        'provider-mcp-option-disabled': !server.enabled,
-                        'provider-mcp-option-missing': server.missing,
-                      }"
-                    >
-                      <input
-                        type="checkbox"
-                        :checked="selectedProviderDraft.acp_mcp_server_ids.includes(server.id)"
-                        @change="
-                          emit('toggle-acp-mcp-server', {
-                            serverId: server.id,
-                            checked: ($event.target as HTMLInputElement).checked,
-                          })
-                        "
-                      />
-                      <span class="provider-mcp-option-copy">
-                        <span class="provider-mcp-option-name">{{ server.name }}</span>
-                        <span class="provider-mcp-option-meta">{{ server.meta }}</span>
-                      </span>
-                    </label>
-                  </template>
-                  <p v-else class="provider-field-help">
-                    {{ t('settings.providers.acp.mcpServersEmpty') }}
-                  </p>
-                </div>
-                <p class="provider-field-help">
-                  {{ t('settings.providers.acp.mcpServersHelp') }}
-                </p>
-              </div>
-            </template>
 
             <ProviderModelsPanel
               :open="modelsPanelOpen"
@@ -277,16 +134,11 @@
 <script setup lang="ts">
 import { BookOpen, ExternalLink, Eye, EyeOff } from 'lucide-vue-next';
 
-import SettingsSelect from '../SettingsSelect.vue';
 import ProviderModelsPanel from './ProviderModelsPanel.vue';
 import { useI18n } from '../../../i18n';
 import type { ProviderDraft } from '../../../composables/useProviderDrafts';
 import type { BuiltInProvider } from '@iki/backend/types/settings';
-import type {
-  AcpMcpServerEntry,
-  ProviderSelectOption,
-  ProviderSupportLink,
-} from './provider_settings_shared';
+import type { ProviderSupportLink } from './provider_settings_shared';
 
 defineProps<{
   selectedProviderInfo: BuiltInProvider | null;
@@ -294,13 +146,6 @@ defineProps<{
   selectedProviderSupportLink: ProviderSupportLink | null;
   selectedProviderBaseUrlHelp: string;
   selectedProviderRequiresApiKey: boolean;
-  isSelectedAcpProvider: boolean;
-  acpCredentialProviderOptions: ProviderSelectOption[];
-  acpMcpServerEntries: AcpMcpServerEntry[];
-  mcpServersLoading: boolean;
-  mcpServersError: string;
-  acpAuthMethods: Array<{ id: string; name: string; description?: string | null; type: string }>;
-  isFetchingAcpAuthMethods: boolean;
   modelsPanelOpen: boolean;
   isFetchingModels: boolean;
   availableModelsList: string[];
@@ -314,12 +159,8 @@ defineProps<{
 const emit = defineEmits<{
   'toggle-enabled': [enabled: boolean];
   'toggle-api-key-visibility': [];
-  'update-acp-api-provider-id': [providerId: string];
-  'toggle-acp-mcp-server': [payload: { serverId: string; checked: boolean }];
-  'update-acp-auth-method-id': [methodId: string];
   'toggle-models-panel': [];
   'fetch-models': [];
-  'fetch-acp-auth-methods': [];
   'toggle-model': [modelId: string];
   'edit-model-options': [modelId: string];
   'add-model': [payload: { modelId: string; displayName: string }];
@@ -333,23 +174,3 @@ const { t } = useI18n();
 
 <style scoped src="../providers_settings.css"></style>
 <style scoped src="../settings_shared.css"></style>
-<style scoped>
-.provider-acp-auth-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.provider-acp-auth-row select {
-  flex: 1;
-}
-
-.provider-acp-auth-row input {
-  flex: 1;
-}
-
-.provider-acp-auth-fetch-btn {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-</style>

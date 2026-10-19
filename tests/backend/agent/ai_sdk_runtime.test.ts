@@ -1,20 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 
-const { acpToolsMock, resolvePersonaPromptMock, getAppConfigMock, loggerEventMock } = vi.hoisted(
-  () => ({
-    acpToolsMock: vi.fn((tools: Record<string, unknown>) => ({
-      ...tools,
-      'acp.acp_provider_agent_dynamic_tool': { type: 'provider' },
-    })),
-    resolvePersonaPromptMock: vi.fn(),
-    getAppConfigMock: vi.fn(),
-    loggerEventMock: vi.fn(),
-  })
-);
-
-vi.mock('@mcpc-tech/acp-ai-provider', () => ({
-  acpTools: acpToolsMock,
+const { resolvePersonaPromptMock, getAppConfigMock, loggerEventMock } = vi.hoisted(() => ({
+  resolvePersonaPromptMock: vi.fn(),
+  getAppConfigMock: vi.fn(),
+  loggerEventMock: vi.fn(),
 }));
 
 vi.mock('@iki/backend/provider/llm/factory', () => ({
@@ -229,39 +219,6 @@ describe('ai_sdk_runtime', () => {
     ]);
   });
 
-  it('unwraps ACP dynamic approval requests into the host tool name and args', () => {
-    expect(
-      collectApprovalRequests([
-        {
-          type: 'tool-approval-request',
-          approvalId: 'approval_2',
-          toolCall: {
-            toolCallId: 'call_2',
-            toolName: 'acp.acp_provider_agent_dynamic_tool',
-            input: JSON.stringify({
-              toolCallId: 'call_2',
-              toolName: 'write_file',
-              args: {
-                path: 'notes.md',
-              },
-            }),
-          },
-        },
-      ])
-    ).toEqual([
-      {
-        approvalId: 'approval_2',
-        toolCallId: 'call_2',
-        toolCall: {
-          toolName: 'write_file',
-          args: {
-            path: 'notes.md',
-          },
-        },
-      },
-    ]);
-  });
-
   it('collects tool calls from args when input is absent', () => {
     expect(
       collectToolCalls(undefined, [
@@ -277,38 +234,6 @@ describe('ai_sdk_runtime', () => {
         toolName: 'lookup',
         args: {
           query: 'hello',
-        },
-      },
-    ]);
-  });
-
-  it('unwraps ACP dynamic tool calls into the actual host tool payload', () => {
-    expect(
-      collectToolCalls(
-        [
-          {
-            toolCalls: [
-              {
-                toolName: 'acp.acp_provider_agent_dynamic_tool',
-                input: JSON.stringify({
-                  toolName: 'write_file',
-                  args: {
-                    path: 'notes.md',
-                    text: 'hello',
-                  },
-                }),
-              },
-            ],
-          },
-        ],
-        undefined
-      )
-    ).toEqual([
-      {
-        toolName: 'write_file',
-        args: {
-          path: 'notes.md',
-          text: 'hello',
         },
       },
     ]);
@@ -398,12 +323,4 @@ describe('ai_sdk_runtime', () => {
     expect(jsonHandler).toHaveBeenCalledWith({ url: 'https://example.com' });
   });
 
-  it('wraps ACP tool-capable runtimes with the ACP dynamic tool even when no local tools are registered', () => {
-    const tools = buildAiToolSet({ enableTools: true, providerType: 'acp' }, []);
-
-    expect(acpToolsMock).toHaveBeenCalledWith({});
-    expect(tools).toEqual({
-      'acp.acp_provider_agent_dynamic_tool': { type: 'provider' },
-    });
-  });
 });

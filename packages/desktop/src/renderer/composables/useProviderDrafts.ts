@@ -24,11 +24,6 @@ export type ProviderRecord = Provider & {
 export type ProviderDraft = {
   api_key: string;
   base_url: string;
-  acp_command: string;
-  acp_args: string;
-  acp_mcp_server_ids: string[];
-  acp_auth_method_id: string;
-  acp_api_provider_id: string;
   enabled: boolean;
   showApiKey: boolean;
   model_options: ProviderModelOptionsMap;
@@ -37,11 +32,6 @@ export type ProviderDraft = {
 export type PersistedProviderSnapshot = {
   api_key: string;
   base_url: string;
-  acp_command: string;
-  acp_args: string;
-  acp_mcp_server_ids: string[];
-  acp_auth_method_id: string;
-  acp_api_provider_id: string;
   enabled: boolean;
   models: string[];
   availableModels: string[];
@@ -92,29 +82,12 @@ export const useProviderDrafts = (params: {
     return trimmed;
   };
 
-  const normalizeSelectedIds = (value: unknown): string[] => {
-    const seen = new Set<string>();
-
-    return parseModelList(value).filter(entry => {
-      if (seen.has(entry)) {
-        return false;
-      }
-      seen.add(entry);
-      return true;
-    });
-  };
-
   const getPersistedProviderSnapshot = (providerId: string): PersistedProviderSnapshot => {
     const record = getProviderRecord(providerId);
 
     return {
       api_key: record?.api_key ?? '',
       base_url: normalizeBaseUrlForDraft(providerId, record?.base_url),
-      acp_command: record?.acp_command ?? '',
-      acp_args: record?.acp_args ?? '',
-      acp_mcp_server_ids: normalizeSelectedIds(record?.acp_mcp_server_ids),
-      acp_auth_method_id: record?.acp_auth_method_id ?? '',
-      acp_api_provider_id: record?.acp_api_provider_id ?? '',
       enabled: record?.enabled === true,
       models: parseModelList(record?.models),
       availableModels: parseModelList(record?.available_models),
@@ -132,11 +105,6 @@ export const useProviderDrafts = (params: {
     providerDrafts.value[providerId] = {
       api_key: snapshot.api_key,
       base_url: snapshot.base_url,
-      acp_command: snapshot.acp_command,
-      acp_args: snapshot.acp_args,
-      acp_mcp_server_ids: [...snapshot.acp_mcp_server_ids],
-      acp_auth_method_id: snapshot.acp_auth_method_id,
-      acp_api_provider_id: snapshot.acp_api_provider_id,
       enabled: snapshot.enabled,
       showApiKey: false,
       model_options: safeClone(snapshot.modelOptions, {}),
