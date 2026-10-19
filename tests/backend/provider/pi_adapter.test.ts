@@ -144,63 +144,118 @@ describe('Pi supply adapter — projection', () => {
     expect(messages[0]).toMatchObject({ role: 'user', content: 'part-array question' });
   });
 
-  it('projects IMAGE file parts to Pi image content — the shape convertToModelMessages emits', () => {
-    // An attached image: the renderer's readAsDataURL puts a COMPLETE data
-    // URL in `url`, and convertToModelMessages passes it through as a file
-    // part. The projection must unwrap the payload (Pi would otherwise wrap
-    // it a second time) and hand it to Pi, which decides from model.input
-    // whether it reaches the wire or becomes its own placeholder.
-    const history = [
+  it('projects IMAGE file parts through the REAL pipeline: renderer attachment → toModelInputMessages → projection', async () => {
+    // The boundary that matters, end to end: what the renderer attaches
+    // (a readAsDataURL data URL in the UI message part), what the real
+    // converter emits, and what the projection hands Pi. The first version
+    // of this projection unwrapped only a `url` field the real pipeline
+    // never emits — convertToModelMessages puts the data URL in `data` — so
+    // every attached image reached Pi double-wrapped
+    // (`data:image/png;base64,data:image/png;base64,...`). Drive the actual
+    // converter so that shape cannot drift again.
+    const modelMessages = await toModelInputMessages([
       {
+        id: 'msg_image',
         role: 'user',
-        content: [
+        parts: [
+          { type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,iVBORw0KGgo=' },
           { type: 'text', text: 'what is in this image?' },
-          { type: 'file', url: 'data:image/png;base64,iVBORw0KGgo=', mediaType: 'image/png' },
         ],
       },
-    ] as unknown as ChatInputMessage[];
+    ]);
+    // Pin the shape we are relying on — if the SDK changes its field name,
+    // this test says so instead of silently passing.
+    expect(modelMessages[0]).toMatchObject({
+      role: 'user',
+      content: [
+        { type: 'file', mediaType: 'image/png' },
+        { type: 'text', text: 'what is in this image?' },
+      ],
+    });
 
-    const { messages } = projectHistoryToPiContext(history, 'scripted-model');
+    const { messages } = projectHistoryToPiContext(modelMessages, 'scripted-model');
     expect(messages[0]).toEqual({
       role: 'user',
       timestamp: expect.any(Number),
+      // Part order is preserved from the source message — the projection
+      // reorders nothing.
       content: [
-        { type: 'text', text: 'what is in this image?' },
+        // The RAW base64 payload — Pi wraps it exactly once on the wire.
         { type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' },
+        { type: 'text', text: 'what is in this image?' },
       ],
     });
   });
 
-  it('projects raw image bytes as well as data URLs, and still refuses other media', () => {
-    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-    const { messages } = projectHistoryToPiContext(
+  it('unwraps a data URL in EITHER field and passes raw bytes through', () => {
+    // The hand-built/rehydration shape (`url`) and the converter's shape
+    // (`data`) are both complete data URLs; raw bytes stay bytes.
+    const viaUrl = projectHistoryToPiContext(
       [
         {
           role: 'user',
-          content: [
-            { type: 'text', text: 'photo' },
-            { type: 'file', data: bytes, mediaType: 'image/jpeg' },
-          ],
+          content: [{ type: 'file', url: 'data:image/png;base64,iVBORw0KGgo=', mediaType: 'image/png' }],
         },
       ] as unknown as ChatInputMessage[],
       'scripted-model'
     );
-    expect(messages[0]).toMatchObject({
-      role: 'user',
-      content: [
-        { type: 'text', text: 'photo' },
-        { type: 'image', data: bytes, mimeType: 'image/jpeg' },
-      ],
+    expect(viaUrl.messages[0]).toMatchObject({
+      content: [{ type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' }],
     });
 
-    // Non-image media stays out of the covered domain — pdf/audio have no
-    // Pi part on this API, so they throw rather than silently drop.
+    const viaData = projectHistoryToPiContext(
+      [
+        {
+          role: 'user',
+          content: [{ type: 'file', data: 'data:image/png;base64,iVBORw0KGgo=', mediaType: 'image/png' }],
+        },
+      ] as unknown as ChatInputMessage[],
+      'scripted-model'
+    );
+    expect(viaData.messages[0]).toMatchObject({
+      content: [{ type: 'image', data: 'iVBORw0KGgo=', mimeType: 'image/png' }],
+    });
+
+    // RAW BYTES are refused, not coerced: Pi's ImageContent.data is a base64
+    // STRING by type and its adapter interpolates it verbatim, so a
+    // Uint8Array would land on the wire as "137,80,78,71" — silent
+    // corruption. The projection throws instead.
+    expect(() =>
+      projectHistoryToPiContext(
+        [
+          {
+            role: 'user',
+            content: [{ type: 'file', data: new Uint8Array([0x89, 0x50]), mediaType: 'image/jpeg' }],
+          },
+        ] as unknown as ChatInputMessage[],
+        'scripted-model'
+      )
+    ).toThrow(PiProjectionError);
+  });
+
+  it('refuses non-image media instead of silently dropping it', () => {
+    // pdf/audio have no Pi part on the openai-completions API, so they throw
+    // rather than becoming a stringified blob that hides type semantics.
     expect(() =>
       projectHistoryToPiContext(
         [
           {
             role: 'user',
             content: [{ type: 'file', data: 'x', mediaType: 'application/pdf' }],
+          },
+        ] as unknown as ChatInputMessage[],
+        'scripted-model'
+      )
+    ).toThrow(PiProjectionError);
+
+    // An image mediaType with NO payload at all is unresolvable — also a
+    // throw, never a fabricated empty image.
+    expect(() =>
+      projectHistoryToPiContext(
+        [
+          {
+            role: 'user',
+            content: [{ type: 'file', mediaType: 'image/png' }],
           },
         ] as unknown as ChatInputMessage[],
         'scripted-model'
@@ -510,13 +565,16 @@ describe('Pi supply adapter — wire behaviors over the scripted server', () => 
     // STRING, so the image rides its own (text-free) user message — the
     // projection handles both shapes; only the server's keying differs.
     server.setScript('default', { chunks: [sse.delta('a cat'), sse.finish('stop')] });
+    // The REAL converter's field (`data`), not the hand-built `url` variant:
+    // the wire-level assertion is only meaningful on the shape the pipeline
+    // actually produces.
     const { systemPrompt, messages } = projectHistoryToPiContext(
       [
         { role: 'user', content: 'image vision' },
         {
           role: 'user',
           content: [
-            { type: 'file', url: 'data:image/png;base64,iVBORw0KGgo=', mediaType: 'image/png' },
+            { type: 'file', data: 'data:image/png;base64,iVBORw0KGgo=', mediaType: 'image/png' },
           ],
         },
       ] as unknown as ChatInputMessage[],

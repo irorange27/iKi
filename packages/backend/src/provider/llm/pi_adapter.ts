@@ -69,7 +69,9 @@ import { normalizeContext } from '@earendil-works/pi-ai';
 import { stream as openaiCompletionsStream } from '@earendil-works/pi-ai/api/openai-completions';
 import type {
   AssistantMessage,
+  ImageContent,
   Message as PiMessage,
+  TextContent,
   ThinkingContent,
   Tool as PiTool,
   ToolCall,
@@ -302,6 +304,27 @@ const projectToolOutput = (output: unknown): { text: string; isError: boolean } 
  * caller then throws, exactly as it does for every other unrepresentable
  * part — a silent drop would hide type semantics.
  */
+/**
+ * Pi's ImageContent carries `data` as a base64 string (or a Uint8Array) and
+ * builds the wire data-URL itself as `data:<mimeType>;base64,<data>`. iKi's
+ * file parts arrive with the payload in a STRING field, and which field
+ * name carries it depends on the producer:
+ *
+ * - `data` — what `convertToModelMessages` emits for a renderer-attached
+ *   image (ai@6 dist: `{type:'file', mediaType, data: <data-URL or bytes>}`).
+ *   The renderer's readAsDataURL output is a COMPLETE `data:image/png;base64,...`
+ *   string, so it must be UNWRAPPED here or Pi double-wraps it into
+ *   `data:image/png;base64,data:image/png;base64,...` — a URL no provider
+ *   decodes. (This exact shape was the first version's bug: only `url` was
+ *   unwrapped, and the real pipeline never emits `url`.)
+ * - `url` — the hand-built/rehydration shape that predates that field name;
+ *   treated identically.
+ * - `data: Uint8Array` — raw bytes, passed through for Pi to encode.
+ *
+ * Returns null for non-image media types and unresolvable payloads: the
+ * caller then throws, exactly as it does for every other unrepresentable
+ * part — a silent drop would hide type semantics.
+ */
 const imageDataForPi = (part: {
   mediaType?: unknown;
   data?: unknown;
@@ -309,15 +332,21 @@ const imageDataForPi = (part: {
 }): string | null => {
   if (typeof part.mediaType !== 'string' || !part.mediaType.startsWith('image/')) return null;
 
-  const fromData = part.data;
-  if (typeof fromData === 'string' && fromData.length > 0) return fromData;
-  if (fromData instanceof Uint8Array) return fromData as unknown as string;
-
-  const url = part.url;
-  if (typeof url === 'string' && url.length > 0) {
-    const comma = url.indexOf(',');
-    if (url.startsWith('data:') && comma > 0) return url.slice(comma + 1);
-    return url;
+  // Pi's ImageContent.data is a base64 STRING by type, and its adapter
+  // builds the wire URL as `data:<mimeType>;base64,<data>` verbatim — so a
+  // Uint8Array would be coerced to "137,80,78,71" and reach the provider as
+  // garbage. Only a string payload is projectable; bytes are refused by the
+  // caller's throw rather than silently corrupted.
+  for (const candidate of [part.data, part.url]) {
+    if (typeof candidate !== 'string' || candidate.length === 0) continue;
+    // A data URL in EITHER field is a complete envelope, not a payload:
+    // take what follows the comma (raw base64) so Pi wraps it exactly once.
+    if (candidate.startsWith('data:')) {
+      const comma = candidate.indexOf(',');
+      if (comma > 0) return candidate.slice(comma + 1);
+      continue;
+    }
+    return candidate;
   }
 
   return null;
@@ -356,11 +385,10 @@ export const projectHistoryToPiContext = (
   // image_url, a text-only model gets Pi's own placeholder text. iKi adds no
   // custom error or warning of its own — the library's default behavior is
   // the product decision (2026-10-19).
-  const userContent = (content: unknown): string | Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }> => {
+  const userContent = (content: unknown): string | Array<TextContent | ImageContent> => {
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
-      const parts: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }> =
-        [];
+      const parts: Array<TextContent | ImageContent> = [];
       for (const part of content) {
         const p = part as {
           type?: string;

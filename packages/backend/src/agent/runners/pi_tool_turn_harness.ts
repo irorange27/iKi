@@ -764,7 +764,17 @@ export class PiToolTurnHarness {
             });
             return Promise.resolve();
           }
-        );
+          // A lost span is the cheap failure — never an unhandled rejection
+          // that takes the turn down.
+        ).catch(error => {
+          logger.event({
+            level: 'warn',
+            event: 'langfuse.span.failed',
+            outcome: 'degraded',
+            message: 'Failed to record the Pi generation observation.',
+            error,
+          });
+        });
       },
       requestApproval: async call => {
         pendingApprovalRequests.push({

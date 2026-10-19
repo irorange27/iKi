@@ -274,7 +274,7 @@ export class PiTextTurnHarness {
       }
       // The generation observation records the SETTLED call — success or
       // failure — before the turn continues or retries.
-      this.traceCall(attemptRequest, eventStream, final, failure);
+      this.traceCall(attemptRequest.maxTokens, final, failure);
       if (!failure) {
         yield* this.finishTurn(input, final, finalText, systemPrompt, {
           requestHistory: attemptHistory,
@@ -343,20 +343,20 @@ export class PiTextTurnHarness {
    * text, usage buckets and cost. A no-op when tracing is off, so the
    * hot path pays one boolean check.
    */
-  private traceCall(
-    request: { systemPrompt: string; messages: PiMessage[]; maxTokens?: number; signal?: AbortSignal },
-    stream: ReturnType<PiTextModelCall>,
-    final: AssistantMessage,
-    failure?: Error
-  ): void {
+  private traceCall(maxTokens: number | undefined, final: AssistantMessage, failure?: Error): void {
     if (!isLangfuseEnabled()) return;
+    // Fire-and-forget: the span records an already-settled call, so nothing
+    // in the turn waits on it. The catch keeps a future field computation
+    // that throws (or a tracer that rejects) from becoming an unhandled
+    // rejection that takes the process down — a lost span is the cheap
+    // failure, a crash is not.
     void tracePiGeneration(
       {
         name: 'pi.text.turn',
         model: this.config.model,
         provider: this.config.providerType,
         ...(this.config.threadId ? { sessionId: this.config.threadId } : {}),
-        ...(typeof request.maxTokens === 'number' ? { modelParameters: { maxTokens: request.maxTokens } } : {}),
+        ...(typeof maxTokens === 'number' ? { modelParameters: { maxTokens } } : {}),
       },
       onSettle => {
         onSettle({
@@ -374,8 +374,15 @@ export class PiTextTurnHarness {
         });
         return Promise.resolve();
       }
-    );
-    void stream;
+    ).catch(error => {
+      logger.event({
+        level: 'warn',
+        event: 'langfuse.span.failed',
+        outcome: 'degraded',
+        message: 'Failed to record the Pi generation observation.',
+        error,
+      });
+    });
   }
 
   private buildTurnHistory(history: ModelMessage[] | undefined, prompt: string): ModelMessage[] {
