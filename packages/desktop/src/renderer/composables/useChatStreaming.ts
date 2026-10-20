@@ -47,17 +47,24 @@ export const useChatStreaming = (deps: {
   // Turn-driven persistence lives in the backend conversation seam; the
   // renderer keeps only user-driven history management (edit update, delete).
 
-  /** User-driven history rewrite: truncate the local store and the durable
-   *  rows after the edited message. */
+  /** User-driven history rewrite: ONE backend call truncates the durable
+   *  rows after the edited message ATOMICALLY with the session-log fact the
+   *  replay needs (thread_session/history_truncation.ts) — the old per-row
+   *  delete loop could half-truncate and never reached the event log, so a
+   *  crash replay rebuilt the deleted messages. The local store (the view)
+   *  drops its tail only after the durable truncate succeeded; a failure
+   *  aborts the send with display and authority still agreeing. */
   const truncateConversationAfterIndex = async (messageIndex: number) => {
-    const messagesToDelete = deps.messageStore.messages.slice(messageIndex + 1);
+    const threadId = deps.currentThread.value?.id;
+    if (!threadId) return;
+    const anchorId = deps.messageStore.getAt(messageIndex)?.id;
+    if (typeof anchorId !== 'string' || !anchorId) return;
+
+    const result = await deps.electronAPI.chat.messages.truncateAfter(threadId, anchorId);
+    if (!result?.success) {
+      throw new Error(result?.error || 'Failed to truncate the conversation.');
+    }
     deps.messageStore.truncateAfterIndex(messageIndex);
-    await Promise.allSettled(
-      messagesToDelete
-        .map(message => (message && typeof message.id === 'string' ? message.id : ''))
-        .filter(id => id.length > 0)
-        .map(id => deps.electronAPI.chat.messages.delete(id))
-    );
   };
 
   const stopActiveStreamIfNeeded = async (targetThreadId?: string) => {
