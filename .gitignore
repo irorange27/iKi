@@ -120,3 +120,7 @@ packages/desktop/main.js
 packages/desktop/main.js.map
 .zcode/
 .archify/
+
+# Screenshots preserved by the e2e gate (tests/integration/e2e/run_smoke.mjs).
+# They are local evidence from a run, not source: regenerated on every pass.
+e2e-shots/

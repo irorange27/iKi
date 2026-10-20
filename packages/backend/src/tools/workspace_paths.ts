@@ -63,7 +63,7 @@ const resolveThreadWorkspaceSelection = (): ThreadWorkspaceSelection | null => {
 
 const getWorkspaceSelectionRequirementError = (): Error =>
   new Error(
-    'Filesystem and shell tools require an active conversation workspace. Choose a workspace in the composer before using local tools.'
+    'Filesystem and shell tools require an active conversation workspace. Choose one with the workspace picker at the top of the chat before using local tools.'
   );
 
 const resolveExplicitWorkspaceRoots = async (): Promise<WorkspaceRoot[]> => {

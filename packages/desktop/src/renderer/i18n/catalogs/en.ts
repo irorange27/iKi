@@ -254,7 +254,7 @@ export const en = defineCatalog({
   'chat.input.expandComposer': 'Expand the input area',
   'chat.input.collapseComposer': 'Collapse the input area',
   'chat.input.permission.title': 'Tool permission mode',
-  'chat.input.permission.ask': 'Ask first (dogfood-probe)',
+  'chat.input.permission.ask': 'Ask first',
   'chat.input.permission.auto': 'Auto-approve',
   'chat.input.permission.panelTitle': 'How should tools be approved?',
   'chat.input.permission.defaultName': 'Global default',

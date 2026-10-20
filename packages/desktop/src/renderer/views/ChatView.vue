@@ -25,10 +25,23 @@
       >
         <div class="chat-header-title-row">
           <template v-if="sidebar.isCollapsed.value">
+            <!-- Two controls, and each must do what its label says. The toggle
+                 used to carry the "Toggle sidebar" label while running
+                 handleNewChat, so a folded sidebar had NO way to be reopened —
+                 the one affordance that claimed to do it created a chat
+                 instead. -->
             <button
               class="chat-header-tool-btn"
               type="button"
               :aria-label="t('chat.sidebar.toggle')"
+              @click="sidebar.toggle"
+            >
+              <PanelLeftDashed :size="16" />
+            </button>
+            <button
+              class="chat-header-tool-btn"
+              type="button"
+              :aria-label="t('chat.sidebar.newChat')"
               @click="handleNewChat"
             >
               <SquarePen :size="16" />
