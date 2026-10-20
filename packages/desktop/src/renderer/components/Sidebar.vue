@@ -106,6 +106,7 @@
             v-model="searchQuery"
             class="sidebar-search-input"
             type="text"
+            :aria-label="t('a11y.searchChats')"
             :placeholder="t('chat.sidebar.searchPlaceholder')"
             @keydown.escape.stop="closeSearch"
           />

@@ -95,6 +95,7 @@
               v-model="modelSearchQuery"
               type="text"
               class="model-selector-search-input"
+              :aria-label="t('a11y.searchModels')"
               :placeholder="t('chat.model.searchPlaceholder')"
             />
           </div>
@@ -132,6 +133,15 @@
                   <span class="model-provider-type">{{ group.typeLabel }}</span>
                 </div>
               </header>
+
+              <!-- A provider saved in settings but with no model enabled yet must
+                   stay listed, otherwise it can never be picked from here. -->
+              <p
+                v-if="group.models.length === 0"
+                class="model-provider-empty"
+              >
+                {{ t('chat.model.noModelsForProvider') }}
+              </p>
 
               <button
                 v-for="model in group.models"
@@ -292,7 +302,6 @@ const providerModelGroups = computed<ProviderModelGroup[]>(() =>
         providerSearchText: `${name} ${typeLabel}`.toLowerCase(),
       };
     })
-    .filter(group => group.models.length > 0)
 );
 
 const filteredProviderGroups = computed<ProviderModelGroup[]>(() => {
@@ -302,14 +311,18 @@ const filteredProviderGroups = computed<ProviderModelGroup[]>(() => {
   return providerModelGroups.value
     .map(group => {
       const matchesProvider = group.providerSearchText.includes(query);
+      if (matchesProvider) return group;
       return {
         ...group,
-        models: matchesProvider
-          ? group.models
-          : group.models.filter(model => model.toLowerCase().includes(query)),
+        models: group.models.filter(model => model.toLowerCase().includes(query)),
       };
     })
-    .filter(group => group.models.length > 0);
+    // Keep a provider that matches by name even with no matching model — the
+    // same rule the empty-model case above needs.
+    .filter(
+      group =>
+        group.models.length > 0 || group.providerSearchText.includes(query)
+    );
 });
 
 const selectedProviderIconProps = computed<ProviderIconProps | null>(() =>
@@ -663,6 +676,24 @@ onUnmounted(() => {
 
 .model-provider-group {
   padding: 4px 0 2px;
+}
+
+/* Shown for a saved provider that has no model enabled yet, so the row stays
+   visible and the user learns where to turn it on. */
+.model-provider-empty {
+  margin: 2px 8px 4px;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--text-muted);
+}
+
+/* Shown for a saved provider that has no model enabled yet, so the row stays
+   visible and the user learns where to turn it on. */
+.model-provider-empty {
+  margin: 2px 8px 4px;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--text-muted);
 }
 
 .model-provider-group + .model-provider-group {

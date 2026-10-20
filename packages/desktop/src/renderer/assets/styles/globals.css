@@ -49,11 +49,62 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* One focus indicator for the whole app. Every control that suppresses the
+     UA ring must supply an equivalent `:focus-visible` treatment; this is the
+     default they fall back to. Pointer focus stays quiet (`:focus-visible`, not
+     `:focus`), so mouse users never see a ring the keyboard user needs. */
+  :focus-visible {
+    outline: var(--focus-ring-width) solid var(--accent-color);
+    outline-offset: var(--focus-ring-offset);
+  }
 }
 
 @layer components {
   .app-background {
     background-color: var(--bg-primary);
+  }
+
+  /* Text that only assistive tech should read: a name for an icon-only control
+     whose visible label is an image, and the polite status announcements that
+     give streaming/loading output a voice. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Skip links land here on Tab: the target must be programmatically focusable
+     but must not grow a ring, because it is a region, not a control. */
+  [data-a11y-landmark]:focus {
+    outline: none;
+  }
+
+  /* Text that only assistive tech should read: a name for an icon-only control
+     whose visible label is an image, and the polite status announcements that
+     give streaming/loading output a voice. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Skip links land here on Tab: the target must be programmatically focusable
+     but must not grow a ring, because it is a region, not a control. */
+  [data-a11y-landmark]:focus {
+    outline: none;
   }
 
   .app-text,

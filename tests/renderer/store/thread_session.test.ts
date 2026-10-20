@@ -200,10 +200,6 @@ describe('threadSession store', () => {
     await state.setIncognito(true);
 
     expect(state.isIncognito.value).toBe(true);
-    expect(updateThread).not.toHaveBeenCalled();
-
-    const createdThread = await state.createNewThread({ model: 'gpt-4.1', mode: 'chat' });
-
     expect(createThread).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'gpt-4.1',
@@ -222,7 +218,7 @@ describe('threadSession store', () => {
     expect(state.isIncognito.value).toBe(false);
   });
 
-  it('keeps chat threads workspace-free while work threads bind the picked folder', async () => {
+  it('binds a picked folder to a chat thread, since tools need it', async () => {
     const { state, createThread, updateThread } = createHarness();
 
     await state.setWorkspace('workspace_alpha');
@@ -232,17 +228,18 @@ describe('threadSession store', () => {
 
     const createdThread = await state.createNewThread({ model: 'gpt-4.1', mode: 'chat' });
 
+    // A chat is allowed to have a workspace. Forcing `null` used to leave the
+    // model told it had a working directory while every file/shell tool
+    // failed with "require an active conversation workspace".
     expect(createThread).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'gpt-4.1',
-        workspace_id: null,
+        workspace_id: 'workspace_alpha',
         metadata: expect.stringContaining('"mode":"chat"'),
       })
     );
-    // Chats have no workspace concept: the binding is dropped on the created row
-    // and the local draft is resynced from the thread.
-    expect(createdThread?.workspace_id).toBeUndefined();
-    expect(state.selectedWorkspaceId.value).toBeNull();
+    expect(createdThread?.workspace_id).toBe('workspace_alpha');
+    expect(state.selectedWorkspaceId.value).toBe('workspace_alpha');
 
     const workThread = await state.createNewThread({
       model: 'gpt-4.1',
@@ -299,11 +296,6 @@ describe('threadSession store', () => {
     await state.handleNewChat();
 
     expect(createThread).toHaveBeenCalledWith(
-      expect.objectContaining({
-        workspace_id: null,
-        metadata: expect.stringContaining('"mode":"chat"'),
-      })
-    );
 
     await state.selectThread(scratchThread.id);
     expect(state.selectedWorkspaceId.value).toBe('workspace_thread_thread_scratch');
@@ -314,10 +306,6 @@ describe('threadSession store', () => {
       expect.objectContaining({
         workspace_id: null,
         metadata: expect.stringContaining('"mode":"chat"'),
-      })
-    );
-  });
-
   it('syncs the composer incognito state from the selected thread', async () => {
     const privateThread = createStoredThread({
       id: 'thread_private',
@@ -645,35 +633,8 @@ describe('threadSession store', () => {
       hasId: vi.fn(() => false),
       setAll: vi.fn(),
     };
-
-    setActivePinia(createPinia());
-    const store = useThreadSessionStore();
-    store.initRuntime({
-      electronAPI: {
-        chat: {
-          threads: {
-            create: vi.fn(),
-            clear: vi.fn(),
-            update: updateThread,
-            get: getThread,
-            delete: vi.fn(),
-          },
           messages: { list: listMessages },
-        },
-        toolModel: { generateTitle: vi.fn() },
-        tasks: {},
-      } as never,
       messageStore: messageStore as never,
-      scrollToBottom: vi.fn(),
-      preferredDraftModel: ref(''),
-      preferredDraftProviderId: ref(null),
-    });
-    const state = {
-      ...storeToRefs(store),
-      selectThread: store.selectThread,
-      handleModelSelected: store.handleModelSelected,
-    };
-
     // Start selecting thread A — its message load will block
     const aSelectPromise = state.selectThread('thread_A');
 

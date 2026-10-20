@@ -6,6 +6,7 @@
           type="text"
           v-model="providerSearchQuery"
           :placeholder="t('settings.providers.searchPlaceholder')"
+          :aria-label="t('a11y.searchProviders')"
           class="search-input"
         />
       </div>
@@ -51,9 +52,15 @@
         @remove-config="removeProviderConfig"
       />
     </div>
+  </section>
 
-    <ProviderEditorModal
-      v-if="showProviderEditor && editingProvider"
+  <!-- The overlays sit outside `.providers-section` on purpose: that section is
+       a container-query root (container-type: inline-size), and layout
+       containment would make it the containing block for these fixed overlays
+       instead of the viewport. They stay in this component's DOM tree so
+       scoped styles and tests keep finding them. -->
+  <ProviderEditorModal
+    v-if="showProviderEditor && editingProvider"
       :editing-provider="editingProvider"
       :provider-type-options="providerTypeOptions"
       :editing-provider-api-format="editingProviderApiFormat"
@@ -71,10 +78,11 @@
       @cancel="closeModelOptionsEditor"
       @save="saveModelOptions"
     />
-  </section>
 </template>
 
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, watch } from 'vue';
+
 import ProviderModelOptionsModal from './providers/ProviderModelOptionsModal.vue';
 import ProviderDetailsPane from './providers/ProviderDetailsPane.vue';
 import ProviderEditorModal from './providers/ProviderEditorModal.vue';
@@ -90,6 +98,7 @@ const {
   editingProvider,
   editingProviderApiFormat,
   fetchLatestModels,
+  flushPendingProviderDraft,
   hasDynamicModels,
   isFetchingModels,
   isProviderConfigured,
@@ -123,6 +132,42 @@ const {
   updateEditingProviderApiFormatSelection,
   updateEditingProviderTypeSelection,
 } = useProvidersSettings();
+
+// The settings window's footer Save writes AppConfig only. Providers are a
+// separate store, so the footer would otherwise drop a dirty provider draft
+// while showing "All changes saved". Expose a flush so the footer can ask.
+const PROVIDER_DRAFT_FLUSH_EVENT = 'iki:providers:flush-draft';
+const PROVIDER_DRAFT_DIRTY_EVENT = 'iki:providers:draft-dirty';
+
+const emitDraftDirty = (dirty: boolean) => {
+  window.dispatchEvent(new CustomEvent(PROVIDER_DRAFT_DIRTY_EVENT, { detail: { dirty } }));
+};
+
+// The settings footer's status indicator reads this to stop claiming
+// "All changes saved" while a provider draft is unsaved.
+watch(isSelectedProviderDirty, dirty => {
+  emitDraftDirty(dirty);
+});
+
+onMounted(() => {
+  window.addEventListener(PROVIDER_DRAFT_FLUSH_EVENT, handleFlushRequest);
+  emitDraftDirty(isSelectedProviderDirty.value);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener(PROVIDER_DRAFT_FLUSH_EVENT, handleFlushRequest);
+  emitDraftDirty(false);
+});
+
+const handleFlushRequest = (event: Event) => {
+  const detail = (event as CustomEvent<{ resolve?: (saved: boolean) => void }>).detail;
+  void (async () => {
+    const saved = await flushPendingProviderDraft();
+    detail?.resolve?.(saved);
+  })();
+};
+
+defineExpose({ flushPendingProviderDraft });
 </script>
 
 <style scoped src="./providers_settings.css"></style>

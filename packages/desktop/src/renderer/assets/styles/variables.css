@@ -40,6 +40,16 @@
   --control-radius-sm: 6px;
   --pill-radius: 999px;
 
+  /* Keyboard focus indicator. Consumed by the global :focus-visible baseline in
+     globals.css and by every component that replaces the UA ring. */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
+  /* Keyboard focus indicator. Consumed by the global :focus-visible baseline in
+     globals.css and by every component that replaces the UA ring. */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 1px;
+
   /* Builtin dark-theme inputs; runtime preset injection overrides only these slots. */
   --theme-bg-primary: #2a2d35;
   --theme-bg-secondary: #22272c;

@@ -23,6 +23,7 @@
         max="240"
         step="5"
         :value="config.security.sessionTimeout"
+        :aria-label="t('settings.security.sessionTimeout')"
         @input="updateSecurity('sessionTimeout', getRangeValue($event))"
       />
       <p class="slider-hint">{{ t('settings.security.timeoutHint') }}</p>

@@ -2,8 +2,6 @@ import { computed, onMounted, ref } from 'vue';
 
 import { useI18n } from '../i18n';
 import type { BuiltInProvider } from '@iki/backend/types/settings';
-import type { ProviderModelDiscoveryOverride } from '@iki/backend/types/provider';
-import type { McpServerSummary, McpTransport } from '@iki/backend/types/mcp';
 import { BUILTIN_PROVIDERS } from '@iki/backend/constants/ProvidersSettings';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import {
@@ -14,12 +12,13 @@ import { createLogger } from '../logger';
 import { useProviderDrafts, type ProviderRecord } from './useProviderDrafts';
 import { useProvidersSettingsEditor } from './useProvidersSettingsEditor';
 import { useProviderModelOptionsEditor } from './useProviderModelOptionsEditor';
-import { getElectronAPI, getElectronApiSliceMethod } from '../services/electron_api';
+import { confirmAction } from './useConfirm';
+import { getElectronAPI } from '../services/electron_api';
 import type {
-  ProviderSelectOption,
   ProviderSupportLink,
   SidebarProvider,
 } from '../components/settings/providers/provider_settings_shared';
+import { arrayEquals } from '../components/settings/providers/provider_settings_shared';
 import {
   buildProviderBaseUrlHelp,
   buildProviderSupportLink,
@@ -29,14 +28,10 @@ import {
 
 export const useProvidersSettings = () => {
   const electronAPI = getElectronAPI();
-  const listMcpServers = getElectronApiSliceMethod('mcp', 'list');
   const providersSettingsLogger = createLogger({ module: 'providers_settings' });
   const { t } = useI18n();
 
   const providers = ref<ProviderRecord[]>([]);
-  const mcpServers = ref<McpServerSummary[]>([]);
-  const mcpServersLoading = ref(false);
-  const mcpServersError = ref('');
   const providerSearchQuery = ref('');
   const selectedProviderId = ref<string | null>(null);
   const isFetchingModels = ref(false);
@@ -115,15 +110,26 @@ export const useProvidersSettings = () => {
 
     isFetchingModels.value = true;
     try {
-      const providerLookupKey = selectedProviderConfig.value?.type || selectedProviderId.value;
+      const draft = selectedProviderDraft.value;
+      const config = selectedProviderConfig.value;
+      const providerLookupKey = config?.type || selectedProviderId.value;
+
+      // Pass the DRAFT's base URL and key so discovery works before the
+      // provider is saved, and so a private gateway is queried directly rather
+      // than through the static catalog.
+      const baseUrl = draft?.base_url.trim() || selectedProviderInfo.value?.defaultBaseUrl || '';
+      const apiKey = draft?.api_key.trim() || '';
+      const providerOverride =
+        baseUrl || apiKey ? { base_url: baseUrl, ...(apiKey ? { api_key: apiKey } : {}) } : null;
+
       const fetched = await electronAPI.chat.getModels(
         providerLookupKey,
-        selectedProviderConfig.value?.id
+        config?.id,
+        providerOverride
       );
       if (fetched && fetched.length > 0) {
         const modelIds = fetched.map(model => model.id);
         setFetchedModels(modelIds);
-        const config = selectedProviderConfig.value;
         if (config) {
           await electronAPI.providers.update(config.id, {
             available_models: JSON.stringify(modelIds),
@@ -170,28 +176,6 @@ export const useProvidersSettings = () => {
     if (!selectedProviderId.value) return false;
     return Boolean(dynamicModels.value[selectedProviderId.value]);
   });
-
-  const loadMcpServers = async () => {
-    if (!listMcpServers) {
-      mcpServers.value = [];
-      mcpServersError.value = '';
-      return;
-    }
-
-    mcpServersLoading.value = true;
-    mcpServersError.value = '';
-    try {
-      const list = await listMcpServers();
-      mcpServers.value = Array.isArray(list) ? list : [];
-    } catch (error) {
-      mcpServers.value = [];
-      mcpServersError.value = t('settings.mcp.error.loadFailed', {
-        error: getErrorMessage(error),
-      });
-    } finally {
-      mcpServersLoading.value = false;
-    }
-  };
 
   const addModel = (payload: { modelId: string; displayName: string }) => {
     const modelId = payload.modelId.trim();
@@ -253,6 +237,8 @@ export const useProvidersSettings = () => {
       draft.api_key !== snapshot.api_key ||
       draft.base_url.trim() !== snapshot.base_url ||
       draft.enabled !== snapshot.enabled ||
+      !arrayEquals(selectedModelsList.value, snapshot.models) ||
+      !arrayEquals(selectedDraftAvailableModels.value, snapshot.availableModels) ||
       serializeProviderModelOptionsMap(draft.model_options) !==
         serializeProviderModelOptionsMap(snapshot.modelOptions)
     );
@@ -289,6 +275,22 @@ export const useProvidersSettings = () => {
       void fetchLatestModels();
     }
   };
+
+  /**
+   * Persist the selected provider's draft if it has anything worth saving.
+   * Used by the settings footer's Save, which otherwise writes AppConfig only
+   * and would silently drop the provider changes it appears to cover.
+   * Returns true when a save actually happened.
+   */
+  const flushPendingProviderDraft = async (): Promise<boolean> => {
+    if (!isSelectedProviderDirty.value || !canSaveSelectedProvider.value) {
+      return false;
+    }
+
+    await saveProviderConfig();
+    return true;
+  };
+
 
   const saveProviderConfig = async () => {
     if (!selectedProviderId.value || !selectedProviderInfo.value || !selectedProviderDraft.value) {
@@ -368,16 +370,19 @@ export const useProvidersSettings = () => {
     const config = selectedProviderConfig.value;
     if (!config) return;
 
-    if (confirm(t('settings.providers.confirmRemove'))) {
-      await electronAPI.providers.delete(config.id);
-      await loadProviders();
-      resetSelectedProviderDraft();
-    }
+    const confirmed = await confirmAction({
+      message: t('settings.providers.confirmRemove'),
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    await electronAPI.providers.delete(config.id);
+    await loadProviders();
+    resetSelectedProviderDraft();
   };
 
   onMounted(() => {
     void loadProviders();
-    void loadMcpServers();
   });
 
   return {
@@ -389,12 +394,11 @@ export const useProvidersSettings = () => {
     editingProvider,
     editingProviderApiFormat,
     fetchLatestModels,
+    flushPendingProviderDraft,
     hasDynamicModels,
     isFetchingModels,
     isProviderConfigured,
     isSelectedProviderDirty,
-    mcpServersError,
-    mcpServersLoading,
     modelOptionsEditor,
     modelsPanelOpen,
     openModelOptionsEditor,

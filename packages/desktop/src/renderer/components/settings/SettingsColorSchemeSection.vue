@@ -31,15 +31,16 @@
         </div>
       </div>
 
-      <label class="search-shell">
-        <Search :size="18" />
+      <div class="search-shell">
+        <Search :size="18" aria-hidden="true" />
         <input
           v-model="searchQuery"
           type="text"
           :placeholder="t('settings.theme.searchPlaceholder')"
+          :aria-label="t('a11y.searchThemes')"
           class="search-input"
         />
-      </label>
+      </div>
     </div>
 
     <div class="settings-card">

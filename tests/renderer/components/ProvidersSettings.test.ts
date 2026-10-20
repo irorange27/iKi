@@ -32,11 +32,6 @@ const findButtonByText = (wrapper: ReturnType<typeof mount>, text: string) => {
 
   if (!match) {
     throw new Error(`Button not found: ${text}`);
-  }
-
-  return match;
-};
-
 const findLabelByText = (wrapper: VueWrapper, text: string) => {
   const match = wrapper
     .findAll('label')
@@ -81,34 +76,6 @@ describe('ProvidersSettings', () => {
     const list = vi.fn(async () => []);
     const add = vi.fn(async () => ({ id: 'deepseek_176' }));
 
-    setElectronApi({
-      providers: {
-        list,
-        add,
-        update: vi.fn(),
-        delete: vi.fn(),
-      },
-      chat: {
-        getModels: vi.fn(async () => []),
-      },
-    });
-
-    const wrapper = mount(ProvidersSettings, {
-      global: {
-        stubs: {
-          LobeIcon: true,
-          BookOpen: true,
-          ChevronDown: true,
-          ExternalLink: true,
-          Eye: true,
-          EyeOff: true,
-          RefreshCw: true,
-        },
-      },
-    });
-
-    await flushPromises();
-
     const deepseekRow = wrapper
       .findAll('.provider-list-item')
       .find(item => item.text().includes('DeepSeek'));
@@ -124,10 +91,6 @@ describe('ProvidersSettings', () => {
     await apiKeyInput.setValue('test-key');
     await wrapper.find('.provider-switch input').setValue(true);
     await findButtonByText(wrapper, 'Save').trigger('click');
-    await flushPromises();
-
-    expect(add).toHaveBeenCalledWith(
-      expect.objectContaining({
         id: expect.stringMatching(/^deepseek_\d+$/),
         name: 'DeepSeek',
         type: 'deepseek',
@@ -141,36 +104,27 @@ describe('ProvidersSettings', () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
+  it('treats a toggled model as a change worth saving', async () => {
+    const update = vi.fn(async () => ({}));
+        available_models: '["gpt-4.1","o3"]',
+
+    expect(findButtonByText(wrapper, 'Save').attributes('disabled')).toBeDefined();
+    expect((wrapper.find('.model-toggle input').element as HTMLInputElement).checked).toBe(true);
+
+    await wrapper.find('.model-toggle input').setValue(false);
+    await flushPromises();
+
+    expect(findButtonByText(wrapper, 'Cancel').attributes('disabled')).toBeUndefined();
+    expect(findButtonByText(wrapper, 'Save').attributes('disabled')).toBeUndefined();
+    expect(JSON.parse(payload.models as string)).toEqual([]);
+  });
+
   it('adds a manual model to the list before enabling it', async () => {
     const add = vi.fn(async () => ({ id: 'openai_176' }));
 
     setElectronApi({
       providers: {
         list: vi.fn(async () => []),
-        add,
-        update: vi.fn(),
-        delete: vi.fn(),
-      },
-      chat: {
-        getModels: vi.fn(async () => []),
-      },
-    });
-
-    const wrapper = mount(ProvidersSettings, {
-      global: {
-        stubs: {
-          LobeIcon: true,
-          BookOpen: true,
-          ChevronDown: true,
-          ExternalLink: true,
-          Eye: true,
-          EyeOff: true,
-          RefreshCw: true,
-        },
-      },
-    });
-
-    await flushPromises();
 
     const openaiRow = wrapper
       .findAll('.provider-list-item')
@@ -202,10 +156,6 @@ describe('ProvidersSettings', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('1 enabled');
-
-    await findButtonByText(wrapper, 'Save').trigger('click');
-    await flushPromises();
-
     expect(add).toHaveBeenCalledTimes(1);
     const [payload] = add.mock.calls[0];
     expect(payload).toEqual(
@@ -225,112 +175,49 @@ describe('ProvidersSettings', () => {
   });
 
   it('creates a custom provider with the selected shared dropdown type', async () => {
-    const list = vi.fn(async () => []);
-    const add = vi.fn(async () => ({ id: 'custom_176' }));
-
-    setElectronApi({
-      providers: {
-        list,
-        add,
-        update: vi.fn(),
-        delete: vi.fn(),
-      },
-      chat: {
-        getModels: vi.fn(async () => []),
-      },
-    });
-
-    const wrapper = mount(ProvidersSettings, {
-      global: {
-        stubs: {
-          LobeIcon: true,
-          BookOpen: true,
-          ChevronDown: true,
-          ExternalLink: true,
-          Eye: true,
-          EyeOff: true,
-          RefreshCw: true,
-        },
-      },
-    });
-
-    await flushPromises();
-    await findButtonByText(wrapper, 'Add Custom Provider').trigger('click');
-    await flushPromises();
-
     await wrapper.find('input[placeholder="e.g. My Local LLM"]').setValue('Anthropic Mirror');
     await selectSettingsOption(wrapper, 'Type', 'Anthropic Compatible');
     await wrapper.find('input[placeholder="Enter API Key"]').setValue('test-key');
-    await findButtonByText(wrapper, 'Save Provider').trigger('click');
-    await flushPromises();
-
-    expect(add).toHaveBeenCalledWith(
-      expect.objectContaining({
         name: 'Anthropic Mirror',
         type: 'anthropic-compatible',
         api_key: 'test-key',
-      })
-    );
-  });
-
   it('shows an API format note for custom providers and updates it when the type changes', async () => {
     const list = vi.fn(async () => []);
-
-    setElectronApi({
-      providers: {
-        list,
-        add: vi.fn(),
-        update: vi.fn(),
-        delete: vi.fn(),
-      },
-      chat: {
-        getModels: vi.fn(async () => []),
-      },
-    });
-
-    const wrapper = mount(ProvidersSettings, {
-      global: {
-        stubs: {
-          LobeIcon: true,
-          BookOpen: true,
-          ChevronDown: true,
-          ExternalLink: true,
-          Eye: true,
-          EyeOff: true,
-          RefreshCw: true,
-        },
-      },
-    });
-
-    await flushPromises();
     await findButtonByText(wrapper, 'Add Custom Provider').trigger('click');
     await flushPromises();
 
     expect(wrapper.text()).toContain('API Format');
-    expect(wrapper.text()).toContain('Chat Completions (/chat/completions)');
+    // A new custom gateway defaults to the Responses dialect: it is the
+    // preferred protocol, and a gateway that only speaks chat completions is
+    // one click away.
+    expect(wrapper.text()).toContain('Responses (/responses)');
     expect(wrapper.text()).toContain(
-      'Runtime adapter: AI SDK OpenAI-compatible provider against your custom base URL.'
+      'Runtime adapter: Pi-AI (OpenAI Responses dialect) against your base URL.'
     );
 
     await wrapper.find('.provider-format-section .settings-select-trigger').trigger('click');
     await flushPromises();
 
-    const responsesOption = wrapper
+    const completionsOption = wrapper
       .findAll('.provider-format-section .settings-select-option')
-      .find(candidate => candidate.text().replace(/\s+/g, ' ').includes('Responses (/responses)'));
+      .find(candidate =>
+        candidate.text().replace(/\s+/g, ' ').includes('Chat Completions (/chat/completions)')
+      );
 
-    if (!responsesOption) {
-      throw new Error('Responses API format option not found');
+    if (!completionsOption) {
+      throw new Error('Chat Completions API format option not found');
     }
 
-    await responsesOption.trigger('click');
+    await completionsOption.trigger('click');
     await flushPromises();
 
+    // Custom type: the generic chat-completions copy applies (the
+    // OpenAI-compatible variant is reserved for that type).
     expect(wrapper.text()).toContain(
-      'Use this when your gateway exposes an OpenAI Responses endpoint.'
+      'This selection sends OpenAI-compatible Chat Completions requests to your configured base URL. Switch to Responses when your gateway exposes it.'
     );
     expect(wrapper.text()).toContain(
-      'Runtime adapter: AI SDK OpenAI Responses provider with your custom base URL.'
+      'Runtime adapter: Pi-AI (OpenAI Chat Completions dialect) against your base URL.'
     );
 
     await selectSettingsOption(wrapper, 'Type', 'Anthropic Compatible');
@@ -340,90 +227,23 @@ describe('ProvidersSettings', () => {
       'Use this when your gateway exposes an Anthropic Messages endpoint.'
     );
     expect(wrapper.text()).toContain(
-      'Runtime adapter: AI SDK Anthropic provider configured against your custom base URL.'
+      'Runtime adapter: Pi-AI (Anthropic Messages dialect) against your base URL.'
     );
   });
 
   it('keeps OpenAI-compatible endpoints on the custom-provider path', async () => {
     const list = vi.fn(async () => []);
     const add = vi.fn(async () => ({ id: 'custom_176' }));
-
-    setElectronApi({
-      providers: {
-        list,
-        add,
-        update: vi.fn(),
-        delete: vi.fn(),
-      },
-      chat: {
-        getModels: vi.fn(async () => []),
-      },
-    });
-
-    const wrapper = mount(ProvidersSettings, {
-      global: {
-        stubs: {
-          LobeIcon: true,
-          BookOpen: true,
-          ChevronDown: true,
-          ExternalLink: true,
-          Eye: true,
-          EyeOff: true,
-          RefreshCw: true,
-        },
-      },
-    });
-
-    await flushPromises();
-    await findButtonByText(wrapper, 'Add Custom Provider').trigger('click');
-    await flushPromises();
-
     await wrapper.find('input[placeholder="e.g. My Local LLM"]').setValue('Proxy Gateway');
     await selectSettingsOption(wrapper, 'Type', 'OpenAI Compatible');
     await wrapper.find('input[placeholder="Enter API Key"]').setValue('proxy-key');
-    await findButtonByText(wrapper, 'Save Provider').trigger('click');
-    await flushPromises();
-
-    expect(add).toHaveBeenCalledWith(
-      expect.objectContaining({
         name: 'Proxy Gateway',
         type: 'openai-compatible',
         api_key: 'proxy-key',
-      })
-    );
-  });
-
   it('persists the responses API format for custom OpenAI-compatible providers', async () => {
     const list = vi.fn(async () => []);
     const add = vi.fn(async () => ({ id: 'custom_177' }));
-
-    setElectronApi({
-      providers: {
-        list,
         add,
-        update: vi.fn(),
-        delete: vi.fn(),
-      },
-      chat: {
-        getModels: vi.fn(async () => []),
-      },
-    });
-
-    const wrapper = mount(ProvidersSettings, {
-      global: {
-        stubs: {
-          LobeIcon: true,
-          BookOpen: true,
-          ChevronDown: true,
-          ExternalLink: true,
-          Eye: true,
-          EyeOff: true,
-          RefreshCw: true,
-        },
-      },
-    });
-
-    await flushPromises();
     await findButtonByText(wrapper, 'Add Custom Provider').trigger('click');
     await flushPromises();
 
@@ -457,49 +277,8 @@ describe('ProvidersSettings', () => {
   });
 
   it('restores the persisted draft when cancel is pressed', async () => {
-    const list = vi.fn(async () => [
-      {
-        id: 'openai_1',
-        name: 'OpenAI',
-        type: 'openai',
-        api_key: 'saved-key',
         models: '["gpt-4.1"]',
-        base_url: 'https://api.openai.com/v1',
-        enabled: true,
-        created_at: '2026-03-21T12:00:00.000Z',
-        updated_at: '2026-03-21T12:00:00.000Z',
         available_models: '["gpt-4.1"]',
-      },
-    ]);
-
-    setElectronApi({
-      providers: {
-        list,
-        add: vi.fn(),
-        update: vi.fn(),
-        delete: vi.fn(),
-      },
-      chat: {
-        getModels: vi.fn(async () => []),
-      },
-    });
-
-    const wrapper = mount(ProvidersSettings, {
-      global: {
-        stubs: {
-          LobeIcon: true,
-          BookOpen: true,
-          ChevronDown: true,
-          ExternalLink: true,
-          Eye: true,
-          EyeOff: true,
-          RefreshCw: true,
-        },
-      },
-    });
-
-    await flushPromises();
-
     const apiKeyInput = wrapper.find('input[type="password"]');
     expect((apiKeyInput.element as HTMLInputElement).value).toBe('saved-key');
 
@@ -521,31 +300,6 @@ describe('ProvidersSettings', () => {
     setElectronApi({
       providers: {
         list: vi.fn(async () => []),
-        add: vi.fn(),
-        update: vi.fn(),
-        delete: vi.fn(),
-      },
-      chat: {
-        getModels: vi.fn(async () => []),
-      },
-    });
-
-    const wrapper = mount(ProvidersSettings, {
-      global: {
-        stubs: {
-          LobeIcon: true,
-          BookOpen: true,
-          ChevronDown: true,
-          ExternalLink: true,
-          Eye: true,
-          EyeOff: true,
-          RefreshCw: true,
-        },
-      },
-    });
-
-    await flushPromises();
-
     const findDeepSeekRow = () => {
       const match = wrapper
         .findAll('.provider-list-item')
@@ -592,28 +346,6 @@ describe('ProvidersSettings', () => {
         ]),
         add: vi.fn(),
         update: vi.fn(),
-        delete: vi.fn(),
-      },
-      chat: {
-        getModels: vi.fn(async () => []),
-      },
-    });
-
-    const wrapper = mount(ProvidersSettings, {
-      global: {
-        stubs: {
-          LobeIcon: true,
-          BookOpen: true,
-          ChevronDown: true,
-          ExternalLink: true,
-          Eye: true,
-          EyeOff: true,
-          RefreshCw: true,
-        },
-      },
-    });
-
-    await flushPromises();
 
     const providerNames = wrapper
       .findAll('.provider-list-item')
@@ -653,6 +385,7 @@ describe('ProvidersSettings', () => {
     });
 
     const wrapper = mount(ProvidersSettings, {
+      attachTo: document.body,
       global: {
         stubs: {
           LobeIcon: true,
@@ -662,6 +395,9 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
+          // Radix teleports dialog content to <body>, outside the VTU wrapper;
+          // render the portal in place so queries keep working.
+          DialogPortal: { template: '<div><slot /></div>' },
         },
       },
     });

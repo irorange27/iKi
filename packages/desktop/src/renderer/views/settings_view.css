@@ -1,7 +1,20 @@
+/* Width contract for the settings shell (Lead's providers block is built
+ * against it):
+ *   >=980px   nav 220px, content padding 24px
+ *   760-979   nav 188px, content padding 16px
+ *   <760      nav is a 56px icon rail, content padding 16px
+ * The shell is the whole window, so viewport width is the honest signal here;
+ * the sections inside go fluid instead of stacking more viewport breakpoints
+ * (see settings_shared.css / component css).
+ * ─────────────────────────────────────────────────────────────────────── */
 .settings-container {
+  --settings-nav-width: 220px;
+  --settings-content-inline-pad: 24px;
+
   display: flex;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   font-size: var(--font-size);
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -38,13 +51,18 @@
 
 .settings-nav {
   flex: none;
-  width: 220px;
+  width: var(--settings-nav-width);
   background: transparent;
   border-right: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
   padding: 44px 10px 12px;
-  overflow: hidden;
+  /* Long menus scroll instead of clipping in a short window. */
+  overflow-x: hidden;
+  overflow-y: auto;
   min-height: 0;
   position: relative;
+  /* The rail is a width change on a flex:none sibling, so it can animate
+     without ever overlapping the content column. */
+  transition: width 0.18s ease;
 }
 
 .nav-menu {
@@ -57,6 +75,7 @@
    for hover and active, no accent fill or inset rail. */
 .nav-menu li {
   min-height: 30px;
+  min-width: 0;
   margin-bottom: 2px;
   padding: 4px 8px;
   cursor: pointer;
@@ -69,6 +88,14 @@
   transition:
     background-color 0.15s,
     color 0.15s;
+}
+
+/* Labels shrink with an ellipsis instead of pushing the content column. */
+.nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-menu li svg {
@@ -89,19 +116,27 @@
 
 .settings-content {
   flex: 1;
-  padding: 0 var(--chat-content-padding, 24px);
+  min-width: 0;
+  padding: 0 var(--settings-content-inline-pad);
   overflow-y: auto;
   background: transparent;
   min-height: 0;
   position: relative;
   display: flex;
   flex-direction: column;
+  /* Keep keyboard-focused controls clear of the sticky header. */
+  scroll-padding-top: 64px;
 }
 
 /* A merged settings page: one scroll, sub-sections titled along the way. */
 .settings-page {
   display: flex;
   flex-direction: column;
+  /* Never let a short window compress a section: sections keep their own
+     height and the middle pane scrolls (same precedent as the providers
+     card's flex: 0 0 auto). */
+  flex: 0 0 auto;
+  min-height: 0;
 }
 
 .settings-page-title {
@@ -124,6 +159,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding-top: 16px;
   padding-bottom: 14px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
@@ -140,9 +176,17 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.settings-header-left .title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-header-left .icon {
@@ -152,9 +196,11 @@
 .settings-header-right {
   display: inline-flex;
   align-items: center;
+  flex: none;
   gap: 8px;
   font-size: 0.9em;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .settings-header-right.is-unsaved {
@@ -214,7 +260,7 @@
 }
 
 .theme-json-editor {
-  min-height: 320px;
+  min-height: clamp(180px, 42vh, 320px);
   line-height: 1.45;
   font-family: var(--font-mono);
 }
@@ -233,6 +279,8 @@
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   z-index: 10;
 }
 
@@ -243,6 +291,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
 }
 
 .save-status::before {
@@ -252,6 +301,8 @@
 
 .footer-actions {
   display: flex;
+  flex: none;
+  margin-left: auto;
   gap: 12px;
 }
 
@@ -290,9 +341,15 @@
   background: var(--accent-hover);
 }
 
-@media (max-width: 980px) {
+/* Narrow: labels still fit, the column just tightens. Driven by the same two
+   custom properties as the default state, so there is one source of truth. */
+@media (max-width: 979px) {
+  .settings-container {
+    --settings-nav-width: 188px;
+    --settings-content-inline-pad: 16px;
+  }
+
   .settings-nav {
-    width: 188px;
     padding: 40px 8px 12px;
   }
 
@@ -306,8 +363,52 @@
     font-size: 13px;
   }
 
-  .settings-content {
-    padding: 0 16px;
+  .settings-header {
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+  }
+}
+
+/* Icon rail: below 760px the window is narrower than the nav's labels are
+   worth, and every pixel it keeps goes to the section content (which is what
+   lets the provider pane stay side-by-side at a genuinely narrow window).
+   Labels stay in the DOM — clipped, not removed — so the accessible name and
+   the title tooltip still describe each row. */
+@media (max-width: 759px) {
+  .settings-container {
+    --settings-nav-width: 56px;
+    --settings-content-inline-pad: 16px;
+  }
+
+  .settings-nav {
+    padding: 40px 6px 12px;
+  }
+
+  .nav-menu {
+    margin-top: 16px;
+  }
+
+  .nav-menu li {
+    justify-content: center;
+    min-height: 34px;
+    padding: 6px 0;
+    gap: 0;
+  }
+
+  .nav-menu li svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .settings-header {

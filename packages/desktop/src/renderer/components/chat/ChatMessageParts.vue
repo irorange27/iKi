@@ -101,12 +101,18 @@
           v-else-if="isFilePart(segment.part) && isFileAnImage(segment.part)"
           class="message-file"
         >
-          <img
-            :src="segment.part.url"
-            :alt="segment.part.filename || 'Attached image'"
-            class="message-file-image"
+          <button
+            type="button"
+            class="message-file-open"
+            :aria-label="t('a11y.viewImage')"
             @click="viewerSrc = segment.part.url"
-          />
+          >
+            <img
+              :src="segment.part.url"
+              :alt="segment.part.filename || 'Attached image'"
+              class="message-file-image"
+            />
+          </button>
         </div>
         <ToolCallPart
           v-else
@@ -822,6 +828,34 @@ const getComposerInvocationToneClass = (kind?: string) => {
 .message-text.markdown-content :deep(.md-math-fallback) {
   font-family: var(--font-mono);
   font-size: 0.9em;
+}
+
+/* Opens the image viewer. The button is a bare wrapper so the image keeps its
+   own sizing, radius and border; the focus ring hugs the image instead. */
+.message-file-open {
+  /* block + fit-content keeps the click target on the image itself; an
+     inline-block button would add a baseline descender gap under it */
+  display: block;
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-base);
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Opens the image viewer. The button is a bare wrapper so the image keeps its
+   own sizing, radius and border; the focus ring hugs the image instead. */
+.message-file-open {
+  /* block + fit-content keeps the click target on the image itself; an
+     inline-block button would add a baseline descender gap under it */
+  display: block;
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-base);
+  background: transparent;
+  cursor: pointer;
 }
 
 .message-file-image {

@@ -47,6 +47,94 @@
   font-weight: 600;
 }
 
+/* Workspace picker: the starting screen states where tools will run before
+   the first message, instead of leaving it to be discovered mid-task. */
+.welcome-workspace-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: clamp(10px, 2.4vh, 16px);
+}
+
+.welcome-workspace-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.welcome-workspace-select {
+  min-height: 34px;
+  max-width: 260px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  color: var(--text-primary);
+  padding: 0 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.welcome-workspace-select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-color) 60%, transparent);
+  outline-offset: 1px;
+}
+
+.welcome-workspace-btn {
+  min-height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.welcome-workspace-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent-color) 45%, var(--border-color));
+}
+
+.welcome-workspace-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.welcome-workspace-hint {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* The path is the fact that matters, so it gets its own quiet line and is
+   truncated rather than wrapping the layout. */
+.welcome-workspace-path {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome-workspace-path--empty {
+  font-family: inherit;
+}
+
+.welcome-workspace-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--color-danger, #e5484d);
+}
+
 .welcome-actions {
   display: flex;
   flex-wrap: wrap;

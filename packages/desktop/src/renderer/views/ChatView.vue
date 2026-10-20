@@ -15,9 +15,11 @@
            block closes the header, mirroring the sidebar's quiet separation.
            With the sidebar folded, the collapsed toolbar's controls move into
            this row as a leading cluster (DSH's leading seat) — they and the
-           title share one line past the macOS traffic lights. -->
+           title share one line past the macOS traffic lights.
+           The row also carries the workspace seat, so it renders even on the
+           starting screen (no title yet): where tools will run has to be
+           answerable before the first message exists. -->
       <header
-        v-if="showHeaderMeta"
         class="chat-header"
         :class="{ 'chat-header-leading-clear': sidebar.isCollapsed.value }"
       >
@@ -27,19 +29,15 @@
               class="chat-header-tool-btn"
               type="button"
               :aria-label="t('chat.sidebar.toggle')"
-              @click="sidebar.toggle"
-            >
-              <PanelLeftDashed :size="16" />
-            </button>
-            <button
-              class="chat-header-tool-btn"
-              type="button"
-              :aria-label="t('chat.sidebar.newChat')"
               @click="handleNewChat"
             >
               <SquarePen :size="16" />
             </button>
           </template>
+          <!-- Where tools will run. Leading seat of the title row, outside the
+               composer: it is conversation context, not a send-time option. -->
+          <WorkspaceSelector />
+          <span v-if="currentThread" class="chat-header-sep" aria-hidden="true"></span>
           <h1 v-if="currentThread" class="chat-header-title" :title="currentThread.title">
             {{ currentThread.title }}
           </h1>
@@ -129,7 +127,14 @@
             <div v-if="externalThreadNotice" class="thread-origin-banner">
               {{ externalThreadNotice }}
             </div>
-            <div class="messages-container" @click="handleMarkdownClick">
+            <!-- Delegation only: it forwards clicks to the copy <button> that the
+                 markdown plugin renders inside, which is natively keyboard
+                 operable. The container itself is not a control. -->
+            <div
+              class="messages-container"
+              data-a11y-delegated-click
+              @click="handleMarkdownClick"
+            >
               <ChatMessageItem
                 v-for="(m, index) in chatMessages"
                 :key="m.id"
@@ -210,6 +215,7 @@ import { PanelLeftDashed, SquarePen } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
+import WorkspaceSelector from '../components/WorkspaceSelector.vue';
 import { useSidebar } from '../composables/useSidebar';
 import ChatInput from '../components/ChatInput.vue';
 import ChatMessageItem from '../components/chat/ChatMessageItem.vue';
@@ -340,7 +346,9 @@ const { latestAssistantTokenUsage, sessionPerfStats } = useChatUsage(
 );
 
 const showMessageCount = computed(() => chatMessages.value.length > 0);
-const showHeaderMeta = computed(() => showMessageCount.value || Boolean(currentThread.value));
+// The header always renders (it carries the workspace seat), so the sidebar's
+// floating collapsed toolbar never has to stand in for it.
+const showHeaderMeta = true;
 const showWelcomeScreen = computed(() => showWelcome.value && chatMessages.value.length === 0);
 // A work thread's project binding is immutable once the conversation has
 // started — switching mid-flight would silently move the tool roots.
@@ -545,6 +553,23 @@ electronAPI.onFocusThread?.(threadId => {
 /* Conversation header (DSH ConversationHeader): title row over the view tabs,
    one hairline closing the block. The title is the page's h1; message count
    and origin ride after it as quiet metadata. */
+/* Top-left workspace seat. It owns its row so it stays put whether or not the
+   header (title + tabs) is rendered, and it never competes with the composer
+   for attention. When the sidebar is folded the column reaches the window edge
+   and macOS traffic lights (20,20) overlay this zone, hence the 84px indent —
+   the same clearance the header uses. */
+.chat-workspace-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 8px clamp(14px, 2.2cqw, var(--chat-content-padding, 24px)) 0;
+}
+
+.chat-workspace-bar--collapsed {
+  padding-left: 84px;
+}
+
 .chat-header {
   flex: none;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
@@ -555,8 +580,10 @@ electronAPI.onFocusThread?.(threadId => {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  min-height: 30px;
-  padding: 10px var(--chat-content-padding, 24px) 0;
+  /* Vertical rhythm follows the window height: in a short window the header
+     gives rows back to the conversation instead of keeping desktop air. */
+  min-height: clamp(24px, 3.2vh, 30px);
+  padding: clamp(6px, 1.4vh, 10px) clamp(14px, 2.2cqw, var(--chat-content-padding, 24px)) 0;
 }
 
 /* Sidebar folded: the chat column reaches the window edge, and hiddenInset
@@ -589,6 +616,24 @@ electronAPI.onFocusThread?.(threadId => {
   color: var(--text-primary);
 }
 
+/* Divides the workspace seat from the conversation title. Quiet on purpose:
+   both are metadata on the same line, neither should read as a control. */
+.chat-header-sep {
+  flex: none;
+  width: 1px;
+  height: 12px;
+  background: color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+
+/* Divides the workspace seat from the conversation title. Quiet on purpose:
+   both are metadata on the same line, neither should read as a control. */
+.chat-header-sep {
+  flex: none;
+  width: 1px;
+  height: 12px;
+  background: color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+
 .chat-header-title {
   margin: 0;
   min-width: 0;
@@ -609,8 +654,11 @@ electronAPI.onFocusThread?.(threadId => {
   color: var(--text-muted);
 }
 
+/* The tab row is one of the fixed rows around the conversation, so it shrinks
+   with the window height before the message area has to. */
 .chat-view-tabs {
-  padding: 0 var(--chat-content-padding, 24px);
+  height: clamp(28px, 4vh, 36px);
+  padding: 0 clamp(14px, 2.2cqw, var(--chat-content-padding, 24px));
 }
 
 /* Messages styles */
@@ -622,7 +670,12 @@ electronAPI.onFocusThread?.(threadId => {
 }
 
 .chat-main-area {
-  padding: var(--chat-content-padding, 24px);
+  /* Container-over-viewport companion: the horizontal gutter follows the chat
+     area's own width (cqw resolves against .chat-main-wrap below), so dragging
+     the sidebar and resizing the window produce one continuous rhythm instead
+     of a 24px -> 16px step at a viewport breakpoint. The block gutter follows
+     the window height for the same reason. */
+  padding: clamp(12px, 3.4vh, 24px) clamp(14px, 2.2cqw, var(--chat-content-padding, 24px));
   min-width: 0;
   overscroll-behavior: contain;
   scrollbar-gutter: stable both-edges;
@@ -641,11 +694,16 @@ electronAPI.onFocusThread?.(threadId => {
 }
 
 .chat-content-column {
-  /* Conversation column follows the window: grows from the 860px reading
-     width up to 1600px, holding ~82% of the chat area in between. Lives on
-     the shared column so the composer below the panel tracks the same
-     width as the messages. */
-  --chat-column-max: clamp(860px, 82%, 1600px);
+  /* Conversation column follows the chat area: 82% up to the 1600px cap, and
+     fluid all the way down to a 360px column instead of freezing at 860px
+     (which left the column wider than its container below ~1050px of chat
+     area and made the "fluid" middle band a no-op). Lives on the shared
+     column so the composer below the panel tracks the same width as the
+     messages. */
+  --chat-column-max: clamp(360px, 82%, 1600px);
+  /* The header and composer rows query this column rather than the viewport,
+     so the sidebar's drag width participates in their reflow. */
+  container-type: inline-size;
 }
 
 .chat-main-wrap {
@@ -775,6 +833,26 @@ electronAPI.onFocusThread?.(threadId => {
 .edit-banner-cancel:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+@media (max-width: 768px) {
+  .chat-main-area {
+    padding: max(10px, calc(var(--chat-content-padding, 24px) - 8px));
+  }
+
+  .messages-container {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .chat-main-area {
+    padding: max(10px, calc(var(--chat-content-padding, 24px) - 8px));
+  }
+
+  .messages-container {
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 768px) {

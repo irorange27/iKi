@@ -161,7 +161,11 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
 
   const syncApprovalPolicyState = (thread: ChatThread | null) => {
     const metadata = thread ? parseJsonRecord(thread.metadata) : {};
-    currentApprovalPolicy.value = parseApprovalPolicy(metadata[THREAD_APPROVAL_POLICY_KEY]) ?? '';
+    // Ask first is the product default, so make it the in-memory default too.
+    // An empty value is not "unset" here — it is transmitted as "no policy"
+    // and makes the backend fall back to legacy flags.
+    currentApprovalPolicy.value =
+      parseApprovalPolicy(metadata[THREAD_APPROVAL_POLICY_KEY]) ?? 'askRisky';
   };
 
   const restoreDraftComposerSelection = () => {
@@ -376,13 +380,30 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       const draftPersonality = currentPersonality.value;
       const metadata: Record<string, unknown> = { mode };
       if (draftPersonality) metadata.personality = draftPersonality;
+      // Persist the approval policy at birth so every turn of this thread
+      // carries a concrete policy. Leaving it out made the first tool turn
+      // arrive with no policy, which the backend logs as `approval_policy
+      // degraded` and handles with legacy auto-run defaults.
+      metadata[THREAD_APPROVAL_POLICY_KEY] = currentApprovalPolicy.value || 'askRisky';
       const thread = await electronAPI.chat.threads.create({
         title: translateWithLocale(getCurrentLocale(), 'chat.thread.newTitle'),
         model: model || null,
         reasoning_effort: draftEffort || null,
         metadata: JSON.stringify(metadata),
         is_incognito: isIncognito.value ? 1 : 0,
-        workspace_id: mode === 'work' ? (options?.workspaceId ?? null) : null,
+        // A workspace chosen on the starting screen applies to plain chats
+        // too: without it the model is told it has a working directory while
+        // every file/shell tool has nowhere to run. Thread-private scratch and
+        // worktree workspaces still never carry over — they belong to one
+        // thread by construction.
+        workspace_id:
+          options?.workspaceId ??
+          (() => {
+            const draftWorkspaceId = normalizeWorkspaceId(selectedWorkspaceId.value);
+            return draftWorkspaceId && !isThreadPrivateWorkspaceId(draftWorkspaceId)
+              ? draftWorkspaceId
+              : null;
+          })(),
       });
       currentThread.value = thread;
       currentModel.value = typeof thread.model === 'string' ? thread.model : model || '';
@@ -392,6 +413,11 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       }
       syncIncognitoState(thread);
       syncWorkspaceState(thread);
+      // Read the policy back from the row we just created: it was written into
+      // metadata above, so the composer must reflect the same value. Skipping
+      // this left `currentApprovalPolicy` empty for the whole first turn, and
+      // an empty policy is exactly what reaches the backend as "none given".
+      syncApprovalPolicyState(thread);
       syncReasoningEffortState(thread);
       syncPersonalityState(thread);
       messageStore.clear();
@@ -472,6 +498,11 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       syncProviderState(thread);
       syncIncognitoState(thread);
       syncWorkspaceState(thread);
+      // Read the policy back from the row we just created: it was written into
+      // metadata above, so the composer must reflect the same value. Skipping
+      // this left `currentApprovalPolicy` empty for the whole first turn, and
+      // an empty policy is exactly what reaches the backend as "none given".
+      syncApprovalPolicyState(thread);
       syncReasoningEffortState(thread);
       syncPersonalityState(thread);
       syncApprovalPolicyState(thread);
@@ -771,7 +802,14 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   const setApprovalPolicy = async (nextValue: string) => {
     const normalizedValue = parseApprovalPolicy(nextValue);
     const activeThread = currentThread.value;
-    if (!activeThread) return;
+    if (!activeThread) {
+      // No thread yet (starting screen): stage the draft choice so the thread
+      // created by the first send inherits it. Returning here silently dropped
+      // the selection, and the new thread then ran under the default policy —
+      // which for a write tool means an approval card the user never asked for.
+      currentApprovalPolicy.value = normalizedValue ?? '';
+      return;
+    }
     const previousValue = parseApprovalPolicy(
       parseJsonRecord(activeThread.metadata)[THREAD_APPROVAL_POLICY_KEY]
     );

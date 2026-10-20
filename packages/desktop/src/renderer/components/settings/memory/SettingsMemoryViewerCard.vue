@@ -146,6 +146,7 @@
               <textarea
                 class="memory-editor-textarea"
                 :value="editingLongMemorySummary"
+                :aria-label="t('a11y.editingMemorySummary')"
                 @input="editingLongMemorySummary = ($event.target as HTMLTextAreaElement).value"
               />
               <div class="memory-inline-actions">
@@ -208,6 +209,7 @@
           type="text"
           :value="memorySearchQuery"
           :placeholder="t('settings.memory.searchPlaceholder')"
+          :aria-label="t('a11y.searchMemory')"
           @input="memorySearchQuery = ($event.target as HTMLInputElement).value"
         />
         <button
