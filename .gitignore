@@ -113,3 +113,10 @@ out/
 # Character config
 七海千秋.char
 eval-results/
+
+# Local scratch artifacts (never committed; see issue #189)
+iKi_v0.db
+packages/desktop/main.js
+packages/desktop/main.js.map
+.zcode/
+.archify/
