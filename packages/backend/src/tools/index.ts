@@ -5,6 +5,7 @@ export * from './shell_tools';
 export * from './agent_tools';
 export * from './skill_tools';
 export * from './web_tools';
+export * from './element_source_tool';
 export * from './schemas';
 export * from './task_plan_tools';
 export * from './todo_tools';
@@ -55,10 +56,20 @@ import {
 import { PlanTool } from './plan_tools';
 import { TodoTool } from './task_plan_tools';
 import { WebSearchTool, FetchTool } from './web_tools';
+import { ElementSourceTool, setElementSourceResolver, type ElementSourceResolver } from './element_source_tool';
 import { HandoffTool } from './handoff_tool';
 
 export type StandardToolRegistrationOptions = {
   delegatedAgentRuntime: DelegatedAgentRuntime;
+  /**
+   * Only the desktop shell can probe a renderer window. A standalone daemon
+   * passes nothing and `element_source` then answers "no window reachable"
+   * instead of failing the whole registration. Omitting it must not *clear* a
+   * resolver installed earlier in the same process — the desktop app runs the
+   * daemon embedded, over the same registry, after main wired the probe.
+   * Pass `setElementSourceResolver(null)` to deliberately remove one.
+   */
+  elementSourceResolver?: ElementSourceResolver;
 };
 
 // Construct only during explicit registration so importing the barrel never
@@ -73,6 +84,8 @@ const buildStandardTools = () => [
   new DelegatedAgentTool(),
   new WebSearchTool(),
   new FetchTool(),
+  new ElementSourceTool(),
+  new ElementSourceTool(),
   new ListPersonalSkillsTool(),
   new ReadPersonalSkillTool(),
   new LoadSkillTool(),
@@ -108,8 +121,16 @@ export const getBuiltinToolNames = (): readonly string[] =>
  */
 export function registerStandardTools({
   delegatedAgentRuntime,
+  elementSourceResolver,
 }: StandardToolRegistrationOptions) {
   setDelegatedAgentRuntime(delegatedAgentRuntime);
+  // Only install a resolver when the caller has one. An omitted resolver must
+  // not clear a previously installed one: the registry and the resolver are
+  // process-wide singletons, and the desktop main process starts the daemon
+  // *embedded* (`services/daemon/daemon_lifecycle.ts`), so the daemon's
+  // re-registration runs after main already wired the renderer probe. Clearing
+  // here made `element_source` answer "no window reachable" in the desktop app.
+  if (elementSourceResolver) setElementSourceResolver(elementSourceResolver);
   for (const tool of getStandardTools()) {
     defaultToolRegistry.register(tool);
   }

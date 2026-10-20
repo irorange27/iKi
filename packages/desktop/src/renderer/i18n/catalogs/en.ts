@@ -47,6 +47,18 @@ export const en = defineCatalog({
   'common.start': 'Start',
   'common.stop': 'Stop',
   'common.restart': 'Restart',
+  'dev.hint': 'Development',
+  'dev.restart.title': 'Restart app',
+  'dev.restart.description':
+    'Main-process, preload, and tool changes only take effect after a restart. Renderer changes (.vue, styles) hot-reload on save.',
+  'dev.restart.action': 'Restart',
+  'dev.restart.hot': 'The renderer is served by Vite, so hot reload is on.',
+  'dev.restart.noHot': 'The renderer is not from a dev server; reload with Cmd/Ctrl+R after edits.',
+  'dev.restart.coming': 'Restarting…',
+  'dev.slash.name': 'Restart app',
+  'dev.slash.description': 'Restart iKi so main-process changes apply (development only).',
+  'dev.slash.executed': 'Restarting…',
+  'dev.slash.devOnly': 'Restarting the app only works in development (pnpm run app:dev).',
   'common.local': 'Local',
   'common.default': 'Default',
   'common.none': 'None',
@@ -70,6 +82,14 @@ export const en = defineCatalog({
   'chat.newChat': 'New Chat',
   'chat.messagesCount': ({ count }) => `${asCount(count)} messages`,
   'chat.welcome.settings': 'Settings',
+  'chat.welcome.workspace.label': 'Workspace',
+  'chat.welcome.workspace.none': 'No workspace',
+  'chat.welcome.workspace.loading': 'Loading…',
+  'chat.welcome.workspace.browse': 'Choose folder…',
+  'chat.welcome.workspace.picking': 'Choosing…',
+  'chat.welcome.workspace.hint': 'Pick a folder so file and shell tools have somewhere to run.',
+  'chat.workspace.selectorLabel': 'Workspace for this chat',
+  'chat.workspace.browse': 'Choose workspace folder',
   'chat.welcome.prompt.blank': 'Blank start',
   'chat.welcome.prompt.project': 'Look at my project',
   'chat.welcome.prompt.paste': 'Help me organize some text',
@@ -234,7 +254,7 @@ export const en = defineCatalog({
   'chat.input.expandComposer': 'Expand the input area',
   'chat.input.collapseComposer': 'Collapse the input area',
   'chat.input.permission.title': 'Tool permission mode',
-  'chat.input.permission.ask': 'Ask first',
+  'chat.input.permission.ask': 'Ask first (dogfood-probe)',
   'chat.input.permission.auto': 'Auto-approve',
   'chat.input.permission.panelTitle': 'How should tools be approved?',
   'chat.input.permission.defaultName': 'Global default',
@@ -275,7 +295,7 @@ export const en = defineCatalog({
   'chat.input.slash.help.name': 'Help',
   'chat.input.slash.help.description': 'Show available slash commands.',
   'chat.input.slash.help.executed':
-    'Type / to browse commands. Built-in: /new, /clear, /incognito, /init, /help.',
+    'Type / to browse commands. Built-in: /new, /clear, /incognito, /init, /restart, /help.',
   'chat.input.slash.init.name': 'Init IKI.md',
   'chat.input.slash.init.description':
     'Create project agent instructions (IKI.md) in the current workspace.',
@@ -318,6 +338,7 @@ export const en = defineCatalog({
   'chat.model.searchPlaceholder': 'Search models...',
   'chat.model.noProviders': 'No providers configured.',
   'chat.model.noProviderMetadata': 'No enabled provider exposes model metadata.',
+  'chat.model.noModelsForProvider': 'No models enabled yet. Enable models in Settings → Models & Tools.',
   'chat.model.noMatchingModels': ({ query }) => `No models match "${asText(query)}".`,
   'chat.workspace.title': 'Workspace',
   'chat.workspace.adding': 'Adding...',
@@ -1250,15 +1271,15 @@ export const en = defineCatalog({
   'settings.providers.modal.apiFormat.anthropicDescription':
     'Use this when your gateway exposes an Anthropic Messages endpoint.',
   'settings.providers.modal.apiFormat.defaultDescription':
-    'In iKi, this selection sends OpenAI-compatible Chat Completions requests to your configured base URL.',
+    'This selection sends OpenAI-compatible Chat Completions requests to your configured base URL. Switch to Responses when your gateway exposes it.',
   'settings.providers.modal.apiFormat.chatCompletionsAdapter':
-    'Runtime adapter: AI SDK OpenAI-compatible provider.',
+    'Runtime adapter: Pi-AI (OpenAI Chat Completions dialect).',
   'settings.providers.modal.apiFormat.responsesAdapter':
-    'Runtime adapter: AI SDK OpenAI Responses provider with your custom base URL.',
+    'Runtime adapter: Pi-AI (OpenAI Responses dialect) against your base URL.',
   'settings.providers.modal.apiFormat.anthropicAdapter':
-    'Runtime adapter: AI SDK Anthropic provider configured against your custom base URL.',
+    'Runtime adapter: Pi-AI (Anthropic Messages dialect) against your base URL.',
   'settings.providers.modal.apiFormat.defaultAdapter':
-    'Runtime adapter: AI SDK OpenAI-compatible provider against your custom base URL.',
+    'Runtime adapter: Pi-AI (OpenAI Chat Completions dialect) against your base URL.',
   'settings.providers.modal.apiKeyPlaceholder': 'Enter API Key',
   'settings.providers.modal.baseUrl': 'Base URL',
   'settings.providers.modal.baseUrlPlaceholder': 'https://api.example.com/v1',
@@ -1311,14 +1332,14 @@ export const en = defineCatalog({
   'settings.providers.modelOptions.errors.invalidJson': 'Provider options must be valid JSON.',
   'settings.providers.modelOptions.errors.objectRequired':
     'Provider options JSON must be an object.',
-  'settings.providers.description.openai': 'Official OpenAI models via the AI SDK OpenAI provider',
+  'settings.providers.description.openai': 'Official OpenAI models via the Pi-AI supply layer',
   'settings.providers.description.anthropic':
-    'Official Claude models via the AI SDK Anthropic provider',
+    'Official Claude models via the Pi-AI supply layer',
   'settings.providers.description.deepseek':
     'DeepSeek AI models with advanced reasoning capabilities',
   'settings.providers.description.kimi': 'Moonshot AI models like Kimi with long context support',
   'settings.providers.description.minimax':
-    'Official MiniMax models via the AI SDK MiniMax provider',
+    'Official MiniMax models via the Pi-AI supply layer',
   'settings.providers.description.ollama': 'Run open-source LLMs locally with Ollama',
   'settings.mcp.title': 'MCP (Model Context Protocol)',
   'settings.mcp.description':
@@ -1441,4 +1462,35 @@ export const en = defineCatalog({
     `Failed to open skill folder: ${asText(error)}`,
   'settings.skills.error.readFailed': ({ error }) =>
     `Failed to read skill content: ${asText(error)}`,
+
+  // --- Accessibility: names, labels and announcements added with the a11y pass.
+  // Icon-only and landmark strings live here so the keyboard/screen-reader
+  // surface is translated like any other UI text.
+  'a11y.skipToConversation': 'Skip to conversation',
+  'a11y.skipToComposer': 'Skip to message composer',
+  'a11y.conversationLandmark': 'Conversation',
+  'a11y.settingsNav': 'Settings sections',
+  'a11y.settingsContent': 'Settings content',
+  'a11y.closeDialog': 'Close dialog',
+  'a11y.messageActions': 'Message actions',
+  'a11y.attachedImages': 'Attached images',
+  'a11y.viewImage': 'Open image preview',
+  'a11y.assistantReplying': 'Assistant is replying',
+  'a11y.toolApprovalRequired': 'Approval needed to run a tool',
+  'a11y.densityOption': ({ name }) => `Interface density: ${asText(name)}`,
+  'a11y.modelEnabled': ({ model }) => `Enable model ${asText(model)}`,
+  'a11y.showApiKey': 'Show API key',
+  'a11y.hideApiKey': 'Hide API key',
+  'a11y.composerInput': 'Message input',
+  'a11y.searchChats': 'Search chats',
+  'a11y.searchModels': 'Search models',
+  'a11y.searchProviders': 'Search providers',
+  'a11y.searchThemes': 'Search themes',
+  'a11y.searchSkills': 'Search skills',
+  'a11y.searchMemory': 'Search long-term memory',
+  'a11y.editingMemorySummary': 'Edit this memory summary',
+  'a11y.modelIdInput': 'Model id to add',
+  'a11y.modelDisplayNameInput': 'Display name for the model to add',
+  'a11y.settingsSectionTab': ({ name }) => `Settings section: ${asText(name)}`,
+  'a11y.turnPreviewCard': ({ role }) => `${asText(role)} message preview`,
 });

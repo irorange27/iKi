@@ -13,6 +13,7 @@ import {
 import { setHostFetch, setPlatformInfo } from '@iki/backend/platform';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import { getToolModel } from '@iki/backend/provider/tool_model';
+import { resolveElement } from './main/services/devtools/element_source';
 import { startDaemonServer } from '@iki/daemon/server';
 import { electronFetchWithTimeout } from './main/services/network/electron_fetch';
 import { registerMainIpc } from './main/ipc';
@@ -28,6 +29,7 @@ import {
 import { startAppUpdateService } from './main/services/update/auto_update_service';
 import { companionService } from './main/services/companion/companion_service';
 import { createMainWindow } from './main/windows/main_window';
+import { installApplicationMenu } from './main/windows/app_menu';
 import { setDevDockIcon } from './main/windows/dev_dock_icon';
 import { syncCompanionWindowToConfig } from './main/windows/companion_window';
 
@@ -129,6 +131,8 @@ if (isDaemonMode) {
 
   // Register standard tools + IPC handlers on startup.
   registerStandardTools({
+    // The renderer probe lives here, not in backend: the daemon has no windows.
+    elementSourceResolver: request => resolveElement(request),
     delegatedAgentRuntime: {
       createRunTracker: createAgentRunTracker,
       getConversationToolModel: getToolModel,
@@ -160,6 +164,10 @@ if (isDaemonMode) {
         platform: process.platform,
       },
     });
+    // Install before the first window so F12 / Cmd+Shift+I works from the
+    // first paint, in dev and packaged builds alike, and within settings and
+    // companion windows too.
+    installApplicationMenu();
     startBackgroundRuntime();
     startAppUpdateService(getAppConfig());
     void startDesktopDaemon();

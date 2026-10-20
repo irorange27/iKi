@@ -22,6 +22,8 @@ import type { AffectStateEntry } from '@iki/backend/types/memory';
 import type { ProactiveTask } from '@iki/backend/types/tasks';
 import type { McpServerInput, McpServerSummary } from '@iki/backend/types/mcp';
 import type { AgentRun, AgentRunTrace, AgentRunTree } from '@iki/backend/types/agent_run';
+import type { DevToolsResolveRequest, DevToolsSourceResult } from '@iki/backend/types/devtools';
+import type { DevRuntimeStatus } from '@iki/backend/types/devtools';
 import type {
   SpeechStatus,
   SpeechTranscriptionInput,
@@ -291,6 +293,19 @@ const electronApi: ElectronApi = {
       subscribe('companion:updated', callback),
     openMainWindow: () => ipcRenderer.invoke('companion:open-main-window'),
     disable: () => ipcRenderer.invoke('companion:disable'),
+  },
+  dev: {
+    getStatus: (): Promise<DevRuntimeStatus> => ipcRenderer.invoke('dev:get-status'),
+    restartApp: (): Promise<{ ok: boolean; reason?: string }> =>
+      ipcRenderer.invoke('dev:restart-app'),
+  },
+  devtools: {
+    installRecorder: (request?: DevToolsResolveRequest): Promise<DevToolsSourceResult> =>
+      ipcRenderer.invoke('devtools:install-recorder', request),
+    probeElement: (request?: DevToolsResolveRequest): Promise<DevToolsSourceResult> =>
+      ipcRenderer.invoke('devtools:probe-element', request),
+    resolveElement: (request?: DevToolsResolveRequest): Promise<DevToolsSourceResult> =>
+      ipcRenderer.invoke('devtools:resolve-element', request),
   },
   openSettings: (section?: string) => ipcRenderer.send('open-settings', section),
   focusThread: (threadId: string) => ipcRenderer.send('chat:focus-thread', threadId),

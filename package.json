@@ -13,6 +13,7 @@
     "app:build": "cd packages/desktop && electron-forge make",
     "app:preview": "node scripts/run-packaged-preview.cjs packages/desktop/out",
     "cdp": "node scripts/app_cdp.mjs",
+    "elem-source": "node scripts/cdp_element_source.mjs",
     "benchmark:daemon": "node scripts/benchmarks/run-daemon-benchmark.cjs",
     "benchmark:desktop-pet:system:summary": "node scripts/benchmarks/summarize-desktop-pet-system-eval.cjs",
     "daemon:start": "node scripts/start-daemon.cjs",

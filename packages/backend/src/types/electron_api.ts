@@ -15,6 +15,7 @@ import type {
 } from '@iki/backend/types/provider';
 import type { ChatMessage, ChatThread, PromptApp, Workspace } from './chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from './chat_usage';
+import type { DevRuntimeStatus, DevToolsResolveRequest, DevToolsSourceResult } from './devtools';
 import type {
   AffectStateEntry,
   LongMemoryEntry,
@@ -369,6 +370,17 @@ export interface ElectronApi {
     onUpdated: (callback: (snapshot: CompanionSnapshot) => void) => () => void;
     openMainWindow: () => Promise<WindowActionResult>;
     disable: () => Promise<WindowActionResult>;
+  };
+  /** Development runtime: restart for main-process edits, hot-reload facts. */
+  dev: {
+    getStatus: () => Promise<DevRuntimeStatus>;
+    restartApp: () => Promise<{ ok: boolean; reason?: string }>;
+  };
+  /** Element → source bridge: which file renders the element on screen. */
+  devtools: {
+    installRecorder: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
+    probeElement: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
+    resolveElement: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
   };
   openSettings: (section?: string) => void;
   /** Focus the main window and switch its chat view to the given thread. */

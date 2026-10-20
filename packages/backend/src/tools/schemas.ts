@@ -9,4 +9,5 @@ export * from './schemas/task_plan';
 export * from './schemas/agent';
 export * from './schemas/proactive_task';
 export * from './schemas/awaiter';
+export * from './schemas/devtools';
 export * from './schemas/outputs';
