@@ -163,6 +163,11 @@ if (!opts.spawnPort && !opts.userData) {
 }
 if (!fs.existsSync(opts.workspace)) die(`workspace path does not exist: ${opts.workspace}`);
 
+// Spawn mode owns the scene end-to-end: the URL always follows the port we
+// passed to the daemon, so a stale --daemon-url cannot make the health poll
+// watch a different (possibly someone else's) daemon.
+if (opts.spawnPort) opts.daemonUrl = `http://127.0.0.1:${opts.spawnPort}`;
+
 const daemonUrl = opts.daemonUrl.replace(/\/+$/, '');
 const wsUrl = `${daemonUrl.replace(/^http/, 'ws')}/v1/chat/stream`;
 
