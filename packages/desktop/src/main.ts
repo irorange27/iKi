@@ -4,7 +4,7 @@ import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
 import { applyAppLoggingConfig, createLogger, setBaseLogContext } from '@iki/backend/logger';
 import { registerStandardTools } from '@iki/backend/tools';
-import { startTurnHarness } from '@iki/backend/agent/harness';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getMcpManager } from '@iki/backend/mcp';
 import {
   initLangfuseTracing,
@@ -132,7 +132,10 @@ if (isDaemonMode) {
     delegatedAgentRuntime: {
       createRunTracker: createAgentRunTracker,
       getConversationToolModel: getToolModel,
-      createHarness: startTurnHarness,
+      // Delegation runs on the same supply as a parent turn. The Pi tool
+      // harness honours `toolsOverride`, so the child inherits exactly the
+      // approval-free tool set the delegation selected.
+      createHarness: startPiTurnHarness,
     },
   });
   void getMcpManager().initialize();

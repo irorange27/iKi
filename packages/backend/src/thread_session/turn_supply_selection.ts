@@ -3,7 +3,7 @@ import type { ModelMessage } from 'ai';
 import { startTurnHarness, type TurnDriverHarness } from '../agent/harness';
 import { PiTextTurnHarness } from '../agent/runners/pi_text_turn_harness';
 import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
-import { supportsPiTurnSupply } from '../provider/llm/factory';
+import { resolvePiTurnSupply } from '../provider/llm/factory';
 import { planToHarnessConfig, type ExecutionPlan } from './execution_plan';
 
 /**
@@ -11,25 +11,102 @@ import { planToHarnessConfig, type ExecutionPlan } from './execution_plan';
  * chain rebuilds (switch items 2c/3a/3b/3c): the Pi supply layer serves
  * text-only turns and tool turns in EVERY mode — autonomous batch
  * continuation and handoff chains included, the turn driver rebuilding each
- * chained harness through this same selector. Everything else — the
- * Responses API, static-factory providers, out-of-domain history — stays on
- * the AI SDK harness until its switch item. The approval policy does NOT
+ * chained harness through this same selector. The approval policy does NOT
  * gate: pause + five-state resume serve every policy (3b).
+ *
+ * REFUSAL IS LOUD. When the Pi projection cannot represent the history, the
+ * turn fails with the offending part named instead of quietly running on a
+ * different executor. The silent re-route was the last thing keeping the AI SDK
+ * alive as a parallel executor, and it hid real problems: the user got an
+ * answer from a different code path than the one they were exercising, and the
+ * only trace was a log line nobody reads. A refusal is a bug report —
+ * the projection domain is the target, and it should grow to cover whatever
+ * shows up here, not be worked around at runtime.
  */
-export const selectTurnHarness = (plan: ExecutionPlan, history: ModelMessage[]): TurnDriverHarness => {
-  const fallback = () => startTurnHarness(planToHarnessConfig(plan));
-  const piAdmitted = supportsPiTurnSupply({
+/** Test/ops seam: build the legacy AI-SDK executor for a plan. */
+export const legacyTurnHarness: TurnHarnessOverride = plan =>
+  startTurnHarness(planToHarnessConfig(plan));
+
+/**
+ * Executor used when the Pi supply refuses the turn.
+ *
+ * The production value is `undefined`: a refusal is terminal and reported (see
+ * above). Tests that drive the durable layer (retry, session log, persistence)
+ * with a scripted AI SDK model inject `startTurnHarness` here so they can keep
+ * asserting those behaviours without a network endpoint — they are testing
+ * what happens AROUND the model call, not which supply serves it. That seam is
+ * also what an operator would use to opt into the legacy executor; no product
+ * code takes it today.
+ */
+export type TurnHarnessOverride = (plan: ExecutionPlan) => TurnDriverHarness | null;
+
+/**
+ * Process-wide FORCED executor.
+ *
+ * When set, it takes precedence over the supply decision entirely: the caller
+ * has said which executor this process runs. That is what the durable-layer
+ * suites need — their provider row points at a closed port and their model is a
+ * scripted AI SDK object, so letting Pi admit the turn would send it to a dead
+ * address and time out. Production leaves this `null`, which makes a refusal
+ * terminal and a healthy turn run on Pi.
+ *
+ * A module-level switch rather than a parameter because the selector is reached
+ * from three deep call sites (streaming, send, and the turn driver's handoff
+ * rebuild); threading a test-only argument through all of them would put test
+ * knowledge in the production signature.
+ */
+let fallbackExecutor: TurnHarnessOverride | null = null;
+
+export const setTurnHarnessFallback = (override: TurnHarnessOverride | null): void => {
+  fallbackExecutor = override;
+};
+
+export const selectTurnHarness = (
+  plan: ExecutionPlan,
+  history: ModelMessage[],
+  override?: TurnHarnessOverride
+): TurnDriverHarness => {
+  const forced = (override ?? fallbackExecutor)?.(plan) ?? null;
+  if (forced) return forced;
+
+  const decision = resolvePiTurnSupply({
     providerType: plan.providerType,
     ...(plan.providerId ? { providerId: plan.providerId } : {}),
     modelId: plan.model,
     history,
   });
-  if (!piAdmitted) return fallback();
+  if (!decision.admitted) {
+    throw new PiSupplyRefusedError(decision.reason, decision.cause, {
+      providerType: plan.providerType,
+      providerId: plan.providerId ?? null,
+      model: plan.model,
+    });
+  }
   if (!plan.enableTools) {
     return new PiTextTurnHarness(planToHarnessConfig(plan));
   }
   return new PiToolTurnHarness(planToHarnessConfig(plan));
 };
+
+/**
+ * The turn cannot run: its history carries something the model supply layer
+ * cannot project. Carries the concrete reason so the failed turn reports it
+ * rather than a generic failure.
+ */
+export class PiSupplyRefusedError extends Error {
+  constructor(
+    readonly reason: string,
+    readonly refusalCause: 'config' | 'domain',
+    readonly context: { providerType: string; providerId: string | null; model: string }
+  ) {
+    super(
+      refusalCause === 'domain'
+        ? `This turn cannot be sent: its history contains content the model projection does not support (${reason}). Nothing was sent — remove or resend the offending message.`
+        : `This turn cannot be sent: ${reason}.`
+    );
+    this.name = 'PiSupplyRefusedError';
+  }
+}
 
 /** The restart-recovery reconstruction (issue #133): the session-log replay
  * stamps the pending approval onto the assistant partial (tool-call +
@@ -66,10 +143,10 @@ export const piDomainResumeHistory = (history: ModelMessage[]): ModelMessage[] =
  * supply it paused on, or the supply flips mid-turn. */
 export const pausedPlanRunsOnPiToolSupply = (plan: ExecutionPlan, history: ModelMessage[]): boolean => {
   if (!plan.enableTools) return false;
-  return supportsPiTurnSupply({
+  return resolvePiTurnSupply({
     providerType: plan.providerType,
     ...(plan.providerId ? { providerId: plan.providerId } : {}),
     modelId: plan.model,
     history: piDomainResumeHistory(history),
-  });
+  }).admitted;
 };

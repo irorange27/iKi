@@ -6,6 +6,7 @@ import type { Provider } from '@iki/backend/types/provider';
 const {
   createModelMock,
   disposeLanguageModelMock,
+  generateChatWithModelMessagesMock,
   generateTextMock,
   getAppConfigMock,
   resolvePersonaPromptMock,
@@ -14,6 +15,7 @@ const {
 } = vi.hoisted(() => ({
   createModelMock: vi.fn(),
   disposeLanguageModelMock: vi.fn(),
+  generateChatWithModelMessagesMock: vi.fn(),
   generateTextMock: vi.fn(),
   getAppConfigMock: vi.fn(),
   resolvePersonaPromptMock: vi.fn(),
@@ -27,6 +29,7 @@ vi.mock('ai', () => ({
 
 vi.mock('@iki/backend/provider/llm/factory', () => ({
   createModel: createModelMock,
+  generateChatWithModelMessages: generateChatWithModelMessagesMock,
   disposeLanguageModel: disposeLanguageModelMock,
   resolvePersonaPrompt: resolvePersonaPromptMock,
   getModelCallSettings: getModelCallSettingsMock,
@@ -75,6 +78,10 @@ beforeEach(() => {
   createModelMock.mockReturnValue('mock-model');
   getModelCallSettingsMock.mockReturnValue({});
   generateTextMock.mockResolvedValue({ text: 'OK' });
+  generateChatWithModelMessagesMock.mockResolvedValue({
+    text: 'OK',
+    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+  });
   resolvePersonaPromptMock.mockReturnValue('persona prompt');
   getAppConfigMock.mockReturnValue(createDefaultAppConfig());
   getProvidersMock.mockReturnValue([]);
@@ -148,7 +155,7 @@ describe('tool model provider', () => {
     expect(toolModel?.model).toBe('gpt-4o-mini');
   });
 
-  it('runs latency tests through the direct model call path instead of chat orchestration', async () => {
+  it('probes latency through the shared aux supply entry, not a private AI SDK call', async () => {
     getProvidersMock.mockReturnValue([
       buildProvider({
         id: 'provider-deepseek',
@@ -170,22 +177,22 @@ describe('tool model provider', () => {
       model: 'deepseek-chat',
     });
 
-    expect(createModelMock).toHaveBeenCalledWith(
-      'deepseek',
-      'deepseek-chat',
-      'provider-deepseek'
+    // Regression: this probe used to build the model itself and call
+    // generateText directly. That made it exercise a DIFFERENT supply than the
+    // auxiliary calls it exists to validate — on a Pi-eligible provider the
+    // probe ran the AI SDK path while the real calls ran Pi, so a green "Test"
+    // said nothing about the route actually in use. One supply decision.
+    expect(generateChatWithModelMessagesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: 'deepseek',
+        providerId: 'provider-deepseek',
+        modelId: 'deepseek-chat',
+        messages: [{ role: 'user', content: 'Reply with OK.' }],
+        maxOutputTokens: 8,
+      })
     );
-    expect(getModelCallSettingsMock).toHaveBeenCalledWith(
-      'deepseek',
-      'deepseek-chat',
-      'provider-deepseek'
-    );
-    expect(generateTextMock).toHaveBeenCalledWith({
-      model: 'mock-model',
-      messages: [{ role: 'user', content: 'Reply with OK.' }],
-      maxOutputTokens: 8,
-    });
-    expect(disposeLanguageModelMock).toHaveBeenCalledWith('mock-model');
+    expect(createModelMock).not.toHaveBeenCalled();
+    expect(generateTextMock).not.toHaveBeenCalled();
   });
 
   it('rejects invalid explicit providerId selections instead of silently picking another provider', async () => {

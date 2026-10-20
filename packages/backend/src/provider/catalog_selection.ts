@@ -23,8 +23,8 @@ export {
 
 export const selectCatalogWithAgent = async <T>(
   params: CatalogSelectionRequest<T>
-): Promise<string[]> => {
-  if (params.availableCatalog.length === 0) return [];
+): Promise<string[] | null> => {
+  if (params.availableCatalog.length === 0) return null;
 
   const runtime = new LlmCatalogSelectionRuntime({
     getToolModel,

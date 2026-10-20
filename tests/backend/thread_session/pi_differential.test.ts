@@ -18,7 +18,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createModelMock = vi.hoisted(() => vi.fn());
 
@@ -76,6 +76,10 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
 }));
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import {
+  legacyTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import {
   MODEL_OUTPUT_COMMITTED,
   MODEL_TEXT_COMMITTED,
@@ -156,6 +160,17 @@ afterAll(async () => {
 
 // ── driver A: current engine ────────────────────────────────────────────────
 describe('differential: current engine (AI SDK harness)', () => {
+  // This block EXISTS to run the legacy executor, so it is forced rather than
+  // routed: the production selector serves every provider type on Pi now, and
+  // its refusal is terminal. The comparison is only meaningful while both
+  // drivers are reachable.
+  beforeEach(() => {
+    setTurnHarnessFallback(legacyTurnHarness);
+  });
+  afterEach(() => {
+    setTurnHarnessFallback(null);
+  });
+
   it('runs the scenario through the streaming harness', async () => {
     const model = new FauxModelProvider([
       fauxToolCall('read_file', { path: '/scenario.txt' }, { id: 'call_a', textBefore: 'first segment. ' }),

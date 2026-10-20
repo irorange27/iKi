@@ -30,6 +30,7 @@ import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createChatTurnPreparer } from '@iki/backend/turn_prep/turn_preparer';
 import { resolveSkillsSystemPrompt } from '@iki/backend/thread_session/skills';
+import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import {
   getAssistantProfileContextMessage,
   onMessagePersisted,
@@ -99,6 +100,12 @@ describe('message_send execution-fact persistence', () => {
   });
 
   beforeEach(async () => {
+  // These suites drive the DURABLE layer (streaming, approvals, session-log
+  // facts, retry, persistence) with a scripted AI SDK model. They are not about
+  // which supply serves the turn, so they opt into the legacy executor: the
+  // production default refuses a turn its projection cannot carry, and a
+  // scripted model has no endpoint to project to.
+  setTurnHarnessFallback(legacyTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-send-persistence-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'send.db') });

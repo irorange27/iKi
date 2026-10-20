@@ -22,6 +22,7 @@ import { AgentHarness } from '@iki/backend/agent/harness';
 import { PiTextTurnHarness } from '@iki/backend/agent/runners/pi_text_turn_harness';
 import { PiToolTurnHarness } from '@iki/backend/agent/runners/pi_tool_turn_harness';
 import {
+  PiSupplyRefusedError,
   pausedPlanRunsOnPiToolSupply,
   selectTurnHarness,
 } from '@iki/backend/thread_session/turn_supply_selection';
@@ -102,7 +103,12 @@ describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
     expect(selectTurnHarness(autonomous, history)).toBeInstanceOf(PiTextTurnHarness);
   });
 
-  it('keeps a static-factory provider on the AI SDK harness in autonomous mode', () => {
+  it('serves a static-factory provider on the Pi harness in autonomous mode', () => {
+    // Contract change: `STATIC_PROVIDER_MODEL_FACTORIES[type]` used to exclude
+    // openai/anthropic/minimax/deepseek from the Pi supply, so the harness
+    // selector kept them on `AgentHarness`. Pi now drives those dialects
+    // (resolveProviderApi), so the selector admits them — one supply for every
+    // provider, which is what "no long-term double-driving" requires.
     const harness = selectTurnHarness(
       plan({
         providerType: 'openai',
@@ -112,27 +118,48 @@ describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
       }),
       history
     );
-    expect(harness).toBeInstanceOf(AgentHarness);
+    expect(harness).not.toBeInstanceOf(AgentHarness);
   });
 
-  it('keeps out-of-domain history on the AI SDK harness (the projection domain gate)', () => {
-    const harness = selectTurnHarness(
-      plan({ autonomous: { maxIterations: 3 } }),
-      [
-        // Approval parts throw in the projection — the out-of-domain probe.
-        {
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool-approval-response',
-              approvalId: 'ap_1',
-              approved: true,
-            } as never,
-          ],
-        },
-      ]
-    );
-    expect(harness).toBeInstanceOf(AgentHarness);
+  it('REFUSES out-of-domain history instead of silently re-routing (the projection domain gate)', () => {
+    // Contract change: this used to return the AI SDK harness, which meant the
+    // user's turn ran on a different executor than the one under test and the
+    // only trace was a log line. A refusal is now terminal and names the part
+    // the projection cannot represent — the domain should grow to cover it,
+    // not be worked around at runtime.
+    expect(() =>
+      selectTurnHarness(
+        plan({ autonomous: { maxIterations: 3 } }),
+        [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-approval-response',
+                approvalId: 'ap_1',
+                approved: true,
+              } as never,
+            ],
+          },
+        ]
+      )
+    ).toThrow(PiSupplyRefusedError);
+
+    // The message must say WHAT could not be projected and that nothing was
+    // sent, so the failure is actionable rather than a generic turn error.
+    expect(() =>
+      selectTurnHarness(
+        plan({ autonomous: { maxIterations: 3 } }),
+        [
+          {
+            role: 'assistant',
+            content: [
+              { type: 'tool-approval-response', approvalId: 'ap_1', approved: true } as never,
+            ],
+          },
+        ]
+      )
+    ).toThrow(/tool-approval-response/);
   });
 });
 
@@ -217,7 +244,7 @@ describe('pausedPlanRunsOnPiToolSupply (switch item 3c: autonomous resumes stay 
     );
   });
 
-  it('refuses a static-factory provider', () => {
+  it('admits a static-factory provider (one supply for every provider type)', () => {
     expect(
       pausedPlanRunsOnPiToolSupply(
         plan({
@@ -227,6 +254,6 @@ describe('pausedPlanRunsOnPiToolSupply (switch item 3c: autonomous resumes stay 
         }),
         history
       )
-    ).toBe(false);
+    ).toBe(true);
   });
 });

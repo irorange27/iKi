@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { startTurnHarness } from '@iki/backend/agent/harness';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { registerStandardTools } from '@iki/backend/tools';
 import { getMcpManager } from '@iki/backend/mcp';
@@ -41,14 +41,29 @@ const ensureUserDataDir = () => {
   return userDataPath;
 };
 
-const writePortFile = (userDataPath: string, port: number) => {
-  const portPath = path.join(userDataPath, 'daemon.port');
-  fs.writeFileSync(portPath, String(port), { encoding: 'utf8' });
-};
-
-const writeHostFile = (userDataPath: string, host: string) => {
-  const hostPath = path.join(userDataPath, 'daemon.host');
-  fs.writeFileSync(hostPath, host, { encoding: 'utf8' });
+// The port/host files are a best-effort handshake: the desktop process reads
+// them to discover an already-running daemon, and its reader swallows every
+// error. Writing them must never be able to take the process down — an
+// unwritable userData dir (a sandboxed/TCC-restricted launch, or a read-only
+// volume) used to throw here from inside the listen callback, which surfaced
+// as an uncaught exception and killed the app.
+const writeOptionalFile = (
+  filePath: string,
+  contents: string,
+  logger: ReturnType<typeof createDaemonLogger>
+) => {
+  try {
+    fs.writeFileSync(filePath, contents, { encoding: 'utf8' });
+  } catch (error) {
+    logger.event({
+      level: 'warn',
+      event: 'daemon.server.state_file',
+      outcome: 'skipped',
+      message: `Could not write ${path.basename(filePath)}; continuing without it.`,
+      error,
+      entity: { path: filePath },
+    });
+  }
 };
 
 export const startDaemonServer = (options?: { port?: number; host?: string }) => {
@@ -75,7 +90,7 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
       delegatedAgentRuntime: {
         createRunTracker: createAgentRunTracker,
         getConversationToolModel: getToolModel,
-        createHarness: startTurnHarness,
+        createHarness: startPiTurnHarness,
       },
     });
     const mcpManager = getMcpManager();
@@ -227,8 +242,8 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
 
     server.listen(port, host, () => {
       started.port = resolveListeningPort();
-      writePortFile(userDataPath, started.port);
-      writeHostFile(userDataPath, host);
+      writeOptionalFile(path.join(userDataPath, 'daemon.port'), String(started.port), serverLogger);
+      writeOptionalFile(path.join(userDataPath, 'daemon.host'), host, serverLogger);
       serverLogger.event({
         level: 'info',
         event: 'daemon.server.listen',

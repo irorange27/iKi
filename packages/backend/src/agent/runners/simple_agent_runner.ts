@@ -26,7 +26,7 @@ import {
   injectReasoningContentIntoMessages,
 } from '../../provider/llm/factory';
 import { normalizeLanguageModelUsage } from '../../provider/llm/usage';
-import { withoutCacheMarkers, withCacheBreakpoint } from '../cache_markers';
+import { withCacheBreakpoint } from '../cache_markers';
 import { parseToolInputFromText } from '@iki/backend/message/tool_parts';
 import {
   appendResponseMessages,
@@ -324,13 +324,13 @@ export class SimpleAgentRunner {
               const budget = request.maxInputTokens - overhead;
               const planned = autoCompactHistory({ history: stepContext, maxInputTokens: budget });
               if (planned.compacted) {
-                // The aux summarizer call rides the routed request's exact
-                // prefix (same model, system, tool schemas, history handed
-                // over marker-free and re-marked at the prefix tail by the
-                // summarizer) so the omitted history is eligible for provider
-                // cache reuse. Custom-model
-                // runs bypass factory-created models and get no replay
-                // context — the summarizer falls back to its standalone call.
+                // The summarizer is a standalone aux call. It used to be able
+                // to REPLAY the routed request's prefix (system, tool schemas,
+                // marker-free history) so the omitted history was eligible for
+                // provider prompt-cache reuse — but that path was only ever
+                // fed from here, and once every turn moved to the Pi supply
+                // (ADR 009 item 3) no caller supplied the prefix, so it never
+                // ran. Deleted rather than left as unreachable machinery.
                 const summary = await generateThreadSummary({
                   threadId: request.threadId,
                   abortSignal: signal,
@@ -339,19 +339,6 @@ export class SimpleAgentRunner {
                     role: message.role === 'user' ? 'user' : 'assistant',
                     content: typeof message.content === 'string' ? message.content : JSON.stringify({ role: message.role, content: message.content }),
                   })),
-                  ...(usingCustomModel
-                    ? {}
-                    : {
-                        cachePrefix: {
-                          providerType: config.providerType,
-                          providerId: config.providerId,
-                          model: config.model,
-                          systemPrompt,
-                          tools,
-                          history: withoutCacheMarkers(stepContext),
-                          ...(openAIPromptCacheKey ? { openAIPromptCacheKey } : {}),
-                        },
-                      }),
                 });
                 signal.throwIfAborted();
                 if (!summary) throw new Error('Context compaction failed; original history has been preserved.');

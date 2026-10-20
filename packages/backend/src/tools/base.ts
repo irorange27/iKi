@@ -74,6 +74,12 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
       outputSchema: this.outputSchema,
       paramSchema: this.paramSchema,
       needsApproval: this.needsApproval ?? false,
+      // Record the declaration at the source. A tool that never passes through
+      // the turn resolver (a direct toAgentTool() in a test, a delegated
+      // child's toolsOverride) must still answer "do I need approval?"
+      // statically — otherwise consumers fall back to the live decision, which
+      // under an explicit policy is a per-call function for every tool.
+      declaredNeedsApproval: this.needsApproval === true,
       ...(this.approvalMode ? { approvalMode: this.approvalMode } : {}),
       autoAllowed: this.autoAllowed === true,
       displayName: this.displayName ?? this.name,

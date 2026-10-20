@@ -523,9 +523,65 @@ export const resolvePersonaPrompt = (providerType: string, providerId?: string |
  * by buildPiModel's pinned protocol fields (system role, no `thinking`
  * injection, no reasoning_effort) — see the adapter for why the catalog's
  * reasoning flag must never drive the Pi model. */
-const supportsPiGeneration = (providerType: string, config: ProviderConfig): boolean =>
-  !STATIC_PROVIDER_MODEL_FACTORIES[providerType] &&
-  !config.isResponseApi &&
+/**
+ * Which protocol dialect a provider's traffic speaks.
+ *
+ * Policy (product): prefer the Responses API wherever the provider supports it;
+ * chat completions is the floor for gateways that only speak it. The table
+ * below is therefore NOT "what the old AI SDK client happened to do" — it is
+ * the provider's real capability, cross-checked against Pi's own catalog
+ * (`@earendil-works/pi-ai/dist/providers/data/*.json`), which is the authority
+ * on which api each provider serves:
+ *
+ *   openai-responses   → openai, cloudflare-ai-gateway, github-copilot, meta,
+ *                        opencode, opencode-go, xai
+ *   anthropic-messages → anthropic, minimax(-cn), openrouter, fireworks, …
+ *   openai-completions → deepseek, groq, cerebras, together, baseten, …
+ *
+ * "Prefer responses" is applied through CAPABILITY, not by blanket default:
+ * forcing responses onto a completions-only provider (DeepSeek, whose catalog
+ * entry says `openai-completions`) would 404 every call. A custom/gateway row
+ * is the one place the operator decides — `is_response_api` is that
+ * declaration and always wins.
+ *
+ * This is the ONE place that answers the question, so the supply predicate and
+ * every Pi model build share it. Before it existed the dialect was implied by
+ * which AI SDK factory was selected — knowledge that lived nowhere and could
+ * not be carried onto the Pi model.
+ */
+const STATIC_PROVIDER_API: Partial<Record<string, 'openai-responses' | 'anthropic-messages'>> = {
+  // Responses-capable (Pi catalog: `openai-responses`).
+  openai: 'openai-responses',
+  // Messages-capable (Pi catalog: `anthropic-messages`). MiniMax's endpoint is
+  // `/anthropic/v1`, and the compatible gateway speaks the same protocol.
+  anthropic: 'anthropic-messages',
+  'anthropic-compatible': 'anthropic-messages',
+  minimax: 'anthropic-messages',
+  // Everything else — deepseek included — speaks OpenAI chat completions, the
+  // default below.
+};
+
+export const resolveProviderApi = (
+  providerType: string,
+  config: Pick<ProviderConfig, 'isResponseApi'>
+): 'openai-completions' | 'openai-responses' | 'anthropic-messages' => {
+  // An explicit flag wins over the type's default: a row can point a
+  // Responses-style type at a chat-completions gateway, and a custom row can
+  // declare a Responses-capable gateway the type cannot express.
+  if (config.isResponseApi) return 'openai-responses';
+  const declared = STATIC_PROVIDER_API[providerType];
+  if (declared) return declared;
+  // Chat completions is the universal floor: every OpenAI-compatible gateway
+  // speaks it, so an unknown provider still works.
+  return 'openai-completions';
+};
+
+const supportsPiGeneration = (_providerType: string, config: ProviderConfig): boolean =>
+  // Neither a static-factory provider type nor `isResponseApi` is an exclusion
+  // any more: Pi drives openai-completions, openai-responses and
+  // anthropic-messages natively, so every provider iKi shipped an AI SDK client
+  // for is served by the same supply. The dialect is chosen by
+  // resolveProviderApi and carried onto the model.
   typeof config.baseURL === 'string' &&
   config.baseURL.trim().length > 0;
 
@@ -538,37 +594,60 @@ const supportsPiGeneration = (providerType: string, config: ProviderConfig): boo
  * also returns false: the AI SDK harness's createModel then raises today's
  * exact error surface.
  */
+/**
+ * The supply decision, with the reason it can be refused.
+ *
+ * A bare boolean forced every caller to invent its own story for "why not Pi",
+ * and the turn silently re-routed to the AI SDK with only a log line behind it.
+ * Carrying the reason lets the selector REFUSE the turn and say what part of
+ * the history the Pi projection could not represent — the user sees the cause
+ * instead of a different executor running their turn.
+ */
+export type PiTurnSupplyDecision =
+  | { admitted: true; reason?: never; cause?: never }
+  | { admitted: false; reason: string; cause: 'config' | 'domain' };
+
+export const resolvePiTurnSupply = (params: {
+  providerType: string;
+  providerId?: string;
+  modelId: string;
+  history: ModelMessage[];
+}): PiTurnSupplyDecision => {
+  let config: ProviderConfig;
+  try {
+    config = getProviderConfig(params.providerType, params.providerId);
+  } catch (error) {
+    return {
+      admitted: false,
+      cause: 'config',
+      reason: `provider "${params.providerType}" is not configured: ${getErrorMessage(error)}`,
+    };
+  }
+  if (!supportsPiGeneration(params.providerType, config)) {
+    return {
+      admitted: false,
+      cause: 'config',
+      reason: `provider "${params.providerType}" has no base URL, so no model endpoint can be addressed`,
+    };
+  }
+  try {
+    projectHistoryToPiContext(params.history, params.modelId, params.providerType);
+    return { admitted: true };
+  } catch (error) {
+    return {
+      admitted: false,
+      cause: 'domain',
+      reason: getErrorMessage(error),
+    };
+  }
+};
+
 export const supportsPiTurnSupply = (params: {
   providerType: string;
   providerId?: string;
   modelId: string;
   history: ModelMessage[];
-}): boolean => {
-  let config: ProviderConfig;
-  try {
-    config = getProviderConfig(params.providerType, params.providerId);
-  } catch {
-    return false;
-  }
-  if (!supportsPiGeneration(params.providerType, config)) return false;
-  try {
-    projectHistoryToPiContext(params.history, params.modelId, params.providerType);
-    return true;
-  } catch (error) {
-    factoryLogger.event({
-      level: 'info',
-      outcome: 'degraded',
-      event: 'llm.supply.pi_turn_fallback',
-      message: 'Turn history outside the Pi projection domain — using the AI SDK harness.',
-      data: {
-        providerType: params.providerType,
-        modelId: params.modelId,
-        reason: getErrorMessage(error),
-      },
-    });
-    return false;
-  }
-};
+}): boolean => resolvePiTurnSupply(params).admitted;
 
 /**
  * Single-shot generation over the Pi supply layer (ADR 007, switch item 1).
@@ -605,6 +684,7 @@ const generateViaPi = async (
     id: options.modelId,
     providerType: config.type,
     baseUrl: config.baseURL,
+    api: resolveProviderApi(options.providerType, config),
     // Single-shot generation enforces no context budget in the AI SDK path
     // either (only maxOutputTokens), so the window here is informational;
     // the catalog's own value is used when the snapshot has one.

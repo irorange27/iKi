@@ -21,7 +21,18 @@ export type CatalogSelectionRequest<T> = {
 };
 
 export interface CatalogSelectionRuntime {
-  run<T>(request: CatalogSelectionRequest<T>): Promise<string[]>;
+  /**
+   * Resolves a selection, or `null` when the selection could not be made
+   * (no tool model, empty transcript, or the auxiliary call failed).
+   *
+   * The distinction from `[]` is load-bearing: `[]` means "the selector ran
+   * and deliberately chose nothing", while `null` means "no selection
+   * exists". Callers fall back to their full catalog on `null` and honour `[]`
+   * as an explicit empty pick. Collapsing both to `[]` previously left a
+   * failed selector silently shrinking the tool set to the one tool a caller
+   * appends by hand.
+   */
+  run<T>(request: CatalogSelectionRequest<T>): Promise<string[] | null>;
 }
 
 export type LlmCatalogSelectionRuntimeDeps = {
@@ -104,10 +115,10 @@ export const tryParseJson = (raw: string): unknown => {
 export class LlmCatalogSelectionRuntime implements CatalogSelectionRuntime {
   constructor(private readonly deps: LlmCatalogSelectionRuntimeDeps) {}
 
-  async run<T>(request: CatalogSelectionRequest<T>): Promise<string[]> {
+  async run<T>(request: CatalogSelectionRequest<T>): Promise<string[] | null> {
     const toolModel = this.deps.getToolModel();
     if (!toolModel) {
-      return [];
+      return null;
     }
 
     const transcript = buildTranscript(request.messages, {
@@ -115,7 +126,7 @@ export class LlmCatalogSelectionRuntime implements CatalogSelectionRuntime {
       maxInputChars: request.maxInputChars,
     });
     if (!transcript.trim() || request.availableCatalog.length === 0) {
-      return [];
+      return null;
     }
 
     const catalogText = request.buildCatalogText(request.availableCatalog);
@@ -148,7 +159,7 @@ export class LlmCatalogSelectionRuntime implements CatalogSelectionRuntime {
           message_count: request.messages.length,
         },
       });
-      return [];
+      return null;
     }
   }
 }

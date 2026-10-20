@@ -134,7 +134,7 @@ export const selectSkillsWithAgent = async (params: {
   availableSkills: SkillCatalogItem[];
   formatCatalogItem: SkillCatalogFormatter;
   affectState?: AffectState | null;
-}): Promise<string[]> => {
+}): Promise<string[] | null> => {
   const affectMessage = params.affectState ? buildAffectDecisionMessage(params.affectState) : '';
 
   return selectCatalogWithAgent({

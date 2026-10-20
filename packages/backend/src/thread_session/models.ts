@@ -1,5 +1,5 @@
 import * as llmFactory from '../provider/llm/factory';
-import { getProviderModels } from '../provider/llm/model_discovery';
+import { getProviderModels, getProviderModelsForRecord } from '../provider/llm/model_discovery';
 import { createLogger } from '@iki/backend/logger';
 import type {
   ProviderModelDescriptor,
@@ -59,7 +59,27 @@ export const createChatStreamingModels = () => {
     providerOverride?: ProviderModelDiscoveryOverride | null
   ): Promise<ProviderModelDescriptor[]> => {
     try {
-      return await toDescriptors(providerType, providerId, await getProviderModels(providerType));
+      // A named provider row (or an unsaved draft carrying one) gets live
+      // discovery: the endpoint's own /models is the only source that can know
+      // about a private gateway's models. Anonymous/static types keep the
+      // catalog path.
+      const overrideBaseUrl = providerOverride?.base_url?.trim();
+      const overrideApiKey = providerOverride?.api_key?.trim();
+      const shouldUseRecord =
+        Boolean(providerId) || Boolean(overrideBaseUrl) || Boolean(overrideApiKey);
+
+      const modelIds = shouldUseRecord
+        ? await getProviderModelsForRecord({
+            providerId: providerId ?? providerOverride?.id ?? providerType,
+            providerType,
+            ...(overrideBaseUrl || providerOverride?.base_url
+              ? { baseUrl: overrideBaseUrl || providerOverride?.base_url || '' }
+              : {}),
+            ...(overrideApiKey ? { apiKey: overrideApiKey } : {}),
+          })
+        : await getProviderModels(providerType);
+
+      return await toDescriptors(providerType, providerId, modelIds);
     } catch (error: unknown) {
       chatStreamingLogger.error(`Failed to get models for ${providerType}`, error);
       return [];

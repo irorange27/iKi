@@ -498,20 +498,45 @@ describe('pi tool turn harness (switch item 3a)', () => {
     expect(onInference.mock.calls[0][0].messages.map((m: ModelMessage) => m.role)).toEqual(['user']);
   });
 
-  it('refuses toolsOverride and pre-aborted signals', async () => {
-    const modelCall = scriptedModelCall([{ content: [textBlock('never')] }]);
+  it('honours toolsOverride as the capability bound (delegation) and still refuses pre-aborted signals', async () => {
+    // Contract change: this used to THROW on toolsOverride, which pinned
+    // delegated subagents to the AI SDK harness. With every turn on the Pi
+    // supply there is no other executor to pin them to, so the harness accepts
+    // the caller's tool set — resolution is skipped and the override IS the
+    // bound. Delegation hands over a pre-filtered, approval-free set.
+    const modelCall = scriptedModelCall([
+      { content: [toolCallBlock('call_ov', 'probe_read', { path: '/ov.txt' })] },
+      { content: [textBlock('done')] },
+    ]);
     const harness = new PiToolTurnHarness(harnessConfig(), { modelCall });
-    const error = await drainError(harness, {
+    const events = await collect(harness, {
       prompt: 'probe',
-      toolsOverride: [{ name: 'x' } as never],
+      toolsOverride: [
+        {
+          name: 'probe_read',
+          description: 'reads a file',
+          parameters: { type: 'object', properties: { path: { type: 'string' } } },
+          needsApproval: false,
+          handler: async () => 'override saw /ov.txt',
+        } as never,
+      ],
     });
-    expect((error as Error).message).toContain('toolsOverride');
+    // The overridden tool was offered to the model and its call executed.
+    const sentTools = (modelCall.requests[0] as { tools?: Array<{ name: string }> }).tools ?? [];
+    expect(sentTools.map(tool => tool.name)).toContain('probe_read');
+    const observations = JSON.stringify(stepEvents(events));
+    expect(observations).toContain('override saw /ov.txt');
 
     const controller = new AbortController();
     controller.abort();
-    const abortError = await drainError(harness, { prompt: 'probe', abortSignal: controller.signal });
+    const abortHarness = new PiToolTurnHarness(harnessConfig(), {
+      modelCall: scriptedModelCall([{ content: [textBlock('never')] }]),
+    });
+    const abortError = await drainError(abortHarness, {
+      prompt: 'probe',
+      abortSignal: controller.signal,
+    });
     expect((abortError as DOMException).name).toBe('AbortError');
-    expect(modelCall.requests).toHaveLength(0);
   });
 
   it('pauses an always-policy turn: approval_request step, requiresApproval done, zero effects', async () => {

@@ -1,5 +1,6 @@
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { applyToolApprovalPolicyList } from '@iki/backend/utils/tool_approval';
+import { createLogger } from '@iki/backend/logger';
 import type { AffectState } from '@iki/backend/affect/affect_state';
 import { selectToolsWithAgent } from '../provider/tool_selection';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
@@ -8,6 +9,7 @@ import { TODO_PLANNING_TOOL_NAME } from '@iki/backend/tools/task_plan_tools';
 
 type ToolResolveMode = 'manual' | 'auto';
 type ToolMetadata = ReturnType<typeof defaultToolRegistry.getToolMetadata>[number];
+const toolGuardLogger = createLogger({ module: 'tool_guard' });
 const AGENT_TOOL_NAME = 'agent';
 const TODO_EXPLICIT_REQUEST_PATTERN =
   /\b(todo|to-do|checklist|plan|planning|progress|roadmap|milestone|step|steps|track)\b|待办|计划|规划|进度|路线图|里程碑|步骤|拆解/u;
@@ -189,6 +191,23 @@ export const resolveToolNames = async (params: {
           affectState: params.affectState,
         })
       : null;
+
+  // `null` = the router could not answer (no tool model, or its call failed).
+  // Falling back to the FULL catalog is the safe direction — a turn must never
+  // lose capabilities because an auxiliary model was unavailable — but it must
+  // not be silent: a dead tool model used to shrink the tool set to the single
+  // hand-appended tool with nothing in the logs to explain why.
+  if (selection === null && catalog.length > 0 && hasMessages) {
+    toolGuardLogger.event({
+      level: 'warn',
+      event: 'tools.selection.fallback',
+      outcome: 'degraded',
+      message:
+        'Tool router produced no selection (tool model unavailable or its call failed); exposing the full catalog for this turn.',
+      data: { catalog_size: catalog.length },
+    });
+  }
+
   const resolvedTools =
     selection === null
       ? getAutoToolNames(autoApproveToolRequests, allowedMcpServerIds)

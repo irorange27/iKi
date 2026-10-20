@@ -33,6 +33,13 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     maxInputTokens: 98000,
     maxOutputTokens: 2000,
   }),
+  // These suites verify DURABLE behaviour (effect-aware retry, cancel routing,
+  // handoff facts, inline journaling) using a scripted AI SDK model. They are
+  // not about supply routing, so they pin the AI SDK harness explicitly: Pi
+  // claims every provider type now, and a stubbed `createModel` would never be
+  // reached. Routing itself is covered by factory_pi_generation.test.ts and
+  // turn_supply_selection.test.ts.
+  supportsPiTurnSupply: () => false,
 }));
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
@@ -40,6 +47,7 @@ import { addProvider } from '@iki/backend/db/providers';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
+import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import {
   APPROVAL_DECIDED,
   APPROVAL_REQUESTED,
@@ -159,6 +167,12 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
   const target = { id: 3, send: vi.fn() };
 
   beforeEach(async () => {
+  // These suites drive the DURABLE layer (streaming, approvals, session-log
+  // facts, retry, persistence) with a scripted AI SDK model. They are not about
+  // which supply serves the turn, so they opt into the legacy executor: the
+  // production default refuses a turn its projection cannot carry, and a
+  // scripted model has no endpoint to project to.
+  setTurnHarnessFallback(legacyTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-effect-retry-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'effect.db') });

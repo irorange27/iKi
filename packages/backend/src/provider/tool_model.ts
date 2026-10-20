@@ -1,12 +1,9 @@
-import { generateText } from 'ai';
-
 import { getProviders } from '../db/providers';
 import { getAppConfig } from '../config';
 import { createLogger } from '@iki/backend/logger';
-import { langfuseTelemetry } from '@iki/backend/observability/langfuse';
 import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
-import { createModel, disposeLanguageModel, getModelCallSettings } from '../provider/llm/factory';
+import { generateChatWithModelMessages } from '../provider/llm/factory';
 import { parseModelList } from '@iki/backend/utils/provider_models';
 
 export interface ToolModelConfig {
@@ -134,7 +131,27 @@ export const getToolModel = (): ToolModelConfig | null => {
       return configuredToolModel;
     }
 
-    return resolveFallbackToolModel(providers);
+    // No explicit tool model configured: fall back to the first enabled
+    // provider's first model. Announce it — this single implicit choice carries
+    // EVERY auxiliary call (tool routing, skill routing, titles, emotion), and
+    // the operator otherwise cannot tell which credential is being spent or why
+    // all of those stopped when that one provider ran out.
+    const fallback = resolveFallbackToolModel(providers);
+    if (fallback) {
+      toolModelLogger.event({
+        level: 'info',
+        event: 'tool_model.resolve',
+        outcome: 'degraded',
+        message:
+          'No tool model configured; using the first enabled provider. Auxiliary calls (tool/skill routing, titles, emotion) depend on it.',
+        data: {
+          providerId: fallback.providerId ?? null,
+          providerType: fallback.providerType,
+          model: fallback.model,
+        },
+      });
+    }
+    return fallback;
   } catch (error) {
     toolModelLogger.error('Failed to get tool model', error);
     return null;
@@ -157,34 +174,22 @@ export const testToolModelLatency = async (
     );
   }
 
-  const model = createModel(
-    resolvedToolModel.providerType,
-    resolvedToolModel.model,
-    resolvedToolModel.providerId
-  );
+  // Probe through the factory entry, not a hand-rolled AI SDK call.
+  //
+  // This used to build the model itself and call generateText directly, which
+  // made it the one aux surface that exercised a DIFFERENT supply than the
+  // calls it is supposed to validate: on a Pi-eligible provider the probe ran
+  // the AI SDK path while the real auxiliary calls ran Pi, so "Test" could
+  // report a healthy latency for a route that was broken. One supply decision
+  // (ADR 007) means one place that decides it.
   const startTime = Date.now();
-  try {
-    await generateText({
-      model,
-      messages: [{ role: 'user', content: 'Reply with OK.' }],
-      ...getModelCallSettings(
-        resolvedToolModel.providerType,
-        resolvedToolModel.model,
-        resolvedToolModel.providerId
-      ),
-      maxOutputTokens: 8,
-      ...(() => {
-        const telemetry = langfuseTelemetry('tool_model.probe', {
-          provider: resolvedToolModel.providerType,
-          providerId: resolvedToolModel.providerId,
-          model: resolvedToolModel.model,
-        });
-        return telemetry ? { experimental_telemetry: telemetry } : {};
-      })(),
-    });
-  } finally {
-    disposeLanguageModel(model);
-  }
+  await generateChatWithModelMessages({
+    providerType: resolvedToolModel.providerType,
+    ...(resolvedToolModel.providerId ? { providerId: resolvedToolModel.providerId } : {}),
+    modelId: resolvedToolModel.model,
+    messages: [{ role: 'user', content: 'Reply with OK.' }],
+    maxOutputTokens: 8,
+  });
 
   return {
     ...(resolvedToolModel.providerId ? { providerId: resolvedToolModel.providerId } : {}),

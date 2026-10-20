@@ -259,4 +259,75 @@ describe('awaiter runner (backend)', () => {
       expect.objectContaining({ title: expect.stringContaining('Continuation failed') }),
     ]);
   });
+
+  it('lets only ONE scheduler claim the same wake', async () => {
+    // Regression (live defect): the wake claim was an unconditional
+    // updateAwaiter(status:'waking'), so two schedulers sharing one database
+    // could both read the same due row and both proceed — one recorded a
+    // successful wake, the other recorded "A turn is already running on this
+    // thread". The desktop embeds the daemon, so two ticks really do coexist.
+    const { awaiterId } = seedAwaiter();
+
+    let sendCalls = 0;
+    const chatDeps = buildRunner({
+      sendOverride: async () => {
+        sendCalls += 1;
+        return { success: true, runId: `run_race_${sendCalls}` };
+      },
+    });
+
+    // Two runner instances model two processes: each has its OWN in-process
+    // `awaiterInFlight` set, so only the DB claim can separate them.
+    const otherRunner = createAwaiterRunner({ chat: chatDeps.chat, host: chatDeps.host });
+
+    const [first, second] = await Promise.all([
+      chatDeps.runner.runAwaiterWake(awaiterId),
+      otherRunner.runAwaiterWake(awaiterId),
+    ]);
+
+    // Exactly one side got far enough to attempt the turn; the other was
+    // refused by the claim and attempted nothing.
+    const claimed = [first, second].filter(
+      result => result.error !== 'Awaiter wake already claimed'
+    );
+    const refused = [first, second].filter(
+      result => result.error === 'Awaiter wake already claimed'
+    );
+    expect(claimed).toHaveLength(1);
+    expect(refused).toHaveLength(1);
+    // The point of the claim: the loser never reached the chat port, so the
+    // turn ran exactly once instead of twice.
+    expect(sendCalls).toBe(1);
+  });
+
+  it('reclaims a wake whose holder went silent', async () => {
+    // A holder that dies mid-wake leaves the row `waking`; the claim refuses
+    // `waking`, so without recovery that awaiter never wakes again.
+    const { awaiterId } = seedAwaiter({ status: 'waking' });
+
+    // Age the row beyond the stale cutoff.
+    getDb()
+      .prepare("UPDATE awaiters SET updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?")
+      .run(awaiterId);
+
+    expect(awaitersDb.reclaimStaleWakingAwaiters(new Date().toISOString())).toBe(1);
+    expect(awaitersDb.getAwaiter(awaiterId)?.status).toBe('armed');
+
+    // The reclaimed row is claimable again: a fresh wake gets past the CAS
+    // (it no longer loses to the dead holder's `waking` state).
+    const deps = buildRunner({
+      sendOverride: async () => ({ success: true, runId: 'run_reclaimed' }),
+    });
+    const result = await deps.runner.runAwaiterWake(awaiterId);
+    expect(result.error ?? '').not.toContain('already claimed');
+
+    // A row still inside the cutoff is NOT touched: reclaiming live work would
+    // double-run an in-flight wake.
+    // A row still inside the cutoff is NOT touched: reclaiming live work would
+    // double-run an in-flight wake. The cutoff is "now minus the threshold", so
+    // pass a cutoff in the PAST relative to this fresh row.
+    const { awaiterId: liveId } = seedAwaiter({ status: 'waking' });
+    expect(awaitersDb.reclaimStaleWakingAwaiters('2000-01-01T00:00:00.000Z')).toBe(0);
+    expect(awaitersDb.getAwaiter(liveId)?.status).toBe('waking');
+  });
 });

@@ -115,12 +115,10 @@ export type ModelCapabilityLimits = Pick<
   'contextWindow' | 'maxInputTokens' | 'maxOutputTokens'
 >;
 
-// Fallback assumptions for models with no catalog/provider data (custom
+// Fallback assumption for models with no catalog/provider data (custom
 // openai-compatible endpoints, or while the models.dev catalog is
-// unreachable): assume a modern large-window multimodal model. Stored
-// provider/model options always win over these defaults.
+// unreachable). Stored provider/model options always win over this default.
 export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 1_000_000;
-export const DEFAULT_MODEL_MAX_OUTPUT_TOKENS = 393_216; // 384K
 
 /**
  * Hard per-request output caps enforced by provider APIs. A stored model
@@ -571,8 +569,11 @@ export const normalizeModelCapabilityLimits = (
   return {
     contextWindow,
     maxInputTokens: maxInputTokens ?? contextWindow,
-    maxOutputTokens:
-      normalizePositiveInteger(limits?.maxOutputTokens) ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+    // Unknown stays unknown: a guessed output cap is sent to the provider as a
+    // hard max_tokens and rejects the whole request when it exceeds the real
+    // limit (the 384K guess broke every custom provider). The model's own
+    // default is the only value that is always valid, so send nothing.
+    maxOutputTokens: normalizePositiveInteger(limits?.maxOutputTokens) ?? null,
   };
 };
 

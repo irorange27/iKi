@@ -69,6 +69,22 @@ export const AgentToolSchema = z.object({
 export type AgentTool = Omit<z.infer<typeof AgentToolSchema>, 'needsApproval'> & {
   needsApproval?: boolean | ToolApprovalFunction;
   approvalMode?: ToolApprovalMode;
+  /**
+   * The tool's OWN approval declaration, before any session policy touched it.
+   *
+   * `needsApproval` is a live decision: an explicit askRisky/trustWorkspace
+   * policy replaces it with a per-call function on every tool, so the field no
+   * longer answers "may this tool run unattended?" — only "does THIS call need
+   * a human?". Consumers that need the static answer (delegation deciding
+   * which tools a subagent may inherit) must read this field instead; reading
+   * `needsApproval` there made the delegable set empty under every explicit
+   * policy (issue #170 diagnosed the emptiness, not its cause).
+   *
+   * Set once by the resolver from the registry tool and never mutated
+   * afterwards. Absent means "not yet annotated", which consumers treat as
+   * "no static approval declared".
+   */
+  declaredNeedsApproval?: boolean;
   handler: (args: unknown) => Promise<unknown>;
   paramSchema?: z.ZodTypeAny;
   /** Retry configuration. Applied in buildAiToolSet for non-BaseTool tools. */

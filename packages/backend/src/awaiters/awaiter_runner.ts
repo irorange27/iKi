@@ -11,6 +11,15 @@ import { getErrorMessage } from '@iki/backend/utils/errors';
 
 const awaiterLogger = createLogger({ module: 'awaiters' });
 
+/**
+ * How long a `waking` row may sit untouched before the scheduler treats its
+ * holder as dead and reclaims it. A live wake refreshes `updated_at` as it
+ * advances; the cutoff only has to exceed that cadence, and being generous
+ * costs nothing (a reclaimed row simply wakes on the next tick) while being
+ * too eager would double-run an in-flight wake.
+ */
+const WAKE_STALE_AFTER_MS = 10 * 60 * 1000;
+
 const AWAITER_WAKE_SYSTEM_PROMPT = [
   'You are executing a deferred continue-later wake for the user.',
   'Resume the work concisely and helpfully without pretending this is uninterrupted consciousness.',
@@ -224,10 +233,35 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
   }
 
   awaiterInFlight.add(awaiterId);
-  awaitersDb.updateAwaiter(awaiterId, {
+
+  // CLAIM the wake atomically, CAS on status.
+  //
+  // This used to be an unconditional updateAwaiter(status:'waking'), so two
+  // schedulers sharing one database (the desktop embeds the daemon, so both
+  // processes run a tick) could each read the same due row and both proceed:
+  // one recorded a successful wake, the other recorded "A turn is already
+  // running on this thread". The in-process `awaiterInFlight` set cannot see
+  // across processes.
+  //
+  // The claim is `armed -> waking` via a conditional UPDATE, so exactly one
+  // racer's statement matches a row. It ALSO clears `next_wake_at`: the due
+  // query matches on that column (`status IN ('armed','waking') AND
+  // next_wake_at <= now`), so leaving it set keeps the row selectable for the
+  // whole wake — the next tick re-picks it while the first wake is still
+  // awaiting the model, and the loser records a spurious "A turn is already
+  // running on this thread" (observed live: success at T+0, error at T+2.6s).
+  // Clearing it makes the row invisible to the due query the instant it is
+  // claimed. A row left `waking` by a process that died mid-wake therefore has
+  // no slot and is recovered by `reclaimStaleWakingAwaiters`, not by re-picking.
+  const claim = awaitersDb.updateAwaiterIfStatus(awaiterId, 'armed', {
     status: 'waking',
     last_error: null,
+    next_wake_at: null,
   });
+  if ((claim?.changes ?? 0) === 0) {
+    awaiterInFlight.delete(awaiterId);
+    return { success: false, error: 'Awaiter wake already claimed' };
+  }
 
   try {
     const messages: import('ai').ModelMessage[] = [
@@ -500,6 +534,22 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
     tickInFlight = true;
 
     try {
+      // Reclaim rows whose wake holder went silent BEFORE listing due work.
+      // Without this, a `waking` row left by a dead process is refused by the
+      // claim forever and the awaiter never wakes again.
+      const reclaimed = awaitersDb.reclaimStaleWakingAwaiters(
+        new Date(Date.now() - WAKE_STALE_AFTER_MS).toISOString()
+      );
+      if (reclaimed > 0) {
+        awaiterLogger.event({
+          level: 'warn',
+          event: 'awaiter.scheduler.reclaim',
+          outcome: 'degraded',
+          message: `Reclaimed ${reclaimed} awaiter(s) stuck in waking.`,
+          data: { reclaimed },
+        });
+      }
+
       const dueAwaiters = awaitersDb.listDueAwaiters(toIsoNow());
       for (const awaiter of dueAwaiters) {
         if (awaiterInFlight.has(awaiter.id)) continue;
