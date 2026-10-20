@@ -1,6 +1,6 @@
 # AGENTS.md — iKi orientation
 
-**iKi**: macOS Electron chat client that wraps third-party LLM APIs with local tool-calling, SQLite persistence, and an optional headless daemon (QQ-bot bridge). 
+**iKi**: an agent harness for durable, multi-agent, long-horizon work, with flexible control/admin surfaces. Supports any model provider.
 
 **Golden rule:** all business logic lives in `packages/backend` (pure Node/TS). `desktop/` (Electron) and `daemon/` (headless HTTP+WS) are thin shells; dependencies point one way only: `desktop`/`daemon` → `backend`.
 
@@ -15,28 +15,6 @@
 7. Reviews gate merges. Run the PR review protocol (`packages/backend/HARNESS_REVIEW.md` § PR review protocol — the in-repo replacement for the former Sourcery bot, which reviewed only a PR's first push): generate the brief (`node scripts/pr_review_brief.mjs`), have a fresh-context reviewer pass over the diff, and address or explicitly resolve every blocking finding before merging. The review of record must postdate the branch HEAD — a push after it invalidates it, and a green CI check was never a review.
 8. After any rework, capture the lesson per `docs/conventions.md` § Lessons: a regression test that fails on the old code first, an ownership-map row if a boundary moved, prose last.
 
-## Commands
-
-| Command | Purpose |
-|---|---|
-| `pnpm run app:dev` | Desktop app in dev mode |
-| `pnpm run app:debug` | Desktop app in dev mode with CDP on `127.0.0.1:9222` |
-| `pnpm run cdp -- <cmd>` | Drive the running app over CDP: `list` / `eval` / `shot` / `hover` / `click` / `theme` |
-| `pnpm run app:preview` | Launch the latest packaged app from `out/` |
-| `pnpm run app:build` | Build distributable artifacts |
-| `pnpm run daemon:start` | Headless daemon |
-| `pnpm run -s ci:quality` | Completion gate: lint + tsc + vue-tsc + architecture + coverage run |
-| `pnpm test` | All tests |
-| `pnpm run test:harness` | Focused harness regression set |
-| `pnpm run test:e2e` | Cross-layer smoke (real app + scripted provider) |
-| `pnpm run test:renderer` | Renderer-only tests |
-| `pnpm vitest run <path>` | One test file |
-| `pnpm run commit` | Interactive semantic commit |
-| `pnpm run changelog:check` | Verify `changelogs/` matches the generator |
-| `python3 scripts/generate-icon.py` | Regenerate the app icon (requires Pillow) |
-
-DevTools auto-open is on in dev (`app:dev`, `start`); set `IKI_AUTO_OPEN_DEVTOOLS=false` to disable. Packaged builds never auto-open.
-
 ## Changing the harness
 
 Read the [backend ownership and regression map](packages/backend/README.md#runtime-contracts) before editing a core path. It is tracked; design notes under `docs/` may be missing or stale.
@@ -46,18 +24,6 @@ Read the [backend ownership and regression map](packages/backend/README.md#runti
 - Extend the existing owner; do not add another history slicer, approval policy evaluator, retry loop, or trajectory recorder in a caller.
 - Change behavior, its boundary regression, and the ownership map together. Preserve unrelated uncommitted edits; do not “repair” a failing regression by restoring behavior that the contract explicitly forbids.
 - Use `pnpm run test:harness` for the focused loop; `pnpm run ci:quality` remains the completion gate. Keep fixes local to backend unless the transport contract changes.
-
-## Where things are
-
-```
-packages/backend   ← business logic — README has the architecture + chat-turn pipeline
-packages/desktop   ← Electron shell: main (IPC translation only) / preload / renderer
-packages/daemon    ← headless server: server_http / server_ws / napcat_adapter / tool_access
-packages/theme     ← shared CSS tokens
-tests/             ← vitest, partially mirrors packages/*/src
-docs/              ← conventions, ADRs, design notes, reports, process (gitignored — may be absent on fresh clones)
-postmortem/        ← incident write-ups
-```
 
 **Task starting points**
 
@@ -71,6 +37,7 @@ postmortem/        ← incident write-ups
 | New IPC channel | `desktop/src/preload/index.ts` + `main/ipc/` + types in `packages/backend/src/types/electron_api.ts` |
 | New daemon route | `packages/daemon/src/server_http.ts` or `server_ws.ts` |
 | Understand the chat-turn pipeline / harness | `packages/backend/README.md` (pipeline) + `docs/harness.md` (concepts) |
+| Test/debug/change iKi end-to-end from inside iKi (dogfood) | `docs/dogfood.md` — daemon-API + CDP loops, captured from a live run |
 | Package the app / cut a release | `packages/desktop/forge.config.ts` + `src/build/runtime_packaging.ts`; runbook: `docs/design/packaging-release.md` |
 
 ## Details live here (read on demand)
@@ -81,7 +48,7 @@ postmortem/        ← incident write-ups
 - `docs/conventions.md` — code conventions, prohibited actions, landmines, testing, commit governance
 - `docs/decisions/` — ADRs: why `AgentHarness` exists, why `turn_prep/` is the boundary, why `@iki/core` was deleted
 - `docs/napcat-integration.md` — QQ bridge via NapCat; `postmortem/backend-bugs-2026-04.md` — bug patterns (pre-monorepo paths, see its banner)
-- `docs/design/` — operative subsystem notes only (MCP, awaiters, proactive tasks, logging contract, ACP) — see its README index
-- `docs/reports/` — dated audits and their measured results; `docs/process/` — proposals and research notes
+- `docs/design/` — operative subsystem notes only (MCP, awaiters, proactive tasks, logging contract) — see its README index
+- `docs/archive/` — **historical archive, not authority** (`archive/reports/` dated audits, `archive/process/` proposals): many claims are superseded by current code. Do not treat anything there (or its file:line pointers) as fact without checking the code. Nothing under `docs/` is tracked in git.
 - `README.md` — user-facing (features, download, quick start); `.impeccable.md` — UI design philosophy
 - `CLAUDE.md` / `IKI.md` — pointer stubs to this file; don't add content there
