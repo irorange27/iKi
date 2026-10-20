@@ -80,6 +80,11 @@ describe('SettingsView footer save and provider drafts', () => {
     const wrapper = await mountSettings();
 
     // Dirty the provider draft by toggling a model off.
+    await wrapper.find('.provider-models-toggle').trigger('click');
+    await flushPromises();
+    await wrapper.find('.model-toggle input').setValue(false);
+    await flushPromises();
+
     // The header must not claim everything is saved.
     expect(wrapper.text()).toContain('Unsaved');
 
