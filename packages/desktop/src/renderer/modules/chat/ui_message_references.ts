@@ -1,8 +1,11 @@
 import type { ChatUiMessage, SkillUsageEntry } from '@iki/backend/message/message_parts';
+// The composition summary types live in types/ (renderer-legal); turn_prep/
+// context_types only re-exports them and pulls the server-side context graph
+// into the renderer's module closure, so import the canonical source.
 import type {
   ContextCompositionCategory,
   ContextCompositionSummary,
-} from '@iki/backend/turn_prep/context_types';
+} from '@iki/backend/types/context_composition';
 import { isAffectLabel, type AffectLabel } from '@iki/backend/types/affect';
 import { normalizeModelCapabilityLimits } from '@iki/backend/utils/provider_models';
 import { normalizeWhitespace } from '@iki/backend/utils/text';

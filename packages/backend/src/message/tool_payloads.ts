@@ -3,32 +3,20 @@ import { z } from 'zod';
 import {
   AgentToolInputSchemaUi,
   AgentToolOutputSchema,
-  DeleteFileInputSchemaUi,
-  DeleteFileOutputSchema,
-  EditFileInputSchemaUi,
-  EditFileOutputSchema,
-  FetchToolInputSchemaUi,
-  FetchToolOutputSchema,
-  LoadSkillInputSchemaUi,
-  LoadSkillOutputSchema,
-  ReadFileInputSchemaUi,
-  ReadFileOutputSchema,
-  ShellToolInputSchemaUi,
-  ShellToolOutputSchema,
-  TodoToolInputSchemaUi,
-  TodoToolOutputSchema,
-  WebToolInputSchemaUi,
-  WebToolOutputSchema,
-  WriteFileInputSchemaUi,
-  WriteFileOutputSchema,
   DeleteAwaiterInputSchemaUi,
   DeleteAwaiterOutputSchema,
+  DeleteFileInputSchemaUi,
+  DeleteFileOutputSchema,
   DeletePersonalSkillInputSchemaUi,
   DeletePersonalSkillOutputSchema,
   DeleteProactiveTaskInputSchemaUi,
   DeleteProactiveTaskOutputSchema,
   DeleteTodoListInputSchemaUi,
   DeleteTodoListOutputSchema,
+  EditFileInputSchemaUi,
+  EditFileOutputSchema,
+  FetchToolInputSchemaUi,
+  FetchToolOutputSchema,
   ListAwaitersInputSchemaUi,
   ListAwaitersOutputSchema,
   ListPersonalSkillsInputSchemaUi,
@@ -37,16 +25,28 @@ import {
   ListProactiveTasksOutputSchema,
   ListTodoListsInputSchemaUi,
   ListTodoListsOutputSchema,
+  LoadSkillInputSchemaUi,
+  LoadSkillOutputSchema,
   ReadAwaiterInputSchemaUi,
   ReadAwaiterOutputSchema,
+  ReadFileInputSchemaUi,
+  ReadFileOutputSchema,
   ReadPersonalSkillInputSchemaUi,
   ReadPersonalSkillOutputSchema,
   ReadProactiveTaskInputSchemaUi,
   ReadProactiveTaskOutputSchema,
   ReadTodoListInputSchemaUi,
   ReadTodoListOutputSchema,
+  ShellToolInputSchemaUi,
+  ShellToolOutputSchema,
+  TodoToolInputSchemaUi,
+  TodoToolOutputSchema,
+  WebToolInputSchemaUi,
+  WebToolOutputSchema,
   WriteAwaiterInputSchemaUi,
   WriteAwaiterOutputSchema,
+  WriteFileInputSchemaUi,
+  WriteFileOutputSchema,
   WritePersonalSkillInputSchemaUi,
   WritePersonalSkillOutputSchema,
   WriteProactiveTaskInputSchemaUi,
@@ -54,8 +54,12 @@ import {
   WriteTodoListInputSchemaUi,
   WriteTodoListOutputSchema,
 } from '@iki/backend/tools/schemas';
-import { normalizeToolNameKey } from './tool_parts';
-import { parseMaybeJson } from './tool_parts/parse';
+import {
+  parseToolInputPayload,
+  parseToolOutputPayload,
+  type ToolPayloadKind,
+  type ToolPayloadValidator,
+} from './tool_payload_contracts';
 
 export type WebToolInput = z.infer<typeof WebToolInputSchemaUi>;
 export type FetchToolInput = z.infer<typeof FetchToolInputSchemaUi>;
@@ -110,34 +114,6 @@ export type ListProactiveTasksToolOutput = z.infer<typeof ListProactiveTasksOutp
 export type ReadProactiveTaskToolOutput = z.infer<typeof ReadProactiveTaskOutputSchema>;
 export type WriteProactiveTaskToolOutput = z.infer<typeof WriteProactiveTaskOutputSchema>;
 export type DeleteProactiveTaskToolOutput = z.infer<typeof DeleteProactiveTaskOutputSchema>;
-
-type ToolKind =
-  | 'web'
-  | 'fetch'
-  | 'shell'
-  | 'read_file'
-  | 'write_file'
-  | 'edit'
-  | 'delete_file'
-  | 'load_skill'
-  | 'list_personal_skills'
-  | 'read_personal_skill'
-  | 'write_personal_skill'
-  | 'delete_personal_skill'
-  | 'todo'
-  | 'agent'
-  | 'list_awaiters'
-  | 'read_awaiter'
-  | 'write_awaiter'
-  | 'delete_awaiter'
-  | 'list_todo_lists'
-  | 'read_todo_list'
-  | 'write_todo_list'
-  | 'delete_todo_list'
-  | 'list_proactive_tasks'
-  | 'read_proactive_task'
-  | 'write_proactive_task'
-  | 'delete_proactive_task';
 
 export type ParsedToolInput =
   | { kind: 'web'; input: WebToolInput }
@@ -197,7 +173,17 @@ export type ParsedToolOutput =
   | { kind: 'delete_proactive_task'; output: DeleteProactiveTaskToolOutput }
   | { kind: 'unknown'; output: unknown };
 
-const TOOL_SCHEMAS: Record<ToolKind, { input: z.ZodTypeAny; output: z.ZodTypeAny }> = {
+/**
+ * Schema-coupled tool payload parsing — **server-side only**.
+ *
+ * This module pulls `@iki/backend/tools/schemas` (zod + every tool schema,
+ * ~1.6 MB of bundled source). The renderer must not import it, directly or
+ * transitively; that is R5 (direct edge) and R7 (reachability) in
+ * `.dependency-cruiser.cjs`, and the renderer has its own seam at
+ * `packages/desktop/src/renderer/modules/chat/tool_payloads.ts` which parses
+ * through `./tool_payload_contracts` without validating.
+ */
+const TOOL_SCHEMAS: Record<ToolPayloadKind, { input: z.ZodTypeAny; output: z.ZodTypeAny }> = {
   web: { input: WebToolInputSchemaUi, output: WebToolOutputSchema },
   fetch: { input: FetchToolInputSchemaUi, output: FetchToolOutputSchema },
   shell: { input: ShellToolInputSchemaUi, output: ShellToolOutputSchema },
@@ -250,58 +236,31 @@ const TOOL_SCHEMAS: Record<ToolKind, { input: z.ZodTypeAny; output: z.ZodTypeAny
   },
 };
 
-const TOOL_ALIASES: Record<string, ToolKind> = {
-  web_search: 'web',
-};
-
-type ToolSchemaMap = typeof TOOL_SCHEMAS;
-type ToolInputByKind = { [K in ToolKind]: z.infer<ToolSchemaMap[K]['input']> };
-type ToolOutputByKind = { [K in ToolKind]: z.infer<ToolSchemaMap[K]['output']> };
-
-const resolveToolKind = (toolName: string): ToolKind | null => {
-  const toolKey = normalizeToolNameKey(toolName);
-  if (Object.prototype.hasOwnProperty.call(TOOL_SCHEMAS, toolKey)) {
-    return toolKey as ToolKind;
-  }
-  return TOOL_ALIASES[toolKey] ?? null;
-};
-
-const parseWithSchema = <T extends z.ZodTypeAny>(schema: T, value: unknown): z.infer<T> | null => {
-  const parsed = schema.safeParse(value);
+// Registry values are typed `z.ZodTypeAny`, so `safeParse` yields `any` per
+// branch; the parseToolInput/Output casts below pin the per-kind result types,
+// exactly like the pre-split parseWithSchema did.
+const validateInputPayload: ToolPayloadValidator = (kind, normalizedValue) => {
+  const parsed = TOOL_SCHEMAS[kind].input.safeParse(normalizedValue);
   return parsed.success ? parsed.data : null;
 };
 
-const normalizeInputValue = (value: unknown): unknown => {
-  if (typeof value === 'object' && value !== null) return value;
-  return parseMaybeJson(value);
+const validateOutputPayload: ToolPayloadValidator = (kind, normalizedValue) => {
+  const parsed = TOOL_SCHEMAS[kind].output.safeParse(normalizedValue);
+  return parsed.success ? parsed.data : null;
 };
 
-const normalizeOutputValue = (value: unknown): unknown => parseMaybeJson(value);
-
 export const parseToolInput = (toolName: string, value: unknown): ParsedToolInput => {
-  const toolKind = resolveToolKind(toolName);
-  if (!toolKind) return { kind: 'unknown', input: value };
+  const { kind, payload } = parseToolInputPayload(toolName, value, validateInputPayload);
 
-  const normalizedValue = normalizeInputValue(value);
-  const parsed = parseWithSchema(TOOL_SCHEMAS[toolKind].input, normalizedValue) as
-    | ToolInputByKind[typeof toolKind]
-    | null;
-
-  return parsed
-    ? ({ kind: toolKind, input: parsed } as ParsedToolInput)
-    : { kind: 'unknown', input: value };
+  return kind === 'unknown'
+    ? { kind: 'unknown', input: payload }
+    : ({ kind, input: payload } as ParsedToolInput);
 };
 
 export const parseToolOutput = (toolName: string, value: unknown): ParsedToolOutput => {
-  const toolKind = resolveToolKind(toolName);
-  if (!toolKind) return { kind: 'unknown', output: value };
+  const { kind, payload } = parseToolOutputPayload(toolName, value, validateOutputPayload);
 
-  const normalizedValue = normalizeOutputValue(value);
-  const parsed = parseWithSchema(TOOL_SCHEMAS[toolKind].output, normalizedValue) as
-    | ToolOutputByKind[typeof toolKind]
-    | null;
-
-  return parsed
-    ? ({ kind: toolKind, output: parsed } as ParsedToolOutput)
-    : { kind: 'unknown', output: value };
+  return kind === 'unknown'
+    ? { kind: 'unknown', output: payload }
+    : ({ kind, output: payload } as ParsedToolOutput);
 };

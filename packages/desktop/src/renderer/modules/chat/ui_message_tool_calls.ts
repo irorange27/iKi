@@ -24,12 +24,7 @@ import {
   normalizeToolNameKey,
 } from '@iki/backend/message/tool_parts';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
-import {
-  parseToolInput,
-  parseToolOutput,
-  type ParsedToolInput,
-  type ParsedToolOutput,
-} from '@iki/backend/message/tool_payloads';
+import { getParsedToolInput, getParsedToolOutput } from './tool_payloads';
 import { translate } from '../../i18n';
 import { getToolUiState, updateToolUiState } from './tool_ui_state';
 
@@ -46,6 +41,7 @@ export {
   normalizeToolNameKey,
   parseToolInputFromText,
 } from '@iki/backend/message/tool_parts';
+export { getParsedToolInput, getParsedToolOutput } from './tool_payloads';
 
 export type WebSearchCitation = {
   title: string;
@@ -120,59 +116,6 @@ const coerceToTimestampMs = (value: unknown): number | null => {
 
   return null;
 };
-
-type ParsedToolPayload = {
-  input: ParsedToolInput;
-  output: ParsedToolOutput;
-  rawInput: unknown;
-  rawOutput: unknown;
-  toolName: string;
-};
-
-const toolPayloadCache = new WeakMap<object, ParsedToolPayload>();
-
-const getParsedToolPayload = (part: unknown): ParsedToolPayload => {
-  if (!isObjectRecord(part)) {
-    return {
-      input: { kind: 'unknown', input: undefined },
-      output: { kind: 'unknown', output: undefined },
-      rawInput: undefined,
-      rawOutput: undefined,
-      toolName: 'tool',
-    };
-  }
-
-  const cached = toolPayloadCache.get(part);
-  const rawInput = getToolInput(part);
-  const rawOutput = getToolOutput(part);
-  const toolName = getToolName(part);
-
-  if (
-    cached &&
-    cached.toolName === toolName &&
-    Object.is(cached.rawInput, rawInput) &&
-    Object.is(cached.rawOutput, rawOutput)
-  ) {
-    return cached;
-  }
-
-  const payload: ParsedToolPayload = {
-    input: parseToolInput(toolName, rawInput),
-    output: parseToolOutput(toolName, rawOutput),
-    rawInput,
-    rawOutput,
-    toolName,
-  };
-
-  toolPayloadCache.set(part, payload);
-  return payload;
-};
-
-export const getParsedToolInput = (part: unknown): ParsedToolInput =>
-  getParsedToolPayload(part).input;
-
-export const getParsedToolOutput = (part: unknown): ParsedToolOutput =>
-  getParsedToolPayload(part).output;
 
 export const getToolDurationMs = (part: unknown): number | null => {
   const toolCallId = getToolCallIdFromPart(part);
@@ -704,7 +647,7 @@ export const getToolDiffStat = (part: unknown): ToolDiffStat => {
 // Output for the raw-JSON section: hide `diff` when it is rendered as a dedicated view.
 // Diff-stripped output views are rebuilt on every streaming re-render of an
 // expanded card; cache per part, invalidated when the raw output reference
-// moves (same freshness rule as toolPayloadCache).
+// moves (same freshness rule as the payload caches in ./tool_payloads).
 const displayOutputCache = new WeakMap<object, { source: unknown; value: unknown }>();
 
 export const getToolOutputForDisplay = (part: unknown): unknown => {
