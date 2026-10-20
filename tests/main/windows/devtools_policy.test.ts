@@ -33,11 +33,19 @@ describe('devtools policy', () => {
       shouldAutoOpenDevTools({
         isPackaged: false,
         autoOpenEnv: undefined,
+      })
+    ).toBe(true);
+  });
+
   it('supports explicit opt-out in development', () => {
     expect(
       shouldAutoOpenDevTools({
         isPackaged: false,
         autoOpenEnv: 'false',
+      })
+    ).toBe(false);
+  });
+
   it('supports explicit opt-in in development', () => {
     expect(
       shouldAutoOpenDevTools({
