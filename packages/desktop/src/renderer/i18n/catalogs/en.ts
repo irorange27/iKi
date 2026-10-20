@@ -1271,15 +1271,15 @@ export const en = defineCatalog({
   'settings.providers.modal.apiFormat.anthropicDescription':
     'Use this when your gateway exposes an Anthropic Messages endpoint.',
   'settings.providers.modal.apiFormat.defaultDescription':
-    'This selection sends OpenAI-compatible Chat Completions requests to your configured base URL. Switch to Responses when your gateway exposes it.',
+    'In iKi, this selection sends OpenAI-compatible Chat Completions requests to your configured base URL. Switch to Responses when your gateway exposes it.',
   'settings.providers.modal.apiFormat.chatCompletionsAdapter':
-    'Runtime adapter: Pi-AI (OpenAI Chat Completions dialect).',
+    'Runtime adapter: AI SDK OpenAI-compatible provider.',
   'settings.providers.modal.apiFormat.responsesAdapter':
-    'Runtime adapter: Pi-AI (OpenAI Responses dialect) against your base URL.',
+    'Runtime adapter: AI SDK OpenAI Responses provider with your custom base URL.',
   'settings.providers.modal.apiFormat.anthropicAdapter':
-    'Runtime adapter: Pi-AI (Anthropic Messages dialect) against your base URL.',
+    'Runtime adapter: AI SDK Anthropic provider configured against your custom base URL.',
   'settings.providers.modal.apiFormat.defaultAdapter':
-    'Runtime adapter: Pi-AI (OpenAI Chat Completions dialect) against your base URL.',
+    'Runtime adapter: AI SDK OpenAI-compatible provider against your custom base URL.',
   'settings.providers.modal.apiKeyPlaceholder': 'Enter API Key',
   'settings.providers.modal.baseUrl': 'Base URL',
   'settings.providers.modal.baseUrlPlaceholder': 'https://api.example.com/v1',

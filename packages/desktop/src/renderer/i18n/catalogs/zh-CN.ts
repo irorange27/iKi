@@ -1221,13 +1221,13 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.providers.modal.apiFormat.defaultDescription':
     '在 iKi 当前实现里，这个选项会向你配置的 Base URL 发送 OpenAI-compatible 的 Chat Completions 请求。',
   'settings.providers.modal.apiFormat.chatCompletionsAdapter':
-    '运行时适配器：Pi-AI（OpenAI Chat Completions 方言）。',
+    '运行时适配器：AI SDK OpenAI-compatible provider。',
   'settings.providers.modal.apiFormat.responsesAdapter':
-    '运行时适配器：Pi-AI（OpenAI Responses 方言），使用你配置的 Base URL。',
+    '运行时适配器：AI SDK OpenAI Responses provider，并使用你配置的自定义 Base URL。',
   'settings.providers.modal.apiFormat.anthropicAdapter':
-    '运行时适配器：Pi-AI（Anthropic Messages 方言），使用你配置的 Base URL。',
+    '运行时适配器：AI SDK Anthropic provider，并使用你配置的自定义 Base URL。',
   'settings.providers.modal.apiFormat.defaultAdapter':
-    '运行时适配器：Pi-AI（OpenAI Chat Completions 方言），使用你配置的 Base URL。',
+    '运行时适配器：AI SDK OpenAI-compatible provider，并使用你配置的自定义 Base URL。',
   'settings.providers.modal.apiKeyPlaceholder': '输入 API Key',
   'settings.providers.modal.baseUrl': 'Base URL',
   'settings.providers.modal.baseUrlPlaceholder': 'https://api.example.com/v1',
