@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseChatMessageCreatePayload,
   parseChatSendPayload,
+  parseChatThreadCreatePayload,
   parseClientRegistrationPayload,
   parseDaemonWebSocketMessage,
   parseMcpServerCreatePayload,
@@ -38,6 +39,46 @@ describe('daemon server schemas', () => {
       ],
       allowedTools: getDefaultAllowedTools(),
     });
+  });
+
+  it('accepts a workspace binding on thread create and rejects a non-string value', () => {
+    // A headless client must be able to bind a thread to its workspace at
+    // create time (dogfood §A step 4) instead of reaching into SQLite.
+    expect(
+      parseChatThreadCreatePayload({ title: 'Dogfood', workspace_id: ' ws-dogfood ' })
+    ).toEqual({ title: 'Dogfood', workspace_id: 'ws-dogfood' });
+
+    // Omitted and explicit-null both mean "no binding", and the omitted case
+    // must not invent the key — the desktop path keeps the payload it sent.
+    expect(parseChatThreadCreatePayload({ title: 'Chat' })).toEqual({ title: 'Chat' });
+    expect(parseChatThreadCreatePayload({ workspace_id: null })).toEqual({
+      workspace_id: null,
+    });
+
+    // A wrong type used to be dropped silently, yielding an unbound thread
+    // whose file/shell tools then refuse to run with no explanation.
+    expect(() => parseChatThreadCreatePayload({ workspace_id: 123 })).toThrow();
+    expect(() => parseChatThreadCreatePayload({ workspace_id: '   ' })).toThrow();
+  });
+
+  it('accepts a workspace binding on thread create and rejects a non-string value', () => {
+    // A headless client must be able to bind a thread to its workspace at
+    // create time (dogfood §A step 4) instead of reaching into SQLite.
+    expect(
+      parseChatThreadCreatePayload({ title: 'Dogfood', workspace_id: ' ws-dogfood ' })
+    ).toEqual({ title: 'Dogfood', workspace_id: 'ws-dogfood' });
+
+    // Omitted and explicit-null both mean "no binding", and the omitted case
+    // must not invent the key — the desktop path keeps the payload it sent.
+    expect(parseChatThreadCreatePayload({ title: 'Chat' })).toEqual({ title: 'Chat' });
+    expect(parseChatThreadCreatePayload({ workspace_id: null })).toEqual({
+      workspace_id: null,
+    });
+
+    // A wrong type used to be dropped silently, yielding an unbound thread
+    // whose file/shell tools then refuse to run with no explanation.
+    expect(() => parseChatThreadCreatePayload({ workspace_id: 123 })).toThrow();
+    expect(() => parseChatThreadCreatePayload({ workspace_id: '   ' })).toThrow();
   });
 
   it('requires providerType and model for chat send payloads', () => {

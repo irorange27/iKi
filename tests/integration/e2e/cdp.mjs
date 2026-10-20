@@ -1,8 +1,12 @@
 // Minimal CDP client over global WebSocket + fetch, for driving the iKi renderer.
-const CDP_PORT = Number(process.env.CDP_PORT || 18731);
+// Read CDP_PORT per call, not at import: the runners launch the app on their own
+// CDP_PORT default (smoke 18731, real 18741). A module-load constant made the
+// real-provider runner poll a DIFFERENT port than the app bound when CDP_PORT
+// was unset, so boot1 "never exposed a renderer".
+const cdpPort = () => Number(process.env.CDP_PORT || 18731);
 
 const getTargets = async () =>
-  (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json();
+  (await fetch(`http://127.0.0.1:${cdpPort()}/json/list`)).json();
 
 export const findRendererTarget = async () => {
   const targets = await getTargets();
