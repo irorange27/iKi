@@ -200,6 +200,10 @@ describe('threadSession store', () => {
     await state.setIncognito(true);
 
     expect(state.isIncognito.value).toBe(true);
+    expect(updateThread).not.toHaveBeenCalled();
+
+    const createdThread = await state.createNewThread({ model: 'gpt-4.1', mode: 'chat' });
+
     expect(createThread).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'gpt-4.1',
@@ -296,6 +300,11 @@ describe('threadSession store', () => {
     await state.handleNewChat();
 
     expect(createThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspace_id: null,
+        metadata: expect.stringContaining('"mode":"chat"'),
+      })
+    );
 
     await state.selectThread(scratchThread.id);
     expect(state.selectedWorkspaceId.value).toBe('workspace_thread_thread_scratch');
@@ -306,6 +315,10 @@ describe('threadSession store', () => {
       expect.objectContaining({
         workspace_id: null,
         metadata: expect.stringContaining('"mode":"chat"'),
+      })
+    );
+  });
+
   it('syncs the composer incognito state from the selected thread', async () => {
     const privateThread = createStoredThread({
       id: 'thread_private',
@@ -633,8 +646,35 @@ describe('threadSession store', () => {
       hasId: vi.fn(() => false),
       setAll: vi.fn(),
     };
+
+    setActivePinia(createPinia());
+    const store = useThreadSessionStore();
+    store.initRuntime({
+      electronAPI: {
+        chat: {
+          threads: {
+            create: vi.fn(),
+            clear: vi.fn(),
+            update: updateThread,
+            get: getThread,
+            delete: vi.fn(),
+          },
           messages: { list: listMessages },
+        },
+        toolModel: { generateTitle: vi.fn() },
+        tasks: {},
+      } as never,
       messageStore: messageStore as never,
+      scrollToBottom: vi.fn(),
+      preferredDraftModel: ref(''),
+      preferredDraftProviderId: ref(null),
+    });
+    const state = {
+      ...storeToRefs(store),
+      selectThread: store.selectThread,
+      handleModelSelected: store.handleModelSelected,
+    };
+
     // Start selecting thread A — its message load will block
     const aSelectPromise = state.selectThread('thread_A');
 
