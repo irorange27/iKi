@@ -13,6 +13,7 @@ import { migration as dropMemoryAndAffect } from './005_drop_memory_and_affect';
 import { migration as dropThreadContext } from './006_drop_thread_context';
 import { migration as dropDeadTables } from './007_drop_dead_tables';
 import { migration as dropClipboardSnapshots } from './008_drop_clipboard_snapshots';
+import { migration as indexConversationReadPaths } from './009_index_conversation_read_paths';
 
 // Forward-only migrations after the baseline. Add new ones above 001 in name
 // order (002_*, 003_*, …) — runMigrations sorts by name. Tables introduced
@@ -27,6 +28,7 @@ export const registeredMigrations: Migration[] = [
   dropThreadContext,
   dropDeadTables,
   dropClipboardSnapshots,
+  indexConversationReadPaths,
 ];
 
 export const initializeMigrations = (db: SqliteDatabase) => {
