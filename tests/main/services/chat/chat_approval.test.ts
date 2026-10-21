@@ -1,5 +1,5 @@
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExecutionPlan } from '@iki/backend/thread_session/execution_plan';
@@ -128,7 +128,7 @@ const expirePendingToolCallApprovalsByRunIdsMock = vi.mocked(
 
 beforeEach(() => {
   // Scripted model: force the executor instead of routing it.
-  setTurnHarnessFallback(legacyTurnHarness);
+  setTurnHarnessFallback(piTurnHarness);
   vi.clearAllMocks();
   rehydrateHarnessMock.mockImplementation(function () {
     let capturedHistory: ModelMessage[] = [];

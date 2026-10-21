@@ -26,11 +26,8 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
     ...actual,
-    createModel: createModelMock,
-    disposeLanguageModel: vi.fn(),
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
     getModelGenerationSettings: vi.fn(() => ({})),
-    injectReasoningContentIntoMessages: vi.fn((messages: unknown[]) => messages),
     resolveModelCapability: async () => ({
       contextWindow: 100000,
       maxInputTokens: 98000,
@@ -77,7 +74,7 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import {
-  legacyTurnHarness,
+  piTurnHarness,
   setTurnHarnessFallback,
 } from '@iki/backend/thread_session/turn_supply_selection';
 import {
@@ -165,7 +162,7 @@ describe('differential: current engine (AI SDK harness)', () => {
   // its refusal is terminal. The comparison is only meaningful while both
   // drivers are reachable.
   beforeEach(() => {
-    setTurnHarnessFallback(legacyTurnHarness);
+    setTurnHarnessFallback(piTurnHarness);
   });
   afterEach(() => {
     setTurnHarnessFallback(null);

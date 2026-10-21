@@ -1,5 +1,5 @@
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from './model_history';
 
 /** A turn-prep/turn-execution input message: the AI SDK's model message. */
 export type ChatInputMessage = ModelMessage;

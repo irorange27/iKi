@@ -594,7 +594,16 @@ const main = async () => {
   await sleep(2000);
   await shot(cdp, '03-boot3-recovered');
   const history = await bodyText(cdp);
-  if (!history.includes('write_file')) throw new Error('history does not render the tool card');
+  // A settled tool card renders its SUMMARY ("Wrote · 1 files"), not the raw
+  // tool name — the name only appears while the approval card is open. Asserting
+  // `write_file` here failed on a correct transcript; assert the pair the user
+  // actually sees instead (prose + the settled write summary).
+  if (!history.includes('Wrote')) throw new Error(
+    `history does not render the settled tool card (expected a "Wrote" summary): ${history.slice(0, 400)}`
+  );
+  if (!history.includes('E2E_DONE E2E_TASK round2')) {
+    throw new Error('history lost the round-2 completion marker');
+  }
 
   step('history check turn');
   await typeAndSend(cdp, 'CHECK_HISTORY');

@@ -1,4 +1,4 @@
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../../message/model_history';
 
 import { generateThreadSummary } from '../../runtimes/thread_summary';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';

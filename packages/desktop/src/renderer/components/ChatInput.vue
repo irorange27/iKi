@@ -275,7 +275,7 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue';
 import type { Component } from 'vue';
-import type { FileUIPart } from 'ai';
+import type { UiFilePart as FileUIPart } from '@iki/backend/message/ui_protocol';
 import { Check, Hand, Settings, ShieldCheck, Zap } from 'lucide-vue-next';
 import type { Provider } from '@iki/backend/types/provider';
 import type { TaskPlan } from '@iki/backend/types/task_plan';

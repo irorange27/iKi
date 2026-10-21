@@ -1,11 +1,14 @@
 import { createLogger } from '@iki/backend/logger';
-import type { ModelMessage, ToolApprovalResponse } from 'ai';
+import type { ModelMessage, ToolApprovalResponse } from '@iki/backend/message/model_history';
 
-import { appendApprovalResponsesToHistory } from '../provider/ai_sdk_runtime';
-import { cloneModelMessages, rehydrateHarness, type TurnDriverHarness } from '../agent/harness';
+import { cloneModelMessages, type TurnDriverHarness } from '../agent/harness';
 import { resumeHistoryFromReplay } from './run_rehydrator';
 import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
-import { pausedPlanRunsOnPiToolSupply, piDomainResumeHistory } from './turn_supply_selection';
+import {
+  pausedPlanRunsOnPiToolSupply,
+  piDomainResumeHistory,
+  PiSupplyRefusedError,
+} from './turn_supply_selection';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import { createPrefixedId } from '../utils/id';
@@ -824,22 +827,41 @@ export const createChatApproval = (deps: {
       // plan's tool selection is already the guarded, post-preparation
       // result, and re-guarding could shrink it mid-turn.
       const resumesOnPi = Boolean(piResumeAdmission);
-      const approvalHarness: TurnDriverHarness = resumesOnPi
-        ? new PiToolTurnHarness(planToHarnessConfig(ctx.plan, { guardActive: false }), {
-            resume: {
-              commands: piResumeAdmission!.commands,
-              owner: {
-                prepare: address => prepareToolExecution(address),
-                executeApproved: (address, port) =>
-                  executeApprovedTool(address, {
-                    signal: port.signal ?? new AbortController().signal,
-                    execute: async (toolName, args) =>
-                      (await port.execute(toolName, args)) as unknown,
-                  }),
-              },
+      // A resumed approval runs on the Pi supply, ALWAYS. The AI SDK fallback
+      // that used to sit here (`rehydrateHarness`) existed for the case where
+      // the paused plan could not be admitted — and it answered that case by
+      // silently resuming the user's turn on a different executor. That is the
+      // same silent re-route the turn selector already refuses (ADR 009), so a
+      // refusal is now terminal and states what is wrong: the plan or its
+      // provider row is unusable, and nothing was executed.
+      if (!piResumeAdmission) {
+        throw new PiSupplyRefusedError(
+          'the paused turn no longer matches an admissible provider plan (its provider row may have been removed or disabled)',
+          'config',
+          {
+            providerType: ctx.plan.providerType,
+            providerId: ctx.plan.providerId ?? null,
+            model: ctx.plan.model,
+          }
+        );
+      }
+      const approvalHarness: TurnDriverHarness = new PiToolTurnHarness(
+        planToHarnessConfig(ctx.plan, { guardActive: false }),
+        {
+          resume: {
+            commands: piResumeAdmission.commands,
+            owner: {
+              prepare: address => prepareToolExecution(address),
+              executeApproved: (address, port) =>
+                executeApprovedTool(address, {
+                  signal: port.signal ?? new AbortController().signal,
+                  execute: async (toolName, args) =>
+                    (await port.execute(toolName, args)) as unknown,
+                }),
             },
-          })
-        : rehydrateHarness(planToHarnessConfig(ctx.plan, { guardActive: false }));
+          },
+        }
+      );
 
       // Build the wire history. The Pi resume consumes the paused history in
       // the Pi wire domain — piDomainResumeHistory strips the replay's
@@ -847,21 +869,11 @@ export const createChatApproval = (deps: {
       // and the owner pairs the decisions from the resume commands. The AI
       // SDK replay keeps the stamped history and appends the collected
       // responses for pairing.
-      const responses = Array.from(session.collectedApprovalResponses.values());
-      let streamHistory = resumesOnPi
-        ? piDomainResumeHistory(cloneModelMessages(session.history ?? []))
-        : cloneModelMessages(session.history ?? []);
-      if (!resumesOnPi && responses.length > 0) {
-        streamHistory = appendApprovalResponsesToHistory(
-          streamHistory,
-          responses.map(r => ({
-            type: 'tool-approval-response' as const,
-            approvalId: r.approvalId,
-            approved: r.approved,
-            ...(r.reason ? { reason: r.reason } : {}),
-          }))
-        );
-      }
+      // The Pi resume consumes the paused history in the Pi wire domain —
+      // piDomainResumeHistory strips the replay's pairing stamps (issue #133)
+      // and the owner pairs the decisions from the resume commands. There is no
+      // second history shape to build any more.
+      const streamHistory = piDomainResumeHistory(cloneModelMessages(session.history ?? []));
 
       // Mid-turn durable progress: a crash during a long resumed segment must
       // leave the executed tool results in the persisted UI history for the

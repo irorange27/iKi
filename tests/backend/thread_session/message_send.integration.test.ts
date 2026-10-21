@@ -8,11 +8,8 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
     ...actual,
-    createModel: createModelMock,
-    disposeLanguageModel: vi.fn(),
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
     getModelGenerationSettings: vi.fn(() => ({})),
-    injectReasoningContentIntoMessages: vi.fn((messages: unknown[]) => messages),
   };
 });
 
@@ -63,7 +60,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
 }));
 
 import { createMessageSend } from '@iki/backend/thread_session/message_send';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
@@ -78,7 +75,7 @@ describe('createMessageSend integration', () => {
   // which supply serves the turn, so they opt into the legacy executor: the
   // production default refuses a turn its projection cannot carry, and a
   // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(legacyTurnHarness);
+  setTurnHarnessFallback(piTurnHarness);
     vi.clearAllMocks();
   });
 

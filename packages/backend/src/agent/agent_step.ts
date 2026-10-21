@@ -1,5 +1,5 @@
 import type { AgentUsage, ToolApprovalRequest } from './types';
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
 
 export type ModelInferenceRecord = {
   messages: ModelMessage[];

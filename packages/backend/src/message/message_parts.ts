@@ -1,4 +1,3 @@
-import type { UIMessage, UIMessageChunk } from 'ai';
 
 import {
   isAffectLabel,
@@ -115,9 +114,38 @@ export type ChatUiDataTypes = {
   'token-usage': TokenUsagePartData;
 };
 
-export type ChatUiMessage = UIMessage<unknown, ChatUiDataTypes>;
-export type ChatUiMessageChunk = UIMessageChunk<unknown, ChatUiDataTypes>;
-export type UiMessagePart = ChatUiMessage['parts'][number];
+// These used to be AI SDK generic instantiations (`UIMessage`,
+// `UIMessageChunk`), which made that package the type authority for iKi's own
+// persisted format (ADR 009). They now come from the protocol module.
+import type {
+  UiDataPart,
+  UiGenericDataPart,
+  ChatUiChunk,
+  ChatUiMessage,
+  ChatUiPart,
+} from './ui_protocol';
+
+export type { ChatUiMessage };
+export type ChatUiMessageChunk = ChatUiChunk;
+
+/**
+ * The data-part members of a message's parts, one per entry in
+ * `ChatUiDataTypes`.
+ *
+ * Generated from the map so the `type` literal of each member is exact — the
+ * nine `Extract<UiMessagePart, { type: 'data-…' }>` aliases below depend on it.
+ */
+type ChatUiDataPart = {
+  [K in keyof ChatUiDataTypes]: UiDataPart<K & string, ChatUiDataTypes[K]>;
+}[keyof ChatUiDataTypes];
+
+export type UiMessagePart =
+  | Exclude<ChatUiPart, { type: `data-${string}` }>
+  | ChatUiDataPart
+  // An unknown `data-*` key still produces a valid part at runtime (the
+  // renderer switches on the prefix); typing it away would force every generic
+  // producer to invent a key.
+  | UiGenericDataPart;
 export type TextPart = Extract<UiMessagePart, { type: 'text' }>;
 export type ReasoningPart = Extract<UiMessagePart, { type: 'reasoning' }>;
 export type MemoryPart = Extract<UiMessagePart, { type: 'data-memory-retrieval' }>;

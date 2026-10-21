@@ -12,8 +12,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
     ...actual,
-    createModel: createModelMock,
-    disposeLanguageModel: vi.fn(),
     resolvePersonaPrompt: () => 'audit system',
     getModelGenerationSettings: () => ({}),
     resolveModelCapability: async () => ({
@@ -35,7 +33,7 @@ import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/databa
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { onMessagePersisted } from '@iki/backend/thread_session/platform';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
@@ -109,7 +107,7 @@ describe('session log approval facts across entries', () => {
   // which supply serves the turn, so they opt into the legacy executor: the
   // production default refuses a turn its projection cannot carry, and a
   // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(legacyTurnHarness);
+  setTurnHarnessFallback(piTurnHarness);
     vi.clearAllMocks();
     coordinator = createThreadStreamCoordinator();
     memory.injectMemoryIntoMessages.mockClear();

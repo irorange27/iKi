@@ -1,4 +1,4 @@
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
 
 import type { AgentRun } from '@iki/backend/types/agent_run';
 import type { ApprovalPolicy } from '../agent/harness/tool_resolver';

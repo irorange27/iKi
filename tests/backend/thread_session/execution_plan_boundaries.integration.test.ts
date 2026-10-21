@@ -20,7 +20,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
 }));
 
 import { closeDatabase, getDb, initializeDatabase } from '@iki/backend/db/database';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { updateChatThread } from '@iki/backend/db/chat_thread';
 import { tryAcquireCrossProcessThreadRun } from '@iki/backend/db/thread_run_locks';
@@ -80,7 +80,7 @@ describe('execution plan admission boundaries', () => {
   // Durable-layer suite: a scripted model drives the turn, so the executor is
   // forced rather than routed (the production default refuses a turn whose
   // provider row does not exist, which is not what this suite is about).
-  setTurnHarnessFallback(legacyTurnHarness);
+  setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-plan-boundaries-'));
     external.userData.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'boundaries.db') });

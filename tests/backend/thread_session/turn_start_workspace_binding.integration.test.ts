@@ -11,8 +11,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
     ...actual,
-    createModel: createModelMock,
-    disposeLanguageModel: vi.fn(),
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
     getModelGenerationSettings: vi.fn(() => ({})),
     resolveModelCapability: async () => ({
@@ -51,7 +49,7 @@ import { addWorkspace } from '@iki/backend/db/workspaces';
 import { getChatThread } from '@iki/backend/db/chat_thread';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
@@ -94,7 +92,7 @@ describe('stream binds the turn workspace at admission', () => {
   // which supply serves the turn, so they opt into the legacy executor: the
   // production default refuses a turn its projection cannot carry, and a
   // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(legacyTurnHarness);
+  setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-turn-start-workspace-'));
     initializeDatabase({ dbPath: path.join(root, 'binding.db') });
     const a = path.join(root, 'a');

@@ -1,5 +1,6 @@
-import { computed, ref } from 'vue';
-import { AbstractChat, type ChatState, type ChatStatus } from 'ai';
+import { computed, ref, shallowRef } from 'vue';
+import type { UiChatStatus } from '@iki/backend/message/ui_protocol';
+import { IkiChat, type ChatStateAdapter } from './iki_chat';
 
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import { isObjectRecord } from '@iki/backend/utils/guards';
@@ -11,8 +12,6 @@ import { createIpcChatTransport, type IpcChatTransport } from './ipc_chat_transp
 import { createChatMessageStore, type ChatMessageStore } from './chat_message_store';
 
 const chatInstanceLogger = createLogger({ module: 'chat_instance' });
-
-class IkiChat extends AbstractChat<ChatUiMessage> {}
 
 const hasRenderableContent = (message: ChatUiMessage | undefined): boolean => {
   if (!message || !Array.isArray(message.parts)) return false;
@@ -31,12 +30,12 @@ const hasRenderableContent = (message: ChatUiMessage | undefined): boolean => {
  */
 export const createReactiveChatState = (
   onWrite: (message: ChatUiMessage) => void
-): { state: ChatState<ChatUiMessage>; messagesArray: ChatUiMessage[] } => {
-  const messagesRef = ref<ChatUiMessage[]>([]);
-  const statusRef = ref<ChatStatus>('ready');
+): { state: ChatStateAdapter; messagesArray: ChatUiMessage[] } => {
+  const messagesRef = shallowRef<ChatUiMessage[]>([]);
+  const statusRef = ref<UiChatStatus>('ready');
   const errorRef = ref<Error | undefined>(undefined);
 
-  const state: ChatState<ChatUiMessage> = {
+  const state: ChatStateAdapter = {
     get status() {
       return statusRef.value;
     },
@@ -85,7 +84,7 @@ export const createReactiveChatState = (
       messagesRef.value.splice(index, 1, { ...message });
       onWrite(message);
     },
-    snapshot: <T>(thing: T): T => thing,
+    snapshot: (thing: ChatUiMessage[]): ChatUiMessage[] => thing,
   };
 
   return { state, messagesArray: messagesRef.value };
@@ -125,6 +124,11 @@ export const createChatInstance = (deps: {
     generateId: deps.generateId,
     transport,
     state,
+    // A stable handle, resolved lazily where it matters: the transport binds
+    // the real thread when it sends. Reading `getCurrentThreadId()` here would
+    // touch the store during module init — before `currentThread` exists — and
+    // the mount failed with a temporal-dead-zone ReferenceError.
+    chatId: 'iki-chat',
     onError: error => {
       chatInstanceLogger.event({
         level: 'error',
@@ -183,7 +187,7 @@ export const createChatInstance = (deps: {
     chat,
     transport,
     messageStore,
-    status: computed<ChatStatus>(() => state.status),
+    status: computed<UiChatStatus>(() => state.status),
     error: computed<Error | undefined>(() => state.error),
     activeAssistantMessageId,
     isApprovalProcessing: approvals.isApprovalProcessing,

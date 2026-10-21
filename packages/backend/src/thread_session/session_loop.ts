@@ -84,7 +84,7 @@ export const createChatStreaming = (deps: {
       approvalId: string,
       session: {
         target: ChatStreamTarget;
-        history?: import('ai').ModelMessage[];
+        history?: import('../message/model_history').ModelMessage[];
         recoveryContext?: ApprovalRecoveryContext;
       }
     ) => unknown;

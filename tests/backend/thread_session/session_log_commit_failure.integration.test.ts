@@ -17,7 +17,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   }),
 }));
 import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/database';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { getChatMessages } from '@iki/backend/db/chat_message';
 import { listAgentRunsByThread } from '@iki/backend/db/agent_runs';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
@@ -39,7 +39,7 @@ beforeEach(async () => {
   // Durable-layer suite: a scripted model drives the turn, so the executor is
   // forced rather than routed (the production default refuses a turn whose
   // provider row does not exist, which is not what this suite is about).
-  setTurnHarnessFallback(legacyTurnHarness);
+  setTurnHarnessFallback(piTurnHarness);
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-pi-settle-review-'));
   external.userData.mockReturnValue(root);
   initializeDatabase({ dbPath: path.join(root, 'review.db') });

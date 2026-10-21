@@ -1,5 +1,5 @@
 import { defaultToolRegistry } from '@iki/backend/tools';
-import { readUIMessageStream, type UIMessage, type UIMessageChunk } from 'ai';
+import { reduceChunkLogToMessage } from '@iki/backend/message/ui_chunk_reducer';
 import type {
   AffectSignalPartData,
   ChatUiMessageChunk,
@@ -123,6 +123,7 @@ const toUiChunkFromToolEvent = (event: ChatStreamEvent): ChatUiMessageChunk | nu
     return {
       type: 'tool-output-available',
       toolCallId,
+      toolName,
       output: event.output,
       dynamic: true,
       ...(typeof event.preliminary === 'boolean' ? { preliminary: event.preliminary } : {}),
@@ -132,6 +133,7 @@ const toUiChunkFromToolEvent = (event: ChatStreamEvent): ChatUiMessageChunk | nu
     return {
       type: 'tool-output-error',
       toolCallId,
+      toolName,
       errorText:
         typeof event.error === 'string'
           ? event.error
@@ -405,40 +407,18 @@ export const createUiChunkEmitter = (
     },
     buildPersistedMessage: async (seedParts?: unknown[]) => {
       if (!started || chunkLog.length === 0) return null;
-      // Reduce through the AI SDK's own UI-message reducer — the same
-      // reduction the renderer's Chat client applies to these chunks — so the
-      // persisted parts match the renderer-accumulated message and the
-      // dual-write paths converge on identical content.
-      let reduced: UIMessage | undefined;
-      const chunkStream = new ReadableStream<UIMessageChunk>({
-        start(controller) {
-          for (const chunk of chunkLog) {
-            controller.enqueue(chunk as unknown as UIMessageChunk);
-          }
-          controller.close();
-        },
-      });
+      // Reduce through iKi's own chunk reducer (ADR 009): it is the same
+      // vocabulary the renderer's chat applies, so the persisted parts and the
+      // renderer-accumulated message converge on identical content.
+      let reduced: { parts: unknown[] } | null = null;
       try {
-        for await (const message of readUIMessageStream({
-          message: {
-            id: messageId,
-            role: 'assistant',
-            parts: (seedParts ?? []) as UIMessage['parts'],
-          },
-          stream: chunkStream,
-          terminateOnError: false,
-          onError: error => {
-            uiStreamLogger.event({
-              level: 'warn',
-              event: 'chat.ui_stream.persist_reduce',
-              outcome: 'degraded',
-              message: 'UI chunk reduction skipped a chunk while building the persisted message.',
-              error,
-            });
-          },
-        })) {
-          reduced = message;
-        }
+        reduced = reduceChunkLogToMessage(chunkLog, {
+          // Every chunk of this turn belongs to the stream's single message.
+          messageId,
+          ...(Array.isArray(seedParts)
+            ? { seed: { messageId, parts: seedParts as never } }
+            : {}),
+        });
       } catch (error) {
         uiStreamLogger.event({
           level: 'warn',
@@ -450,7 +430,7 @@ export const createUiChunkEmitter = (
         return null;
       }
       if (!reduced) return null;
-      return { id: messageId, role: 'assistant', parts: reduced.parts as unknown[] };
+      return { id: messageId, role: 'assistant', parts: reduced.parts };
     },
     finish: () => {
       if (terminated) return;

@@ -1,4 +1,4 @@
-import type { ChatTransport } from 'ai';
+import type { UiChatTransport } from '@iki/backend/message/ui_protocol';
 
 import type { ChatInvocationOptions, ElectronApi } from '@iki/backend/types/electron_api';
 import { clonePlainData } from '@iki/backend/utils/clone';
@@ -89,7 +89,7 @@ const createInboundSlot = (): InboundSlot => {
 const isTerminalChunkType = (type: string): boolean =>
   type === 'finish' || type === 'abort' || type === 'error';
 
-export type IpcChatTransport = ChatTransport<ChatUiMessage> & {
+export type IpcChatTransport = UiChatTransport & {
   /**
    * Arms a catch-all stream for chunks the backend pushes without a matching
    * `chat.stream` invoke — the tool-approval resume path. The next `start`

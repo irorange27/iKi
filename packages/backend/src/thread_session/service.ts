@@ -19,7 +19,7 @@ import { setChatServicePlatformDeps, onMessagePersisted } from './platform';
 import { deriveResumeStreamOptions, rebuildResumeHistoryFromEvents } from './run_rehydrator';
 import type { AgentRun, AgentRunKind } from '@iki/backend/types/agent_run';
 import { getErrorMessage } from '@iki/backend/utils/errors';
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
 import { buildThreadMarkdown, parseStoredMessageForExport } from '../message/thread_markdown_export';
 import { searchThreadContent } from '../message/thread_content_search';
 

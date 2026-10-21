@@ -1,5 +1,7 @@
-import { convertToModelMessages, validateUIMessages } from 'ai';
-import type { FileUIPart } from 'ai';
+import { convertUiMessagesToModel } from './ui_to_model';
+
+/** A normalized file part: what the renderer attaches and the model accepts. */
+type FileUIPart = { type: 'file'; url: string; mediaType: string; filename?: string };
 
 import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
 import type {
@@ -122,14 +124,6 @@ export const toModelInputMessages = async (
     );
     if (normalizedUiMessages.length === 0) return [];
 
-    try {
-      await validateUIMessages({
-        messages: normalizedUiMessages,
-      });
-    } catch (error: unknown) {
-      throw new Error(`Invalid UI messages: ${getErrorMessage(error)}`);
-    }
-
     // The SDK's converter drops `approval-requested` parts outright, but the
     // approval-resume fallback needs the live request in the model history so
     // the decision appended by the approval layer pairs with it. Re-stamping
@@ -157,20 +151,10 @@ export const toModelInputMessages = async (
         ? stampLiveApprovalRequests(normalizedUiMessages)
         : normalizedUiMessages;
 
-    try {
-      return await convertToModelMessages(
-        conversionReady.map(message => {
-          const { id, ...rest } = message;
-          void id;
-          return rest;
-        }),
-        {
-          ignoreIncompleteToolCalls: true,
-        }
-      );
-    } catch (error: unknown) {
-      throw new Error(`Failed to convert UI messages: ${getErrorMessage(error)}`);
-    }
+    // The normalization above already validated and repaired every part, so the
+    // conversion itself cannot fail on shape; a throw here would be a bug in the
+    // converter, not bad input.
+    return convertUiMessagesToModel(conversionReady);
   }
 
   return messages as ChatInputMessage[];

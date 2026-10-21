@@ -47,7 +47,7 @@ import { addProvider } from '@iki/backend/db/providers';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import {
   APPROVAL_DECIDED,
   APPROVAL_REQUESTED,
@@ -172,7 +172,7 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
   // which supply serves the turn, so they opt into the legacy executor: the
   // production default refuses a turn its projection cannot carry, and a
   // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(legacyTurnHarness);
+  setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-effect-retry-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'effect.db') });

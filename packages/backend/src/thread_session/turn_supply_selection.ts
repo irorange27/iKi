@@ -1,6 +1,6 @@
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
 
-import { startTurnHarness, type TurnDriverHarness } from '../agent/harness';
+import { type TurnDriverHarness } from '../agent/harness';
 import { PiTextTurnHarness } from '../agent/runners/pi_text_turn_harness';
 import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
 import { resolvePiTurnSupply } from '../provider/llm/factory';
@@ -23,22 +23,29 @@ import { planToHarnessConfig, type ExecutionPlan } from './execution_plan';
  * the projection domain is the target, and it should grow to cover whatever
  * shows up here, not be worked around at runtime.
  */
-/** Test/ops seam: build the legacy AI-SDK executor for a plan. */
-export const legacyTurnHarness: TurnHarnessOverride = plan =>
-  startTurnHarness(planToHarnessConfig(plan));
-
 /**
  * Executor used when the Pi supply refuses the turn.
  *
  * The production value is `undefined`: a refusal is terminal and reported (see
  * above). Tests that drive the durable layer (retry, session log, persistence)
- * with a scripted AI SDK model inject `startTurnHarness` here so they can keep
- * asserting those behaviours without a network endpoint — they are testing
- * what happens AROUND the model call, not which supply serves it. That seam is
- * also what an operator would use to opt into the legacy executor; no product
- * code takes it today.
+ * with a scripted model inject a harness here so they can keep asserting those
+ * behaviours without a network endpoint — they are testing what happens AROUND
+ * the model call, not which supply serves it. `piTurnHarness` is the builder
+ * that seam now uses (the AI SDK builders are gone, ADR 009).
  */
 export type TurnHarnessOverride = (plan: ExecutionPlan) => TurnDriverHarness | null;
+
+/**
+ * Build the Pi harness for a plan.
+ *
+ * The durable-layer test seam: pair it with `setTurnHarnessFallback` when a
+ * suite scripts the model itself and must not reach the network. It is the
+ * replacement for the removed `legacyTurnHarness`.
+ */
+export const piTurnHarness: TurnHarnessOverride = plan =>
+  plan.enableTools
+    ? new PiToolTurnHarness(planToHarnessConfig(plan, { guardActive: false }))
+    : new PiTextTurnHarness(planToHarnessConfig(plan, { guardActive: false }));
 
 /**
  * Process-wide FORCED executor.
@@ -46,8 +53,8 @@ export type TurnHarnessOverride = (plan: ExecutionPlan) => TurnDriverHarness | n
  * When set, it takes precedence over the supply decision entirely: the caller
  * has said which executor this process runs. That is what the durable-layer
  * suites need — their provider row points at a closed port and their model is a
- * scripted AI SDK object, so letting Pi admit the turn would send it to a dead
- * address and time out. Production leaves this `null`, which makes a refusal
+ * scripted object, so letting Pi admit the turn would send it to a dead address
+ * and time out. Production leaves this `null`, which makes a refusal
  * terminal and a healthy turn run on Pi.
  *
  * A module-level switch rather than a parameter because the selector is reached

@@ -116,7 +116,7 @@ export const assembleExecutionPlan = (params: {
 /** The harness reads its whole config from the plan. */
 export const planToHarnessConfig = (
   plan: ExecutionPlan,
-  overrides?: Partial<Pick<HarnessConfig, 'modelFactory' | 'guardActive'>>
+  overrides?: Partial<Pick<HarnessConfig, 'guardActive'>>
 ): HarnessConfig => ({
   providerType: plan.providerType,
   ...(plan.providerId ? { providerId: plan.providerId } : {}),
@@ -134,7 +134,6 @@ export const planToHarnessConfig = (
   ...(typeof plan.maxInputTokens === 'number' ? { maxInputTokens: plan.maxInputTokens } : {}),
   ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
   ...(plan.threadId ? { threadId: plan.threadId } : {}),
-  ...(overrides?.modelFactory ? { modelFactory: overrides.modelFactory } : {}),
 });
 
 /**

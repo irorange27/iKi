@@ -13,11 +13,8 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
     ...actual,
-    createModel: createModelMock,
-    disposeLanguageModel: vi.fn(),
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
     getModelGenerationSettings: vi.fn(() => ({})),
-    injectReasoningContentIntoMessages: vi.fn((messages: unknown[]) => messages),
     resolveModelCapability: async () => ({
       contextWindow: 100000,
       maxInputTokens: 98000,
@@ -50,10 +47,11 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
 }));
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { getChatMessages } from '@iki/backend/db/chat_message';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import {
   rebuildThreadViewFromEvents,
@@ -117,6 +115,9 @@ describe('session log turn facts and pure replay', () => {
   beforeAll(async () => {
     dataDir = await mkdtemp(path.join(os.tmpdir(), 'iki-session-log-'));
     initializeDatabase({ dbPath: path.join(dataDir, 'log.db') });
+    // Pi resolves a real provider row before admitting a turn (ADR 009); the
+    // suite scripts the model, so a closed port here is deliberate.
+    seedTurnProvider({ providerId: 'provider_primary', model: 'test-model' });
     conversation = createChatPersistence({
       memory: memory as never,
       // platform is module-mocked above; the real continuity hook is not
@@ -148,7 +149,7 @@ describe('session log turn facts and pure replay', () => {
   // which supply serves the turn, so they opt into the legacy executor: the
   // production default refuses a turn its projection cannot carry, and a
   // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(legacyTurnHarness);
+  setTurnHarnessFallback(piTurnHarness);
     vi.clearAllMocks();
     prepareChatTurnMock.mockResolvedValue(preparedTurn);
     createModelMock.mockReturnValue(

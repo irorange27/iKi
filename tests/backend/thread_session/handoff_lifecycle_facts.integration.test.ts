@@ -54,7 +54,7 @@ import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { getSessionEvents } from '@iki/backend/db/session_events';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { rebuildThreadViewFromEvents } from '@iki/backend/thread_session/session_log';
@@ -72,7 +72,7 @@ describe('a handoff chain records the run segment swap in the session log', () =
   // which supply serves the turn, so they opt into the legacy executor: the
   // production default refuses a turn its projection cannot carry, and a
   // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(legacyTurnHarness);
+  setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-handoff-facts-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'handoff.db') });

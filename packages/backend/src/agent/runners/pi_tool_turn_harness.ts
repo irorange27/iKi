@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-ai';
-import type { ModelMessage, ToolResultPart } from 'ai';
 
 import { createLogger } from '@iki/backend/logger';
 import { isLangfuseEnabled, tracePiGeneration } from '@iki/backend/observability/langfuse';
@@ -8,7 +7,12 @@ import { RefusalError, getErrorMessage, isContextOverflowError, isRetryableError
 import type { ToolApprovalRequest } from '../types';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { withRetry } from '@iki/backend/utils/retry';
-import { appendUserPromptToHistory, cloneModelMessages } from '../../provider/ai_sdk_runtime';
+import {
+  appendUserPromptToHistory,
+  cloneModelMessages,
+  type ModelMessage,
+  type ModelToolResultOutput,
+} from '@iki/backend/message/model_history';
 import {
   resolvePersonaPrompt,
   getProviderConfig,
@@ -21,7 +25,7 @@ import {
   projectHistoryToPiContext,
   projectToolsToPiTools,
 } from '../../provider/llm/pi_adapter';
-import { TERMINAL_TOOL_NAMES } from './simple_agent_runner';
+import { TERMINAL_TOOL_NAMES } from '../harness/harness_types';
 import {
   runPiAgentLoop,
   toolResultIsError as toolExecutionIsError,
@@ -609,7 +613,7 @@ export class PiToolTurnHarness {
           );
         }
         toolCallsCount += 1;
-        const output = outcome.result.output as ToolResultPart['output'];
+        const output = outcome.result.output as ModelToolResultOutput;
         const isError = toolExecutionIsError(output);
         toolCallResults.push({
           toolName: outcome.result.toolName,
@@ -945,7 +949,7 @@ export class PiToolTurnHarness {
               type: 'tool-result',
               toolCallId: event.call.id,
               toolName: event.call.name,
-              output: event.output as ToolResultPart['output'],
+              output: event.output as ModelToolResultOutput,
             },
           ],
         };

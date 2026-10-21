@@ -1,11 +1,14 @@
 import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-ai';
-import type { ModelMessage } from 'ai';
 
 import { createLogger } from '@iki/backend/logger';
 import { RefusalError, getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
 import { isLangfuseEnabled, tracePiGeneration } from '@iki/backend/observability/langfuse';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
-import { appendUserPromptToHistory, cloneModelMessages } from '../../provider/ai_sdk_runtime';
+import {
+  appendUserPromptToHistory,
+  cloneModelMessages,
+  type ModelMessage,
+} from '@iki/backend/message/model_history';
 import {
   resolvePersonaPrompt,
   getProviderConfig,

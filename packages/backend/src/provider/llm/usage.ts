@@ -1,4 +1,4 @@
-import type { LanguageModelUsage } from 'ai';
+import type { LanguageModelUsage } from './wire_types';
 
 import type { TokenUsageMetrics } from '@iki/backend/types/chat_usage';
 

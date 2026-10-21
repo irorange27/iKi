@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const writeThreadTodoPlanMock = vi.hoisted(() => vi.fn());
 const prepareChatTurnMock = vi.hoisted(() => vi.fn());
 
@@ -9,13 +9,25 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
     ...actual,
-    createModel: createModelMock,
-    disposeLanguageModel: vi.fn(),
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
     getModelGenerationSettings: vi.fn(() => ({})),
-    injectReasoningContentIntoMessages: vi.fn((messages: unknown[]) => messages),
+    // No database in this suite: answer the provider lookup directly so the Pi
+    // supply admits the turn. The address is never dialled — `callPiChat` is
+    // mocked above.
+    getProviderConfig: vi.fn(() => ({
+      type: 'openai',
+      apiKey: 'key-test',
+      baseUrl: 'http://127.0.0.1:9/v1',
+    })),
   };
 });
+
+// The supply seam: Pi is the only executor (ADR 009), so the scripted model is
+// installed here rather than on the removed `createModel`.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/db/thread_todos', () => ({
   writeThreadTodoPlan: writeThreadTodoPlanMock,
@@ -95,9 +107,13 @@ import type { LanguageModelV3Usage } from '@ai-sdk/provider';
 
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import {
+  createScriptedPiChat,
+  type PiScript,
+  type PiScriptStep,
+} from '@iki/backend/agent/testing/scripted_pi';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { createTool, defaultToolRegistry, HandoffTool } from '@iki/backend/tools';
 
@@ -110,7 +126,7 @@ describe('createChatStreaming integration', () => {
   // which supply serves the turn, so they opt into the legacy executor: the
   // production default refuses a turn its projection cannot carry, and a
   // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(legacyTurnHarness);
+  setTurnHarnessFallback(piTurnHarness);
     vi.clearAllMocks();
   });
 
@@ -138,10 +154,14 @@ describe('createChatStreaming integration', () => {
       },
     }));
 
-    createModelMock.mockReturnValue(new FauxModelProvider([
-      fauxToolCall(toolName, {}),
-      fauxText('stream done'),
-    ]));
+    // Two model calls: the first asks for the tool (and must END with toolUse so
+    // the harness executes it), the second answers after the result.
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [{ kind: 'toolCall', toolName, args: {} }, { kind: 'done', reason: 'toolUse' }],
+        [{ kind: 'text', text: 'stream done' }, { kind: 'done', reason: 'stop' }],
+      ])
+    );
     prepareChatTurnMock.mockResolvedValue({
       report: { totalEstimatedTokens: 1, blocks: [] },
       usedSkills: [],
@@ -284,9 +304,14 @@ describe('createChatStreaming integration', () => {
       paramSchema: z.object({}),
       handler: async () => 'must not execute',
     }));
-    createModelMock.mockReturnValue(new FauxModelProvider([
-      fauxToolCall(toolName, {}, { id: 'approval-call-1' }),
-    ]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName, args: {}, id: 'approval-call-1' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+      ])
+    );
     prepareChatTurnMock.mockResolvedValue({
       report: { totalEstimatedTokens: 1, blocks: [] },
       usedSkills: [],
@@ -364,10 +389,18 @@ describe('createChatStreaming integration', () => {
       paramSchema: z.object({}),
       handler: async () => 'ok',
     }));
-    createModelMock.mockReturnValue(new FauxModelProvider([
-      fauxToolCall(toolName, {}, { usage: cacheUsage(72, 400, 28) }),
-      fauxText('stream done', { usage: cacheUsage(272, 128, 0) }),
-    ]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName, args: {} },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'stream done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     prepareChatTurnMock.mockResolvedValue({
       report: { totalEstimatedTokens: 1, blocks: [] },
       usedSkills: [],
@@ -438,8 +471,8 @@ describe('createChatStreaming integration', () => {
       cacheWriteTokens: 28,
     });
   });
-  const setupLoop = (faux: FauxModelProvider, toolNames: string[] = []) => {
-    createModelMock.mockReturnValue(faux);
+  const setupLoop = (script: PiScript[], toolNames: string[] = []) => {
+    callPiChatMock.mockImplementation(createScriptedPiChat(script));
     prepareChatTurnMock.mockResolvedValue({
       report: { totalEstimatedTokens: 1, blocks: [] }, usedSkills: [], selectedSkillIds: [], skillMode: 'manual',
       finalMessages: [{ role: 'user', content: 'original task' }], history: [], prompt: 'original task',
@@ -466,8 +499,10 @@ describe('createChatStreaming integration', () => {
   };
 
   it('excludes duplicate stream/send calls during preparation but allows another thread', async () => {
-    const faux = new FauxModelProvider([fauxText('other thread'), fauxText('first thread')]);
-    const { streaming, run } = setupLoop(faux);
+    const { streaming, run } = setupLoop([
+      [{ kind: 'text', text: 'other thread' }, { kind: 'done' }],
+      [{ kind: 'text', text: 'first thread' }, { kind: 'done' }],
+    ]);
     const prepare = prepareChatTurnMock.getMockImplementation()!;
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
@@ -478,6 +513,7 @@ describe('createChatStreaming integration', () => {
     const other = await streaming.stream({ id: 43, send: vi.fn() }, {
       threadId: 'thread_2', providerType: 'openai', model: 'test-model', messages: [],
     });
+    if (!(other as { success?: boolean }).success) console.log('DEBUG_OTHER:', JSON.stringify(other).slice(0,300));
     expect(other).toMatchObject({ success: true, text: 'other thread' });
     release();
     expect(await first).toMatchObject({ success: true, text: 'first thread' });
@@ -485,8 +521,10 @@ describe('createChatStreaming integration', () => {
   });
 
   it('does not start the superseded request after its delayed preparation resolves', async () => {
-    const faux = new FauxModelProvider([fauxText('new thread'), fauxText('must not execute')]);
-    const { streaming, run } = setupLoop(faux);
+    const { streaming, run } = setupLoop([
+      [{ kind: 'text', text: 'new thread' }, { kind: 'done' }],
+      [{ kind: 'text', text: 'must not execute' }, { kind: 'done' }],
+    ]);
     const prepare = prepareChatTurnMock.getMockImplementation()!;
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
@@ -497,12 +535,21 @@ describe('createChatStreaming integration', () => {
     });
     release();
     await first;
-    expect(faux.remaining).toBe(1);
+    // One scripted model call was consumed; none of the second turn ran.
+    expect(callPiChatMock.mock.calls.length).toBe(1);
   });
 
   it('preserves tool context across concurrent threads after asynchronous suspension', async () => {
-    const { streaming } = setupLoop(new FauxModelProvider([]), [toolName]);
-    createModelMock.mockImplementation(() => new FauxModelProvider([fauxToolCall(toolName, {}), fauxText('done')]));
+    const { streaming } = setupLoop([], [toolName]);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName, args: {} },
+          { kind: 'text', text: 'done' },
+          { kind: 'done' },
+        ],
+      ])
+    );
     let entered = 0;
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
@@ -527,24 +574,35 @@ describe('createChatStreaming integration', () => {
   });
 
   it('ends autonomous work on a natural model stop without spending another call', async () => {
-    const faux = new FauxModelProvider([fauxText('done'), fauxText('must not run')]);
-    const { run } = setupLoop(faux);
+    const { run } = setupLoop([
+      [{ kind: 'text', text: 'done' }, { kind: 'done' }],
+      [{ kind: 'text', text: 'must not run' }, { kind: 'done' }],
+    ]);
     expect(await run()).toMatchObject({ success: true, text: 'done' });
-    expect(faux.remaining).toBe(1);
+    // One scripted model call was consumed; none of the second turn ran.
+    expect(callPiChatMock.mock.calls.length).toBe(1);
   });
 
   it('resumes an autonomous handoff with its summary and next task', async () => {
     defaultToolRegistry.register(new HandoffTool());
-    const faux = new FauxModelProvider([
-      fauxToolCall('handoff', { summary: 'Found the defect', next_steps: 'Fix it', reason: 'context_limit' }),
-      fauxText('fixed'),
-    ]);
-    const call = vi.spyOn(faux, 'doStream');
-    const { run } = setupLoop(faux, ['handoff']);
+    const { run } = setupLoop([
+      [
+        {
+          kind: 'toolCall',
+          toolName: 'handoff',
+          args: { summary: 'Found the defect', next_steps: 'Fix it', reason: 'context_limit' },
+        },
+        { kind: 'done', reason: 'toolUse' },
+      ],
+      [{ kind: 'text', text: 'fixed' }, { kind: 'done', reason: 'stop' }],
+    ], ['handoff']);
+    const call = callPiChatMock;
     try {
       expect(await run()).toMatchObject({ success: true });
       expect(call).toHaveBeenCalledTimes(2);
-      const prompt = JSON.stringify(call.mock.calls[1][0].prompt);
+      // Pi receives the context as its second argument (`{ systemPrompt,
+      // messages, tools }`), not the SDK's `{ prompt }`.
+      const prompt = JSON.stringify(call.mock.calls[1][1]);
       expect(prompt).toContain('Found the defect');
       expect(prompt).toContain('Fix it');
     } finally { defaultToolRegistry.remove('handoff'); }
@@ -555,12 +613,14 @@ describe('createChatStreaming integration', () => {
       name: toolName, type: 'function', description: 'Probe',
       paramSchema: z.object({}), handler: async () => 'observation',
     }));
-    const faux = new FauxModelProvider([
-      fauxToolCall(toolName, {}), fauxToolCall(toolName, {}), fauxText('must not run'),
-    ]);
-    const { run } = setupLoop(faux, [toolName]);
+    const { run } = setupLoop([
+      [{ kind: 'toolCall', toolName, args: {} }, { kind: 'done', reason: 'toolUse' }],
+      [{ kind: 'toolCall', toolName, args: {} }, { kind: 'done', reason: 'toolUse' }],
+      [{ kind: 'text', text: 'must not run' }, { kind: 'done' }],
+    ], [toolName]);
     expect(await run(1, 2)).toMatchObject({ success: true });
-    expect(faux.remaining).toBe(1);
+    // One scripted model call was consumed; none of the second turn ran.
+    expect(callPiChatMock.mock.calls.length).toBe(1);
     const completedUpdate = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
       .map(([, updates]) => updates)
       .filter(updates => updates.status === 'completed')
@@ -575,18 +635,22 @@ describe('createChatStreaming integration', () => {
       name: toolName, type: 'function', description: 'Probe',
       paramSchema: z.object({}), handler: async () => 'completed observation',
     }));
-    const faux = new FauxModelProvider([
-      fauxToolCall(toolName, {}), fauxText('interrupted'), fauxText('steered response'),
-    ]);
-    const { coordinator, run } = setupLoop(faux, [toolName]);
-    const original = faux.doStream.bind(faux);
+    const { coordinator, run } = setupLoop([
+      [{ kind: 'toolCall', toolName, args: {} }, { kind: 'done', reason: 'toolUse' }],
+      [{ kind: 'text', text: 'interrupted' }, { kind: 'done' }],
+      [{ kind: 'text', text: 'steered response' }, { kind: 'done' }],
+    ], [toolName]);
+    // Steering fires on the second MODEL call, which is the seam the old
+    // `doStream` spy sat on. `callPiChat(model, context, options)`.
+    const original = callPiChatMock.getMockImplementation()!;
+    const call = callPiChatMock;
     let calls = 0;
-    const call = vi.spyOn(faux, 'doStream').mockImplementation(options => {
+    callPiChatMock.mockImplementation((model, context, options) => {
       if (++calls === 2) expect(coordinator.steerStream(42, 'thread_1', 'new direction').success).toBe(true);
-      return original(options);
+      return (original as (m: unknown, c: unknown, o: unknown) => unknown)(model, context, options);
     });
     expect(await run()).toMatchObject({ success: true, text: 'steered response' });
-    const prompt = JSON.stringify(call.mock.calls[2][0].prompt);
+    const prompt = JSON.stringify(call.mock.calls[2][1]);
     expect(prompt).toContain('completed observation');
     expect(prompt.match(/original task/g)).toHaveLength(1);
     expect(JSON.stringify(call.mock.calls[2][0].prompt.at(-1))).toContain('new direction');

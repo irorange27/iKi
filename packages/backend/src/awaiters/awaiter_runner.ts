@@ -264,14 +264,14 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
   }
 
   try {
-    const messages: import('ai').ModelMessage[] = [
+    const messages: import('../message/model_history').ModelMessage[] = [
       { role: 'system', content: AWAITER_WAKE_SYSTEM_PROMPT },
     ];
 
     if (awaiter.origin_run_id) {
       const originRun = agentRunDb.getAgentRun(awaiter.origin_run_id);
       const resumedMessages = Array.isArray(originRun?.working?.modelMessages)
-        ? (originRun!.working!.modelMessages as import('ai').ModelMessage[])
+        ? (originRun!.working!.modelMessages as import('../message/model_history').ModelMessage[])
         : [];
       if (resumedMessages.length > 0) {
         messages.push({

@@ -27,10 +27,18 @@ export const TOOL_EXECUTION_PREPARED = 'tool_execution_prepared';
 export const TOOL_EXECUTION_STARTED = 'tool_execution_started';
 export const TOOL_EXECUTION_FINISHED = 'tool_execution_finished';
 const EXECUTION_EVENTS = [TOOL_EXECUTION_PREPARED, TOOL_EXECUTION_STARTED, TOOL_EXECUTION_FINISHED];
-type ToolResult = Extract<
-  Extract<ChatInputMessage, { role: 'tool' }>['content'][number],
-  { type: 'tool-result' }
->;
+/**
+ * The tool-result shape this module hands back. Structurally identical to the
+ * Pi harness's own outcome result (both are the `type: 'tool-result'` part), so
+ * the two declarations stay assignable — they were compared by the resume
+ * wiring and diverged when they were declared independently.
+ */
+type ToolResult = {
+  type: 'tool-result';
+  toolCallId: string;
+  toolName: string;
+  output: unknown;
+};
 export type ToolExecutionAddress = { threadId: string; approvalId: string };
 type Binding = ToolExecutionAddress & {
   messageId: string;

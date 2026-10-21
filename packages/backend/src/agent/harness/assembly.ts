@@ -1,12 +1,15 @@
-import { AgentHarness } from './agent_harness';
 import type { HarnessConfig } from './harness_types';
 import { PiToolTurnHarness } from '../runners/pi_tool_turn_harness';
 import { PiTextTurnHarness } from '../runners/pi_text_turn_harness';
 
 /**
  * The single assembly point for harness construction (conventions landmine #6):
- * every `new AgentHarness` goes through startTurnHarness or rehydrateHarness so
- * new always-pass config fields and default policy land here, not at five sites.
+ * every harness is built here so new always-pass config fields and default
+ * policy land in one place, not at five call sites.
+ *
+ * The AI SDK executors (`startTurnHarness`, `rehydrateHarness`) were removed
+ * with the supply retirement (ADR 009); `startPiTurnHarness` is the only
+ * builder left.
  */
 export type TurnHarnessAssembly = Omit<HarnessConfig, 'maxOutputTokens'> & {
   /** Non-finite/null values omit the output cap instead of passing it through. */
@@ -23,14 +26,6 @@ const toHarnessConfig = (assembly: TurnHarnessAssembly): HarnessConfig => {
     ...(validBudget(maxOutputTokens) ? { maxOutputTokens } : {}),
   };
 };
-
-/** A harness for a brand-new turn (stream send, chat send, delegated subagent). */
-export const startTurnHarness = (assembly: TurnHarnessAssembly): AgentHarness =>
-  new AgentHarness(toHarnessConfig(assembly));
-
-/** A harness rebuilt from durable state (approval resume, handoff-resume). */
-export const rehydrateHarness = (assembly: TurnHarnessAssembly): AgentHarness =>
-  new AgentHarness(toHarnessConfig(assembly));
 
 /**
  * The Pi-supply harness for a turn, sharing the same assembly contract.

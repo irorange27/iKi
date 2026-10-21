@@ -1,7 +1,5 @@
-import {
-  appendUserPromptToHistory,
-  buildPromptContext,
-} from '../provider/ai_sdk_runtime';
+import { appendUserPromptToHistory } from '@iki/backend/message/model_history';
+import { buildPromptContext } from '@iki/backend/message/prompt_context';
 import {
   loadAgentConfig,
   validateAgentConfig,

@@ -1,5 +1,5 @@
 import { countTokens, decode, encode } from 'gpt-tokenizer';
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
 
 import type { AgentTool } from './types';
 

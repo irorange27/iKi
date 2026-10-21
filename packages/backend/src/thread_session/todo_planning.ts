@@ -1,4 +1,3 @@
-import { generateText } from 'ai';
 
 import { TODO_PLANNING_TOOL_NAME as TODO_TOOL_NAME } from '@iki/backend/tools/task_plan_tools';
 const TODO_REMINDER_AFTER_STEPS = 3;
@@ -8,9 +7,21 @@ type StepWithToolCalls = {
   toolCalls?: ReadonlyArray<{ toolName?: string }>;
 };
 
-type TodoPrepareStep = NonNullable<Parameters<typeof generateText>[0]['prepareStep']>;
-type PrepareStepOptions = Parameters<TodoPrepareStep>[0];
-type PrepareStepResult = ReturnType<TodoPrepareStep>;
+/**
+ * The step callback shape this helper needs, declared locally.
+ *
+ * It used to be derived from the AI SDK's `generateText` signature
+ * (`Parameters<typeof generateText>[0]['prepareStep']`), which dragged the
+ * whole SDK type graph into a module that only reads `steps` and appends a
+ * reminder message. Naming the fields it actually touches keeps the dependency
+ * surface honest.
+ */
+type PrepareStepOptions = {
+  steps: ReadonlyArray<StepWithToolCalls>;
+  messages: Array<{ role: 'user'; content: string }>;
+};
+type PrepareStepResult = { messages: PrepareStepOptions['messages'] } | undefined;
+type TodoPrepareStep = (options: PrepareStepOptions) => PrepareStepResult;
 
 const stepUsedTodo = (step: StepWithToolCalls): boolean =>
   Array.isArray(step.toolCalls)

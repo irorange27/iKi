@@ -4,7 +4,7 @@ import { getApprovalId } from '@iki/backend/message/tool_parts';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../../logger';
-import type { AbstractChat } from 'ai';
+import type { IkiChat } from './iki_chat';
 import type { IpcChatTransport } from './ipc_chat_transport';
 
 const approvalLogger = createLogger({ module: 'tool_approval_controller' });
@@ -17,7 +17,7 @@ export type ToolApprovalController = ReturnType<typeof createToolApprovalControl
  * then resume the stream the backend pushes over the same IPC channel.
  */
 export const createToolApprovalController = (deps: {
-  chat: AbstractChat<ChatUiMessage>;
+  chat: IkiChat;
   transport: IpcChatTransport;
   electronAPI: Pick<ElectronApi, 'chat'>;
 }) => {

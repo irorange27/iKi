@@ -2,7 +2,7 @@ import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { ChatContextMode } from '@iki/backend/message/intervention_policy';
 import type { AffectState } from '@iki/backend/affect/affect_state';
 import type { AppConfig } from '@iki/backend/types/config';
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import type { EffectiveContextConfig } from './context_budget';

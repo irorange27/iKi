@@ -1,4 +1,4 @@
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
 import type { AgentRunKind } from '@iki/backend/types/agent_run';
 import type { ToolApprovalRequest } from '@iki/backend/agent';
 import type { ExecutionPlan } from './execution_plan';

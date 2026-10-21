@@ -1,4 +1,4 @@
-import type { LanguageModel, ModelMessage } from 'ai';
+import type { ModelMessage } from '@iki/backend/message/model_history';
 
 import type { AgentStep, ModelInferenceRecord } from '@iki/backend/agent/agent_step';
 import type { AgentTool, AgentUsage, ToolApprovalRequest, AgentResult, AgentTurnPerf } from '@iki/backend/agent/types';
@@ -28,7 +28,6 @@ export type HarnessConfig = {
   reasoningEffort?: string;
   threadId?: string;
   /** Inject a custom model (FauxModelProvider in tests). */
-  modelFactory?: (providerType: string, modelId: string, providerId: string) => LanguageModel;
 };
 
 // ── Turn input / output ───────────────────────────────────────────────
@@ -98,3 +97,11 @@ export type TurnDriverHarness = {
   turn(input: TurnInput): AsyncGenerator<TurnEvent, void>;
   getHistory(): ModelMessage[];
 };
+
+/**
+ * Tools that END the turn when the model calls them (`handoff` restarts the run
+ * as a new segment). Shared vocabulary: both the Pi loop and its callers test
+ * against it, and it used to live in the AI SDK runner file, which made the Pi
+ * harness import its retired sibling.
+ */
+export const TERMINAL_TOOL_NAMES = new Set(['handoff']);

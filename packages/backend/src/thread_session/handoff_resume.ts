@@ -1,4 +1,4 @@
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
 import type { ChatInputMessage } from './types';
 
 export type HandoffDetails = {

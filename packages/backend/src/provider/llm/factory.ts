@@ -1,10 +1,6 @@
-import { generateText, smoothStream, type LanguageModel, type ModelMessage } from 'ai';
-import type { JSONValue, SharedV3ProviderOptions } from '@ai-sdk/provider';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createOpenAI } from '@ai-sdk/openai';
-import { createDeepSeek } from '@ai-sdk/deepseek';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { createMiniMax } from '@ai-sdk/minimax';
+
+import type { JSONValue, SharedV3ProviderOptions } from './wire_types';
+import type { ModelMessage } from '@iki/backend/message/model_history';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -141,19 +137,6 @@ export interface ChatGenerationResult {
 
 const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
-
-const isLanguageModelInstance = (value: unknown): value is LanguageModel => {
-  if (!isObjectRecord(value)) return false;
-
-  return (
-    value.specificationVersion === 'v3' &&
-    typeof value.provider === 'string' &&
-    typeof value.modelId === 'string' &&
-    typeof value.doGenerate === 'function' &&
-    typeof value.doStream === 'function' &&
-    'supportedUrls' in value
-  );
-};
 
 const readBootstrapAuthConfig = (providerType: string): ProviderConfig | null => {
   try {
@@ -387,119 +370,6 @@ const createInstrumentedFetch = (): typeof globalThis.fetch => {
     }
     return globalThis.fetch(input, init);
   };
-};
-
-/**
- * Per-provider model wiring for the static provider types. Each entry
- * owns its SDK client construction and default endpoint; providers absent from
- * this table fall through to isResponseApi handling or the OpenAI-compatible path.
- */
-const STATIC_PROVIDER_MODEL_FACTORIES: Record<string, (config: ProviderConfig, modelId: string) => LanguageModel> = {
-  openai: (config, modelId) => {
-    const client = createOpenAI({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.openai.com/v1',
-    });
-    return client(modelId);
-  },
-  anthropic: (config, modelId) => {
-    const model = createAnthropic({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.anthropic.com/v1',
-    })(modelId);
-    if (!isLanguageModelInstance(model)) {
-      throw new Error(`Anthropic provider returned an invalid language model for "${modelId}".`);
-    }
-    return model;
-  },
-  'anthropic-compatible': (config, modelId) => {
-    const model = createAnthropic({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.anthropic.com/v1',
-      name: 'anthropic-compatible',
-    })(modelId);
-    if (!isLanguageModelInstance(model)) {
-      throw new Error(`Anthropic provider returned an invalid language model for "${modelId}".`);
-    }
-    return model;
-  },
-  deepseek: (config, modelId) => {
-    const client = createDeepSeek({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.deepseek.com/v1',
-    });
-    return client(modelId);
-  },
-  minimax: (config, modelId) => {
-    const model = createMiniMax({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.minimax.io/anthropic/v1',
-    })(modelId);
-    if (!isLanguageModelInstance(model)) {
-      throw new Error(`MiniMax provider returned an invalid language model for "${modelId}".`);
-    }
-    return model;
-  },
-};
-
-export const createModel = (
-  providerType: string,
-  modelId: string,
-  providerId?: string | null
-): LanguageModel => {
-  const config = getProviderConfig(providerType, providerId);
-
-  // Validations: If no modelId, try to pick the first one from config
-  if (!modelId && config.models.length > 0) {
-    modelId = config.models[0];
-  }
-
-  if (!modelId) {
-    throw new Error(
-      `Model not specified for provider "${providerType}". Please select a model in chat or update settings.`
-    );
-  }
-
-  const storedModelOptions = getProviderModelOptions(config.modelOptions, modelId);
-
-  const staticFactory = STATIC_PROVIDER_MODEL_FACTORIES[providerType];
-  if (staticFactory) {
-    return staticFactory(config, modelId);
-  }
-
-  if (config.isResponseApi) {
-    const client = createOpenAI({
-      name: providerType,
-      apiKey: config.apiKey,
-      baseURL: config.baseURL,
-    });
-    return client.responses(modelId);
-  }
-
-  // Default to OpenAI compatible for most other providers
-  const client = createOpenAICompatible({
-    name: providerType,
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-    fetch: createInstrumentedFetch(),
-  });
-  if (typeof storedModelOptions?.supportsStructuredOutputs === 'boolean') {
-    return client.languageModel(modelId, {
-      supportsStructuredOutputs: storedModelOptions.supportsStructuredOutputs,
-    });
-  }
-
-  return client(modelId);
-};
-
-/**
- * Dispose a language model after a call. The AI SDK model objects are inert
- * today, so this is a deliberate no-op — kept as the caller-side teardown
- * point the runners already call in `finally` (ACP's model needed cleanup;
- * that path is gone, and a future one re-implements this body).
- */
-export const disposeLanguageModel = (_model: LanguageModel): void => {
-  // Intentionally empty: see the doc comment above.
 };
 
 /** The persona SECTION of a request system prompt — named for exactly what
@@ -835,86 +705,19 @@ export const generateChatWithModelMessages = async (options: {
 }): Promise<ChatGenerationResult> => {
   const config = getProviderConfig(options.providerType, options.providerId);
   let usePi = supportsPiGeneration(options.providerType, config);
-  if (usePi) {
-    // Per-request domain gate (ADR 007 decision 2): requests whose history
-    // carries parts outside the projection's covered domain (multimodal
-    // today) stay on the AI SDK until their own switch items land. The
-    // projection itself is the domain test — coverage widening automatically
-    // re-routes, and the fallback never sees a projection throw.
-    try {
-      projectHistoryToPiContext(options.messages, options.modelId, options.providerType);
-    } catch (error) {
-      usePi = false;
-      factoryLogger.event({
-        level: 'info',
-        outcome: 'degraded',
-        event: 'llm.generate.supply_fallback',
-        message: 'History outside the Pi projection domain — using the AI SDK path.',
-        data: {
-          providerType: options.providerType,
-          modelId: options.modelId,
-          reason: getErrorMessage(error),
-        },
-      });
-    }
+  if (!usePi) {
+    // No second supply. The AI SDK branch that used to sit here is gone
+    // (ADR 009): a provider this layer cannot serve must fail with the reason
+    // rather than quietly run the request somewhere else.
+    throw new Error(
+      `Provider "${options.providerType}" cannot be served: it has no base URL, so no model endpoint can be addressed.`
+    );
   }
-  if (usePi) {
-    return generateViaPi(options, config);
-  }
-  const model = createModel(options.providerType, options.modelId, options.providerId);
-  const assembled = assembleRequestSystemPrompt([
-    { slot: 'persona', text: resolvePersonaPrompt(options.providerType, options.providerId) },
-    ...(typeof options.extraSystemPrompt === 'string'
-      ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
-      : []),
-  ]);
-  const systemPrompt = options.systemPromptOverride ?? assembled.prompt;
-
-  try {
-    const telemetry = langfuseTelemetry('chat.generate', {
-      sessionId: options.threadId,
-      provider: options.providerType,
-      providerId: options.providerId,
-      model: options.modelId,
-    });
-    const result = await generateText({
-      model,
-      system: systemPrompt,
-      messages: injectReasoningContentIntoMessages(options.messages),
-      ...getModelCallSettings(options.providerType, options.modelId, options.providerId),
-      ...(options.providerOptions ? { providerOptions: options.providerOptions } : {}),
-      ...(typeof options.temperature === 'number' ? { temperature: options.temperature } : {}),
-      ...(typeof options.maxOutputTokens === 'number'
-        ? { maxOutputTokens: options.maxOutputTokens }
-        : {}),
-      ...(options.abortSignal ? { abortSignal: options.abortSignal } : {}),
-      ...(telemetry ? { experimental_telemetry: telemetry } : {}),
-    });
-
-    if (!result.text) {
-      factoryLogger.event({
-        level: 'warn',
-        event: 'llm.generate.empty',
-        outcome: 'degraded',
-        message: `Generation produced no text for provider "${options.providerType}" model "${options.modelId}".`,
-        data: { providerType: options.providerType, modelId: options.modelId },
-      });
-    }
-    return {
-      text: result.text,
-      usage: normalizeLanguageModelUsage(result.totalUsage || result.usage),
-    };
-  } catch (error) {
-    factoryLogger.event({
-      level: 'error',
-      event: 'llm.generate.failed',
-      outcome: 'failed',
-      message: `Generation failed for provider "${options.providerType}" model "${options.modelId}".`,
-      error,
-      data: { providerType: options.providerType, modelId: options.modelId },
-    });
-    throw error;
-  }
+  // Per-request domain gate (ADR 007 decision 2): the projection IS the domain
+  // test. A history it cannot represent is refused with the offending part
+  // named — never silently re-routed to another executor.
+  projectHistoryToPiContext(options.messages, options.modelId, options.providerType);
+  return generateViaPi(options, config);
 };
 
 export const fetchModelsFromDev = async (providerType: string) => {
@@ -1032,28 +835,6 @@ export const resolveModelCapability = async (
  * providers) include it in the API request body. Needed for providers like MIMO
  * that require reasoning_content be passed back across all turns.
  */
-export const injectReasoningContentIntoMessages = (
-  messages: ModelMessage[],
-): ModelMessage[] => {
-  return messages.map(msg => {
-    if (msg.role !== 'assistant') return msg;
-    if (!Array.isArray(msg.content)) return msg;
-    const reasoningParts = msg.content.filter(p => p.type === 'reasoning');
-    if (reasoningParts.length === 0) return msg;
-    const reasoningContent = reasoningParts.map(p => p.text).join('');
-    return {
-      ...msg,
-      providerOptions: {
-        ...msg.providerOptions,
-        openaiCompatible: {
-          ...(msg.providerOptions?.openaiCompatible ?? {}),
-          reasoning_content: reasoningContent,
-        },
-      },
-    };
-  });
-};
-
 export const resetModelsDevCatalogCacheForTests = () => {
   cachedModelsDevCatalog = null;
   cachedModelsDevFetchedAt = 0;

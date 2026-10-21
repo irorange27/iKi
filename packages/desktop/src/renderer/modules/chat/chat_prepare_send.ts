@@ -1,4 +1,4 @@
-import type { FileUIPart } from 'ai';
+import type { UiFilePart as FileUIPart } from '@iki/backend/message/ui_protocol';
 import type { ChatUiMessage, ComposerInvocationPartData } from '@iki/backend/message/message_parts';
 import type { AudioEmotionResult } from '@iki/backend/types/speech';
 
