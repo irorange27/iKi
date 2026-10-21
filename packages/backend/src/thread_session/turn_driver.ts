@@ -511,7 +511,7 @@ const runTurnBatches = async (
         if (req.approvalId) {
           deps.approvals.ensurePendingApprovalSession(req.approvalId, {
             target,
-            history: state.harness.getHistory() ?? state.streamHistory,
+            history: state.harness.getHistory(),
             recoveryContext: state.approvalContext,
           });
         }
@@ -654,7 +654,6 @@ const runTurnBatches = async (
       if (steered) {
         flushCommittedText();
         streamState.steered = false;
-        state.streamHistory = state.harness.getHistory();
         const drained = deps.drainSteerMessages();
         if (drained.length > 0) {
           const steerPrompt =
@@ -677,9 +676,11 @@ const runTurnBatches = async (
             },
           ]);
           state.streamHistory = [
-            ...state.streamHistory,
+            ...state.harness.getHistory(),
             { role: 'user' as const, content: `[STEERING INPUT]\n\n${steerPrompt}` },
           ];
+        } else {
+          state.streamHistory = state.harness.getHistory();
         }
         streamState.abortController = new AbortController();
         state.streamPrompt = '';
@@ -698,7 +699,7 @@ const runTurnBatches = async (
       if (agentResult?.requiresApproval && agentResult.toolApprovalRequests?.length) {
         deps.approvals.registerApprovalBatch(agentResult.toolApprovalRequests, {
           target,
-          history: state.harness.getHistory() ?? state.streamHistory,
+          history: state.harness.getHistory(),
           ...(state.approvalContext ? { recoveryContext: state.approvalContext } : {}),
         });
         state.runTracker.recordAgentStep({
