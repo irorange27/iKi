@@ -3,14 +3,6 @@ import type { Migration } from './runner';
 
 const INDEXES: ReadonlyArray<{ table: string; columns: readonly string[]; sql: string }> = [
   {
-
-    table: 'chat_messages',
-    columns: ['thread_id', 'timestamp', 'created_at', 'id'],
-    sql: `CREATE INDEX IF NOT EXISTS idx_chat_messages_thread_order
-            ON chat_messages(thread_id, timestamp, created_at, id)`,
-  },
-  {
-
     table: 'chat_threads',
     columns: ['updated_at'],
     sql: `CREATE INDEX IF NOT EXISTS idx_chat_threads_updated_at
@@ -35,7 +27,6 @@ const migration: Migration = {
   up: (db: SqliteDatabase) => {
     for (const index of INDEXES) {
       if (!tableExists(db, index.table)) continue;
-
       if (!index.columns.every(column => tableHasColumn(db, index.table, column))) continue;
       db.exec(index.sql);
     }

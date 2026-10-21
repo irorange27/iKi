@@ -76,7 +76,6 @@ const buildStandardTools = () => [
   new WebSearchTool(),
   new FetchTool(),
   new ElementSourceTool(),
-  new ElementSourceTool(),
   new ListPersonalSkillsTool(),
   new ReadPersonalSkillTool(),
   new LoadSkillTool(),
