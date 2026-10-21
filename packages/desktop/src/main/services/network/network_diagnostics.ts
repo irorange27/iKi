@@ -239,6 +239,7 @@ export const testNetworkConnectivity = async (
     try {
       await ses.setProxy({ mode: 'direct' });
     } catch {
+      /* empty: error is not actionable here */
     }
   }
 };

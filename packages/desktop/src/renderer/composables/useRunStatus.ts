@@ -27,6 +27,7 @@ export const useRunStatus = (deps: {
     try {
       removeListener();
     } catch {
+      /* empty: error is not actionable here */
     }
   });
 

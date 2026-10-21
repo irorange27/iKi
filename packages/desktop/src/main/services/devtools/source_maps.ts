@@ -27,6 +27,7 @@ export const relativizeSource = (source: string, root: string): string => {
     try {
       candidate = new URL(candidate).pathname;
     } catch {
+      /* empty: error is not actionable here */
     }
   }
   const fsMatch = /^\/@fs\/(.*)$/.exec(candidate);

@@ -508,6 +508,7 @@ export const registerConfigIpc = (): void => {
       try {
         win.webContents.send('config:updated', normalized);
       } catch {
+        /* empty: error is not actionable here */
       }
     }
 

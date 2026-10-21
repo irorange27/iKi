@@ -23,6 +23,7 @@ export function useCompanionVoice() {
     const audio = new Audio(src);
     audio.volume = 0.7;
     audio.play().catch(() => {
+      /* autoplay can be blocked by the browser; the voice simply stays silent */
     });
     currentAudio = audio;
   };

@@ -416,6 +416,7 @@ export const useSettingsSpeechSection = (params: {
           handleWhisperDownloadProgress(payload);
         }) ?? (() => undefined);
     } catch {
+      /* empty: error is not actionable here */
     }
   });
 
@@ -423,6 +424,7 @@ export const useSettingsSpeechSection = (params: {
     try {
       removeDownloadProgressListener();
     } catch {
+      /* empty: error is not actionable here */
     }
     if (speechStatusTimer !== null) {
       window.clearTimeout(speechStatusTimer);

@@ -81,7 +81,7 @@ describe('model-step context budget', () => {
         }),
       ],
     })) {
-      
+      /* drain the stream; assertions follow */
     }
     expect(summarize).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(summarize.mock.calls[0][0])).toContain(oldText);
@@ -109,7 +109,7 @@ describe('model-step context budget', () => {
         history: initialHistory,
         toolsOverride: [],
       })) {
-        
+        /* drain the stream; the throw is asserted below */
       }
     };
     await expect(consume()).rejects.toThrow('Context compaction failed');

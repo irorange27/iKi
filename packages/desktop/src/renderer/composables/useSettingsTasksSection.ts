@@ -493,12 +493,14 @@ export const useSettingsTasksSection = (params: {
         }
       }) ?? (() => undefined);
   } catch {
+    /* empty: error is not actionable here */
   }
 
   onUnmounted(() => {
     try {
       removeTaskPushListener();
     } catch {
+      /* empty: error is not actionable here */
     }
   });
 

@@ -59,6 +59,7 @@ export const useChatViewLifecycle = (deps: {
           runSafe(() => deps.handleTaskPush(payload));
         }) ?? (() => undefined);
     } catch {
+      /* empty: error is not actionable here */
     }
 
     try {
@@ -68,6 +69,7 @@ export const useChatViewLifecycle = (deps: {
           runSafe(() => deps.handleAwaiterPush(payload));
         }) ?? (() => undefined);
     } catch {
+      /* empty: error is not actionable here */
     }
   });
 
@@ -75,10 +77,12 @@ export const useChatViewLifecycle = (deps: {
     try {
       removeTaskPushListener();
     } catch {
+      /* empty: error is not actionable here */
     }
     try {
       removeAwaiterPushListener();
     } catch {
+      /* empty: error is not actionable here */
     }
   });
 };

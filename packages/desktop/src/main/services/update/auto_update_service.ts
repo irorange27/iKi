@@ -99,6 +99,7 @@ const resolveGitHubRepository = (
     const repository = parseGitHubRepository(parsed.repository);
     if (repository) return repository;
   } catch {
+    /* empty: error is not actionable here */
   }
 
   return parseDefaultGitHubRepository();

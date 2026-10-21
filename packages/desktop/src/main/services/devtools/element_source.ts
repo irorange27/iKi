@@ -43,6 +43,7 @@ const installRecorder = async (contents: Electron.WebContents): Promise<void> =>
   try {
     await contents.executeJavaScript(buildInstallRecorderExpression(), true);
   } catch {
+    /* empty: error is not actionable here */
   }
 };
 

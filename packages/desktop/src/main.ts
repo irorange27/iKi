@@ -56,6 +56,7 @@ const syncLoggingConfig = () => {
   try {
     applyAppLoggingConfig(getAppConfig());
   } catch {
+    /* empty: error is not actionable here */
   }
 };
 
@@ -70,6 +71,7 @@ const updatePlatformDisplayScale = () => {
     const scale = screen.getPrimaryDisplay().scaleFactor;
     setPlatformInfo({ displayScale: scale });
   } catch {
+    /* empty: error is not actionable here */
   }
 };
 

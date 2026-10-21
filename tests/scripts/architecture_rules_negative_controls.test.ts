@@ -145,6 +145,7 @@ const writeFixture = async (root: string, control: Control): Promise<void> => {
     try {
       await fs.symlink(path.join(root, 'packages', aliasPkg), linkPath, 'dir');
     } catch {
+      /* empty: error is not actionable here */
     }
   }
   await fs.writeFile(

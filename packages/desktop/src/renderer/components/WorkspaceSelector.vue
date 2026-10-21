@@ -64,6 +64,7 @@ const pickWorkspace = async () => {
     }
     selectWorkspace(picked.id);
   } catch {
+    /* empty: error is not actionable here */
   } finally {
     isPicking.value = false;
   }

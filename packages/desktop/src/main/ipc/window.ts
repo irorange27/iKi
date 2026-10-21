@@ -15,6 +15,7 @@ export const registerWindowIpc = (): void => {
         section: typeof section === 'string' ? section : undefined,
       });
     } catch {
+      /* empty: error is not actionable here */
     }
   });
 
@@ -25,6 +26,7 @@ export const registerWindowIpc = (): void => {
         mainWindow.webContents.send('chat:thread-activate', threadId.trim());
       }
     } catch {
+      /* empty: error is not actionable here */
     }
   });
 
@@ -33,6 +35,7 @@ export const registerWindowIpc = (): void => {
       const win = BrowserWindow.fromWebContents(event.sender);
       win?.close();
     } catch {
+      /* empty: error is not actionable here */
     }
   });
 
@@ -40,6 +43,7 @@ export const registerWindowIpc = (): void => {
     try {
       BrowserWindow.fromWebContents(event.sender)?.minimize();
     } catch {
+      /* empty: error is not actionable here */
     }
   });
 
@@ -53,6 +57,7 @@ export const registerWindowIpc = (): void => {
         win.maximize();
       }
     } catch {
+      /* empty: error is not actionable here */
     }
   });
 
@@ -62,6 +67,7 @@ export const registerWindowIpc = (): void => {
       if (!win || typeof win.setHasShadow !== 'function') return;
       win.setHasShadow(Boolean(enabled));
     } catch {
+      /* empty: error is not actionable here */
     }
   });
 };

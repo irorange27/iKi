@@ -208,6 +208,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
       try {
         waveformSource.disconnect();
       } catch {
+        /* empty: error is not actionable here */
       }
       waveformSource = null;
     }
@@ -215,6 +216,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
       try {
         waveformAnalyser.disconnect();
       } catch {
+        /* empty: error is not actionable here */
       }
       waveformAnalyser = null;
     }

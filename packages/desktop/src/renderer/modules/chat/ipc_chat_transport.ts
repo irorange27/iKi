@@ -64,6 +64,7 @@ const createInboundSlot = (): InboundSlot => {
     try {
       controller.close();
     } catch {
+      /* empty: error is not actionable here */
     }
   };
   slot.fail = error => {
@@ -72,6 +73,7 @@ const createInboundSlot = (): InboundSlot => {
     try {
       controller.error(error);
     } catch {
+      /* empty: error is not actionable here */
     }
   };
 

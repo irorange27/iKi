@@ -40,6 +40,7 @@ const resolveFfmpegPath = (): string | null => {
       return resolvePackagedExecutablePath(ffmpegStatic);
     }
   } catch {
+    /* empty: error is not actionable here */
   }
   return null;
 };
@@ -51,6 +52,7 @@ export const resolveAvailableFfmpegPath = (): string | null => {
     const probe = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' });
     if (probe.status === 0) return 'ffmpeg';
   } catch {
+    /* empty: error is not actionable here */
   }
   return null;
 };
