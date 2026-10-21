@@ -31,9 +31,10 @@ import {
 } from './session_log';
 import {
   createTurnDriver,
-  finalizeRunForOutcome,
+  finalizeTurn,
+  finalizeTurnCancelled,
+  finalizeTurnFailure,
   runFailureFromError,
-  terminalFactForOutcome,
 } from './turn_driver';
 import { parseStoredWorkspaceSelection } from '../workspaces/thread_workspace';
 import { deriveRunTurnPlan } from './run_rehydrator';
@@ -252,7 +253,7 @@ export const createChatApproval = (deps: {
         system_prompt: plan.systemPrompt,
         max_input_tokens: plan.maxInputTokens ?? null,
         max_output_tokens: plan.maxOutputTokens ?? null,
-        max_iterations: plan.maxIterations ?? null,
+        max_iterations: plan.budget.step ?? null,
         enabled_tools: JSON.stringify(plan.enabledTools),
         available_skill_ids: JSON.stringify(plan.availableSkillIds),
         // Turn-start workspace binding (D30): the resumed execution must
@@ -404,7 +405,17 @@ export const createChatApproval = (deps: {
       return null;
     }
 
-    const parsedPlan = parseStoredPlan(approvalSession.plan_json);
+    // F3: the frozen plan now comes from the LOG — the `turn_started` fact
+    // carries it, so the approval session's `plan_json` column is a fallback
+    // for rows written before F3 rather than the authority. Reading the column
+    // first is what kept the legacy table load-bearing: a resume whose plan
+    // column was lost could not rebuild the turn even though the log held it.
+    // Matched by run id, because one thread's stream holds every turn and only
+    // the paused run's plan may be adopted.
+    const replayPlan = storedRunId
+      ? replay.turns.find(turn => turn.runId === storedRunId)?.plan
+      : undefined;
+    const parsedPlan = replayPlan ?? parseStoredPlan(approvalSession.plan_json);
     const runSnapshot = !parsedPlan && storedRunId ? agentRunDb.getAgentRun(storedRunId) : null;
     const derivedPlan = deriveRunTurnPlan(runSnapshot, {
       providerType: approvalSession.provider_type,
@@ -461,10 +472,25 @@ export const createChatApproval = (deps: {
       requireApproval: derivedPlan.requireApproval ?? true,
       autoApproveToolRequests: false,
       ...(derivedPlan.approvalPolicy ? { approvalPolicy: derivedPlan.approvalPolicy } : {}),
-      maxIterations: derivedPlan.maxIterations,
+      // no probe needed
+      // The two budgets from the legacy row — the step budget from the
+      // approval-session column (or the run row), the batch bound from the
+      // run row's metadata. Never re-derived from current config.
+      budget: {
+        step: derivedPlan.maxIterations,
+        ...(derivedPlan.autonomous
+          ? {
+              batch: {
+                max: derivedPlan.autonomous.maxIterations,
+                ...(derivedPlan.autonomous.continuePrompt
+                  ? { continuePrompt: derivedPlan.autonomous.continuePrompt }
+                  : {}),
+              },
+            }
+          : {}),
+      },
       // The run row may carry config the legacy columns never stored.
       ...(derivedPlan.reasoningEffort ? { reasoningEffort: derivedPlan.reasoningEffort } : {}),
-      ...(derivedPlan.autonomous ? { autonomous: derivedPlan.autonomous } : {}),
       ...(typeof approvalSession.max_input_tokens === 'number'
         ? { maxInputTokens: approvalSession.max_input_tokens }
         : {}),
@@ -696,7 +722,6 @@ export const createChatApproval = (deps: {
               messages: session.history ?? [],
             },
             working: {
-              modelMessages: session.history ?? [],
               accumulatedText: '',
               pendingApprovalIds: Array.from(session.pendingApprovalIds).filter(
                 id => !session.collectedApprovalResponses.has(id)
@@ -748,20 +773,21 @@ export const createChatApproval = (deps: {
         );
       } catch (error) {
         session.collectedApprovalResponses.delete(approvalId);
-        resumeRunTracker.markFailed(runFailureFromError(error, getErrorMessage(error)));
         // The abandoned child's started fact must not dangle as running in
         // the replay: startup reclamation only revisits running/blocked rows,
-        // so this terminal event is the only thing that heals the stream.
-        recordFailureTerminalEvent(
-          resumePlan.threadId,
-          turnFactsToEvents({
-            terminal: {
-              runId: resumeRunTracker.id,
-              status: 'failed',
-              errorText: getErrorMessage(error),
-            },
-          })
-        );
+        // so this terminal fact — written with the row by the same authority —
+        // is the only thing that heals the stream.
+        finalizeTurnFailure({
+          tracker: resumeRunTracker,
+          failure: {
+            status: 'failed',
+            errorText: getErrorMessage(error),
+            retryable: true,
+          },
+          threadId: resumePlan.threadId,
+          transport: 'approval-resume',
+          loudGuard: true,
+        });
         throw error;
       }
     }
@@ -944,10 +970,11 @@ export const createChatApproval = (deps: {
         uiChunkEmitter.finish();
       }
 
-      // The driver's CURRENT tracker/harness: a handoff chain finalizes the
-      // child segment, not the completed parent.
+      // The driver's CURRENT tracker: a handoff chain finalizes the child
+      // segment, not the completed parent. The model history is NOT copied into
+      // the run row here — it lives in the session log and is replayed on
+      // recovery (ADR 010).
       const finalTracker = driver.getRunTracker();
-      finalTracker.syncModelMessages(driver.getHarness().getHistory() ?? session.history ?? []);
       if (streamResult.outcome !== 'cancelled' && nextApprovalContext) {
         deps.usage.recordUsageEvent({
           threadId: nextApprovalContext.plan.threadId,
@@ -962,56 +989,48 @@ export const createChatApproval = (deps: {
           },
         });
       }
-      // Event-first (ADR 008 F1): the continuation's facts reach the session
-      // log BEFORE the run row finalizes — a write failure fails the resume
-      // through the catch below while the row is still non-terminal.
+      // Event-first (ADR 008 F1): the continuation's committed output and its
+      // terminal fact are written by ONE outcome row before the run row
+      // finalizes — a write failure fails the resume through the catch below
+      // while the row is still non-terminal. A re-pause is not terminal (its
+      // next continuation records its own facts), so its row only blocks.
+      let persistedContinuation:
+        | Awaited<ReturnType<typeof uiChunkEmitter.buildPersistedMessage>>
+        | undefined;
       if (baseApprovalContext?.plan.threadId) {
         // Seed the reduction with the already-persisted pre-pause parts so the
         // accumulated message stays whole across the pause, then upsert.
-        const persisted = await uiChunkEmitter.buildPersistedMessage(
+        persistedContinuation = await uiChunkEmitter.buildPersistedMessage(
           loadPersistedAssistantParts(uiChunkEmitter.messageId)
         );
-        // Session log: the continuation's committed output; a re-pause is not
-        // terminal (its next continuation records its own facts). The
-        // terminal fact mirrors finalizeRunForOutcome's outcome mapping (the
-        // event-side twin; undefined for a re-pause).
-        const terminal = terminalFactForOutcome(streamResult);
-        recordSessionEvents(
-          baseApprovalContext.plan.threadId,
-          turnFactsToEvents({
-            ...(persisted
-              ? {
-                  committed: {
-                    runId: driver.getRunTracker().id,
-                    messageId: persisted.id,
-                    message: persisted as never,
-                    transport: 'approval-resume',
-                  },
-                }
-              : {}),
-            ...(terminal
-              ? {
-                  terminal: {
-                    runId: driver.getRunTracker().id,
-                    status: terminal.status,
-                    ...(terminal.finishReason ? { finishReason: terminal.finishReason } : {}),
-                    ...(terminal.errorText ? { errorText: terminal.errorText } : {}),
-                  },
-                }
-              : {}),
-          })
-        );
-        if (persisted) {
+        if (persistedContinuation) {
           await persistAssistantTurnMessage(
             deps.conversation,
             baseApprovalContext.plan.threadId,
-            persisted,
+            persistedContinuation,
             'approval-resume'
           );
         }
       }
-      finalizeRunForOutcome(driver.getRunTracker(), streamResult, {
-        text: driver.getAccumulatedResponse() || streamResult.response,
+      const continuationText = driver.getAccumulatedResponse() || streamResult.response;
+      finalizeTurn({
+        tracker: driver.getRunTracker(),
+        outcome: streamResult.outcome,
+        text: continuationText,
+        ...(streamResult.usage ? { usage: streamResult.usage } : {}),
+        ...(streamResult.outcome === 'handoff' ? { handoff: streamResult.handoff } : {}),
+        ...(baseApprovalContext?.plan.threadId
+          ? { threadId: baseApprovalContext.plan.threadId }
+          : {}),
+        transport: 'approval-resume',
+        ...(persistedContinuation
+          ? {
+              committed: {
+                messageId: persistedContinuation.id,
+                message: persistedContinuation as never,
+              },
+            }
+          : {}),
       });
       return {
         success: true,
@@ -1030,33 +1049,38 @@ export const createChatApproval = (deps: {
       const failingTracker = driverHandle?.getRunTracker() ?? resumeRunTracker;
       if (streamState.cancelled) {
         uiChunkEmitter.abort();
-        if (failingTracker && failingTracker.getRun().status === 'running') {
-          failingTracker.markCancelled();
-        }
-        const cancelledThreadId = failingTracker?.getRun().threadId;
-        if (cancelledThreadId) {
+        if (failingTracker) {
           // The cancellation is a terminal fact — the replay must not show
           // this continuation running forever (flip-ledger gap closed in F4).
-          recordFailureTerminalEvent(
-            cancelledThreadId,
-            turnFactsToEvents({
-              terminal: { runId: failingTracker.id, status: 'cancelled' },
-            })
-          );
+          finalizeTurnCancelled({
+            tracker: failingTracker,
+            ...(failingTracker.getRun().threadId
+              ? { threadId: failingTracker.getRun().threadId as string }
+              : {}),
+            transport: 'approval-resume',
+            skipRow: failingTracker.getRun().status !== 'running',
+            loudGuard: true,
+          });
         }
         return { success: true, stopped: streamState.stoppedByUser };
       }
-      if (failingTracker && failingTracker.getRun().status === 'running') {
-        failingTracker.markFailed(runFailureFromError(error, message));
-      }
-      const failedThreadId = failingTracker?.getRun().threadId;
-      if (failedThreadId) {
-        recordFailureTerminalEvent(
-          failedThreadId,
-          turnFactsToEvents({
-            terminal: { runId: failingTracker.id, status: 'failed', errorText: message },
-          })
-        );
+      if (failingTracker) {
+        const retry = runFailureFromError(error, message);
+        finalizeTurnFailure({
+          tracker: failingTracker,
+          failure: {
+            status: 'failed',
+            errorText: message,
+            ...(retry.code ? { code: retry.code } : {}),
+            ...(typeof retry.retryable === 'boolean' ? { retryable: retry.retryable } : {}),
+          },
+          ...(failingTracker.getRun().threadId
+            ? { threadId: failingTracker.getRun().threadId as string }
+            : {}),
+          transport: 'approval-resume',
+          skipRow: failingTracker.getRun().status !== 'running',
+          loudGuard: true,
+        });
       }
       uiChunkEmitter.error(message);
       return { success: false, error: message };

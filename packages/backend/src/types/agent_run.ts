@@ -40,16 +40,6 @@ export type AgentRunStepType =
 
 export type AgentRunStepStatus = 'started' | 'completed' | 'failed';
 
-export type AgentRunCheckpointReason =
-  | 'step-completed'
-  | 'approval-requested'
-  | 'approval-answered'
-  | 'child-run-spawned'
-  | 'run-completed'
-  | 'run-cancelled'
-  | 'run-failed'
-  | 'periodic';
-
 export type AgentRunInput = {
   prompt?: string;
   messages?: unknown[];
@@ -57,7 +47,6 @@ export type AgentRunInput = {
 };
 
 export type AgentRunWorkingState = {
-  modelMessages: unknown[];
   accumulatedText: string;
   pendingApprovalIds: string[];
   lastStepIndex: number;
@@ -67,6 +56,13 @@ export type AgentRunOutput = {
   text?: string;
   finishReason?: string;
   usage?: Record<string, unknown>;
+  /**
+   * Calls the step budget left pending. They executed (their results are on
+   * the transcript) but no model call read them, so a `budget-exhausted` row
+   * must say what is missing instead of reading like a complete answer
+   * (2026-10 audit A-3: the remainder vanished at the harness seam).
+   */
+  pendingToolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
 };
 
 export type AgentRunError = {
@@ -109,19 +105,9 @@ export interface AgentRunStep {
   finishedAt?: string | null;
 }
 
-export interface AgentRunCheckpoint {
-  id: string;
-  runId: string;
-  stepIndex: number;
-  reason: AgentRunCheckpointReason;
-  snapshot: AgentRun;
-  createdAt: string;
-}
-
 export interface AgentRunTrace {
   run: AgentRun;
   steps: AgentRunStep[];
-  latestCheckpoint?: AgentRunCheckpoint | null;
   children: AgentRun[];
 }
 

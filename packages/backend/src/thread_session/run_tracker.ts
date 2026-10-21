@@ -69,6 +69,13 @@ type FinalizeRunParams = {
   text?: string;
   finishReason?: string;
   usage?: Record<string, unknown>;
+  /**
+   * Calls the step budget left pending at the end of the turn. Part of the
+   * run's OUTPUT, not its transcript: they executed, but no model call read
+   * their results, so a `budget-exhausted` row must say what is missing
+   * instead of reading like a complete answer.
+   */
+  pendingToolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
 };
 
 type BlockRunParams = FinalizeRunParams & {
@@ -100,6 +107,9 @@ const buildOutput = (params: FinalizeRunParams): AgentRunOutput | null => {
     ...(typeof params.text === 'string' ? { text: params.text } : {}),
     ...(typeof params.finishReason === 'string' ? { finishReason: params.finishReason } : {}),
     ...(params.usage && typeof params.usage === 'object' ? { usage: params.usage } : {}),
+    ...(Array.isArray(params.pendingToolCalls) && params.pendingToolCalls.length > 0
+      ? { pendingToolCalls: params.pendingToolCalls }
+      : {}),
   };
   return Object.keys(output).length > 0 ? output : null;
 };
@@ -118,7 +128,6 @@ export type AgentRunTracker = {
   id: string;
   getRun: () => AgentRun;
   recordModelStep: (record: ModelInferenceRecord) => void;
-  syncModelMessages: (messages: unknown[]) => AgentRun;
   recordAgentStep: (step: AgentStep) => void;
   recordApprovalResponse: (params: {
     approvalId: string;
@@ -278,15 +287,6 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
           usage: record.usage,
         },
       });
-    },
-    syncModelMessages: messages => {
-      persist({
-        working: {
-          ...currentRun.working,
-          modelMessages: Array.isArray(messages) ? structuredClone(messages) : [],
-        },
-      });
-      return currentRun;
     },
     recordAgentStep: step => {
       if (step.type === 'tool_execution_start') {

@@ -41,9 +41,10 @@ import {
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
 import {
   createTurnDriver,
-  finalizeRunForOutcome,
+  finalizeTurn,
+  finalizeTurnCancelled,
+  finalizeTurnFailure,
   runFailureFromError,
-  terminalFactForOutcome,
   type TurnDriverHandle,
 } from './turn_driver';
 
@@ -254,9 +255,13 @@ export const createChatStreaming = (deps: {
       let streamPrompt = preparedTurn.prompt;
 
       if (options.runConfig?.kind === 'handoff-resume' && options.runConfig?.parentRunId) {
+        // The parent's transcript comes from the session-log replay (ADR 010
+        // §3), not from the run row's removed `working.modelMessages` copy.
+        // The parent row is read only for its threadId — the replay is keyed
+        // by conversation, and a row without one has no log to rebuild from.
         const parentRun = agentRunDb.getAgentRun(options.runConfig.parentRunId);
-        const handoffResume = buildHandoffResumeContext({
-          parentRun,
+        const handoffResume = await buildHandoffResumeContext({
+          threadId: parentRun?.threadId ?? options.threadId,
           preparedHistory: preparedTurn.history,
           preparedPrompt: preparedTurn.prompt,
         });
@@ -283,7 +288,6 @@ export const createChatStreaming = (deps: {
             messages: preparedTurn.finalMessages,
           },
           working: {
-            modelMessages: streamHistory,
             accumulatedText: '',
             pendingApprovalIds: [],
             lastStepIndex: 0,
@@ -437,6 +441,10 @@ export const createChatStreaming = (deps: {
 
       const finalResponse = activeDriver.getAccumulatedResponse() || streamResult.response;
       const finalRunTracker = activeDriver.getRunTracker();
+      // The facts of the batch that ended the turn (a handoff chain finalized
+      // its parent segments itself, so the driver's return value describes
+      // only the last chained segment).
+      const lastFacts = activeDriver.getLastFacts();
 
       // Event-first (ADR 008 F1): the turn's facts reach the session log
       // BEFORE the run row finalizes — a write failure fails the turn through
@@ -444,6 +452,9 @@ export const createChatStreaming = (deps: {
       // terminal row whose outcome was never recorded. The record also
       // precedes finish(): a terminated emitter drops error chunks, so the
       // failure must be caught while the failure channel is still open.
+      let settledMessageRef: Awaited<
+        ReturnType<typeof uiChunkEmitter.buildPersistedMessage>
+      > = undefined;
       if (options.threadId) {
         // Durable assistant record — partial (approval-pending) or completed.
         // Upsert converges with any late progress write on the same id.
@@ -455,31 +466,7 @@ export const createChatStreaming = (deps: {
           role: 'assistant' as const,
           parts: [],
         };
-        // Session log: committed output + how the turn ended. The terminal
-        // fact mirrors finalizeRunForOutcome's outcome mapping (the
-        // event-side twin; undefined for an approval pause).
-        const terminal = terminalFactForOutcome(streamResult);
-        recordSessionEvents(
-          options.threadId,
-          turnFactsToEvents({
-            committed: {
-              runId: finalRunTracker.id,
-              messageId: settledMessage.id,
-              message: settledMessage as never,
-              transport: 'stream',
-            },
-            ...(terminal
-              ? {
-                  terminal: {
-                    runId: finalRunTracker.id,
-                    status: terminal.status,
-                    ...(terminal.finishReason ? { finishReason: terminal.finishReason } : {}),
-                    ...(terminal.errorText ? { errorText: terminal.errorText } : {}),
-                  },
-                }
-              : {}),
-          })
-        );
+        settledMessageRef = settledMessage;
         turnPersistFinalized = true;
         await persistAssistantTurnMessage(
           deps.conversation,
@@ -492,8 +479,23 @@ export const createChatStreaming = (deps: {
       if (streamResult.outcome !== 'awaiting-approval') {
         uiChunkEmitter.finish();
       }
-      finalizeRunForOutcome(finalRunTracker, streamResult, {
+      // Session log + run row: ONE outcome row writes both projections — the
+      // committed output rides the same record as its terminal fact, and the
+      // row is finalized only after the facts landed (ADR 008 F1).
+      finalizeTurn({
+        tracker: finalRunTracker,
+        outcome: streamResult.outcome,
         text: finalResponse,
+        ...(lastFacts.usage ? { usage: lastFacts.usage } : {}),
+        ...(lastFacts.pendingToolCalls && lastFacts.pendingToolCalls.length > 0
+          ? { pendingToolCalls: lastFacts.pendingToolCalls }
+          : {}),
+        ...(streamResult.outcome === 'handoff' ? { handoff: streamResult.handoff } : {}),
+        ...(options.threadId ? { threadId: options.threadId } : {}),
+        transport: 'stream',
+        ...(settledMessageRef
+          ? { committed: { messageId: settledMessageRef.id, message: settledMessageRef as never } }
+          : {}),
         notify: notifyRunStatus,
       });
       return {
@@ -505,52 +507,44 @@ export const createChatStreaming = (deps: {
     } catch (error: unknown) {
       if (streamState.cancelled) {
         if (coordinator.peekStream(senderId) === streamState) uiChunkEmitter.abort();
+        const cancelledTracker = driver?.getRunTracker() ?? sessionLogTracker;
+        let abortedMessage:
+          | { id: string; role: 'assistant'; parts: [] }
+          | Awaited<ReturnType<typeof uiChunkEmitter.buildPersistedMessage>>
+          | undefined;
         if (options.threadId) {
           turnPersistFinalized = true;
-          const abortedMessage = (await uiChunkEmitter.buildPersistedMessage()) ?? {
+          const persistedAbort = (await uiChunkEmitter.buildPersistedMessage()) ?? {
             id: uiChunkEmitter.messageId,
             role: 'assistant' as const,
             parts: [],
           };
+          abortedMessage = persistedAbort;
           await persistAssistantTurnMessage(
             deps.conversation,
             options.threadId,
-            abortedMessage,
+            persistedAbort,
             'stream-abort',
             userTurnMessageId
           );
-          const cancelledTracker = driver?.getRunTracker() ?? sessionLogTracker;
-          // A cancel while blocked records turn_cancelled while the run row
-          // stays blocked (the approval remains resumable) — intentional
-          // until the resume slice unifies the two. This is a failure-path
-          // terminal: the record must not mask the cancellation being
-          // reported (ADR 008 F1).
-          if (cancelledTracker) {
-            recordFailureTerminalEvent(
-              options.threadId,
-              turnFactsToEvents({
-                committed: {
-                  runId: cancelledTracker.id,
-                  messageId: abortedMessage.id,
-                  message: abortedMessage as never,
-                  transport: 'stream-abort',
-                },
-                terminal: {
-                  runId: cancelledTracker.id,
-                  status:
-                    cancelledTracker.getRun().status === 'running' ||
-                    cancelledTracker.getRun().status === 'blocked'
-                      ? 'cancelled'
-                      : cancelledTracker.getRun().status,
-                },
-              })
-            );
-          }
         }
-        const activeRunTracker = driver?.getRunTracker();
-        if (activeRunTracker?.getRun().status === 'running') {
-          activeRunTracker.markCancelled();
-          notifyRunStatus();
+        if (cancelledTracker) {
+          // A cancel while blocked records turn_cancelled while the run row
+          // stays blocked (the approval remains resumable): the cancellation
+          // is the event, the row is the resumable handle. Failure-path
+          // terminal, loud-guarded — the record must not mask the
+          // cancellation being reported (ADR 008 F1).
+          const rowStatus = cancelledTracker.getRun().status;
+          finalizeTurnCancelled({
+            tracker: cancelledTracker,
+            ...(abortedMessage
+              ? { committed: { messageId: abortedMessage.id, message: abortedMessage as never } }
+              : {}),
+            ...(options.threadId ? { threadId: options.threadId } : {}),
+            transport: 'stream-abort',
+            ...(rowStatus !== 'running' ? { keepRowStatus: rowStatus } : {}),
+            notify: notifyRunStatus,
+          });
         }
         return { success: true, stopped: streamState.stoppedByUser };
       }
@@ -570,29 +564,34 @@ export const createChatStreaming = (deps: {
         },
       });
       // The pre-execution window (run row created, driver not yet built) has
-      // no driver tracker — the stream's own tracker marks the failure.
-      const activeRunTracker = driver?.getRunTracker() ?? sessionLogTracker;
-      if (activeRunTracker?.getRun().status === 'running') {
-        activeRunTracker.markFailed(runFailureFromError(error, message));
-        notifyRunStatus();
-      }
-      // Session log: a failed turn is a terminal fact even when no assistant
-      // row is persisted on this path. The user-facing outcome is the failure
-      // regardless of which segment reached it; the record itself is
-      // loud-guarded — losing it must not mask the reported failure
+      // no driver tracker — the stream's own tracker carries the failure.
+      // One call writes both projections, loud-guarded: a failed turn is a
+      // terminal fact even when no assistant row is persisted on this path,
+      // and losing the record must not mask the reported failure
       // (ADR 008 F1).
-      const failedTracker = activeRunTracker ?? sessionLogTracker;
-      if (options.threadId && failedTracker) {
-        recordFailureTerminalEvent(
-          options.threadId,
-          turnFactsToEvents({
-            terminal: {
-              runId: failedTracker.id,
-              status: 'failed',
-              errorText: message,
-            },
-          })
-        );
+      const failedTracker = driver?.getRunTracker() ?? sessionLogTracker;
+      if (failedTracker) {
+        const retry = runFailureFromError(error, message);
+        finalizeTurnFailure({
+          tracker: failedTracker,
+          failure: {
+            status: 'failed',
+            errorText: message,
+            ...(retry.code ? { code: retry.code } : {}),
+            ...(typeof retry.retryable === 'boolean' ? { retryable: retry.retryable } : {}),
+          },
+          // The text the commit gate WITHHELD: never published, never in
+          // history, but it is what the turn produced before failing, so the
+          // row keeps it distinguishable from a turn that produced nothing.
+          ...(typeof retry.text === 'string' && retry.text.length > 0
+            ? { text: retry.text }
+            : {}),
+          ...(options.threadId ? { threadId: options.threadId } : {}),
+          transport: 'stream',
+          skipRow: failedTracker.getRun().status !== 'running',
+          loudGuard: true,
+          notify: notifyRunStatus,
+        });
       }
       uiChunkEmitter.error(message);
       return { success: false, error: message };

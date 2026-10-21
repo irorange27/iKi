@@ -22,9 +22,10 @@ import {
 } from './session_log';
 import {
   createTurnDriver,
-  finalizeRunForOutcome,
+  finalizeTurn,
+  finalizeTurnCancelled,
+  finalizeTurnFailure,
   runFailureFromError,
-  terminalFactForOutcome,
 } from './turn_driver';
 import { NO_TOOLS_SYSTEM_PROMPT } from './constants';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
@@ -198,7 +199,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             messages: preparedTurn.finalMessages,
           },
           working: {
-            modelMessages: preparedTurn.history,
             accumulatedText: '',
             pendingApprovalIds: [],
             lastStepIndex: 0,
@@ -305,7 +305,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         // The driver's CURRENT tracker/harness, not the setup's: a handoff
         // chain finalizes the child segment, not the completed parent.
         const finalTracker = driver.getRunTracker();
-        const finalHarness = driver.getHarness();
 
         if (result.outcome === 'cancelled') {
           // Two cancel sources reach this transport: a lost thread lease
@@ -319,23 +318,33 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           const message = leaseLost
             ? 'Thread run lease was lost; the send was interrupted.'
             : 'Run cancelled.';
+          // Failure-path projections, loud-guarded: the record must never mask
+          // the interruption being reported. One authority writes both.
           if (leaseLost) {
-            if (finalTracker.getRun().status === 'running') {
-              finalTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
-            }
-          } else if (finalTracker.getRun().status === 'running') {
-            finalTracker.markCancelled();
-          }
-          if (options.threadId) {
-            // Session log: a lease loss ends the turn even here. Failure-path
-            // terminal — loud-guarded, never masks the reported interruption.
-            recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-              terminal: {
-                runId: finalTracker.id,
-                status: leaseLost ? 'failed' : 'cancelled',
-                ...(leaseLost ? { errorText: message } : {}),
+            finalizeTurnFailure({
+              tracker: finalTracker,
+              failure: {
+                status: 'failed',
+                errorText: message,
+                // A lease loss is a distinct, diagnosable outcome — not an
+                // anonymous failure. The code was dropped when this path moved
+                // to the one finalize authority.
+                code: 'THREAD_LEASE_LOST',
+                retryable: true,
               },
-            }));
+              ...(options.threadId ? { threadId: options.threadId } : {}),
+              transport: 'send',
+              skipRow: finalTracker.getRun().status !== 'running',
+              loudGuard: true,
+            });
+          } else {
+            finalizeTurnCancelled({
+              tracker: finalTracker,
+              ...(options.threadId ? { threadId: options.threadId } : {}),
+              transport: 'send',
+              skipRow: finalTracker.getRun().status !== 'running',
+              loudGuard: true,
+            });
           }
           return {
             success: false,
@@ -344,7 +353,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           };
         }
 
-        finalTracker.syncModelMessages(finalHarness.getHistory());
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
           providerType: options.providerType,
@@ -387,16 +395,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           // blocked row whose pause output was never recorded (ADR 008 F1).
           const persisted = await uiChunkEmitter.buildPersistedMessage();
           if (options.threadId && persisted) {
-            // Session log: the pause's partial output; its continuation
-            // (through approveTool) records its own facts.
-            recordSessionEvents(options.threadId, turnFactsToEvents({
-              committed: {
-                runId: finalTracker.id,
-                messageId: persisted.id,
-                message: persisted as never,
-                transport: 'send',
-              },
-            }));
             await persistAssistantTurnMessage(
               deps.conversation,
               options.threadId,
@@ -404,7 +402,19 @@ export const createMessageSend = (deps: MessageSendDeps) => {
               'send',
             );
           }
-          finalizeRunForOutcome(finalTracker, result, { text: finalResponse });
+          // The pause records its partial output with NO terminal fact (an
+          // approval pause is not terminal — its continuation through
+          // approveTool records its own facts); the row is finalized last.
+          finalizeTurn({
+            tracker: finalTracker,
+            outcome: result.outcome,
+            text: finalResponse,
+            ...(options.threadId ? { threadId: options.threadId } : {}),
+            transport: 'send',
+            ...(persisted
+              ? { committed: { messageId: persisted.id, message: persisted as never } }
+              : {}),
+          });
           return {
             success: false,
             error: approvalError,
@@ -414,37 +424,23 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         }
 
         uiChunkEmitter.finish();
-        // Event-first (ADR 008 F1): the turn's facts reach the session log
-        // BEFORE the run row finalizes — a write failure fails the send
-        // through the catch below while the row is still running, never
-        // leaving a terminal row whose outcome was never recorded. The
-        // terminal fact mirrors finalizeRunForOutcome's outcome mapping
-        // (the event-side twin).
+        // Event-first (ADR 008 F1): `finalizeTurn` writes the committed output
+        // and the terminal fact from ONE outcome row, then finalizes the run
+        // row — a write failure fails the send through the catch below while
+        // the row is still running, never leaving a terminal row whose outcome
+        // was never recorded.
+        let settledMessage: Awaited<ReturnType<typeof uiChunkEmitter.buildPersistedMessage>> =
+          undefined;
         if (options.threadId) {
           // Deterministic per-run id: a duplicate persist of the same turn
           // converges on one row and the message joins back to its run.
           // Retries are separate runs and legitimately separate rows.
           const persisted = await uiChunkEmitter.buildPersistedMessage();
-          const settledMessage = persisted ?? {
+          settledMessage = persisted ?? {
             id: assistantMessageId,
             role: 'assistant' as const,
             parts: [{ type: 'text', text: finalResponse, state: 'done' }],
           };
-          const terminal = terminalFactForOutcome(result);
-          recordSessionEvents(options.threadId, turnFactsToEvents({
-            committed: {
-              runId: finalTracker.id,
-              messageId: settledMessage.id,
-              message: settledMessage as never,
-              transport: 'send',
-            },
-            terminal: {
-              runId: finalTracker.id,
-              status: terminal.status,
-              ...(terminal.finishReason ? { finishReason: terminal.finishReason } : {}),
-              ...(terminal.errorText ? { errorText: terminal.errorText } : {}),
-            },
-          }));
           await persistAssistantTurnMessage(
             deps.conversation,
             options.threadId,
@@ -452,7 +448,18 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             'send',
           );
         }
-        finalizeRunForOutcome(finalTracker, result, { text: finalResponse });
+        finalizeTurn({
+          tracker: finalTracker,
+          outcome: result.outcome,
+          text: finalResponse,
+          ...(result.usage ? { usage: result.usage } : {}),
+          ...(result.outcome === 'handoff' ? { handoff: result.handoff } : {}),
+          ...(options.threadId ? { threadId: options.threadId } : {}),
+          transport: 'send',
+          ...(settledMessage
+            ? { committed: { messageId: settledMessage.id, message: settledMessage as never } }
+            : {}),
+        });
         return {
           success: true,
           text: finalResponse,
@@ -494,31 +501,33 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           role: 'assistant' as const,
           parts: [{ type: 'text', text: llmResult.text, state: 'done' }],
         };
-        recordSessionEvents(options.threadId, turnFactsToEvents({
-          committed: {
-            runId: activeRunTracker.id,
-            messageId: settledMessage.id,
-            message: settledMessage as never,
-            transport: 'send',
-          },
-          terminal: { runId: activeRunTracker.id, status: 'completed' },
-        }));
         await persistAssistantTurnMessage(
           deps.conversation,
           options.threadId,
           settledMessage,
           'send',
         );
-      } else if (options.threadId) {
-        recordSessionEvents(options.threadId, turnFactsToEvents({
-          terminal: { runId: activeRunTracker.id, status: 'completed' },
-        }));
+        // Same outcome row as the tool path: a text-only reply completes the
+        // turn through the one authority, not a private `markCompleted`.
+        finalizeTurn({
+          tracker: activeRunTracker,
+          outcome: 'completed',
+          text: llmResult.text,
+          ...(llmResult.usage ? { usage: llmResult.usage } : {}),
+          threadId: options.threadId,
+          transport: 'send',
+          committed: { messageId: settledMessage.id, message: settledMessage as never },
+        });
+      } else {
+        finalizeTurn({
+          tracker: activeRunTracker,
+          outcome: 'completed',
+          text: llmResult.text,
+          ...(llmResult.usage ? { usage: llmResult.usage } : {}),
+          ...(options.threadId ? { threadId: options.threadId } : {}),
+          transport: 'send',
+        });
       }
-      runTracker.markCompleted({
-        text: llmResult.text,
-        usage: llmResult.usage ? { ...llmResult.usage } : undefined,
-        finishReason: 'completed',
-      });
       return {
         success: true,
         text: llmResult.text,
@@ -540,26 +549,36 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         if (leaseLost) {
           // The thread was taken over while this send ran: stop cleanly at the
           // barrier instead of reporting a provider error or persisting
-          // results from an execution that lost its run right.
-          if (runTracker && runTracker.getRun().status === 'running') {
-            runTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
-          }
-          if (options.threadId && runTracker) {
-            // Session log: both lease-loss shapes end the turn. Failure-path
-            // terminal — loud-guarded, never masks the reported interruption.
-            recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-              terminal: { runId: runTracker.id, status: 'failed', errorText: message },
-            }));
+          // results from an execution that lost its run right. Failure-path
+          // projections are loud-guarded — never mask the interruption.
+          if (runTracker) {
+            finalizeTurnFailure({
+              tracker: runTracker,
+              failure: {
+                status: 'failed',
+                errorText: message,
+                // A lease loss is a distinct, diagnosable outcome — not an
+                // anonymous failure. The code was dropped when this path moved
+                // to the one finalize authority.
+                code: 'THREAD_LEASE_LOST',
+                retryable: true,
+              },
+              ...(options.threadId ? { threadId: options.threadId } : {}),
+              transport: 'send',
+              skipRow: runTracker.getRun().status !== 'running',
+              loudGuard: true,
+            });
           }
         } else {
           const cancelledTracker = driverHandle?.getRunTracker() ?? runTracker;
-          if (cancelledTracker && cancelledTracker.getRun().status === 'running') {
-            cancelledTracker.markCancelled();
-          }
-          if (options.threadId && cancelledTracker) {
-            recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-              terminal: { runId: cancelledTracker.id, status: 'cancelled' },
-            }));
+          if (cancelledTracker) {
+            finalizeTurnCancelled({
+              tracker: cancelledTracker,
+              ...(options.threadId ? { threadId: options.threadId } : {}),
+              transport: 'send',
+              skipRow: cancelledTracker.getRun().status !== 'running',
+              loudGuard: true,
+            });
           }
         }
         return {
@@ -570,13 +589,21 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       }
       const message = getStreamErrorMessage(error);
       const failingTracker = driverHandle?.getRunTracker() ?? runTracker;
-      if (failingTracker && failingTracker.getRun().status === 'running') {
-        failingTracker.markFailed(runFailureFromError(error, message));
-      }
-      if (options.threadId && failingTracker) {
-        recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-          terminal: { runId: failingTracker.id, status: 'failed', errorText: message },
-        }));
+      if (failingTracker) {
+        const retry = runFailureFromError(error, message);
+        finalizeTurnFailure({
+          tracker: failingTracker,
+          failure: {
+            status: 'failed',
+            errorText: message,
+            ...(retry.code ? { code: retry.code } : {}),
+            ...(typeof retry.retryable === 'boolean' ? { retryable: retry.retryable } : {}),
+          },
+          ...(options.threadId ? { threadId: options.threadId } : {}),
+          transport: 'send',
+          skipRow: failingTracker.getRun().status !== 'running',
+          loudGuard: true,
+        });
       }
       return {
         success: false,

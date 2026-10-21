@@ -4,7 +4,7 @@ import { addTurnPerf, type AgentStep, type AgentTurnPerf } from '@iki/backend/ag
 import type { ConversationPreview } from '@iki/backend/types/companion';
 import { traceChatTurn } from '@iki/backend/observability/langfuse';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
-import type { TurnDriverHarness } from '../agent/harness';
+import type { TurnDriverHarness, TurnOutput } from '../agent/harness';
 import type { AgentRunTracker } from './run_tracker';
 import { createAgentRunTracker } from './run_tracker';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
@@ -14,6 +14,7 @@ import { planToRunTrackerParams } from './execution_plan';
 import { selectTurnHarness } from './turn_supply_selection';
 import {
   MODEL_TEXT_COMMITTED,
+  recordFailureTerminalEvent,
   recordSessionEvents,
   STEERING_INPUT_ACCEPTED,
   SESSION_EVENT_VERSION,
@@ -30,6 +31,8 @@ import type { AgentRunStatus } from '@iki/backend/types/agent_run';
 
 type TurnDriverResultBase = {
   response?: string;
+  /** The reply the segment accumulated (a handoff chain's last segment). */
+  text?: string;
   usage?: import('@iki/backend/agent').AgentResult['usage'];
   /** Billed input of the final SDK step — the real context size the model last saw. */
   lastStepInputTokens?: number;
@@ -37,12 +40,25 @@ type TurnDriverResultBase = {
   perf?: AgentTurnPerf;
   /** Estimated tokens of the resolved tool schemas (from the harness turn). */
   toolSchemaTokens?: { builtin: number; mcp: number };
+  /**
+   * Tool calls the harness reported but could not consume — the step budget
+   * ran out with them pending. They were EXECUTED (their results are on the
+   * transcript) but no model call read them, so the run row carries them:
+   * without this field "half an answer" disappears at the harness seam
+   * (audit C-1/A-3).
+   */
+  pendingToolCalls?: import('../agent/runners/pi_agent_loop').PiLoopToolCall[];
 };
 
 type HandoffResult = { summary: string; nextSteps: string; reason: string };
 
+/** `AgentResult` plus the remainder the driver reads back out of the harness
+ *  turn (see TurnOutput.pendingToolCalls). */
+type HarnessTurnResult = import('@iki/backend/agent').AgentResult & {
+  pendingToolCalls?: TurnOutput['pendingToolCalls'];
+};
+
 export type TurnDriverResult =
-  | (TurnDriverResultBase & { outcome: 'continuing' })
   | (TurnDriverResultBase & { outcome: 'completed' })
   | (TurnDriverResultBase & { outcome: 'budget-exhausted' })
   | (TurnDriverResultBase & { outcome: 'awaiting-approval' })
@@ -74,6 +90,13 @@ type TurnDriverState = {
   handoffChain: number;
   turnHadToolCalls: boolean;
   isAwaitingApproval: boolean;
+  /**
+   * The facts of the batch that actually ended the turn. The finalize reads
+   * THESE rather than the driver's return value: a handoff chain finalizes
+   * each parent segment itself with that segment's own outcome, so only the
+   * facts here describe the row the entry's finalize will write.
+   */
+  lastFacts: TurnDriverResultBase;
 };
 
 export type TurnDriverDeps = {
@@ -124,6 +147,9 @@ export type TurnDriverSetup = Pick<
 export type TurnDriverHandle = {
   run: () => Promise<TurnDriverResult | undefined>;
   getRunTracker: () => AgentRunTracker;
+  /** The last batch's finish facts — the row the entry finalizes carries
+   *  these, whatever the mid-turn segment swaps did. */
+  getLastFacts: () => TurnDriverResultBase;
   /** The harness the final batch ran on (differs from the setup's after a
    *  handoff chain) — the entry's history sync must read this one. */
   getHarness: () => TurnDriverHarness;
@@ -158,69 +184,360 @@ export const runFailureFromError = (error: unknown, message: string) => ({
 });
 
 /**
- * The event-side twin of finalizeRunForOutcome: the terminal fact the
- * session log records for a driver outcome — undefined for an approval
- * pause (not terminal; its continuation records its own facts). The run row
- * and the event are two projections of one outcome — adding an outcome
- * changes both switches.
+ * ── The one turn-outcome authority ────────────────────────────────────
+ *
+ * Every way a turn can end is enumerated HERE, once. The run row and the
+ * session-log event are two PROJECTIONS of the row below — not two places
+ * that decide (audit A-1/A-2: `terminalFactForOutcome` and
+ * `finalizeRunForOutcome` used to be two switches that had already drifted
+ * apart on the handoff text, and eleven hand-written `mark*` sites owned
+ * private copies of the same decision).
+ *
+ * `terminal` is absent for `awaiting-approval` on purpose: a pause is not
+ * terminal, and its continuation records its own facts.
  */
-export const terminalFactForOutcome = (
-  result: TurnDriverResult
-): { status: AgentRunStatus; finishReason?: string; errorText?: string } | undefined => {
-  if (result.outcome === 'awaiting-approval') return undefined;
-  if (result.outcome === 'partial-failure') {
-    return {
+type TurnOutcomeSpec = {
+  /** The run row's terminal status. */
+  runStatus: AgentRunStatus;
+  /** `output.finishReason` on the row and, when terminal, on the event. */
+  finishReason?: string;
+  /** How the run row reports the failure (failed outcomes only). */
+  errorText?: string;
+  retryable?: boolean;
+  /** Session-log terminal — the event type and its payload's `status` come
+   *  from these two; absent means the outcome records no terminal fact. */
+  terminal?: { eventKind: 'completed' | 'failed' | 'cancelled'; status: AgentRunStatus };
+  /** The single text projection: the row's `output.text`, the event's
+   *  `errorText`, and the reply all come from here. */
+  text?: (text: string, handoff: HandoffResult | undefined) => string | undefined;
+};
+
+const asOptionalText = (text: string): string | undefined => (text ? text : undefined);
+
+/** The handoff reply: the segment's own answer plus the handoff block. */
+const handoffText = (text: string, handoff: HandoffResult | undefined): string | undefined =>
+  ((text ? text + '\n\n' : '') +
+    `[Handoff] ${handoff?.summary ?? ''}\n\nNext steps: ${handoff?.nextSteps ?? ''}`).trim() ||
+  undefined;
+
+/**
+ * Outcome → (run row, session-log event). Adding a terminal outcome means
+ * adding a row here; no entry keeps a private copy of the mapping.
+ */
+export const TURN_OUTCOMES: Record<TurnDriverResult['outcome'], TurnOutcomeSpec> = {
+  completed: {
+    runStatus: 'completed',
+    finishReason: 'completed',
+    terminal: { eventKind: 'completed', status: 'completed' },
+    text: asOptionalText,
+  },
+  'budget-exhausted': {
+    // The step budget ran out with work still pending. The turn ENDED — it is
+    // not a completed answer, and the remainder rides the row's
+    // `pendingToolCalls`.
+    runStatus: 'completed',
+    finishReason: 'budget-exhausted',
+    terminal: { eventKind: 'completed', status: 'completed' },
+    text: asOptionalText,
+  },
+  handoff: {
+    runStatus: 'completed',
+    finishReason: 'handoff',
+    terminal: { eventKind: 'completed', status: 'completed' },
+    text: handoffText,
+  },
+  'awaiting-approval': {
+    // Not terminal: the row blocks, the log records nothing, and the
+    // continuation (approveTool) records its own facts.
+    runStatus: 'blocked',
+    finishReason: 'approval-requested',
+    text: asOptionalText,
+  },
+  cancelled: {
+    runStatus: 'cancelled',
+    finishReason: 'cancelled',
+    terminal: { eventKind: 'cancelled', status: 'cancelled' },
+    text: asOptionalText,
+  },
+  'partial-failure': {
+    runStatus: 'failed',
+    finishReason: 'partial-failure',
+    errorText: 'Autonomous iteration failed; partial progress saved.',
+    retryable: true,
+    terminal: {
+      eventKind: 'failed',
       status: 'failed',
-      errorText: 'Autonomous iteration failed; partial progress saved.',
-    };
-  }
-  if (result.outcome === 'cancelled') return { status: 'cancelled' };
-  if (result.outcome === 'handoff' || result.outcome === 'budget-exhausted') {
-    return { status: 'completed', finishReason: result.outcome };
-  }
-  return { status: 'completed' };
+    },
+  },
+};
+
+/** The turn segment handed to a failure finalize (the two terminal facts a
+ *  catch/cancel path owns besides a driver outcome). */
+/**
+ * A terminal failure, as the run row and the log both need it.
+ *
+ * `code` is NOT decoration: the entries derive it from the caught error
+ * (`runFailureFromError`) so a lost write is diagnosable as
+ * `SESSION_LOG_COMMIT_FAILED` rather than an anonymous "turn failed". It was
+ * dropped between the derivation and this spec, so every entry computed the
+ * code and then threw it away.
+ */
+export type TurnFailureSpec = {
+  status: 'failed';
+  errorText: string;
+  code?: string;
+  retryable?: boolean;
+};
+
+/** One finalize call's inputs: which outcome, on which row, with which words. */
+/** The terminal-writing surface a finalize needs. `AgentRunTracker` satisfies
+ *  it, and so does the delegated-agent tool's narrow port — one authority, one
+ *  narrow contract, no second tracker type. */
+export type TerminalRunTracker = Pick<
+  AgentRunTracker,
+  'id' | 'getRun' | 'markCompleted' | 'markBlocked' | 'markFailed' | 'markCancelled'
+>;
+
+export type FinalizeTurnParams = {
+  tracker: TerminalRunTracker;
+  outcome: TurnDriverResult['outcome'];
+  /** The reply text the entry accumulated (the row's `output.text` source). */
+  text?: string;
+  usage?: import('@iki/backend/agent').AgentResult['usage'];
+  /** The handoff block for the `handoff` outcome. */
+  handoff?: HandoffResult;
+  /**
+   * Calls the step budget left pending. They EXECUTED (their results are on
+   * the transcript) but no model call read them, so the turn's text is only
+   * part of an answer. Without them `budget-exhausted` is indistinguishable
+   * from a complete reply — the audit's A-3 "half an answer vanishes at the
+   * harness seam". Written by the SAME projection as the row's status and the
+   * log's terminal fact: one outcome, one write.
+   */
+  pendingToolCalls?: TurnOutput['pendingToolCalls'];
+  /** The session log to project into. Omitted = row projection only. */
+  threadId?: string;
+  /** Which transport the fact records (stream / send / approval-resume). */
+  transport: string;
+  /**
+   * Mark the run row ONLY when it is still mid-flight. A resume/cancel race
+   * can have finalized the row already; `markResumed` refuses a
+   * terminal → completed transition, so a row that already ended must not be
+   * told the outcome again.
+   */
+  onlyIfRunning?: boolean;
+  /** Keep the row un-terminal while still writing the event (the failure-path
+   *  discipline of ADR 008 F1: a blocked row stays resumable while its cancel
+   *  is recorded). */
+  skipRow?: boolean;
+  /** Failure-path terminal: never masks the failure being reported. */
+  loudGuard?: boolean;
+  /** The committed message to record alongside the terminal fact. */
+  committed?: {
+    messageId: string;
+    message: never;
+  };
+  notify?: () => void;
+};
+
+/** The two projections one finalize writes, derived from one table row. */
+const projectTurnOutcome = (
+  outcome: TurnDriverResult['outcome'],
+  text: string,
+  handoff: HandoffResult | undefined
+): {
+  spec: TurnOutcomeSpec;
+  text: string | undefined;
+  terminalFact?: {
+    status: AgentRunStatus;
+    finishReason?: string;
+    errorText?: string;
+  };
+  eventKind?: 'completed' | 'failed' | 'cancelled';
+} => {
+  const spec = TURN_OUTCOMES[outcome];
+  const projected = spec.text?.(text, handoff);
+  const terminalFact = spec.terminal
+    ? {
+        status: spec.terminal.status,
+        ...(spec.finishReason ? { finishReason: spec.finishReason } : {}),
+        ...(spec.errorText ? { errorText: spec.errorText } : {}),
+      }
+    : undefined;
+  return { spec, text: projected, ...(terminalFact ? { terminalFact } : {}), eventKind: spec.terminal?.eventKind };
 };
 
 /**
- * The authoritative terminal-outcome mapping: one place decides what each
- * TurnDriverResult outcome means for the run row. Every entry that runs
- * the driver finalizes through this — adding a terminal outcome means
- * changing this switch and the per-transport projection adapters, not each
- * entry's private finalize code.
+ * The single finalize: writes the run row and the session-log terminal from
+ * ONE row of `TURN_OUTCOMES`. Every entry (stream, send, approval resume) and
+ * every failure path calls this instead of hand-writing `mark*` calls.
  */
-export const finalizeRunForOutcome = (
-  tracker: AgentRunTracker,
-  result: TurnDriverResult,
-  params: { text?: string; notify?: () => void } = {}
+export const finalizeTurn = (params: FinalizeTurnParams): void => {
+  const { tracker, outcome, transport } = params;
+  const projection = projectTurnOutcome(outcome, params.text ?? '', params.handoff);
+  const { spec } = projection;
+  const status = tracker.getRun().status;
+  const writable = !params.skipRow && (!params.onlyIfRunning || status === 'running');
+
+  // ── projection 1 (EVENT-FIRST) — the session log ───────────────────
+  //
+  // ORDER IS THE CONTRACT (ADR 008 F1): the facts reach the log BEFORE the row
+  // goes terminal. If the append fails it throws, the entry's catch marks the
+  // run failed, and the turn reports failure — a row that already said
+  // `completed` could never be taken back, so a lost fact surfaced as a
+  // successful turn whose history was missing its own outcome. That is exactly
+  // what `session-log_write_discipline` and `session_log_commit_failure` pin;
+  // this function used to write the row first.
+  if (params.threadId && projection.terminalFact && projection.eventKind) {
+    const record = params.loudGuard ? recordFailureTerminalEvent : recordSessionEvents;
+    record(
+      params.threadId,
+      turnFactsToEvents({
+        ...(params.committed
+          ? {
+              committed: {
+                runId: tracker.id,
+                messageId: params.committed.messageId,
+                message: params.committed.message,
+                transport,
+              },
+            }
+          : {}),
+        terminal: { runId: tracker.id, ...projection.terminalFact },
+      })
+    );
+  }
+  // ── projection 2: the run row ──────────────────────────────────────
+  if (writable) {
+    if (spec.runStatus === 'completed') {
+      tracker.markCompleted({
+        ...(projection.text ? { text: projection.text } : {}),
+        ...(params.usage ? { usage: { ...params.usage } } : {}),
+        ...(spec.finishReason ? { finishReason: spec.finishReason } : {}),
+        ...(params.pendingToolCalls && params.pendingToolCalls.length > 0
+          ? { pendingToolCalls: params.pendingToolCalls }
+          : {}),
+      });
+    } else if (spec.runStatus === 'blocked') {
+      tracker.markBlocked({
+        ...(projection.text ? { text: projection.text } : {}),
+        ...(params.usage ? { usage: { ...params.usage } } : {}),
+        ...(spec.finishReason ? { finishReason: spec.finishReason } : {}),
+      });
+    } else if (spec.runStatus === 'cancelled') {
+      tracker.markCancelled({ ...(projection.text ? { text: projection.text } : {}) });
+    } else {
+      tracker.markFailed({
+        message: spec.errorText ?? 'Turn failed.',
+        ...(spec.retryable !== undefined ? { retryable: spec.retryable } : {}),
+      });
+    }
+  }
+
+  params.notify?.();
+};
+
+/**
+ * A failure that never produced a driver outcome (the turn threw, or a cancel
+ * or lease loss landed outside the driver's own loop). It goes through the
+ * SAME row and the SAME projection as the driver outcomes — the two
+ * terminal-fact shapes this file's entries used to write by hand are rows
+ * here.
+ */
+export const finalizeTurnFailure = (
+  params: Omit<FinalizeTurnParams, 'outcome'> & { failure: TurnFailureSpec }
 ): void => {
-  const text = params.text ?? result.response;
-  if (result.outcome === 'cancelled') {
-    tracker.markCancelled({ ...(text ? { text } : {}) });
-  } else if (result.outcome === 'partial-failure') {
+  const { tracker, failure, transport } = params;
+  if (!params.skipRow) {
     tracker.markFailed({
-      message: 'Autonomous iteration failed; partial progress saved.',
-      retryable: true,
+      message: failure.errorText,
+      ...(failure.code ? { code: failure.code } : {}),
+      ...(failure.retryable !== undefined ? { retryable: failure.retryable } : {}),
+      // The text the turn DID generate before failing. It is not published
+      // (the commit gate withheld it) and must not enter history, but the run
+      // row keeps it in `working.accumulatedText` so a diagnosed failure can
+      // be told apart from one that produced nothing.
+      ...(typeof params.text === 'string' && params.text.length > 0
+        ? { text: params.text }
+        : {}),
     });
-  } else if (result.outcome === 'awaiting-approval') {
-    tracker.markBlocked({
-      ...(text ? { text } : {}),
-      usage: result.usage ? { ...result.usage } : undefined,
-    });
-  } else if (result.outcome === 'handoff') {
-    const handoffResponse =
-      (text ? text + '\n\n' : '') +
-      `[Handoff] ${result.handoff.summary}\n\nNext steps: ${result.handoff.nextSteps}`;
-    tracker.markCompleted({
-      text: handoffResponse.trim() || undefined,
-      usage: result.usage ? { ...result.usage } : undefined,
-      finishReason: 'handoff',
-    });
-  } else {
-    tracker.markCompleted({
-      ...(text ? { text } : {}),
-      usage: result.usage ? { ...result.usage } : undefined,
-      finishReason: result.outcome === 'budget-exhausted' ? 'budget-exhausted' : 'completed',
-    });
+  }
+  if (params.threadId) {
+    const record = params.loudGuard ? recordFailureTerminalEvent : recordSessionEvents;
+    record(
+      params.threadId,
+      turnFactsToEvents({
+        ...(params.committed
+          ? {
+              committed: {
+                runId: tracker.id,
+                messageId: params.committed.messageId,
+                message: params.committed.message,
+                transport,
+              },
+            }
+          : {}),
+        terminal: {
+          runId: tracker.id,
+          status: failure.status,
+          errorText: failure.errorText,
+        },
+      })
+    );
+  }
+  params.notify?.();
+};
+
+/**
+ * The terminal of a harness turn the DRIVER did not run (the delegated-agent
+ * tool's child run, issue #145's out-of-band executor). It goes through the
+ * same table: a harness that stopped with tool calls pending did not finish
+ * its answer, so it finalizes `budget-exhausted` — the child used to report
+ * `completed` for every non-throwing turn, whatever its budget outcome.
+ */
+export const finalizeHarnessTurn = (params: {
+  tracker: TerminalRunTracker;
+  output: { text: string; usage?: import('@iki/backend/agent').AgentResult['usage']; finishReason?: string };
+  transport: string;
+}): void => {
+  const outcome: TurnDriverResult['outcome'] =
+    params.output.finishReason === 'tool-calls' ? 'budget-exhausted' : 'completed';
+  finalizeTurn({
+    tracker: params.tracker,
+    outcome,
+    text: params.output.text,
+    ...(params.output.usage ? { usage: params.output.usage } : {}),
+    transport: params.transport,
+  });
+};
+
+/** The stop/cancel pair of a turn that ended by cancellation rather than by
+ *  the driver's own loop (blocked-then-cancelled, resume cancelled). */
+export const finalizeTurnCancelled = (
+  params: Omit<FinalizeTurnParams, 'outcome'> & { keepRowStatus?: AgentRunStatus }
+): void => {
+  const { tracker, transport } = params;
+  if (!params.skipRow && !params.keepRowStatus) {
+    tracker.markCancelled({ ...(params.text ? { text: params.text } : {}) });
+  }
+  if (params.threadId) {
+    const record = params.loudGuard ? recordFailureTerminalEvent : recordSessionEvents;
+    record(
+      params.threadId,
+      turnFactsToEvents({
+        ...(params.committed
+          ? {
+              committed: {
+                runId: tracker.id,
+                messageId: params.committed.messageId,
+                message: params.committed.message,
+                transport,
+              },
+            }
+          : {}),
+        terminal: { runId: tracker.id, status: 'cancelled' },
+      })
+    );
   }
   params.notify?.();
 };
@@ -237,7 +554,11 @@ const runTurnBatches = async (
 ): Promise<TurnDriverResult | undefined> => {
   const { target, plan, streamState, uiChunkEmitter } = deps;
   const threadId = plan.threadId;
-  const autonomousMode = Boolean(plan.autonomous && plan.autonomous.maxIterations > 1);
+  // The BATCH budget (ADR 004). It says nothing about the step budget: a
+  // step-exhausted batch with no batch bound is a finished turn, not a
+  // continuation.
+  const batch = plan.budget.batch;
+  const autonomousMode = Boolean(batch && batch.max > 1);
   const previewEnabled = deps.conversationPreview !== false;
   let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let previewText = '';
@@ -411,7 +732,7 @@ const runTurnBatches = async (
     // eslint-disable-next-line no-constant-condition
     while (true) {
       // Run agent via harness — for-await consumes TurnEvent stream
-      let agentResult: import('@iki/backend/agent').AgentResult | undefined;
+      let agentResult: HarnessTurnResult | undefined;
       let cancelled = false;
       let steered = false;
 
@@ -468,6 +789,9 @@ const runTurnBatches = async (
                     return {
                       response: output.text,
                       toolCalls: output.toolCalls,
+                      ...(output.pendingToolCalls && output.pendingToolCalls.length > 0
+                        ? { pendingToolCalls: output.pendingToolCalls }
+                        : {}),
                       toolApprovalRequests: output.toolApprovalRequests,
                       usage: output.usage,
                       ...(output.lastStepInputTokens != null
@@ -480,7 +804,10 @@ const runTurnBatches = async (
                       iterations: 0,
                       requiresApproval: output.requiresApproval,
                       finishReason: output.finishReason,
-                    } as import('@iki/backend/agent').AgentResult;
+                      ...(output.pendingToolCalls
+                        ? { pendingToolCalls: output.pendingToolCalls }
+                        : {}),
+                    } as HarnessTurnResult;
                   }
                 }
                 return undefined;
@@ -556,7 +883,6 @@ const runTurnBatches = async (
 
       // Check for approval requests in result
       if (agentResult?.requiresApproval && agentResult.toolApprovalRequests?.length) {
-        state.runTracker.syncModelMessages(state.harness.getHistory() ?? state.streamHistory);
         deps.approvals.registerApprovalBatch(agentResult.toolApprovalRequests, {
           target,
           history: state.harness.getHistory() ?? state.streamHistory,
@@ -579,6 +905,10 @@ const runTurnBatches = async (
             : {}),
         };
         state.isAwaitingApproval = true;
+        state.lastFacts = {
+          text: state.accumulatedResponse || agentResult.response,
+          ...(agentResult.usage ? { usage: agentResult.usage } : {}),
+        };
         break;
       }
 
@@ -599,6 +929,9 @@ const runTurnBatches = async (
         ...(agentResult?.toolSchemaTokens
           ? { toolSchemaTokens: agentResult.toolSchemaTokens }
           : {}),
+        ...(agentResult?.pendingToolCalls && agentResult.pendingToolCalls.length > 0
+          ? { pendingToolCalls: agentResult.pendingToolCalls }
+          : {}),
       };
       if (handoff) {
         const args = handoff.args as Record<string, unknown>;
@@ -612,9 +945,13 @@ const runTurnBatches = async (
           },
         };
       } else {
+        // `tool-calls` is the harness saying "I stopped with calls still
+        // pending" — its step budget ran out. That is a terminal outcome, not
+        // an internal continuation: the batch bound below may open another
+        // batch, but the turn's own answer is `budget-exhausted`.
         streamResult = {
           ...resultBase,
-          outcome: agentResult?.finishReason === 'tool-calls' ? 'continuing' : 'completed',
+          outcome: agentResult?.finishReason === 'tool-calls' ? 'budget-exhausted' : 'completed',
         };
       }
 
@@ -629,8 +966,12 @@ const runTurnBatches = async (
       }
       previewText = '';
 
-      state.runTracker.syncModelMessages(state.harness.getHistory() ?? state.streamHistory);
-
+      // TERMINAL outcomes end the batch loop here. `budget-exhausted` is NOT
+      // one of them: it is the outcome of the batch that just ran (its step
+      // budget ran out), and the batch bound below may open another batch to
+      // finish the work. Breaking here would make `budget-exhausted` final
+      // even when the turn still had batches left, which is how the
+      // continuation silently stopped after one batch.
       if (
         streamResult.outcome === 'cancelled' ||
         streamResult.outcome === 'awaiting-approval' ||
@@ -650,24 +991,31 @@ const runTurnBatches = async (
           ? state.accumulatedResponse + '\n\n---\n\n' + handoffText
           : handoffText;
 
-        state.runTracker.markCompleted({
-          text: handoffText.trim() || undefined,
-          usage: streamResult.usage ? { ...streamResult.usage } : undefined,
-          finishReason: 'handoff',
-        });
-        deps.notifyRunStatus();
-
         state.handoffChain++;
-        if (state.handoffChain >= MAX_HANDOFF_CHAIN || !autonomousMode) break;
-
         const parentRunId = state.runTracker.id;
-        // The segment swap is a lifecycle change, and the run row is only one
-        // projection of it. Without these facts the replay reads the parent as
-        // still running and the chained segment as a turn with a defaulted
-        // kind — two projections of one turn disagreeing.
-        recordSessionEvents(threadId, turnFactsToEvents({
-          terminal: { runId: parentRunId, status: 'completed', finishReason: 'handoff' },
-        }));
+        const chainContinues = state.handoffChain < MAX_HANDOFF_CHAIN && autonomousMode;
+        // The parent segment's terminal is the SAME outcome as the turn's:
+        // both projections are written from the `handoff` row, so the row and
+        // the log cannot disagree on status, finishReason or error text
+        // (audit A-2's divergence). A chain that stops here leaves the final
+        // finalize to the entry, exactly as a non-chained turn does.
+        finalizeTurn({
+          tracker: state.runTracker,
+          outcome: 'handoff',
+          text: handoffText,
+          ...(streamResult.usage ? { usage: streamResult.usage } : {}),
+          handoff: streamResult.handoff,
+          ...(chainContinues ? { threadId } : {}),
+          transport: plan.transport,
+          notify: deps.notifyRunStatus,
+        });
+
+        if (!chainContinues) {
+          // The chained batch would have been the last one anyway; the entry's
+          // finalize writes the same `handoff` row again — markCompleted is
+          // idempotent for one run, and the entry owns the reply text.
+          break;
+        }
 
         state.runTracker = createAgentRunTracker(
           planToRunTrackerParams(
@@ -678,7 +1026,6 @@ const runTurnBatches = async (
                 messages: [],
               },
               working: {
-                modelMessages: [],
                 accumulatedText: '',
                 pendingApprovalIds: [],
                 lastStepIndex: 0,
@@ -732,21 +1079,36 @@ const runTurnBatches = async (
         state.streamPrompt = streamResult.handoff.nextSteps || 'Continue the work from the handoff summary.';
         continue;
       }
-      if (!autonomousMode) break;
+      // The facts of the batch that is actually last. They are recorded
+      // BEFORE the batch gates below, which may let another batch supersede
+      // them — the superseding batch overwrites this with its own facts, so
+      // an entry always finalizes the row it is really finalizing (audit A-1:
+      // the old code turned this into `budget-exhausted` only inside the
+      // autonomous branch, so a non-autonomous turn escaped as a silent
+      // `completed`).
+      state.lastFacts = {
+        text: state.accumulatedResponse || streamResult.response,
+        ...(streamResult.usage ? { usage: streamResult.usage } : {}),
+        ...(streamResult.pendingToolCalls && streamResult.pendingToolCalls.length > 0
+          ? { pendingToolCalls: streamResult.pendingToolCalls }
+          : {}),
+      };
+
+      // Only a step-budget exhaustion continues: "only exhausted tool steps
+      // may continue within the requested batch bound" (README's stop
+      // contract). A batch bound of 1 is a single-batch turn.
+      if (!autonomousMode || streamResult.outcome !== 'budget-exhausted') break;
 
       state.batchIndex++;
-      if (state.batchIndex >= Math.min(
-        MAX_AUTONOMOUS_BATCHES,
-        plan.autonomous?.maxIterations ?? MAX_AUTONOMOUS_BATCHES,
-      )) break;
+      if (state.batchIndex >= Math.min(MAX_AUTONOMOUS_BATCHES, batch?.max ?? MAX_AUTONOMOUS_BATCHES)) {
+        // The batch bound is exhausted: this batch's own outcome stands.
+        break;
+      }
 
       state.streamHistory = state.harness.getHistory();
-      state.streamPrompt = plan.autonomous?.continuePrompt || 'Continue with the next step.';
+      state.streamPrompt = batch?.continuePrompt || 'Continue with the next step.';
     }
 
-    if (streamResult?.outcome === 'continuing') {
-      streamResult = { ...streamResult, outcome: 'budget-exhausted' };
-    }
     return streamResult;
   } finally {
     // Error paths (provider failure, cancellation) exit through here with
@@ -772,10 +1134,12 @@ export const createTurnDriver = (
     handoffChain: 0,
     turnHadToolCalls: false,
     isAwaitingApproval: false,
+    lastFacts: {},
   };
   return {
     run: () => runTurnBatches(state, deps),
     getRunTracker: () => state.runTracker,
+    getLastFacts: () => state.lastFacts,
     getHarness: () => state.harness,
     getAccumulatedResponse: () => state.accumulatedResponse,
     getBatchCount: () => state.batchIndex,

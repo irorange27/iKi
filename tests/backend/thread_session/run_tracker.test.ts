@@ -38,7 +38,6 @@ const buildStoredRun = (overrides: Record<string, unknown> = {}) => ({
     metadata: { source: 'delegated-agent' },
   },
   working: {
-    modelMessages: [],
     accumulatedText: '',
     pendingApprovalIds: [],
     lastStepIndex: 0,
@@ -108,7 +107,6 @@ describe('createAgentRunTracker', () => {
         metadata: { source: 'delegated-agent' },
       },
       working: {
-        modelMessages: [],
         accumulatedText: '',
         pendingApprovalIds: [],
         lastStepIndex: 0,
@@ -179,7 +177,6 @@ describe('createAgentRunTracker', () => {
       availableSkillIds: [],
       input: { prompt: 'Inspect files' },
       working: {
-        modelMessages: [],
         accumulatedText: '',
         pendingApprovalIds: [],
         lastStepIndex: 0,
@@ -207,7 +204,6 @@ describe('createAgentRunTracker', () => {
       availableSkillIds: [],
       input: { prompt: 'run a command' },
       working: {
-        modelMessages: [],
         accumulatedText: '',
         pendingApprovalIds: ['approval_1'],
         lastStepIndex: 0,

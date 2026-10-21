@@ -1,4 +1,5 @@
 import type { ModelMessage } from '../message/model_history';
+import { rebuildResumeHistoryFromEvents } from './run_rehydrator';
 import type { ChatInputMessage } from './types';
 
 export type HandoffDetails = {
@@ -22,7 +23,19 @@ const findLatestHandoffArgs = (
         (part as Record<string, unknown>).type === 'tool-call' &&
         (part as Record<string, unknown>).toolName === 'handoff'
       ) {
-        const args = (part as Record<string, unknown>).args as Record<string, unknown> | undefined;
+        // `input` is the ONLY field a replayed tool-call carries —
+        // `message/ui_to_model.ts` writes `input: part.input ?? {}` and nothing
+        // in the message layer ever writes `args`. This reader used to look for
+        // `args` alone, so every handoff resumed from a replay got a
+        // `[HANDOFF CONTEXT]` block with an empty summary, empty next steps and
+        // empty reason (the block itself still rendered, which is why it went
+        // unnoticed). `args` is kept as a fallback for payloads that reach this
+        // function through a path that spells it that way, but it is not what
+        // the replay projection produces — do not treat the two as equivalent
+        // spellings of one contract.
+        const args =
+          ((part as Record<string, unknown>).input as Record<string, unknown> | undefined) ??
+          ((part as Record<string, unknown>).args as Record<string, unknown> | undefined);
         return args ?? {};
       }
     }
@@ -31,18 +44,27 @@ const findLatestHandoffArgs = (
 };
 
 /**
- * Rebuilds history/prompt for a handoff-resume run from the parent run's stored
- * model messages: a [HANDOFF CONTEXT] system message on top of the parent's
- * transcript, followed by the current thread's history.
+ * Rebuilds history/prompt for a handoff-resume run from the parent run's
+ * transcript AS REPLAYED FROM THE SESSION LOG: a [HANDOFF CONTEXT] system
+ * message on top of the parent's conversation, followed by the current
+ * thread's history.
+ *
+ * The source is `rebuildResumeHistoryFromEvents` — the run row's
+ * `working.modelMessages` copy this used to read was removed (ADR 010 §3):
+ * it duplicated the log and could disagree with it. A run with no threadId,
+ * or whose log has no messages, yields null so the caller falls back to the
+ * prepared turn (same contract as the old empty-array check — missing
+ * history is never fabricated).
  */
-export const buildHandoffResumeContext = (params: {
-  parentRun: { working?: { modelMessages?: unknown } } | null | undefined;
+export const buildHandoffResumeContext = async (params: {
+  threadId: string | null | undefined;
   preparedHistory: ChatInputMessage[];
   preparedPrompt: string;
-}): { history: ModelMessage[]; prompt: string } | null => {
-  const resumedMessages = Array.isArray(params.parentRun?.working?.modelMessages)
-    ? (params.parentRun!.working!.modelMessages as ModelMessage[])
-    : [];
+}): Promise<{ history: ModelMessage[]; prompt: string } | null> => {
+  const threadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
+  if (!threadId) return null;
+  const replayed = await rebuildResumeHistoryFromEvents(threadId);
+  const resumedMessages = replayed?.history ?? [];
   if (resumedMessages.length === 0) return null;
 
   const args = findLatestHandoffArgs(resumedMessages) ?? {};

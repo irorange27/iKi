@@ -6,6 +6,7 @@ import { parseAwaiterTriggerSpec, type Awaiter } from '@iki/backend/types/awaite
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { toIsoNow } from '@iki/backend/utils/text';
 import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
+import { rebuildResumeHistoryFromEvents } from '@iki/backend/thread_session/run_rehydrator';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 
@@ -269,9 +270,15 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
     ];
 
     if (awaiter.origin_run_id) {
+      // The origin conversation comes from the session-log replay (ADR 010
+      // §3), not from the run row's removed `working.modelMessages` copy.
+      // The row is read only for its threadId: the replay is keyed by
+      // conversation, so a row without one has no log to rebuild from and
+      // the wake keeps its plain shape (no fabricated context).
       const originRun = agentRunDb.getAgentRun(awaiter.origin_run_id);
-      const resumedMessages = Array.isArray(originRun?.working?.modelMessages)
-        ? (originRun!.working!.modelMessages as import('../message/model_history').ModelMessage[])
+      const originThreadId = originRun?.threadId;
+      const resumedMessages = originThreadId
+        ? ((await rebuildResumeHistoryFromEvents(originThreadId))?.history ?? [])
         : [];
       if (resumedMessages.length > 0) {
         messages.push({

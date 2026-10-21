@@ -105,6 +105,18 @@ const normalizeOutput = (value: unknown): AgentRunOutput | null => {
     ...(parsed.usage && typeof parsed.usage === 'object'
       ? { usage: parsed.usage as Record<string, unknown> }
       : {}),
+    // The remainder a `budget-exhausted` turn could not consume. This rebuild
+    // is a WHITELIST — the write path persisted the field and this read dropped
+    // it, so the row read back as a complete answer (2026-10 audit A-3 found
+    // the seam; the second face was here). Anything added to `AgentRunOutput`
+    // must be listed in this projection and in `buildOutput`.
+    ...(Array.isArray(parsed.pendingToolCalls)
+      ? {
+          pendingToolCalls: parsed.pendingToolCalls as NonNullable<
+            AgentRunOutput['pendingToolCalls']
+          >,
+        }
+      : {}),
   };
 };
 

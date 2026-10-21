@@ -7,6 +7,7 @@ import type { AgentResult, AgentTool, AgentUsage } from '@iki/backend/agent/type
 import type { TurnDriverHarness, TurnHarnessAssembly } from '@iki/backend/agent/harness';
 import type { AgentStep, ModelInferenceRecord } from '@iki/backend/agent/agent_step';
 import type {
+  AgentRun,
   AgentRunInput,
   AgentRunKind,
   AgentRunWorkingState,
@@ -49,17 +50,82 @@ type DelegatedAgentRunTracker = {
   id: string;
   recordModelStep: (record: ModelInferenceRecord) => void;
   recordAgentStep: (step: AgentStep) => void;
-  syncModelMessages: (messages: unknown[]) => unknown;
-  markCompleted: (params: { text?: string; finishReason?: string; usage?: AgentUsage }) => unknown;
-  markFailed: (error: { message: string; code?: string; retryable?: boolean }) => unknown;
+  /**
+   * The child's terminal goes through the ONE finalize authority
+   * (`finalizeHarnessTurn`), so the tracker exposes exactly what that
+   * authority writes — read off the real run tracker rather than re-declared
+   * as a private `mark*` pair of its own.
+   */
+  terminal: TerminalRunTracker;
 };
 
 /**
  * Backend pieces the delegated-agent tool needs at execution time, injected at
  * registration so tools/ stays below orchestration and persistence.
  */
+/**
+ * The terminal surface a delegated child finalizes through.
+ *
+ * Declared STRUCTURALLY here instead of importing
+ * `thread_session/turn_driver`: `tools/` sits below the session layer (arch
+ * rule `tools-below-session`), and importing the driver to reuse its outcome
+ * authority inverted that edge. The composition root injects the real
+ * implementation through `DelegatedAgentRuntime.finalizeFailure`, so the child
+ * still ends on the ONE outcome authority — the rule and the single-authority
+ * goal are both honoured, instead of trading one for the other.
+ */
+/**
+ * The terminal-writing surface a run tracker must satisfy. Declared from the
+ * LOW layer (`types/agent_run`) rather than re-exported from the session
+ * layer, so `tools/` can name it without an upward import.
+ */
+export type TerminalRunTracker = {
+  id: string;
+  getRun: () => AgentRun;
+  markCompleted: (params: DelegateRunFinalizeParams) => AgentRun;
+  markBlocked: (params: DelegateRunFinalizeParams) => AgentRun;
+  markFailed: (params: DelegateRunFailureParams) => AgentRun;
+  markCancelled: (params?: { text?: string }) => AgentRun;
+};
+
+type DelegateRunFinalizeParams = {
+  text?: string;
+  finishReason?: string;
+  usage?: Record<string, unknown>;
+  pendingApprovalIds?: string[];
+  pendingToolCalls?: unknown[];
+};
+
+type DelegateRunFailureParams = { message: string; code?: string; retryable?: boolean; text?: string };
+
+export type DelegatedFinalizePort = {
+  /** A failed child turn (a throw, or an approval it cannot answer). */
+  finalizeFailure: (params: {
+    tracker: unknown;
+    failure: { status: 'failed'; errorText: string; code?: string; retryable?: boolean };
+    transport: string;
+  }) => void;
+  /** A completed child turn, mapped from its harness output. */
+  finalizeSuccess: (params: {
+    tracker: unknown;
+    output: { text: string; usage?: unknown; finishReason?: string };
+    transport: string;
+  }) => void;
+};
+
 export type DelegatedAgentRuntime = {
-  createRunTracker: (params: DelegatedAgentRunTrackerParams) => DelegatedAgentRunTracker;
+  /** The real run tracker (thread_session's) — the tool narrows it to the
+   *  record + terminal surface it uses. */
+  createRunTracker: (params: DelegatedAgentRunTrackerParams) => {
+    id: string;
+    getRun: TerminalRunTracker['getRun'];
+    recordModelStep: (record: ModelInferenceRecord) => void;
+    recordAgentStep: (step: AgentStep) => void;
+    markCompleted: TerminalRunTracker['markCompleted'];
+    markBlocked: TerminalRunTracker['markBlocked'];
+    markFailed: TerminalRunTracker['markFailed'];
+    markCancelled: TerminalRunTracker['markCancelled'];
+  };
   getConversationToolModel: () => ToolModelConfig | null;
   /**
    * Builds the SUBAGENT's executor. Narrowed to `TurnDriverHarness` (turn +
@@ -68,6 +134,9 @@ export type DelegatedAgentRuntime = {
    * name `AgentHarness`, which pinned delegation to the AI SDK.
    */
   createHarness: (assembly: TurnHarnessAssembly) => TurnDriverHarness;
+  /** The session layer's one finalize, injected (see `DelegatedFinalizePort`
+   *  for why this is a port and not an import). */
+  finalize: DelegatedFinalizePort;
 };
 
 let delegatedAgentRuntime: DelegatedAgentRuntime | null = null;
@@ -330,6 +399,9 @@ export class DelegatedAgentTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  // Delegation runs a whole child turn with its own writes; replaying it
+  // duplicates that work (and any effect the child performed).
+  override replay = 'unsafe' as const;
   override description =
     "Delegate a bounded investigation, review, or synthesis subtask to a fresh subagent scratchpad. Best for side work such as comparing sources, scanning directory structure, or producing focused findings. The delegated run inherits only the current turn's approval-free tools and cannot recursively spawn more agents. Pick subagent_type deliberately: explorer is a read-only research agent (safe for investigation), general carries the full approval-free tool set.";
   override paramSchema = AgentToolInputSchema;
@@ -393,7 +465,7 @@ export class DelegatedAgentTool extends BaseTool {
       maxOutputTokens: resolvedMaxTokens,
     });
 
-    const runTracker = requireDelegatedAgentRuntime().createRunTracker({
+    const createdTracker = requireDelegatedAgentRuntime().createRunTracker({
       kind: 'delegated-agent',
       threadId: runtimeContext.threadId,
       parentRunId: runtimeContext.runId,
@@ -414,12 +486,17 @@ export class DelegatedAgentTool extends BaseTool {
         },
       },
       working: {
-        modelMessages: [],
         accumulatedText: '',
         pendingApprovalIds: [],
         lastStepIndex: 0,
       },
     });
+    // One identity, two surfaces: the record surface the tool drives and the
+    // terminal surface the shared finalize authority writes.
+    const runTracker = {
+      ...createdTracker,
+      terminal: createdTracker as unknown as TerminalRunTracker,
+    };
     runtimeContext.runTracker?.recordChildRun({
       childRunId: runTracker.id,
       childKind: 'delegated-agent',
@@ -469,10 +546,19 @@ export class DelegatedAgentTool extends BaseTool {
         }
       );
       if (!turnOutput) throw new Error('Delegated agent produced no output');
-      runTracker.syncModelMessages(harness.getHistory());
+      // The child's model history is NOT copied into its run row: it lives in
+      // the session log and is replayed on recovery (ADR 010 §3).
     } catch (error) {
-      runTracker.markFailed({
-        message: error instanceof Error ? error.message : String(error),
+      // A delegated turn's terminal is the SAME outcome vocabulary the parent
+      // uses (audit A-1's eleventh hand-written site): a throw is a failure,
+      // one row, one projection.
+      requireDelegatedAgentRuntime().finalize.finalizeFailure({
+        tracker: runTracker.terminal,
+        failure: {
+          status: 'failed',
+          errorText: error instanceof Error ? error.message : String(error),
+        },
+        transport: 'delegated-agent',
       });
       throw error;
     } finally {
@@ -490,18 +576,27 @@ export class DelegatedAgentTool extends BaseTool {
             )
         )
       );
-      runTracker.markFailed({
-        message: `Delegated subagent requested approval-gated tools (${formatToolNameList(toolNames)}), which are not supported inside the agent tool.`,
+      requireDelegatedAgentRuntime().finalize.finalizeFailure({
+        tracker: runTracker.terminal,
+        failure: {
+          status: 'failed',
+          errorText: `Delegated subagent requested approval-gated tools (${formatToolNameList(toolNames)}), which are not supported inside the agent tool.`,
+        },
+        transport: 'delegated-agent',
       });
       throw new Error(
         `Delegated subagent requested approval-gated tools (${formatToolNameList(toolNames)}), which are not supported inside the agent tool. Run that step directly from the parent agent instead.`
       );
     }
 
-    runTracker.markCompleted({
-      text: turnOutput.text,
-      ...(turnOutput.usage ? { usage: turnOutput.usage } : {}),
-      finishReason: 'completed',
+    // The child's terminal is derived from ITS OWN harness outcome through
+    // the shared table: a step budget that ran out with tool calls pending is
+    // `budget-exhausted`, not a silent success (the delegated turn used to
+    // report 'completed' for every non-throwing turn).
+    requireDelegatedAgentRuntime().finalize.finalizeSuccess({
+      tracker: runTracker.terminal,
+      output: turnOutput,
+      transport: 'delegated-agent',
     });
 
     // Scan scratchpad for intermediate findings

@@ -2,6 +2,7 @@ import { createLogger } from '@iki/backend/logger';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import type { AgentRunStatus } from '@iki/backend/types/agent_run';
 import type { ExecutionPlan } from './execution_plan';
+import { parseExecutionPlanValue } from './execution_plan_codec';
 import {
   appendSessionFacts,
   getSessionEvents,
@@ -239,6 +240,15 @@ export type RebuiltTurn = {
   status: AgentRunStatus;
   finishReason?: string;
   errorText?: string;
+  /**
+   * The turn's frozen execution plan, when its `turn_started` fact carried one
+   * (F3, ADR 008): the plan travels WITH the fact that started the turn, so a
+   * recovery consumer reads it from the log instead of the legacy
+   * `tool_call_approval_sessions.plan_json` column. Absent for pre-F3 rows and
+   * for facts whose plan failed to parse — both fall back to the old source,
+   * which is why absence must stay distinguishable from an empty plan.
+   */
+  plan?: ExecutionPlan;
 };
 
 export type RebuiltApproval = {
@@ -454,10 +464,18 @@ export const rebuildThreadViewFromEvents = (
       case TURN_STARTED: {
         const runId = typeof payload.runId === 'string' ? payload.runId : '';
         if (!runId) break;
+        // F3: the frozen plan travels with the fact that started the turn, so
+        // recovery reads it from the log instead of the approval session's
+        // plan_json column. A plan that fails validation is DROPPED rather than
+        // coerced — absence is what tells the caller to take its legacy
+        // fallback, and a fabricated plan would run the harness under a
+        // configuration the turn never had.
+        const plan = parseExecutionPlanValue(payload.plan);
         turns.set(runId, {
           runId,
           kind: typeof payload.kind === 'string' ? payload.kind : 'chat-turn',
           status: 'running',
+          ...(plan ? { plan } : {}),
         });
         break;
       }

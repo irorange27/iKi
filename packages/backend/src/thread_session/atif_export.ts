@@ -9,15 +9,17 @@ import type {
   AtifTrajectoryExportResult,
 } from '@iki/backend/types/atif';
 import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
-import { stripInjectedContext } from '@iki/backend/turn_prep/context_helpers';
 
 /**
  * Exporter for the Agent Trajectory Interchange Format (ATIF, v1.8) —
  * https://www.harborframework.com/docs/agents/trajectory-format
  *
- * Source records: the run row (working.modelMessages / output.usage) and its
- * append-only agent_run_steps audit log. Tool-call steps are merged with their
- * following tool-result step into a single agent step with an observation.
+ * Source records: the run row (input / output.usage / working.accumulatedText)
+ * and its append-only agent_run_steps audit log. The transcript itself is NOT
+ * read from the run row — `working.modelMessages` was removed (ADR 010 §3);
+ * the session log is the history authority. Tool-call steps are merged with
+ * their following tool-result step into a single agent step with an
+ * observation.
  */
 
 const ATIF_SCHEMA_VERSION = 'ATIF-v1.8';
@@ -109,7 +111,11 @@ const extractLastUserText = (messages: unknown[] | undefined): string | null => 
         : content && typeof content === 'object'
           ? extractTextFromModelMessageContent(content)
           : '';
-    if (text.trim()) return clip(stripInjectedContext(text));
+    // The per-turn `<system-reminder>` envelope this used to strip is
+    // retired (no producer exists any more). Exporting the recorded text
+    // AS RECORDED is the honest projection: a presentation-layer cleanup
+    // of a dead envelope was a second opinion about what the history was.
+    if (text.trim()) return clip(text);
   }
   return null;
 };
