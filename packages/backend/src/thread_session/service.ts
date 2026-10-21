@@ -37,8 +37,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     crossProcessThreadRun: (threadId, options) =>
       tryAcquireCrossProcessThreadRun(threadId, { onLeaseLost: options.onLeaseLost }),
   });
-  const persistence = createChatPersistence({
-  });
+  const persistence = createChatPersistence();
   const approvals = createChatApproval({
     streams: {
       tryAcquireThreadRun: streamCoordinator.tryAcquireThreadRun,

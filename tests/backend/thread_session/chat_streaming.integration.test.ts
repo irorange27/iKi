@@ -84,8 +84,6 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
   getAssistantProfileContextMessage: () => '',
-  retrieveRelevantContinuity: () => null,
-  onMessagePersisted: async () => undefined,
   getCompanion: () => ({
     beginThinking: vi.fn(),
     startThinking: vi.fn(),
@@ -265,12 +263,7 @@ describe('createChatStreaming integration', () => {
       chunks.indexOf(usageChunk)
     );
 
-    expect(conversation.createMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'msg_user_probe',
-        thread_id: 'thread_1',
-      })
-    );
+    expect(conversation.createMessage).not.toHaveBeenCalled();
     expect(conversation.upsertTurnMessage).toHaveBeenCalledTimes(1);
     const [turnRow] = conversation.upsertTurnMessage.mock.calls[0]! as [Record<string, unknown>];
     expect(turnRow).toMatchObject({

@@ -47,8 +47,6 @@ import { createChatTurnPreparer } from '@iki/backend/turn_prep/turn_preparer';
 import { resolveSkillsSystemPrompt } from '@iki/backend/thread_session/skills';
 import {
   getAssistantProfileContextMessage,
-  onMessagePersisted,
-  retrieveRelevantContinuity,
 } from '@iki/backend/thread_session/platform';
 import {
   assembleExecutionPlan,
@@ -71,7 +69,6 @@ import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
 
 const memory = {
-  onMessagePersisted: vi.fn(),
   injectMemoryIntoMessages: vi.fn((messages: unknown[]) => messages),
   getAffectContextMessage: () => '',
 };
@@ -103,7 +100,6 @@ describe('execution plan admission boundaries', () => {
     addWorkspace({ id: 'workspace_wt_bound_b', path: b, name: 'B' });
     conversation = createChatPersistence({
       memory: memory as never,
-      onContinuityMessagePersisted: onMessagePersisted,
     });
     conversation.createThread({
       id: 'thread_bound',
@@ -169,7 +165,6 @@ describe('execution plan admission boundaries', () => {
       }),
       resolveSkillsSystemPrompt,
       getAssistantProfileContextMessage,
-      retrieveRelevantContinuity,
     });
     const original = {
       ...options(),
@@ -277,7 +272,6 @@ describe('execution plan admission boundaries', () => {
       }),
       resolveSkillsSystemPrompt,
       getAssistantProfileContextMessage,
-      retrieveRelevantContinuity,
     });
     const original = options();
     const prepared = await preparer.prepareChatTurn(original);
@@ -354,7 +348,6 @@ describe('execution plan admission boundaries', () => {
       }),
       resolveSkillsSystemPrompt,
       getAssistantProfileContextMessage,
-      retrieveRelevantContinuity,
     });
     const prepared = await preparer.prepareChatTurn({
       ...options(),

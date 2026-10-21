@@ -47,32 +47,13 @@ export const pickIdLessSendInput = (
 };
 
 export const persistUserTurnMessage = (
-  conversation: Pick<ConversationStore, 'createMessage'>,
+  _conversation: Pick<ConversationStore, 'createMessage'>,
   options: ChatTurnOptions
 ): string | undefined => {
   if (!options.threadId) return undefined;
   const picked = pickUserTurnMessage(options);
   if (!picked) return undefined;
-  const { messageId: id, message: lastUser } = picked;
-  try {
-    conversation.createMessage({
-      id,
-      thread_id: options.threadId,
-      message: lastUser,
-      metadata: JSON.stringify({ format: UI_MESSAGE_METADATA_FORMAT }),
-    });
-    return id;
-  } catch (error) {
-    logger.event({
-      level: 'warn',
-      event: 'chat.turn.user_persist',
-      outcome: 'degraded',
-      message: 'Failed to persist the user turn message.',
-      error,
-      data: { thread_id: options.threadId },
-    });
-  }
-  return undefined;
+  return picked.messageId;
 };
 
 const assistantUpsertChains = new Map<string, Promise<void>>();

@@ -31,7 +31,6 @@ import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { listAgentRunsByThread } from '@iki/backend/db/agent_runs';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
-import { onMessagePersisted } from '@iki/backend/thread_session/platform';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import type { ExecutionPlan } from '@iki/backend/thread_session/execution_plan';
@@ -49,7 +48,6 @@ import {
 const toolName = 'plan_persistence_probe';
 
 const memory = {
-  onMessagePersisted: vi.fn(),
   injectMemoryIntoMessages: vi.fn((messages: unknown[]) => messages),
   getAffectContextMessage: () => '',
 };
@@ -184,7 +182,6 @@ describe('approval resume restores the persisted plan after a restart', () => {
     seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
     conversation = createChatPersistence({
       memory: memory as never,
-      onContinuityMessagePersisted: onMessagePersisted,
     });
     conversation.createThread({ id: 'thread_plan' });
     coordinator = createThreadStreamCoordinator();

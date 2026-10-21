@@ -50,8 +50,6 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
   getAssistantProfileContextMessage: () => '',
-  retrieveRelevantContinuity: () => null,
-  onMessagePersisted: async () => undefined,
   getCompanion: () => ({
     beginThinking: vi.fn(),
     endThinking: vi.fn(),
@@ -134,7 +132,6 @@ beforeAll(async () => {
   defaultToolRegistry.register(readFileTool);
   conversation = createChatPersistence({
     memory: {} as never,
-    onContinuityMessagePersisted: async () => undefined,
   });
   conversation.createThread({ id: 'thread_diff_current' });
 });

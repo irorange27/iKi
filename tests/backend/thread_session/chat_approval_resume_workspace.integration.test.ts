@@ -35,7 +35,6 @@ import { addWorkspace } from '@iki/backend/db/workspaces';
 import { getChatThread } from '@iki/backend/db/chat_thread';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
-import { onMessagePersisted } from '@iki/backend/thread_session/platform';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
@@ -73,7 +72,6 @@ import {
 } from '@iki/backend/thread_session/session_log';
 
 const memory = {
-  onMessagePersisted: vi.fn(),
   injectMemoryIntoMessages: vi.fn((messages: unknown[]) => messages),
   getAffectContextMessage: () => '',
 };
@@ -229,7 +227,6 @@ describe('approval resume keeps the turn-start workspace', () => {
     addWorkspace({ id: 'workspace_wt_probe', path: b, name: 'b' });
     conversation = createChatPersistence({
       memory: memory as never,
-      onContinuityMessagePersisted: onMessagePersisted,
     });
     conversation.createThread({
       id: 'thread_probe',

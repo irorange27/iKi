@@ -86,14 +86,7 @@ const normalizeThreadInput = (
   };
 };
 
-export const createChatPersistence = (deps: {
-
-  onContinuityMessagePersisted?: (params: {
-    threadId: string;
-    messageId: string;
-    messageJson: string;
-  }) => Promise<void>;
-} = {}) => {
+export const createChatPersistence = () => {
   const listThreads = () => chatThreadDb.getChatThreads();
   const getThread = (id: string) => {
     ensureThreadWorkspaceSelection(id);
@@ -203,27 +196,9 @@ export const createChatPersistence = (deps: {
   };
 
   const getMessage = (id: string): ChatMessage | null => {
-
-    const row = getDb()
-      .prepare(
-        `SELECT thread_id, payload FROM session_events
-          WHERE type IN (?, ?) AND payload LIKE ?
-          ORDER BY revision DESC LIMIT 1`
-      )
-      .get(
-        MESSAGE_EVENT_TYPES.INPUT_ACCEPTED,
-        MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED, `%"id":"${id.replace(/"/g, '')}"`) as
-      | { thread_id: string; payload: string }
-      | undefined;
-    if (!row) return null;
-    try {
-      return projectRow(row.thread_id, {
-        type: '',
-        payload: JSON.parse(row.payload) as unknown,
-      });
-    } catch {
-      return null;
-    }
+    const found = findMessageEvent(id);
+    if (!found) return null;
+    return projectRow(found.threadId, { type: '', payload: found.payload });
   };
   const createMessage = (input: unknown) => {
     const message = isObjectRecord(input) ? (input as Partial<ChatMessage>) : {};
@@ -234,19 +209,29 @@ export const createChatPersistence = (deps: {
     const threadId = typeof message.thread_id === 'string' ? message.thread_id : '';
     if (!threadId) throw new Error('createMessage requires a thread_id');
 
-    const sanitizedMessageJson =
+    const parsedMessage: unknown =
       typeof message.message === 'string'
-        ? sanitizeUiMessageJsonForStorage(message.message)
-        : JSON.stringify(message.message ?? {});
+        ? (() => {
+            try {
+              return JSON.parse(message.message);
+            } catch {
+              return { id: messageId, role: 'user', parts: [{ type: 'text', text: message.message }] };
+            }
+          })()
+        : (message.message ?? {});
 
-    void sanitizedMessageJson;
+    appendSessionFacts(threadId, [
+      {
+        type: MESSAGE_EVENT_TYPES.INPUT_ACCEPTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          messageId,
+          message: parsedMessage,
+          transport: 'send',
+        },
+      },
+    ]);
     chatThreadDb.touchChatThread(threadId);
-
-    void deps.onContinuityMessagePersisted?.({
-      threadId,
-      messageId,
-      messageJson: sanitizedMessageJson,
-    });
 
     return getMessage(messageId);
   };
@@ -313,9 +298,9 @@ export const createChatPersistence = (deps: {
         isObjectRecord(input) && typeof (input as { id?: unknown }).id === 'string'
           ? (input as { id: string }).id.trim()
           : '';
-      const existing = id ? getMessage(id) : null;
-      if (existing && id) {
-
+      if (!id) return null;
+      const existing = getMessage(id);
+      if (existing) {
         const rawMessage = isObjectRecord(input)
           ? (input as { message?: unknown }).message
           : undefined;
@@ -325,7 +310,11 @@ export const createChatPersistence = (deps: {
             : input;
         return updateMessage(id, payload);
       }
-      return createMessage(input);
+      const threadId = isObjectRecord(input) && typeof (input as { thread_id?: unknown }).thread_id === 'string'
+        ? (input as { thread_id: string }).thread_id
+        : '';
+      if (!threadId) return null;
+      return updateMessage(id, input);
     },
   };
 };

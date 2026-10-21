@@ -36,8 +36,6 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
   getAssistantProfileContextMessage: () => '',
-  retrieveRelevantContinuity: () => null,
-  onMessagePersisted: async () => undefined,
   getCompanion: () => ({
     beginThinking: vi.fn(),
     endThinking: vi.fn(),
@@ -66,7 +64,6 @@ import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { z } from 'zod';
 
 const memory = {
-  onMessagePersisted: vi.fn(),
   injectMemoryIntoMessages: vi.fn((messages: unknown[]) => messages),
   getAffectContextMessage: () => '',
 };
@@ -111,7 +108,6 @@ describe('streamed text commit gate', () => {
     seedTurnProvider({ providerId: 'provider_primary', model: 'test-model' });
     conversation = createChatPersistence({
       memory: memory as never,
-      onContinuityMessagePersisted: async () => undefined,
     });
     conversation.createThread({ id: 'thread_commit' });
     conversation.createThread({ id: 'thread_commit_kill' });

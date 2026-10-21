@@ -164,12 +164,7 @@ describe('createMessageSend integration', () => {
     expect((callPiChatMock.mock.calls[0] as unknown[])[0]).toMatchObject({
       id: 'gpt-4o-mini',
     });
-    expect(conversation.createMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'msg_user_probe',
-        thread_id: 'thread_1',
-      })
-    );
+    expect(conversation.createMessage).not.toHaveBeenCalled();
     expect(conversation.upsertTurnMessage).toHaveBeenCalledTimes(1);
     const [turnRow] = conversation.upsertTurnMessage.mock.calls[0]! as [Record<string, unknown>];
     expect(turnRow.id).toMatch(/^assistant_run_/);

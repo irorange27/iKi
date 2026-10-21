@@ -50,7 +50,6 @@ let root: string;
 let conversation: ReturnType<typeof createChatPersistence>;
 const text = 'REVIEW_RESPONSE_MUST_SURVIVE_SETTLE';
 const memory = {
-  onMessagePersisted: (): void => undefined,
   injectMemoryIntoMessages: (messages: unknown[]): unknown[] => messages,
   getAffectContextMessage: (): string => '',
 };
@@ -66,7 +65,6 @@ beforeEach(async () => {
     seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
   conversation = createChatPersistence({
     memory: memory as never,
-    onContinuityMessagePersisted: async (): Promise<void> => undefined,
   });
   conversation.createThread({ id: 'review_settle', metadata: '{"mode":"chat"}' });
 });

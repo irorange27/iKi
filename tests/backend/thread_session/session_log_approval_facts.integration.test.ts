@@ -35,7 +35,6 @@ import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/databa
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
-import { onMessagePersisted } from '@iki/backend/thread_session/platform';
 import {
   piTurnHarness,
   setTurnHarnessFallback,
@@ -54,7 +53,6 @@ import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
 
 const memory = {
-  onMessagePersisted: vi.fn(),
   injectMemoryIntoMessages: vi.fn((messages: unknown[]) => messages),
   getAffectContextMessage: () => '',
 };
@@ -86,7 +84,6 @@ describe('session log approval facts across entries', () => {
     addWorkspace({ id: 'workspace_facts', path: a, name: 'facts' });
     conversation = createChatPersistence({
       memory: memory as never,
-      onContinuityMessagePersisted: onMessagePersisted,
     });
     conversation.createThread({
       id: 'thread_facts',

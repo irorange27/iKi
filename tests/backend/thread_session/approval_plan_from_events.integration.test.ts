@@ -35,7 +35,6 @@ import { closeDatabase, getDb, initializeDatabase } from '@iki/backend/db/databa
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
-import { onMessagePersisted } from '@iki/backend/thread_session/platform';
 import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
@@ -46,7 +45,6 @@ import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
 
 const memory = {
-  onMessagePersisted: vi.fn(),
   injectMemoryIntoMessages: vi.fn((messages: unknown[]) => messages),
   getAffectContextMessage: () => '',
 };
@@ -155,7 +153,6 @@ describe('F3: the approval resume reads its plan from the session log', () => {
     addWorkspace({ id: 'workspace_f3', path: workspaceDir, name: 'f3' });
     conversation = createChatPersistence({
       memory: memory as never,
-      onContinuityMessagePersisted: onMessagePersisted,
     });
     conversation.createThread({
       id: 'thread_f3',

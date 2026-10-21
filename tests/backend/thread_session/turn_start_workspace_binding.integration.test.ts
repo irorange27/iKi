@@ -34,8 +34,6 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
   getAssistantProfileContextMessage: () => '',
-  retrieveRelevantContinuity: () => null,
-  onMessagePersisted: async () => undefined,
   getCompanion: () => ({
     beginThinking: vi.fn(),
     endThinking: vi.fn(),
@@ -61,7 +59,6 @@ import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
 
 const memory = {
-  onMessagePersisted: vi.fn(),
   injectMemoryIntoMessages: vi.fn((messages: unknown[]) => messages),
   getAffectContextMessage: () => '',
 };
@@ -99,7 +96,6 @@ describe('stream binds the turn workspace at admission', () => {
     addWorkspace({ id: 'workspace_wt_binding', path: b, name: 'b' });
     conversation = createChatPersistence({
       memory: memory as never,
-      onContinuityMessagePersisted: async () => undefined,
     });
     conversation.createThread({
       id: 'thread_binding',

@@ -9,15 +9,6 @@ export interface ChatCompanionBridge {
   notifyReplyComplete(threadLabel?: string): void;
 }
 
-export interface ContinuityMemoryPreview {
-  id: string;
-  summary: string;
-  score: number;
-  updated_at?: string;
-  tags?: string[];
-  sourceMessageCount?: number;
-}
-
 export interface ChatServicePlatformDeps {
   companion?: ChatCompanionBridge;
   exportTrace?: (runId: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;

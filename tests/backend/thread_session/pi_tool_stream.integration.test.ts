@@ -48,8 +48,6 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
   getAssistantProfileContextMessage: (): string => '',
-  retrieveRelevantContinuity: (): null => null,
-  onMessagePersisted: async (): Promise<void> => undefined,
   getCompanion: () => ({
     beginThinking: vi.fn(),
     endThinking: vi.fn(),
@@ -193,7 +191,6 @@ beforeAll(async () => {
   );
   conversation = createChatPersistence({
     memory: {} as never,
-    onContinuityMessagePersisted: async (): Promise<void> => undefined,
   });
   conversation.createThread({ id: 'thread_pi_tool_stream' });
   conversation.createThread({ id: 'thread_sdk_tool_regress' });
