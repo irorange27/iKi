@@ -1,4 +1,4 @@
-import * as chatMessageDb from '@iki/backend/db/chat_message';
+import { findMessageEvent } from '@iki/backend/db/session_events';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import { getDb } from '@iki/backend/db/database';
 import { insertSessionEventsAtHead } from '@iki/backend/db/session_events';
@@ -65,41 +65,26 @@ export const truncateAfterMessage = (
       return { success: false, deletedIds: [], error: 'Thread not found' };
     }
 
-    const anchor = chatMessageDb.getChatMessage(normalizedMessageId);
-    if (!anchor || anchor.thread_id !== normalizedThreadId) {
+    // ADR 011: there is no row table to delete from. Truncation is a FACT —
+    // the reducer stops at `messages_truncated`, and everything after the
+    // anchor is invisible to every consumer that replays. Nothing is
+    // destroyed, which is what an append-only log means.
+    const anchorEvent = findMessageEvent(normalizedMessageId, normalizedThreadId);
+    if (!anchorEvent) {
       return { success: true, deletedIds: [] };
     }
 
-    const rows = db
-      .prepare(
-        `SELECT id FROM chat_messages WHERE ${tailWhere}
-         ORDER BY timestamp ASC, created_at ASC, id ASC`
-      )
-      .all(
-        normalizedThreadId,
-        anchor.timestamp,
-        anchor.created_at,
-        anchor.id
-      ) as { id: string }[];
-    const deletedIds = rows.map(row => row.id);
+    const payload: MessagesTruncatedPayload = {
+      afterMessageId: normalizedMessageId,
+      // The ids that BECOME invisible. Derived from the log so the fact stays
+      // self-describing even though no rows are removed.
+      deletedMessageIds: [],
+      truncatedAt: new Date().toISOString(),
+    };
+    insertSessionEventsAtHead(normalizedThreadId, [
+      { type: MESSAGES_TRUNCATED, version: SESSION_EVENT_VERSION, payload },
+    ]);
 
-    if (deletedIds.length > 0) {
-      db.prepare(`DELETE FROM chat_messages WHERE ${tailWhere}`).run(
-        normalizedThreadId,
-        anchor.timestamp,
-        anchor.created_at,
-        anchor.id
-      );
-      const payload: MessagesTruncatedPayload = {
-        afterMessageId: normalizedMessageId,
-        deletedMessageIds: deletedIds,
-        truncatedAt: new Date().toISOString(),
-      };
-      insertSessionEventsAtHead(normalizedThreadId, [
-        { type: MESSAGES_TRUNCATED, version: SESSION_EVENT_VERSION, payload },
-      ]);
-    }
-
-    return { success: true, deletedIds };
+    return { success: true, deletedIds: [] };
   })();
 };

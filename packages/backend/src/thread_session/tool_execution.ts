@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { getToolCallApproval, getToolCallApprovalSession } from '../db/tool_call_approval';
-import { getChatMessage } from '../db/chat_message';
+import { findMessageEvent } from '../db/session_events';
 import {
   appendSessionEvents,
   appendSessionFacts,
@@ -242,7 +242,16 @@ const recordedResult = async (action: Action): Promise<ToolResult | undefined> =
     value: action.binding.messageId,
   });
   const latest = snapshots.at(-1)?.payload as { message?: unknown } | undefined;
-  const legacy = latest ? undefined : getChatMessage(action.binding.messageId);
+  const legacyEvent = latest
+    ? undefined
+    : findMessageEvent(action.binding.messageId, action.binding.threadId);
+  const legacy = legacyEvent
+    ? {
+        id: action.binding.messageId,
+        thread_id: legacyEvent.threadId,
+        message: JSON.stringify((legacyEvent.payload as { message?: unknown }).message ?? {}),
+      }
+    : undefined;
   const message =
     latest?.message ??
     (legacy?.thread_id === action.binding.threadId ? parseStoredUiMessageRow(legacy) : undefined);

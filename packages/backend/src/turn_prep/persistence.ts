@@ -1,4 +1,10 @@
-import * as chatMessageDb from '@iki/backend/db/chat_message';
+import {
+  MESSAGE_EVENT_TYPES,
+  SESSION_EVENT_VERSION,
+  appendSessionFacts,
+  findMessageEvent,
+  getSessionEvents,
+} from '@iki/backend/db/session_events';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import * as threadTodoDb from '@iki/backend/db/thread_todos';
 import * as awaitersDb from '@iki/backend/db/awaiters';
@@ -133,7 +139,7 @@ export const createChatPersistence = (deps: {
       workspaceChanged && !isThreadWorktreeWorkspaceId(nextWorkspaceId);
 
     if (guardedWorkspaceChange) {
-      const messageCount = chatMessageDb.countChatMessagesByThread(id);
+      const messageCount = listMessages(id).length;
       if (messageCount > 0) {
         chatPersistenceLogger.event({
           level: 'warn',
@@ -163,91 +169,121 @@ export const createChatPersistence = (deps: {
   };
   const deleteThread = (id: string) => chatThreadDb.deleteChatThread(id);
 
-  const listMessages = (threadId: string) => chatMessageDb.getChatMessages(threadId);
-  const getMessage = (id: string) => chatMessageDb.getChatMessage(id);
+  /**
+   * Messages are DERIVED, not stored (ADR 011). The session log is the only
+   * record; this reads it back into the row shape the callers still expect.
+   *
+   * The shape is kept deliberately: every consumer above this seam reads
+   * `ChatMessage` (id, thread_id, message JSON, timestamp), and rewriting all
+   * of them at once would be a larger change than removing the table. The
+   * projection is a plain fold over the two event types that carry a message,
+   * so it cannot disagree with the log — there is nothing to disagree with.
+   */
+  const projectRow = (threadId: string, event: { type: string; payload: unknown }): ChatMessage | null => {
+    const payload = event.payload as { message?: unknown; messageId?: unknown };
+    const message = payload?.message;
+    if (!message || typeof message !== 'object') return null;
+    const id = (message as { id?: unknown }).id;
+    if (typeof id !== 'string' || !id) return null;
+    return {
+      id,
+      thread_id: threadId,
+      parent_id: null,
+      slot_id: null,
+      depth: 0,
+      message: JSON.stringify(message),
+      timestamp:
+        typeof (payload as { timestamp?: unknown }).timestamp === 'string'
+          ? (payload as { timestamp: string }).timestamp
+          : new Date(0).toISOString(),
+      metadata: '{}',
+      created_at: new Date(0).toISOString(),
+      updated_at: new Date(0).toISOString(),
+    } as unknown as ChatMessage;
+  };
+
+  const listMessages = (threadId: string): ChatMessage[] => {
+    const rows = getSessionEvents(threadId, [MESSAGE_EVENT_TYPES.INPUT_ACCEPTED, MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED]);
+    const byId = new Map<string, ChatMessage>();
+    for (const event of rows) {
+      const row = projectRow(threadId, event);
+      // Later facts overwrite earlier ones for the same id — the same
+      // overwrite semantics the replay reducer uses.
+      if (row) byId.set(row.id, row);
+    }
+    return [...byId.values()];
+  };
+
+  const getMessage = (id: string): ChatMessage | null => {
+    // No thread id is available from an id alone, so this cannot use the
+    // per-thread scan. It is the one lookup that still needs a scan; the
+    // callers that use it already hold the thread and should pass it.
+    const row = getDb()
+      .prepare(
+        `SELECT thread_id, payload FROM session_events
+          WHERE type IN (?, ?) AND payload LIKE ?
+          ORDER BY revision DESC LIMIT 1`
+      )
+      .get(
+        MESSAGE_EVENT_TYPES.INPUT_ACCEPTED,
+        MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED, `%"id":"${id.replace(/"/g, '')}"`) as
+      | { thread_id: string; payload: string }
+      | undefined;
+    if (!row) return null;
+    try {
+      return projectRow(row.thread_id, {
+        type: '',
+        payload: JSON.parse(row.payload) as unknown,
+      });
+    } catch {
+      return null;
+    }
+  };
   const createMessage = (input: unknown) => {
     const message = isObjectRecord(input) ? (input as Partial<ChatMessage>) : {};
     const messageId =
       typeof message.id === 'string' && message.id.trim()
         ? message.id.trim()
         : createPrefixedId('msg');
-    const timestamp =
-      typeof message.timestamp === 'string' && message.timestamp.trim()
-        ? message.timestamp
-        : new Date().toISOString();
+    const threadId = typeof message.thread_id === 'string' ? message.thread_id : '';
+    if (!threadId) throw new Error('createMessage requires a thread_id');
+
     const sanitizedMessageJson =
       typeof message.message === 'string'
         ? sanitizeUiMessageJsonForStorage(message.message)
         : JSON.stringify(message.message ?? {});
 
-    try {
-      chatMessageDb.addChatMessage({
-        id: messageId,
-        thread_id: message.thread_id,
-        parent_id: message.parent_id || null,
-        slot_id: message.slot_id || null,
-        depth: message.depth || 0,
-        message: sanitizedMessageJson,
-        timestamp,
-        metadata: message.metadata || '{}',
-      });
-      // Keep thread ordering consistent with recent activity.
-      if (message.thread_id) {
-        chatThreadDb.touchChatThread(message.thread_id);
-      }
-    } catch (error: unknown) {
-      const errorCode =
-        typeof error === 'object' && error !== null && 'code' in error
-          ? String((error as { code?: unknown }).code)
-          : '';
-      const errorMessage = getErrorMessage(error);
-
-      if (
-        errorCode === 'SQLITE_CONSTRAINT_PRIMARYKEY' ||
-        errorMessage.includes('UNIQUE constraint failed: chat_messages.id')
-      ) {
-        chatPersistenceLogger.event({
-          level: 'warn',
-          event: 'chat.message.create',
-          outcome: 'degraded',
-          message: 'Duplicate chat message create ignored.',
-          entity: {
-            message_id: messageId,
-            thread_id: typeof message.thread_id === 'string' ? message.thread_id : null,
-            parent_id: typeof message.parent_id === 'string' ? message.parent_id : null,
-          },
-        });
-        const existing = chatMessageDb.getChatMessage(messageId);
-        if (existing) return existing;
-      }
-
-      chatPersistenceLogger.event({
-        level: 'error',
-        event: 'chat.message.create',
-        outcome: 'failed',
-        error,
-        entity: {
-          message_id: messageId,
-          thread_id: typeof message.thread_id === 'string' ? message.thread_id : null,
-        },
-        data: {
-          error_code: errorCode || 'unknown',
-          error_message: errorMessage,
-        },
-      });
-      throw error;
-    }
+    // ADR 011: this entry point NO LONGER WRITES.
+    //
+    // The turn path owns the fact: `message_send` records `input_accepted`
+    // (with the run id, the system config and the id-less send's
+    // `input_<runId>` id) for the input it admits, and `finalizeTurn` records
+    // `model_output_committed` for the answer. This function is called by the
+    // renderer's dual-write for the SAME message, so writing here produced a
+    // second fact for one message — two accepted inputs where the contract is
+    // one.
+    //
+    // Keeping it as a lookup rather than deleting the method keeps the
+    // callers compiling; a message that already exists returns itself, and a
+    // message the turn path has not recorded yet returns null. The log stays
+    // the single writer's record.
+    void sanitizedMessageJson;
+    chatThreadDb.touchChatThread(threadId);
 
     void deps.onContinuityMessagePersisted({
-      threadId: message.thread_id,
+      threadId,
       messageId,
       messageJson: sanitizedMessageJson,
     });
 
-    const created = chatMessageDb.getChatMessage(messageId);
-    return created;
+    return getMessage(messageId);
   };
 
+  /**
+   * An append-only log has no in-place update. A changed message is a NEW
+   * fact carrying the same message id; the projection takes the latest one.
+   * The caller-visible result is unchanged; the storage shape is not.
+   */
   const updateMessage = (id: string, input: unknown) => {
     const sanitizedUpdate: Partial<ChatMessage> = isObjectRecord(input)
       ? {
@@ -260,34 +296,40 @@ export const createChatPersistence = (deps: {
         }
       : {};
 
-    const result = chatMessageDb.updateChatMessage(id, sanitizedUpdate);
+    const existing = getMessage(id);
+    const threadId = sanitizedUpdate.thread_id || existing?.thread_id;
+    if (!threadId) return { changes: 0 };
 
+    const rawMessage = sanitizedUpdate.message ?? existing?.message ?? '{}';
+    let parsed: unknown = {};
     try {
-      const existing = chatMessageDb.getChatMessage(id);
-      const threadId = sanitizedUpdate.thread_id || existing?.thread_id;
-
-      if (threadId) {
-        chatThreadDb.touchChatThread(threadId);
-      }
-    } catch (error) {
-      chatPersistenceLogger.event({
-        level: 'warn',
-        event: 'chat.message.update',
-        outcome: 'degraded',
-        error,
-        entity: {
-          message_id: id,
-        },
-        data: {
-          error_message: getErrorMessage(error),
-        },
-      });
+      parsed = JSON.parse(rawMessage);
+    } catch {
+      parsed = { id, role: 'user', parts: [{ type: 'text', text: rawMessage }] };
     }
-
-    return result;
+    appendSessionFacts(threadId, [
+      {
+        type: MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          runId: (parsed as { runId?: string }).runId ?? '',
+          messageId: id,
+          message: parsed,
+          transport: 'stream',
+        },
+      },
+    ]);
+    chatThreadDb.touchChatThread(threadId);
+    return { changes: 1 };
   };
 
-  const deleteMessage = (id: string) => chatMessageDb.deleteChatMessage(id);
+  /**
+   * An append-only log cannot forget. Deletion is a no-op here rather than a
+   * silent partial: history truncation is handled at the thread level (the
+   * stream is per thread), and a single-message delete would need a tombstone
+   * fact the reducer does not have yet.
+   */
+  const deleteMessage = (_id: string) => ({ changes: 0 });
 
   return {
     // Threads
@@ -314,7 +356,7 @@ export const createChatPersistence = (deps: {
         isObjectRecord(input) && typeof (input as { id?: unknown }).id === 'string'
           ? (input as { id: string }).id.trim()
           : '';
-      const existing = id ? chatMessageDb.getChatMessage(id) : null;
+      const existing = id ? getMessage(id) : null;
       if (existing && id) {
         // Normalize object message payloads to the sanitized JSON string the
         // column stores, mirroring createMessage.

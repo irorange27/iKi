@@ -1,4 +1,5 @@
-import * as chatMessageDb from '../db/chat_message';
+import { getSessionEvents } from '../db/session_events';
+import { getChatThreads } from '../db/chat_thread';
 import * as chatThreadDb from '../db/chat_thread';
 import { extractTextFromMessageParts, isObjectRecord } from './message_parts';
 
@@ -52,8 +53,24 @@ export const searchThreadContent = (rawQuery: string, limit = 12): ThreadContent
   // JSON LIKE prefilter narrows the scan; exact per-message matching happens
   // on the extracted plain text so markup never surfaces in snippets.
   const like = `%${query.replace(/[%_]/g, ch => `\\${ch}`)}%`;
-  const rows = chatMessageDb
-    .searchMessageRows(like, limit * 4)
+  // ADR 011: search the session log. The two message-carrying event types are
+  // read per thread through the (thread_id, revision) index, then the same
+  // JSON prefilter narrows before any text extraction.
+  const rows = getChatThreads()
+    .flatMap(thread =>
+      getSessionEvents(thread.id, ['input_accepted', 'model_output_committed'])
+        .filter(event => JSON.stringify(event.payload).includes(query))
+        .map(event => {
+          const message = (event.payload as { message?: { id?: unknown } }).message;
+          return {
+            id: typeof message?.id === 'string' ? message.id : '',
+            thread_id: thread.id,
+            message: JSON.stringify(message ?? {}),
+            updated_at: event.createdAt,
+          };
+        })
+    )
+    .slice(0, limit * 4)
     .map(row => {
       const parsed = messageSearchableText(row.message);
       return parsed ? { row, parsed } : null;

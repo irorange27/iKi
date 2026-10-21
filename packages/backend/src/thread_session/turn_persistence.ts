@@ -1,7 +1,7 @@
 import { createLogger } from '@iki/backend/logger';
 import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
-import * as chatMessageDb from '@iki/backend/db/chat_message';
+import { findMessageEvent } from '@iki/backend/db/session_events';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 
 const logger = createLogger({ module: 'turn_persistence' });
@@ -155,9 +155,14 @@ export const persistAssistantTurnMessage = (
 export const loadPersistedAssistantParts = (messageId: string): unknown[] | undefined => {
   if (!messageId.trim()) return undefined;
   try {
-    const row = chatMessageDb.getChatMessage(messageId);
-    if (!row) return undefined;
-    const parsed = parseStoredUiMessageRow({ id: row.id, message: row.message });
+    // ADR 011: messages live in the session log, not a row table.
+    const found = findMessageEvent(messageId);
+    if (!found) return undefined;
+    const message = (found.payload as { message?: unknown }).message;
+    const parsed = parseStoredUiMessageRow({
+      id: messageId,
+      message: JSON.stringify(message ?? {}),
+    });
     const parts =
       parsed && typeof parsed === 'object' ? (parsed as { parts?: unknown }).parts : null;
     return Array.isArray(parts) ? parts : undefined;

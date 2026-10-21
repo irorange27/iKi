@@ -139,3 +139,67 @@ export const appendSessionEvents = (
  * Only decisions derived from a read snapshot need expected-revision CAS. */
 export const appendSessionFacts = (threadId: string, events: NewSessionEvent[]): number =>
   append(threadId, null, events)!;
+
+/**
+ * Find the newest message fact carrying `messageId`, across every thread.
+ *
+ * Messages are events (ADR 011), so a lookup by message id is a scan over the
+ * two event types that carry one. There is no `(payload->message->id)` index:
+ * the column is a JSON TEXT blob and SQLite would need a generated column to
+ * index it, which is a schema change this removal does not need yet.
+ *
+ * The `LIKE` prefilter narrows the scan before any JSON is parsed; it is a
+ * superset match (`%id%`), so the caller still confirms the id. Callers that
+ * already hold the thread should pass it — the per-thread form uses the
+ * `(thread_id, revision)` index and does not scan the whole log.
+ */
+export const findMessageEvent = (
+  messageId: string,
+  threadId?: string
+): { threadId: string; payload: unknown } | null => {
+  const needle = messageId.trim();
+  if (!needle) return null;
+  const like = `%${needle.replace(/[%_]/g, ch => `\\${ch}`)}%`;
+  const sql = threadId
+    ? `SELECT thread_id, payload FROM session_events
+        WHERE thread_id = ? AND type IN ('input_accepted','model_output_committed')
+          AND payload LIKE ? ORDER BY revision DESC LIMIT 20`
+    : `SELECT thread_id, payload FROM session_events
+        WHERE type IN ('input_accepted','model_output_committed')
+          AND payload LIKE ? ORDER BY revision DESC LIMIT 20`;
+  const rows = (
+    threadId
+      ? getDb().prepare(sql).all(threadId, like)
+      : getDb().prepare(sql).all(like)
+  ) as Array<{ thread_id: string; payload: string }>;
+
+  for (const row of rows) {
+    try {
+      const payload = JSON.parse(row.payload) as { message?: { id?: unknown } };
+      if (payload?.message?.id === needle) {
+        return { threadId: row.thread_id, payload };
+      }
+    } catch {
+      // A malformed row cannot match; keep scanning rather than failing the
+      // caller over one bad record.
+    }
+  }
+  return null;
+};
+
+/**
+ * The event types that carry a message payload, and the payload schema
+ * version they are written with.
+ *
+ * These are PERSISTED PROTOCOL, not an implementation detail: a value here is
+ * written into rows that outlive the code. They live in the db layer because
+ * `turn_prep` writes them and may not import `thread_session` (R5); the
+ * reducer in `thread_session/session_log.ts` reads the same strings. Changing
+ * a value means migrating the stored rows, not editing a constant.
+ */
+export const MESSAGE_EVENT_TYPES = {
+  INPUT_ACCEPTED: 'input_accepted',
+  MODEL_OUTPUT_COMMITTED: 'model_output_committed',
+} as const;
+
+export const SESSION_EVENT_VERSION = 1;

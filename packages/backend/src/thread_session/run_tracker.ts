@@ -9,7 +9,6 @@ import {
 } from '@iki/backend/db/agent_runs';
 import { claimQueuedAgentRun } from '@iki/backend/db/agent_runs';
 import { hasLiveThreadRunLease } from '@iki/backend/db/thread_run_locks';
-import { getChatMessages, updateChatMessage } from '@iki/backend/db/chat_message';
 import { expirePendingToolCallApprovalsByRunIds, getToolCallApprovalSession } from '@iki/backend/db/tool_call_approval';
 import {
   APPROVAL_DECIDED,
@@ -638,36 +637,15 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
   const threadIds = Array.from(
     new Set(reclaimable.map(run => run.threadId).filter((id): id is string => typeof id === 'string'))
   );
-  let interruptedToolParts = 0;
-  for (const threadId of threadIds) {
-    for (const messageRow of getChatMessages(threadId)) {
-      if (!messageRow.message.includes('"dynamic-tool"')) continue;
-      let parsed: { parts?: unknown[] } | null = null;
-      try {
-        parsed = JSON.parse(messageRow.message);
-      } catch {
-        continue;
-      }
-      if (!Array.isArray(parsed?.parts)) continue;
-
-      let changed = false;
-      const parts = parsed.parts.map(part => {
-        if (!isObjectRecord(part) || part.type !== 'dynamic-tool') return part;
-        if (isTerminalDynamicToolPart(part)) return part;
-        changed = true;
-        interruptedToolParts += 1;
-        return toInterruptedToolPart(
-          part as unknown as DynamicToolPart,
-          interruptedToolPartErrorText(part as unknown as DynamicToolPart)
-        );
-      });
-      if (changed) {
-        updateChatMessage(messageRow.id, {
-          message: JSON.stringify({ ...parsed, parts }),
-        });
-      }
-    }
-  }
+  // ADR 011: the repair pass that used to REWRITE unfinished tool parts in
+  // `chat_messages` is gone with the table. An append-only log cannot be
+  // patched, and it does not need to be: `toModelInputMessages` already
+  // repairs an unfinished `dynamic-tool` part at READ time
+  // (`repairInterruptedTools`), so every consumer sees the interrupted state
+  // without any row being touched. The counter stays for the recovery result
+  // shape; it now reports 0 because nothing is rewritten.
+  const interruptedToolParts = 0;
+  void threadIds;
 
   // Reconcile approval and UI records before making the Run terminal. If any
   // reconciliation fails, the next startup still finds the Run as stuck and
