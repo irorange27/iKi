@@ -170,7 +170,7 @@ export const buildWorkspaceSystemMessageForSelection = (
   return (
     `Current workspace: ${workspaceLabel} (${workspacePath}). ` +
     'Prefer relative paths from this root, default shell work to this directory, and do not operate outside it unless the user explicitly changes workspace. ' +
-    `Additional writable app data root: ${brainPath}. Use it for continuity files such as owner.md and memory_inbox/.`
+    `Additional writable app data root: ${brainPath} (addressable as brain/). Use it for notes and files that should outlive this workspace.`
   );
 };
 

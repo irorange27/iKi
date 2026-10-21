@@ -39,7 +39,6 @@ import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { z } from 'zod';
 
 const memory = {
-  onMessagePersisted: vi.fn(),
   injectMemoryIntoMessages: vi.fn((messages: unknown[]) => messages),
   getAffectContextMessage: () => '',
 };
@@ -61,7 +60,6 @@ describe('turn preparer explicit tool upper bound', () => {
         skillMode: 'manual' as const,
       }),
       getAssistantProfileContextMessage: () => '',
-      retrieveRelevantContinuity: () => null,
     });
 
   const prepare = async (options: Record<string, unknown>) =>
