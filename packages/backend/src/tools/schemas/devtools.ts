@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { toolCallDescriptionField } from './shared';
 
-const elementSourceInputShape = {
+export const ElementSourceInputSchema = z.object({
   target: z
     .enum(['selected', 'hovered', 'selector', 'point'])
     .optional()
@@ -28,6 +28,4 @@ const elementSourceInputShape = {
     .optional()
     .describe('Viewport y in CSS pixels; required when target is `point`'),
   description: toolCallDescriptionField,
-};
-
-export const ElementSourceInputSchema = z.object(elementSourceInputShape);
+});

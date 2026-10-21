@@ -169,9 +169,7 @@ const AwaiterRecordOutputSchema = z
     id: z.string().optional(),
     title: z.string().optional(),
     instruction: z.string().optional(),
-    status: z
-      .enum(['armed', 'waking', 'completed', 'cancelled', 'failed', 'expired'])
-      .optional(),
+    status: z.enum(['armed', 'waking', 'completed', 'cancelled', 'failed', 'expired']).optional(),
     thread_id: z.string().optional(),
     origin_run_id: z.string().nullable().optional(),
     origin_checkpoint_id: z.string().nullable().optional(),

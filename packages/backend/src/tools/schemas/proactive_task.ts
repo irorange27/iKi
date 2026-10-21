@@ -11,29 +11,17 @@ const proactiveTaskLookupInputFields = {
 const proactiveTaskSafeToolSchema = z.enum(SAFE_PROACTIVE_TASK_TOOLS);
 
 const proactiveTaskScheduleBaseFields = {
-  timezone: z
-    .string()
-    .trim()
-    .describe('Optional IANA timezone such as "Asia/Shanghai"')
-    .optional(),
+  timezone: z.string().trim().describe('Optional IANA timezone such as "Asia/Shanghai"').optional(),
 };
 
 const proactiveTaskScheduleInputSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('interval'),
-    intervalMinutes: z
-      .number()
-      .int()
-      .min(1)
-      .describe('Run every N minutes'),
+    intervalMinutes: z.number().int().min(1).describe('Run every N minutes'),
   }),
   z.object({
     kind: z.literal('cron'),
-    cronExpression: z
-      .string()
-      .trim()
-      .min(1)
-      .describe('Five-field cron expression'),
+    cronExpression: z.string().trim().min(1).describe('Five-field cron expression'),
     ...proactiveTaskScheduleBaseFields,
   }),
   z.object({
@@ -60,7 +48,7 @@ const proactiveTaskScheduleInputSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
-const listProactiveTasksInputShape = {
+export const ListProactiveTasksInputSchema = z.object({
   query: z.string().trim().describe('Optional search text for matching proactive tasks').optional(),
   limit: z
     .number()
@@ -69,9 +57,7 @@ const listProactiveTasksInputShape = {
     .optional()
     .default(DEFAULT_PROACTIVE_TASK_LIST_LIMIT),
   description: toolCallDescriptionField,
-};
-
-export const ListProactiveTasksInputSchema = z.object(listProactiveTasksInputShape);
+});
 
 const proactiveTaskLookupShape = {
   id: proactiveTaskLookupInputFields.id.optional(),
@@ -79,70 +65,71 @@ const proactiveTaskLookupShape = {
   description: toolCallDescriptionField,
 };
 
-export const ReadProactiveTaskInputSchema = z.object(proactiveTaskLookupShape).superRefine(requireEitherField('id', 'name'));
+export const ReadProactiveTaskInputSchema = z
+  .object(proactiveTaskLookupShape)
+  .superRefine(requireEitherField('id', 'name'));
 
-const writeProactiveTaskInputShape = {
-  action: z
-    .enum(['create', 'update'])
-    .describe('Create a new proactive task or update an existing one'),
-  id: proactiveTaskLookupInputFields.id.optional(),
-  currentName: proactiveTaskLookupInputFields.name
-    .describe('Exact existing task name when updating by name')
-    .optional(),
-  name: proactiveTaskLookupInputFields.name
-    .describe('Display name for the task')
-    .optional(),
-  prompt: z
-    .string()
-    .trim()
-    .describe('Instruction the scheduled task should execute on each run')
-    .optional(),
-  schedule: proactiveTaskScheduleInputSchema.describe(
-    'Recurring schedule. Use daily/weekly presets instead of raw cron when possible.'
-  ).optional(),
-  enabled: z.boolean().describe('Whether the task should be enabled after this write').optional(),
-  notify: z
-    .boolean()
-    .describe('Whether the desktop app should show completion/failure notifications')
-    .optional(),
-  delivery: z
-    .enum(['current_thread', 'dedicated_thread', 'specific_thread'])
-    .describe('Where scheduled messages should be posted')
-    .optional(),
-  threadId: z
-    .string()
-    .trim()
-    .describe('Explicit thread id when delivery is specific_thread')
-    .optional(),
-  providerType: z
-    .string()
-    .trim()
-    .describe('Optional provider type override; defaults to the current chat model')
-    .optional(),
-  providerId: z
-    .string()
-    .trim()
-    .describe('Optional provider id override; defaults to the current chat provider instance')
-    .optional(),
-  model: z
-    .string()
-    .trim()
-    .describe('Optional model override; defaults to the current chat model')
-    .optional(),
-  toolMode: z
-    .enum(['auto', 'manual', 'disabled'])
-    .describe('How the scheduled task may use safe tools when it runs')
-    .optional(),
-  tools: z
-    .array(proactiveTaskSafeToolSchema)
-    .describe('Safe tool allowlist when toolMode is manual')
-    .optional(),
-  description: toolCallDescriptionField,
-};
-
-export const WriteProactiveTaskInputSchema = z.object(writeProactiveTaskInputShape).superRefine((value, ctx) => {
+export const WriteProactiveTaskInputSchema = z
+  .object({
+    action: z
+      .enum(['create', 'update'])
+      .describe('Create a new proactive task or update an existing one'),
+    id: proactiveTaskLookupInputFields.id.optional(),
+    currentName: proactiveTaskLookupInputFields.name
+      .describe('Exact existing task name when updating by name')
+      .optional(),
+    name: proactiveTaskLookupInputFields.name.describe('Display name for the task').optional(),
+    prompt: z
+      .string()
+      .trim()
+      .describe('Instruction the scheduled task should execute on each run')
+      .optional(),
+    schedule: proactiveTaskScheduleInputSchema
+      .describe('Recurring schedule. Use daily/weekly presets instead of raw cron when possible.')
+      .optional(),
+    enabled: z.boolean().describe('Whether the task should be enabled after this write').optional(),
+    notify: z
+      .boolean()
+      .describe('Whether the desktop app should show completion/failure notifications')
+      .optional(),
+    delivery: z
+      .enum(['current_thread', 'dedicated_thread', 'specific_thread'])
+      .describe('Where scheduled messages should be posted')
+      .optional(),
+    threadId: z
+      .string()
+      .trim()
+      .describe('Explicit thread id when delivery is specific_thread')
+      .optional(),
+    providerType: z
+      .string()
+      .trim()
+      .describe('Optional provider type override; defaults to the current chat model')
+      .optional(),
+    providerId: z
+      .string()
+      .trim()
+      .describe('Optional provider id override; defaults to the current chat provider instance')
+      .optional(),
+    model: z
+      .string()
+      .trim()
+      .describe('Optional model override; defaults to the current chat model')
+      .optional(),
+    toolMode: z
+      .enum(['auto', 'manual', 'disabled'])
+      .describe('How the scheduled task may use safe tools when it runs')
+      .optional(),
+    tools: z
+      .array(proactiveTaskSafeToolSchema)
+      .describe('Safe tool allowlist when toolMode is manual')
+      .optional(),
+    description: toolCallDescriptionField,
+  })
+  .superRefine((value, ctx) => {
     const hasId = typeof value.id === 'string' && value.id.trim().length > 0;
-    const hasCurrentName = typeof value.currentName === 'string' && value.currentName.trim().length > 0;
+    const hasCurrentName =
+      typeof value.currentName === 'string' && value.currentName.trim().length > 0;
     const hasName = typeof value.name === 'string' && value.name.trim().length > 0;
     const hasPrompt = typeof value.prompt === 'string' && value.prompt.trim().length > 0;
 
@@ -198,5 +185,6 @@ export const WriteProactiveTaskInputSchema = z.object(writeProactiveTaskInputSha
     }
   });
 
-
-export const DeleteProactiveTaskInputSchema = z.object(proactiveTaskLookupShape).superRefine(requireEitherField('id', 'name'));
+export const DeleteProactiveTaskInputSchema = z
+  .object(proactiveTaskLookupShape)
+  .superRefine(requireEitherField('id', 'name'));

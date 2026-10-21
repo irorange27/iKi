@@ -1,9 +1,16 @@
 import { z } from 'zod';
 
 const planToolStepShape = {
-  id: z.string().trim().min(1).describe('Short, stable identifier for this step (e.g. "analyze-files")'),
+  id: z
+    .string()
+    .trim()
+    .min(1)
+    .describe('Short, stable identifier for this step (e.g. "analyze-files")'),
   description: z.string().min(1).describe('What this step does and why'),
-  expectedOutput: z.string().min(1).describe('Concrete deliverable or result expected from this step'),
+  expectedOutput: z
+    .string()
+    .min(1)
+    .describe('Concrete deliverable or result expected from this step'),
   dependsOn: z
     .array(z.string().trim().min(1))
     .max(20)
@@ -16,12 +23,17 @@ const planToolStepShape = {
     .describe('Tools likely needed for this step')
     .optional()
     .default([]),
-  strategy: z.string().trim().min(1).describe('Brief approach note -- how to tackle this step').optional(),
+  strategy: z
+    .string()
+    .trim()
+    .min(1)
+    .describe('Brief approach note -- how to tackle this step')
+    .optional(),
 };
 
 export const MAX_PLAN_STEPS = 10;
 
-const planToolInputShape = {
+export const PlanToolInputSchema = z.object({
   steps: z
     .array(z.object(planToolStepShape))
     .min(1)
@@ -33,6 +45,4 @@ const planToolInputShape = {
     .string()
     .min(1)
     .describe('High-level approach: key decisions, constraints, and order of operations'),
-};
-
-export const PlanToolInputSchema = z.object(planToolInputShape);
+});

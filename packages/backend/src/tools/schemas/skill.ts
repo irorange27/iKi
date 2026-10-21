@@ -21,9 +21,7 @@ export const LoadSkillInputSchema = z.object({
   description: toolCallDescriptionField,
 });
 
-
-
-const listPersonalSkillsInputShape = {
+export const ListPersonalSkillsInputSchema = z.object({
   query: z.string().trim().describe('Optional search text for matching personal skills').optional(),
   limit: z
     .number()
@@ -32,11 +30,9 @@ const listPersonalSkillsInputShape = {
     .optional()
     .default(DEFAULT_PERSONAL_SKILL_LIST_LIMIT),
   description: toolCallDescriptionField,
-};
+});
 
-export const ListPersonalSkillsInputSchema = z.object(listPersonalSkillsInputShape);
-
-const readPersonalSkillInputShape = {
+export const ReadPersonalSkillInputSchema = z.object({
   id: personalSkillIdInputFields.id,
   maxChars: z
     .number()
@@ -45,11 +41,9 @@ const readPersonalSkillInputShape = {
     .optional()
     .default(DEFAULT_PERSONAL_SKILL_READ_MAX_CHARS),
   description: toolCallDescriptionField,
-};
+});
 
-export const ReadPersonalSkillInputSchema = z.object(readPersonalSkillInputShape);
-
-const writePersonalSkillInputShape = {
+export const WritePersonalSkillInputSchema = z.object({
   id: personalSkillIdInputFields.id,
   skillName: z
     .string()
@@ -67,13 +61,9 @@ const writePersonalSkillInputShape = {
     .min(1)
     .describe('Markdown instructions body to store below the generated frontmatter'),
   description: toolCallDescriptionField,
-};
-
-export const WritePersonalSkillInputSchema = z.object(writePersonalSkillInputShape);
+});
 
 export const DeletePersonalSkillInputSchema = z.object({
   id: personalSkillIdInputFields.id,
   description: toolCallDescriptionField,
 });
-
-

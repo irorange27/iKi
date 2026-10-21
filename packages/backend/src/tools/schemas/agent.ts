@@ -14,7 +14,7 @@ export const agentUsedToolOutputSchema = z
   })
   .passthrough();
 
-const agentToolInputShape = {
+export const AgentToolInputSchema = z.object({
   task: z
     .string()
     .trim()
@@ -41,7 +41,7 @@ const agentToolInputShape = {
     .optional()
     .default('general')
     .describe(
-      "general (default): full approval-free tool set for open-ended subtasks. explorer: read-only research agent — reads files, searches the web, and loads skills; it cannot create, modify, or delete anything. Use explorer for investigation subtasks so nothing can be changed by accident."
+      'general (default): full approval-free tool set for open-ended subtasks. explorer: read-only research agent — reads files, searches the web, and loads skills; it cannot create, modify, or delete anything. Use explorer for investigation subtasks so nothing can be changed by accident.'
     ),
   tools: z
     .array(z.string().trim().min(1))
@@ -61,6 +61,4 @@ const agentToolInputShape = {
     .optional()
     .default(DEFAULT_AGENT_MAX_ITERATIONS),
   description: toolCallDescriptionField,
-};
-
-export const AgentToolInputSchema = z.object(agentToolInputShape);
+});
