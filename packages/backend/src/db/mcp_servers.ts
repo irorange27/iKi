@@ -2,6 +2,7 @@ import { getDb } from './database';
 import type { McpServer, McpServerInput, McpServerUpdate } from '@iki/backend/types/mcp';
 import { toIsoNow } from '@iki/backend/utils/text';
 import { buildSetClause } from './utils';
+import { parseJsonStringArray, toStringArray } from '@iki/backend/utils/json';
 
 type McpServerRow = Omit<McpServer, 'enabled' | 'args' | 'tool_allowlist' | 'headers' | 'env'> & {
   enabled: number | boolean;
@@ -9,30 +10,6 @@ type McpServerRow = Omit<McpServer, 'enabled' | 'args' | 'tool_allowlist' | 'hea
   tool_allowlist?: string | null;
   headers?: string | null;
   env?: string | null;
-};
-
-const toStringArray = (value: unknown): string[] => {
-  if (Array.isArray(value)) {
-    return value
-      .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-      .map(entry => entry.trim());
-  }
-  if (typeof value === 'string' && value.trim()) {
-    return [value.trim()];
-  }
-  return [];
-};
-
-const parseStringArray = (raw: string | null | undefined): string[] | null => {
-  if (!raw || typeof raw !== 'string') return null;
-  try {
-    const parsed = JSON.parse(raw);
-    const normalized = toStringArray(parsed);
-    return normalized.length > 0 ? normalized : null;
-  } catch {
-    const normalized = toStringArray(raw);
-    return normalized.length > 0 ? normalized : null;
-  }
 };
 
 const parseStringMap = (raw: string | null | undefined): Record<string, string> | null => {
@@ -52,11 +29,13 @@ const parseStringMap = (raw: string | null | undefined): Record<string, string> 
   }
 };
 
+const emptyToNull = (value: string[]): string[] | null => (value.length > 0 ? value : null);
+
 const normalizeRow = (row: McpServerRow): McpServer => ({
   ...row,
   enabled: Boolean(row.enabled),
-  args: parseStringArray(row.args) ?? null,
-  tool_allowlist: parseStringArray(row.tool_allowlist) ?? null,
+  args: emptyToNull(parseJsonStringArray(row.args)),
+  tool_allowlist: emptyToNull(parseJsonStringArray(row.tool_allowlist)),
   headers: parseStringMap(row.headers) ?? null,
   env: parseStringMap(row.env) ?? null,
 });
