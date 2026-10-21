@@ -254,7 +254,7 @@ const LEGACY_CHAT_UI_METADATA_PART_TYPES = new Set<LegacyChatUiMetadataPartType>
   'token-usage',
 ]);
 
-export const createSkillUsagePart = (data: SkillUsagePartData): SkillUsagePart => ({
+const createSkillUsagePart = (data: SkillUsagePartData): SkillUsagePart => ({
   type: 'data-skill-usage',
   data,
 });
@@ -266,12 +266,12 @@ export const createComposerInvocationPart = (
   data,
 });
 
-export const createContextReportPart = (data: ContextReportPartData): ContextReportPart => ({
+const createContextReportPart = (data: ContextReportPartData): ContextReportPart => ({
   type: 'data-context-report',
   data,
 });
 
-export const createTokenUsagePart = (data: TokenUsagePartData): TokenUsagePart => ({
+const createTokenUsagePart = (data: TokenUsagePartData): TokenUsagePart => ({
   type: 'data-token-usage',
   data,
 });
@@ -291,7 +291,7 @@ export const isSkillUsagePart = (part: unknown): part is SkillUsagePart =>
 export const isComposerInvocationPart = (part: unknown): part is ComposerInvocationPart =>
   isObjectRecord(part) && part.type === 'data-composer-invocation';
 
-export const isContextReportPart = (part: unknown): part is ContextReportPart =>
+const isContextReportPart = (part: unknown): part is ContextReportPart =>
   isObjectRecord(part) && part.type === 'data-context-report';
 
 export const isTokenUsagePart = (part: unknown): part is TokenUsagePart =>
@@ -320,7 +320,7 @@ export const getComposerInvocationPartData = (part: unknown): ComposerInvocation
   return isObjectRecord(part.data) ? (part.data as ComposerInvocationPartData) : {};
 };
 
-export const getContextReportPartData = (part: unknown): ContextReportPartData | null => {
+const getContextReportPartData = (part: unknown): ContextReportPartData | null => {
   if (!isContextReportPart(part)) return null;
   return isObjectRecord(part.data) ? (part.data as ContextReportPartData) : {};
 };

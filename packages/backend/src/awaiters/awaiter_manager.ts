@@ -99,7 +99,7 @@ const resolveAwaiterByTitle = (title: string): Awaiter | null => {
   return matches[0];
 };
 
-export const resolveAwaiter = (reference: AwaiterReference): Awaiter | null => {
+const resolveAwaiter = (reference: AwaiterReference): Awaiter | null => {
   const byId = normalizeWhitespace(reference.id);
   if (byId) {
     return awaitersDb.getAwaiter(byId);

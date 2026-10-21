@@ -40,7 +40,7 @@ const createMessage = (
     stopReason,
   }) as AssistantMessage;
 
-export const piEventsForScript = (script: PiScript): AssistantMessageEvent[] => {
+const piEventsForScript = (script: PiScript): AssistantMessageEvent[] => {
   const content: AssistantMessage['content'] = [];
   const events: AssistantMessageEvent[] = [];
   let index = 0;

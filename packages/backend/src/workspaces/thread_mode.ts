@@ -7,7 +7,7 @@ export type ThreadApprovalPolicy = 'never' | 'trustWorkspace' | 'askRisky' | 'al
 
 export const THREAD_APPROVAL_POLICY_KEY = 'approvalPolicy';
 
-export const THREAD_APPROVAL_POLICIES: readonly ThreadApprovalPolicy[] = [
+const THREAD_APPROVAL_POLICIES: readonly ThreadApprovalPolicy[] = [
   'never',
   'trustWorkspace',
   'askRisky',
@@ -22,7 +22,7 @@ export const parseApprovalPolicy = (value: unknown): ThreadApprovalPolicy | null
 
 export const THREAD_SCRATCH_WORKSPACE_PREFIX = 'workspace_thread_';
 
-export const THREAD_WORK_MODE_METADATA_KEY = 'mode';
+const THREAD_WORK_MODE_METADATA_KEY = 'mode';
 
 const isScratchOrWorktreeWorkspaceId = (workspaceId: string): boolean =>
   workspaceId.startsWith(THREAD_SCRATCH_WORKSPACE_PREFIX) ||

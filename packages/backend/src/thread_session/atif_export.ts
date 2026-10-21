@@ -48,7 +48,7 @@ const AtifStepSchema = z.object({
   extra: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const AtifTrajectorySchema = z.object({
+const AtifTrajectorySchema = z.object({
   schema_version: z.literal(ATIF_SCHEMA_VERSION),
   session_id: z.string().optional(),
   trajectory_id: z.string().optional(),

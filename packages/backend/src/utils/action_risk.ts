@@ -4,7 +4,7 @@ export type ToolApprovalDecision = 'allow' | 'ask';
 
 export type ApprovalPolicy = 'never' | 'trustWorkspace' | 'askRisky' | 'always';
 
-export const READ_TOOLS = new Set([
+const READ_TOOLS = new Set([
   'read_file',
   'web_search',
   'fetch',
@@ -17,7 +17,7 @@ export const READ_TOOLS = new Set([
   'read_proactive_task',
 ]);
 
-export const WORKSPACE_WRITE_TOOLS = new Set(['write_file', 'edit', 'undo_edit']);
+const WORKSPACE_WRITE_TOOLS = new Set(['write_file', 'edit', 'undo_edit']);
 
 export type ToolApprovalDeclaration = {
   name: string;

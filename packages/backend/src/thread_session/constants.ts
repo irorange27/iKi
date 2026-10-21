@@ -1,4 +1,4 @@
-export const DEFAULT_TOOL_CALL_MAX_ITERATIONS = 200;
+const DEFAULT_TOOL_CALL_MAX_ITERATIONS = 200;
 
 export const resolveToolCallMaxIterations = (value?: number): number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0

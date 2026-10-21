@@ -50,7 +50,7 @@ const trimmedOrUndefined = (value: string | null | undefined): string | undefine
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-export const getRunMaxIterations = (run: AgentRun | null | undefined): number | undefined => {
+const getRunMaxIterations = (run: AgentRun | null | undefined): number | undefined => {
   const value = run?.input?.metadata?.maxIterations;
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   return Math.max(1, Math.trunc(value));

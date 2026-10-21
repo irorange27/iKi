@@ -25,10 +25,10 @@ const normalizePassword = (network: NetworkConfig | null | undefined): string =>
   return typeof password === 'string' ? password : '';
 };
 
-export const hasEnabledProxy = (network: NetworkConfig | null | undefined): boolean =>
+const hasEnabledProxy = (network: NetworkConfig | null | undefined): boolean =>
   Boolean(network?.proxy?.enable);
 
-export const getProxyProtocol = (
+const getProxyProtocol = (
   network: NetworkConfig | null | undefined
 ): AppConfig['network']['proxy']['type'] => network?.proxy?.type || 'http';
 

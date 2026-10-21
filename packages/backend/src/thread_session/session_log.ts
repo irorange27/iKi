@@ -41,9 +41,9 @@ export const TOOL_EXECUTED = 'tool_executed';
 export const STEERING_INPUT_ACCEPTED = 'steering_input_accepted';
 export const MODEL_TEXT_COMMITTED = 'model_text_committed';
 export const MODEL_OUTPUT_COMMITTED = 'model_output_committed';
-export const TURN_COMPLETED = 'turn_completed';
-export const TURN_FAILED = 'turn_failed';
-export const TURN_CANCELLED = 'turn_cancelled';
+const TURN_COMPLETED = 'turn_completed';
+const TURN_FAILED = 'turn_failed';
+const TURN_CANCELLED = 'turn_cancelled';
 export const APPROVAL_REQUESTED = 'approval_requested';
 export const APPROVAL_DECIDED = 'approval_decided';
 

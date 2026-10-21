@@ -30,9 +30,9 @@ const EXECUTION_EVENTS = [TOOL_EXECUTION_PREPARED, TOOL_EXECUTION_STARTED, TOOL_
 
 export type ReplayPolicy = 'safe' | 'unsafe';
 
-export const TOOL_EXECUTION_INTERRUPTED = 'tool-execution-interrupted';
+const TOOL_EXECUTION_INTERRUPTED = 'tool-execution-interrupted';
 
-export const toolInterruptedMessage = (toolName: string): string =>
+const toolInterruptedMessage = (toolName: string): string =>
   `Tool ${toolName} was interrupted and may have partially run; its outcome is unknown, so it was not retried. Verify the current state before calling it again.`;
 
 type ToolResult = {

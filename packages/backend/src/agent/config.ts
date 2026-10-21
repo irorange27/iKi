@@ -7,7 +7,7 @@ import {
 
 const configLogger = createLogger({ module: 'agent_config' });
 
-export const getDefaultAgentConfig = (): AgentConfig =>
+const getDefaultAgentConfig = (): AgentConfig =>
   AgentConfigSchema.parse({
     enabled: false,
     systemPrompt: 'You are a helpful AI assistant. You are capable, autonomous, and helpful.',

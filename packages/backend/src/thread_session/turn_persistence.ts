@@ -11,7 +11,7 @@ export type ConversationStore = {
   upsertTurnMessage: (input: unknown) => unknown;
 };
 
-export const UI_MESSAGE_METADATA_FORMAT = 'ai-ui-message-v1';
+const UI_MESSAGE_METADATA_FORMAT = 'ai-ui-message-v1';
 
 export const pickUserTurnMessage = (
   options: ChatTurnOptions

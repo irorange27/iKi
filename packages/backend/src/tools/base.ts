@@ -73,7 +73,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   }
 }
 
-export class ToolRegistry {
+class ToolRegistry {
   private tools = new Map<string, AgentTool>();
 
   register(tool: AgentTool | BaseTool): void {

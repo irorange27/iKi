@@ -1,12 +1,12 @@
 import type { ModelMessage } from '@iki/backend/message/model_history';
 
 export const SUMMARY_OPEN_TAG = '<compacted-summary>';
-export const SUMMARY_CLOSE_TAG = '</compacted-summary>';
+const SUMMARY_CLOSE_TAG = '</compacted-summary>';
 
 // Kept short on purpose: the preamble is paid on every compacted request, and
 // the step-budget tests run windows small enough that a 300-character
 // instruction is a measurable share of the budget. The meaning is unchanged.
-export const CHECKPOINT_PREAMBLE =
+const CHECKPOINT_PREAMBLE =
   '[compacted checkpoint] Treat as established background; build on it without restating it, and continue from the messages below.';
 
 export const COMPACTION_INSTRUCTION = [

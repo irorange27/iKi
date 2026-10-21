@@ -38,7 +38,7 @@ export const getNetworkTimeoutMs = (): number => {
   return clampNetworkTimeoutMs(getNetworkConfig()?.timeout);
 };
 
-export const clampNetworkRetryAttempts = (retries: unknown): number => {
+const clampNetworkRetryAttempts = (retries: unknown): number => {
   if (typeof retries !== 'number' || !Number.isFinite(retries)) {
     return DEFAULT_NETWORK_RETRY_ATTEMPTS;
   }
@@ -53,7 +53,7 @@ export const getNetworkRetryAttempts = (): number => {
   return clampNetworkRetryAttempts(getNetworkConfig()?.retryAttempts);
 };
 
-export const getConfiguredProxyUrl = (): string | null => {
+const getConfiguredProxyUrl = (): string | null => {
   return buildProxyUrl(getNetworkConfig());
 };
 

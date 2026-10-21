@@ -86,7 +86,7 @@ const resolveBrainRoot = async (): Promise<WorkspaceRoot> => {
   return { resolvedPath, realPath };
 };
 
-export const resolveWorkspaceRoots = async (): Promise<WorkspaceRoot[]> => {
+const resolveWorkspaceRoots = async (): Promise<WorkspaceRoot[]> => {
   const explicitRoots = await resolveExplicitWorkspaceRoots();
   const brainRoot = await resolveBrainRoot();
   const deduped = new Map<string, WorkspaceRoot>();

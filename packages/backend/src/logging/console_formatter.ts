@@ -161,7 +161,7 @@ const buildExtrasLabel = (entry: StructuredConsoleFormatterInput): string => {
   return parts.join('  ');
 };
 
-export const createStructuredConsoleSegments = (
+const createStructuredConsoleSegments = (
   entry: StructuredConsoleFormatterInput,
   options?: ConsoleFormatterOptions
 ): ConsoleLogSegments => {

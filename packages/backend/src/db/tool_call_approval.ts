@@ -32,7 +32,7 @@ export const getToolCallApproval = (approvalId: string): ToolCallApproval | null
   return row ?? null;
 };
 
-export const getToolCallApprovalsBySession = (
+const getToolCallApprovalsBySession = (
   sessionId: string,
   states?: ToolCallApprovalState[]
 ): ToolCallApproval[] => {

@@ -151,7 +151,7 @@ type TurnOutcomeSpec = {
 
 const asOptionalText = (text: string): string | undefined => (text ? text : undefined);
 
-export const TURN_OUTCOMES: Record<TurnDriverResult['outcome'], TurnOutcomeSpec> = {
+const TURN_OUTCOMES: Record<TurnDriverResult['outcome'], TurnOutcomeSpec> = {
   completed: {
     runStatus: 'completed',
     finishReason: 'completed',

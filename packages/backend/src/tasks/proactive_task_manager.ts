@@ -123,7 +123,7 @@ const resolveTaskByName = (name: string): ProactiveTask | null => {
   return matches[0];
 };
 
-export const resolveProactiveTask = (reference: ProactiveTaskReference): ProactiveTask | null => {
+const resolveProactiveTask = (reference: ProactiveTaskReference): ProactiveTask | null => {
   const byId = normalizeWhitespace(reference.id);
   if (byId) {
     return tasksDb.getProactiveTask(byId);

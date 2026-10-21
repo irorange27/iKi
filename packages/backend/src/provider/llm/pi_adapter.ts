@@ -17,7 +17,7 @@ import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 
 const ANTHROPIC_PROVIDER_TYPE = 'anthropic';
 
-export class PiProjectionError extends Error {
+class PiProjectionError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'PiProjectionError';

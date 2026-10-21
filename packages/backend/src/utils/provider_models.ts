@@ -338,7 +338,7 @@ export const getProviderModelOptions = (
   return normalizeProviderModelOptions(modelOptions[trimmedModelId]) ?? null;
 };
 
-export const pruneProviderModelOptionsMap = (
+const pruneProviderModelOptionsMap = (
   modelOptions: ProviderModelOptionsMap,
   modelIds: string[]
 ): ProviderModelOptionsMap => {

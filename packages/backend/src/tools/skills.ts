@@ -64,7 +64,7 @@ export const getSkillRootsForUi = (): Array<{ source: SkillSource; path: string 
   return getSkillRootsInternal().map(root => ({ source: root.source, path: root.root }));
 };
 
-export const getSkillRootPath = (source: SkillSource): string => {
+const getSkillRootPath = (source: SkillSource): string => {
   const root = getSkillRootsInternal().find(entry => entry.source === source)?.root;
   if (root) return root;
   return source === 'codex'

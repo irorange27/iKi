@@ -28,7 +28,7 @@ export const AgentConfigSchema = z.object({
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
-export const ToolApprovalModeSchema = z.enum(['configurable', 'always']);
+const ToolApprovalModeSchema = z.enum(['configurable', 'always']);
 export type ToolApprovalMode = z.infer<typeof ToolApprovalModeSchema>;
 
 export const AgentToolSchema = z.object({
@@ -65,13 +65,13 @@ export type AgentTool = Omit<z.infer<typeof AgentToolSchema>, 'needsApproval'> &
   retry?: ToolRetryConfig;
 };
 
-export const ToolCallSchema = z.object({
+const ToolCallSchema = z.object({
   toolName: z.string(),
   args: z.record(z.string(), z.unknown()),
   result: z.unknown().optional(),
 });
 
-export const ToolApprovalRequestSchema = z.object({
+const ToolApprovalRequestSchema = z.object({
   approvalId: z.string(),
   toolCallId: z.string().optional(),
   toolCall: z
@@ -84,7 +84,7 @@ export const ToolApprovalRequestSchema = z.object({
 
 export type ToolApprovalRequest = z.infer<typeof ToolApprovalRequestSchema>;
 
-export const AgentUsageSchema = z.object({
+const AgentUsageSchema = z.object({
   inputTokens: z.number().int().nonnegative().default(0),
   outputTokens: z.number().int().nonnegative().default(0),
   totalTokens: z.number().int().nonnegative().default(0),
