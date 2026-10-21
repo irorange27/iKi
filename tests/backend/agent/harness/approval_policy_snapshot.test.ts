@@ -1,13 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { listToolAllowPatternsMock } = vi.hoisted(() => ({
-  listToolAllowPatternsMock: vi.fn((): string[] => []),
-}));
-
-vi.mock('@iki/backend/db/tool_allowlist', () => ({
-  listToolAllowPatterns: listToolAllowPatternsMock,
-}));
-
 import { registerStandardTools } from '@iki/backend/tools';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
@@ -41,55 +33,46 @@ const resolveWithBox = (box: ApprovalPolicyBox): AgentTool[] =>
   });
 
 const need = (tools: AgentTool[], name: string) =>
-  tools.find(tool => tool.name === name)!.needsApproval as (input: unknown) => boolean;
+  // The decision is ASYNC (it may await a function-valued declaration), so the
+  // helper returns a promise and every assertion awaits it.
+  tools.find(tool => tool.name === name)!.needsApproval as (
+    input: unknown
+  ) => boolean | Promise<boolean>;
 
 // Per-step semantics: one SDK step's tool calls share a policy snapshot, and a
 // user change lands on the next step (see agent_harness onModelStep).
 describe('approval policy snapshots', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listToolAllowPatternsMock.mockReturnValue([]);
   });
 
-  it('shares one allowlist read across the tool calls of a step', () => {
-    listToolAllowPatternsMock.mockReturnValue(['{"path":"allowed.txt"}']);
-    const box = createApprovalPolicyBox('askRisky');
-    const tools = resolveWithBox(box);
-    const writeNeed = need(tools, 'write_file');
-
-    writeNeed({ path: 'allowed.txt' });
-    writeNeed({ path: 'other.txt' });
-    expect(listToolAllowPatternsMock).toHaveBeenCalledTimes(1);
-
-    advanceApprovalPolicySnapshot(box, 'askRisky');
-    writeNeed({ path: 'allowed.txt' });
-    expect(listToolAllowPatternsMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('honours a policy change from the next step onward', () => {
+  it('honours a policy change from the next step onward', async () => {
     const box = createApprovalPolicyBox('never');
     const tools = resolveWithBox(box);
     const writeNeed = need(tools, 'write_file');
 
-    expect(writeNeed({ path: 'a.txt' })).toBe(false);
+    expect(await writeNeed({ path: 'a.txt' })).toBe(false);
 
     advanceApprovalPolicySnapshot(box, 'always');
-    expect(writeNeed({ path: 'a.txt' })).toBe(true);
+    expect(await writeNeed({ path: 'a.txt' })).toBe(true);
   });
 
-  it('applies a learned allow rule once the snapshot advances', () => {
+  it('does not let a learned allow rule reach the decision any more', async () => {
+    // ADR 005 decision 3's learned allowlist was removed with
+    // `db/tool_allowlist.ts` (no production writer → permanently empty rule
+    // set). `write_file` declares `needsApproval: true`, so under `askRisky` it
+    // must ask on every step; there is no stored rule that could clear it.
     const box = createApprovalPolicyBox('askRisky');
     const tools = resolveWithBox(box);
     const writeNeed = need(tools, 'write_file');
 
-    expect(writeNeed({ path: 'allowed.txt' })).toBe(true);
+    expect(await writeNeed({ path: 'allowed.txt' })).toBe(true);
 
-    listToolAllowPatternsMock.mockReturnValue(['{"path":"allowed.txt"}']);
     advanceApprovalPolicySnapshot(box, 'askRisky');
-    expect(writeNeed({ path: 'allowed.txt' })).toBe(false);
+    expect(await writeNeed({ path: 'allowed.txt' })).toBe(true);
   });
 
-  it('keeps the legacy flags deciding when no explicit policy is set', () => {
+  it('keeps the legacy flags deciding when no explicit policy is set', async () => {
     const box = createApprovalPolicyBox(undefined);
     const tools = resolveTools({
       enableTools: true,
@@ -103,7 +86,7 @@ describe('approval policy snapshots', () => {
 
     // Two halves of the same intent: a snapshot must not escalate a tool that
     // never asked for approval, AND it must not silently clear one that did.
-    expect(need(tools, 'read_file')({ path: 'a.txt' })).toBe(false);
-    expect(need(tools, 'write_file')({ path: 'a.txt' })).toBe(true);
+    expect(await need(tools, 'read_file')({ path: 'a.txt' })).toBe(false);
+    expect(await need(tools, 'write_file')({ path: 'a.txt' })).toBe(true);
   });
 });
