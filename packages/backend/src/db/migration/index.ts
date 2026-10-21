@@ -16,6 +16,8 @@ import { migration as dropClipboardSnapshots } from './008_drop_clipboard_snapsh
 import { migration as indexConversationReadPaths } from './009_index_conversation_read_paths';
 import { migration as dropChatMessages } from './010_drop_chat_messages';
 import { migration as dropContinuity } from './011_drop_continuity';
+import { migration as dropIdentityProfiles } from './012_drop_identity_profiles';
+import { migration as dropAwaiterWakeEvents } from './013_drop_awaiter_wake_events';
 
 export const registeredMigrations: Migration[] = [
   baseline,
@@ -29,6 +31,8 @@ export const registeredMigrations: Migration[] = [
   indexConversationReadPaths,
   dropChatMessages,
   dropContinuity,
+  dropIdentityProfiles,
+  dropAwaiterWakeEvents,
 ];
 
 export const initializeMigrations = (db: SqliteDatabase) => {

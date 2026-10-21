@@ -8,7 +8,6 @@ export * from './chat_usage';
 export * from './companion';
 export * from './config';
 export * from './electron_api';
-export * from './identity';
 export * from './logging';
 export * from './mcp';
 export * from './provider';
