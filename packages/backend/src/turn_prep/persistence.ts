@@ -87,12 +87,16 @@ const normalizeThreadInput = (
 };
 
 export const createChatPersistence = (deps: {
-  onContinuityMessagePersisted: (params: {
+  /**
+   * Retained so existing callers keep compiling; the continuity subsystem
+   * that consumed this hook is deleted. A caller may pass nothing.
+   */
+  onContinuityMessagePersisted?: (params: {
     threadId: string;
     messageId: string;
     messageJson: string;
   }) => Promise<void>;
-}) => {
+} = {}) => {
   const listThreads = () => chatThreadDb.getChatThreads();
   const getThread = (id: string) => {
     ensureThreadWorkspaceSelection(id);
@@ -270,7 +274,7 @@ export const createChatPersistence = (deps: {
     void sanitizedMessageJson;
     chatThreadDb.touchChatThread(threadId);
 
-    void deps.onContinuityMessagePersisted({
+    void deps.onContinuityMessagePersisted?.({
       threadId,
       messageId,
       messageJson: sanitizedMessageJson,

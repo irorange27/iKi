@@ -21,7 +21,6 @@ export type {
 export const createChatContextAssembler = (deps: {
   workspaceSystemMessage?: (threadId?: string) => string;
   resolveSkillsSystemPrompt: typeof import('../thread_session/skills').resolveSkillsSystemPrompt;
-  getAssistantProfileContextMessage: () => string;
 }) => {
   const assemble = async (params: AssembleChatContextParams) => {
     const contextConfig = deriveModelAwareContextConfig(
@@ -68,7 +67,6 @@ export const createChatContextAssembler = (deps: {
           contextConfig,
           params.modelCapability,
           agentInstructions,
-          deps.getAssistantProfileContextMessage
         );
     blocks.push(identityContext.block);
 

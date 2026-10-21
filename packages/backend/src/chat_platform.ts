@@ -18,12 +18,6 @@ export interface ContinuityMemoryPreview {
   sourceMessageCount?: number;
 }
 
-export interface ContinuityRetrievalPayload {
-  query: string;
-  results: ContinuityMemoryPreview[];
-  systemMessage: string;
-}
-
 export interface ChatServicePlatformDeps {
   companion?: ChatCompanionBridge;
   exportTrace?: (runId: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
@@ -33,13 +27,6 @@ export interface ChatServicePlatformDeps {
     filePath?: string;
     error?: string;
   }>;
-  getAssistantProfileContextMessage?: () => string;
-  retrieveRelevantContinuity?: (query: string) => ContinuityRetrievalPayload | null;
-  onMessagePersisted?: (params: {
-    threadId: string;
-    messageId: string;
-    messageJson: string;
-  }) => Promise<void>;
   getAutoPinnedSkillIds?: (threadId: string) => string[];
   recordAutoSkillSelection?: (params: {
     threadId: string;

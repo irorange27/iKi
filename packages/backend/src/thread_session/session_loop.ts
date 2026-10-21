@@ -20,8 +20,6 @@ import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent } from './type
 import { createUiChunkEmitter } from './ui_stream';
 import {
   getCompanion,
-  getAssistantProfileContextMessage,
-  retrieveRelevantContinuity,
 } from './platform';
 import { resolveSkillsSystemPrompt } from './skills';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../workspaces/thread_workspace';
@@ -91,8 +89,6 @@ export const createChatStreaming = (deps: {
 }) => {
   const turnPreparer = createChatTurnPreparer({
     resolveSkillsSystemPrompt,
-    getAssistantProfileContextMessage,
-    retrieveRelevantContinuity,
     getRuntimeConfig: () => {
       try {
         const config = getAppConfig();

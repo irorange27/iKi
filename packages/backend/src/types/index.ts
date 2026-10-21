@@ -7,7 +7,6 @@ export * from './tool_call_approval';
 export * from './chat_usage';
 export * from './companion';
 export * from './config';
-export * from './continuity';
 export * from './electron_api';
 export * from './identity';
 export * from './logging';

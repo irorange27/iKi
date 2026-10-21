@@ -5,11 +5,6 @@ import { createChatService } from '@iki/backend/thread_session';
 import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
 import { companionService } from '../companion/companion_service';
 import {
-  getAssistantProfileContextMessage,
-  retrieveRelevantContinuity,
-  onMessagePersisted as onContinuityMessagePersisted,
-} from '../continuity/continuity_service';
-import {
   getAutoPinnedSkillIds,
   recordAutoSkillSelection,
 } from '../workflow/workflow_optimizer';
@@ -70,9 +65,6 @@ const platformDeps: ChatServicePlatformDeps = {
       return { success: false, error: String(err) };
     }
   },
-  getAssistantProfileContextMessage,
-  retrieveRelevantContinuity,
-  onMessagePersisted: onContinuityMessagePersisted,
   getAutoPinnedSkillIds,
   recordAutoSkillSelection,
 };

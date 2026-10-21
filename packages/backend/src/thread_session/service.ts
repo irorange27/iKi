@@ -14,7 +14,7 @@ import {
   tryAcquireCrossProcessThreadRun,
 } from '@iki/backend/db/thread_run_locks';
 import { createChatUsage } from './usage';
-import { setChatServicePlatformDeps, onMessagePersisted } from './platform';
+import { setChatServicePlatformDeps } from './platform';
 import { deriveResumeStreamOptions, rebuildResumeHistoryFromEvents } from './run_rehydrator';
 import type { AgentRun, AgentRunKind } from '@iki/backend/types/agent_run';
 import { getErrorMessage } from '@iki/backend/utils/errors';
@@ -39,7 +39,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       tryAcquireCrossProcessThreadRun(threadId, { onLeaseLost: options.onLeaseLost }),
   });
   const persistence = createChatPersistence({
-    onContinuityMessagePersisted: onMessagePersisted,
   });
   const approvals = createChatApproval({
     streams: {

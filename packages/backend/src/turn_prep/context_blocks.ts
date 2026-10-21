@@ -56,22 +56,21 @@ export const buildIdentityContext = (
   threadId: string | undefined,
   contextConfig: ContextConfig,
   modelCapability: ModelCapability | null | undefined,
-  agentInstructions: string,
-  getAssistantProfileContextMessage: () => string
+  agentInstructions: string
 ): IdentityContext => {
-  const profile = clipTextToTokenBudget(
-    getAssistantProfileContextMessage().trim(),
-    contextConfig.maxIdentityTokens
-  );
+  // The assistant-profile block was the continuity subsystem's prompt
+  // contribution; it is gone with that subsystem. What remains here is the
+  // turn's own identity context: the workspace binding and the agent's
+  // instructions, neither of which needed a database.
+  const identityText = [
+    workspaceSystemMessage?.(threadId)?.trim() ?? '',
+    agentInstructions?.trim() ?? '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   const identityClip = {
-    text: [
-      profile.text,
-      workspaceSystemMessage?.(threadId)?.trim() ?? '',
-      agentInstructions?.trim() ?? '',
-    ]
-      .filter(Boolean)
-      .join('\n\n'),
-    truncated: profile.truncated,
+    text: clipTextToTokenBudget(identityText, contextConfig.maxIdentityTokens).text,
+    truncated: clipTextToTokenBudget(identityText, contextConfig.maxIdentityTokens).truncated,
   };
 
   return {

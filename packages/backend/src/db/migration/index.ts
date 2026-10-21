@@ -15,6 +15,7 @@ import { migration as dropDeadTables } from './007_drop_dead_tables';
 import { migration as dropClipboardSnapshots } from './008_drop_clipboard_snapshots';
 import { migration as indexConversationReadPaths } from './009_index_conversation_read_paths';
 import { migration as dropChatMessages } from './010_drop_chat_messages';
+import { migration as dropContinuity } from './011_drop_continuity';
 
 // Forward-only migrations after the baseline. Add new ones above 001 in name
 // order (002_*, 003_*, …) — runMigrations sorts by name. Tables introduced
@@ -31,6 +32,7 @@ export const registeredMigrations: Migration[] = [
   dropClipboardSnapshots,
   indexConversationReadPaths,
   dropChatMessages,
+  dropContinuity,
 ];
 
 export const initializeMigrations = (db: SqliteDatabase) => {
