@@ -9,7 +9,6 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: '@iki/backend/', replacement: path.join(ROOT, 'packages/backend/src/') },
-      { find: '@iki/backend', replacement: path.join(ROOT, 'packages/backend/src/index.ts') },
       { find: '@iki/theme/', replacement: path.join(ROOT, 'packages/theme/src/') },
       { find: '@iki/theme', replacement: path.join(ROOT, 'packages/theme/src/index.ts') },
       { find: '@iki/daemon/', replacement: path.join(ROOT, 'packages/daemon/src/') },

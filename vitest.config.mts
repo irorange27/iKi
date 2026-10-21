@@ -15,7 +15,6 @@ export default defineConfig({
       { find: '@iki/theme/', replacement: path.join(ROOT, 'packages/theme/src/') },
       { find: '@iki/theme', replacement: path.join(ROOT, 'packages/theme/src/index.ts') },
       { find: '@iki/backend/', replacement: path.join(ROOT, 'packages/backend/src/') },
-      { find: '@iki/backend', replacement: path.join(ROOT, 'packages/backend/src/index.ts') },
     ],
   },
   test: {

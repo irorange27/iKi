@@ -30,9 +30,6 @@
       "@iki/theme/*": [
         "./packages/theme/src/*"
       ],
-      "@iki/backend": [
-        "./packages/backend/src/index.ts"
-      ],
       "@iki/backend/*": [
         "./packages/backend/src/*"
       ]
