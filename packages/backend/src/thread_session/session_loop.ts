@@ -24,7 +24,6 @@ import {
 import { resolveSkillsSystemPrompt } from './skills';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../workspaces/thread_workspace';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
-import { writeThreadTodoPlan } from '../db/thread_todos';
 import {
   persistAssistantTurnMessage,
   persistUserTurnMessage,
@@ -296,8 +295,6 @@ export const createChatStreaming = (deps: {
       }
 
       getCompanion().beginThinking(companionThinkingKey);
-
-      writeThreadTodoPlan({ threadId: options.threadId, items: [] });
 
       let progressTimer: ReturnType<typeof setTimeout> | null = null;
       let progressPending = false;

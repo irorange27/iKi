@@ -7,8 +7,6 @@ export * from './skill_tools';
 export * from './web_tools';
 export * from './element_source_tool';
 export * from './schemas';
-export * from './task_plan_tools';
-export * from './todo_tools';
 export * from './proactive_task_tools';
 export * from './awaiter_tools';
 export * from './plan_tools';
@@ -36,12 +34,6 @@ import {
   WritePersonalSkillTool,
 } from './skill_tools';
 import {
-  DeleteTodoListTool,
-  ListTodoListsTool,
-  ReadTodoListTool,
-  WriteTodoListTool,
-} from './todo_tools';
-import {
   DeleteProactiveTaskTool,
   ListProactiveTasksTool,
   ReadProactiveTaskTool,
@@ -54,7 +46,6 @@ import {
   WriteAwaiterTool,
 } from './awaiter_tools';
 import { PlanTool } from './plan_tools';
-import { TodoTool } from './task_plan_tools';
 import { WebSearchTool, FetchTool } from './web_tools';
 import { ElementSourceTool, setElementSourceResolver, type ElementSourceResolver } from './element_source_tool';
 import { HandoffTool } from './handoff_tool';
@@ -82,11 +73,6 @@ const buildStandardTools = () => [
   new WritePersonalSkillTool(),
   new DeletePersonalSkillTool(),
   new PlanTool(),
-  new TodoTool(),
-  new ListTodoListsTool(),
-  new ReadTodoListTool(),
-  new WriteTodoListTool(),
-  new DeleteTodoListTool(),
   new ListProactiveTasksTool(),
   new ReadProactiveTaskTool(),
   new WriteProactiveTaskTool(),

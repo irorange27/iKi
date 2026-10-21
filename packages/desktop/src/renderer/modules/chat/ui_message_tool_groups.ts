@@ -9,7 +9,6 @@ import {
   getToolStateKind,
   getToolStateLabel,
   isApprovalRequestedPart,
-  isTranscriptHiddenToolPart,
   normalizeToolNameKey,
 } from './ui_message_tool_calls';
 import { translate } from '../../i18n';
@@ -42,7 +41,7 @@ const VERB_BY_TOOL_KEY: Record<string, ToolCallVerb> = {
   fetch: 'fetch',
   agent: 'agent',
   load_skill: 'skill',
-  todo: 'plan',
+  plan: 'plan',
 };
 
 const FILE_VERBS = new Set<ToolCallVerb>(['read', 'edit', 'write', 'delete']);
@@ -161,8 +160,6 @@ export const segmentMessageParts = (
   };
 
   parts.forEach((part, index) => {
-    if (isTranscriptHiddenToolPart(part)) return;
-
     if (isToolPart(part) && !isApprovalRequestedPart(part)) {
       if (!currentGroup) currentGroup = { parts: [], startIndex: index };
       currentGroup.parts.push(part);

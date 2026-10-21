@@ -5,7 +5,6 @@ import { PiTextTurnHarness } from '../agent/runners/pi_text_turn_harness';
 import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
 import { resolvePiTurnSupply } from '../provider/llm/factory';
 import { planToHarnessConfig, type ExecutionPlan } from './execution_plan';
-import { todoReminderFor } from './todo_reminder';
 
 export type TurnHarnessOverride = (plan: ExecutionPlan) => TurnDriverHarness | null;
 
@@ -44,10 +43,7 @@ export const selectTurnHarness = (
   if (!plan.enableTools) {
     return new PiTextTurnHarness(planToHarnessConfig(plan));
   }
-  return new PiToolTurnHarness(planToHarnessConfig(plan), {
-
-    stepReminder: steps => todoReminderFor(steps, plan.enabledTools),
-  });
+  return new PiToolTurnHarness(planToHarnessConfig(plan));
 };
 
 export class PiSupplyRefusedError extends Error {

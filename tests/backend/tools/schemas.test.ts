@@ -10,25 +10,20 @@ import {
   ListDirInputSchema,
   ReadFileInputSchema,
   ShellToolInputSchema,
-  TodoToolInputSchema,
   WebToolInputSchema,
   WriteFileInputSchema,
   DeleteAwaiterInputSchema,
   DeletePersonalSkillInputSchema,
   DeleteProactiveTaskInputSchema,
-  DeleteTodoListInputSchema,
   ListAwaitersInputSchema,
   ListPersonalSkillsInputSchema,
   ListProactiveTasksInputSchema,
-  ListTodoListsInputSchema,
   ReadAwaiterInputSchema,
   ReadPersonalSkillInputSchema,
   ReadProactiveTaskInputSchema,
-  ReadTodoListInputSchema,
   WriteAwaiterInputSchema,
   WritePersonalSkillInputSchema,
   WriteProactiveTaskInputSchema,
-  WriteTodoListInputSchema,
 } from '@iki/backend/tools/schemas';
 
 describe('tool input schemas', () => {
@@ -70,15 +65,4 @@ describe('tool input schemas', () => {
     ).toBe('Search for current updates.');
   });
 
-  it('caps execution todo plans at five broad steps', () => {
-    expect(() =>
-      TodoToolInputSchema.parse({
-        items: Array.from({ length: 6 }, (_value, index) => ({
-          id: String(index + 1),
-          text: `Task ${index + 1}`,
-        })),
-        description: 'Track an overlong execution plan.',
-      })
-    ).toThrow(/<=5 items/i);
-  });
 });

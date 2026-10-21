@@ -84,7 +84,6 @@ describe('turn preparer explicit tool upper bound', () => {
     defaultToolRegistry.remove('web_search');
     defaultToolRegistry.remove('handoff');
     defaultToolRegistry.remove('plan');
-    defaultToolRegistry.remove('todo');
     defaultToolRegistry.remove('load_skill');
     closeDatabase();
     await fs.rm(root, { recursive: true, force: true });
@@ -134,7 +133,7 @@ describe('turn preparer explicit tool upper bound', () => {
         handler: async () => 'searched',
       })
     );
-    for (const name of ['handoff', 'plan', 'todo']) {
+    for (const name of ['handoff', 'plan']) {
       defaultToolRegistry.register(
         createTool({
           name,

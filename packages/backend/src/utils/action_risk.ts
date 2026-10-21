@@ -11,8 +11,6 @@ export const READ_TOOLS = new Set([
   'load_skill',
   'list_personal_skills',
   'read_personal_skill',
-  'list_todo_lists',
-  'read_todo_list',
   'list_awaiters',
   'read_awaiter',
   'list_proactive_tasks',

@@ -5,7 +5,6 @@ import {
   Download,
   FilePenLine,
   FileText,
-  ListTodo,
   Search,
   Terminal,
   Trash2,
@@ -171,15 +170,10 @@ const TOOL_ICON_COMPONENTS: Record<string, Component> = {
   write_file: FilePenLine,
   delete_file: Trash2,
   agent: Bot,
-  todo: ListTodo,
   list_awaiters: Clock3,
   read_awaiter: Clock3,
   write_awaiter: Clock3,
   delete_awaiter: Trash2,
-  list_todo_lists: ListTodo,
-  read_todo_list: ListTodo,
-  write_todo_list: ListTodo,
-  delete_todo_list: Trash2,
   list_proactive_tasks: Clock3,
   read_proactive_task: Clock3,
   write_proactive_task: Clock3,
@@ -261,19 +255,6 @@ export const getToolTitle = (part: unknown): string => {
     }
 
     if (
-      toolKey === 'read_todo_list' ||
-      toolKey === 'write_todo_list' ||
-      toolKey === 'delete_todo_list'
-    ) {
-      if (typeof input.title === 'string' && input.title.trim()) {
-        return normalizeSingleLineText(input.title);
-      }
-      if (typeof input.id === 'string' && input.id.trim()) {
-        return normalizeSingleLineText(input.id);
-      }
-    }
-
-    if (
       toolKey === 'read_awaiter' ||
       toolKey === 'write_awaiter' ||
       toolKey === 'delete_awaiter'
@@ -319,16 +300,6 @@ export const getToolTitle = (part: unknown): string => {
       return 'Awaiters';
     }
 
-    if (toolKey === 'list_todo_lists') {
-      if (typeof input.query === 'string' && input.query.trim()) {
-        return normalizeSingleLineText(input.query);
-      }
-      return 'Todo lists';
-    }
-
-    if (toolKey === 'todo') {
-      return translate('toolCall.executionPlan');
-    }
   }
 
   if (typeof rawName === 'string' && rawName.trim()) {
@@ -451,37 +422,6 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
       };
     }
 
-    if (toolKey === 'list_todo_lists') {
-      const query = typeof input.query === 'string' ? input.query.trim() : '';
-      const meta: string[] = [];
-      if (typeof input.limit === 'number' && Number.isFinite(input.limit)) {
-        meta.push(translate('toolCall.meta.limit', { value: Math.trunc(input.limit) }));
-      }
-
-      return {
-        title: translate('toolCall.query'),
-        value: query || translate('toolCall.allTodoLists'),
-        metaText: meta.length > 0 ? meta.join(' · ') : undefined,
-        isPrimary: true,
-      };
-    }
-
-    if (
-      (toolKey === 'read_todo_list' ||
-        toolKey === 'write_todo_list' ||
-        toolKey === 'delete_todo_list') &&
-      ((typeof input.title === 'string' && input.title.trim()) ||
-        (typeof input.id === 'string' && input.id.trim()))
-    ) {
-      return {
-        title: translate('toolCall.todoList'),
-        value:
-          (typeof input.title === 'string' && input.title.trim()) ||
-          (typeof input.id === 'string' && input.id.trim()) ||
-          '',
-        isPrimary: true,
-      };
-    }
   }
 
   return {
@@ -495,9 +435,6 @@ export const getToolInputDisplayTitle = (part: unknown): string => getToolInputD
 export const getToolInputDisplayValue = (part: unknown): unknown => getToolInputDisplay(part).value;
 export const getToolInputDisplayMetaText = (part: unknown): string =>
   getToolInputDisplay(part).metaText ?? '';
-
-export const isTranscriptHiddenToolPart = (part: unknown): boolean =>
-  normalizeToolNameKey(getToolName(part)) === 'todo';
 
 export const isToolCollapsed = (part: unknown): boolean => {
   const toolCallId = getToolCallIdFromPart(part);
@@ -525,7 +462,6 @@ export const getUsedToolNames = (message: unknown): string[] => {
 
   for (const part of parts) {
     if (!isToolPart(part)) continue;
-    if (isTranscriptHiddenToolPart(part)) continue;
     const rawName = getToolName(part);
     const name = typeof rawName === 'string' ? rawName.trim() : '';
     if (!name || name === 'tool') continue;

@@ -30,7 +30,6 @@ import {
 import { NO_TOOLS_SYSTEM_PROMPT } from './constants';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
-import { writeThreadTodoPlan } from '../db/thread_todos';
 import {
   persistAssistantTurnMessage,
   persistUserTurnMessage,
@@ -210,8 +209,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         }
 
         const harness = selectTurnHarness(plan, preparedTurn.history);
-
-        writeThreadTodoPlan({ threadId: options.threadId, items: [] });
 
         const wireTarget: ChatStreamTarget = { id: -1, send: () => undefined };
         const uiChunkEmitter = createUiChunkEmitter(wireTarget, `assistant_${activeRunTracker.id}`);

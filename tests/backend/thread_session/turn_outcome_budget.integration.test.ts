@@ -33,10 +33,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   };
 });
 
-vi.mock('@iki/backend/db/thread_todos', () => ({
-  writeThreadTodoPlan: vi.fn(),
-}));
-
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { getAgentRun, listAgentRunsByThread } from '@iki/backend/db/agent_runs';

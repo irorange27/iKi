@@ -20,7 +20,6 @@ import {
   getToolName,
   getToolInput,
   getToolOutput,
-  isTranscriptHiddenToolPart,
   isToolPart,
   normalizeToolNameKey,
 } from './ui_message_tool_calls';
@@ -192,7 +191,6 @@ const buildToolReferenceSummary = (message: ChatUiMessage | unknown): ToolRefere
 
   for (const part of parts) {
     if (!isToolPart(part)) continue;
-    if (isTranscriptHiddenToolPart(part)) continue;
 
     const toolCallId = getToolCallIdFromPart(part);
     const toolName = normalizeWhitespace(getToolName(part));

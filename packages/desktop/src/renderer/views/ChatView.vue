@@ -203,7 +203,6 @@
           :approval-policy="currentApprovalPolicy"
           :latest-token-usage="latestAssistantTokenUsage"
           :session-perf-stats="sessionPerfStats"
-          :todo-plan="activeTodoPlan"
           :prepare-message-send="prepareMessageSend"
           :submit-turn="submitTurn"
           @new-chat-requested="handleNewChat"
@@ -245,7 +244,6 @@ import { useConfigStore } from '../store/config';
 import { useThreadSessionStore } from '../store/thread_session';
 import { useMarkdownCopy } from '../composables/useMarkdownCopy';
 import { useChatStreaming } from '../composables/useChatStreaming';
-import { useChatThreadTodoPlan } from '../composables/useChatThreadTodoPlan';
 import { useToolMetadata } from '../composables/useToolMetadata';
 import { getThreadOriginInfo } from '../modules/chat/thread_origin';
 import { getElectronAPI } from '../services/electron_api';
@@ -461,12 +459,6 @@ threadSession.initRuntime({
   preferredDraftProviderId,
   persistDraftModelSelection,
 });
-
-const { activeTodoPlan, handleChatChunk } = useChatThreadTodoPlan({
-  electronAPI,
-  threadId: computed(() => currentThread.value?.id || null),
-});
-chatInstance.transport.onChunk(handleChatChunk);
 
 const streaming = useChatStreaming({
   electronAPI,

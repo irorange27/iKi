@@ -27,7 +27,6 @@ import type {
   WhisperNodeModelInfo,
 } from './speech';
 import type { SkillSource, SkillSummary } from './skill';
-import type { TaskPlan } from './task_plan';
 import type { AppUpdateStatus } from './update';
 import type {
   AgentRun,
@@ -155,7 +154,6 @@ export interface ElectronApi {
     threads: {
       list: () => Promise<ChatThread[]>;
       get: (id: string) => Promise<ChatThread | null>;
-      getTodoPlan: (threadId: string) => Promise<TaskPlan | null>;
       create: (thread: ChatThreadInput) => Promise<ChatThread>;
       clear: (id: string, thread: ChatThreadInput) => Promise<ChatThread | null>;
       update: (id: string, thread: ChatThreadInput) => Promise<unknown>;

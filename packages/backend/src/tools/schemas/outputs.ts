@@ -2,14 +2,6 @@ import { z } from 'zod';
 
 import { agentUsedToolOutputSchema } from './agent';
 
-const TodoPlanItemOutputSchema = z
-  .object({
-    id: z.string().optional(),
-    text: z.string().optional(),
-    status: z.enum(['pending', 'in_progress', 'completed']).optional(),
-  })
-  .passthrough();
-
 export const WebToolOutputSchema = z
   .object({
     query: z.string().optional(),
@@ -106,17 +98,6 @@ export const LoadSkillOutputSchema = z
   })
   .passthrough();
 
-export const TodoToolOutputSchema = z
-  .object({
-    items: z.array(TodoPlanItemOutputSchema).optional(),
-    rendered: z.string().optional(),
-    totalCount: z.number().optional(),
-    completedCount: z.number().optional(),
-    inProgressCount: z.number().optional(),
-    pendingCount: z.number().optional(),
-  })
-  .passthrough();
-
 export const AgentToolOutputSchema = z
   .object({
     response: z.string().optional(),
@@ -201,65 +182,6 @@ export const DeletePersonalSkillOutputSchema = z
     deleted: z.boolean().optional(),
     id: z.string().optional(),
     filePath: z.string().optional(),
-  })
-  .passthrough();
-
-const TodoItemOutputSchema = z
-  .object({
-    id: z.string().optional(),
-    list_id: z.string().optional(),
-    content: z.string().optional(),
-    notes: z.string().nullable().optional(),
-    status: z.enum(['pending', 'completed']).optional(),
-    sort_order: z.number().optional(),
-    completed_at: z.string().nullable().optional(),
-    created_at: z.string().optional(),
-    updated_at: z.string().optional(),
-  })
-  .passthrough();
-
-const TodoListSummaryOutputSchema = z
-  .object({
-    id: z.string().optional(),
-    title: z.string().optional(),
-    summary: z.string().nullable().optional(),
-    item_count: z.number().optional(),
-    completed_count: z.number().optional(),
-    pending_count: z.number().optional(),
-    created_at: z.string().optional(),
-    updated_at: z.string().optional(),
-  })
-  .passthrough();
-
-const TodoListOutputSchema = TodoListSummaryOutputSchema.extend({
-  items: z.array(TodoItemOutputSchema).optional(),
-}).passthrough();
-
-export const ListTodoListsOutputSchema = z
-  .object({
-    lists: z.array(TodoListSummaryOutputSchema).optional(),
-    resultCount: z.number().optional(),
-  })
-  .passthrough();
-
-export const ReadTodoListOutputSchema = z
-  .object({
-    list: TodoListOutputSchema.optional(),
-  })
-  .passthrough();
-
-export const WriteTodoListOutputSchema = z
-  .object({
-    action: z.enum(['created', 'updated']).optional(),
-    list: TodoListOutputSchema.optional(),
-  })
-  .passthrough();
-
-export const DeleteTodoListOutputSchema = z
-  .object({
-    deleted: z.boolean().optional(),
-    listId: z.string().nullable().optional(),
-    title: z.string().nullable().optional(),
   })
   .passthrough();
 

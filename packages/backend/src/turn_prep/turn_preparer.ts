@@ -14,7 +14,6 @@ import type {
 import { persistThreadRuntimeHints } from './thread_hints';
 import { resolveToolNames } from './tool_guard';
 import { getPromptFromMessage, toModelInputMessages } from '@iki/backend/message/ui_messages';
-import { TODO_PLANNING_TOOL_NAME } from '@iki/backend/tools/task_plan_tools';
 
 export type ChatTurnOptions = {
   providerType: string;
@@ -171,9 +170,7 @@ export const createChatTurnPreparer = (deps: {
       ? []
       : collectRequiredBuiltinSkillTools(usedSkills);
     const mergedResolvedTools = mergeToolNames(resolvedTools, skillRequiredTools);
-    const guardedTools = mergedResolvedTools.filter(
-      toolName => Boolean(options.threadId) || toolName !== TODO_PLANNING_TOOL_NAME
-    );
+    const guardedTools = [...mergedResolvedTools];
 
     if (!explicitToolSelection && !guardedTools.includes('shell')) {
       guardedTools.push('shell');

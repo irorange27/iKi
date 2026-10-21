@@ -1,7 +1,5 @@
 <template>
-  <template v-if="isHiddenTodoTool"></template>
-
-  <div v-else-if="isApprovalRequestedPart(part)" class="tool-approval-content">
+  <div v-if="isApprovalRequestedPart(part)" class="tool-approval-content">
     <div class="tool-approval-header">
       <svg class="tool-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
@@ -332,7 +330,6 @@ import {
   hasToolDiff,
   hasWebSearchCitations,
   isApprovalRequestedPart,
-  isTranscriptHiddenToolPart,
   isToolCallPart,
   isToolCollapsed,
   isToolResultPart,
@@ -354,8 +351,6 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-
-const isHiddenTodoTool = computed(() => isTranscriptHiddenToolPart(props.part));
 
 const terminalView = computed(() => (props.embedded ? getToolTerminalView(props.part) : null));
 

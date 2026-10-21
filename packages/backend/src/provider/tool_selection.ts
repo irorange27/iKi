@@ -33,8 +33,8 @@ const SYSTEM_PROMPT =
   '- Prefer using NO tools when possible.\n' +
   '- If the user asks about current local machine state or other live information the model cannot know reliably on its own (for example current time, filesystem contents, git status, installed tools, running processes, or live web data), include the tool needed to verify it instead of guessing.\n' +
   '- `web` only discovers candidate pages. If the answer depends on facts inside those pages (for example prices, dates, quotes, measurements, or claims), include `fetch` too instead of relying on search-result snippets alone.\n' +
-  '- Include `todo` only when the task is genuinely substantial and multi-step: usually work expected to need at least 3 meaningful actions, several tool rounds, or explicit progress tracking.\n' +
-  '- Do NOT include `todo` for simple questions, one-shot lookups, single command checks, single file reads, or straightforward single edits.\n' +
+  '- Include `plan` only when the task is genuinely substantial and multi-step: usually work expected to need at least 3 meaningful actions or several tool rounds.\n' +
+  '- Do NOT include `plan` for simple questions, one-shot lookups, single command checks, single file reads, or straightforward single edits.\n' +
   '- Include `agent` only when the turn naturally splits into coordinator + worker: one bounded investigation, review, or synthesis subtask with a clear intermediate deliverable that the main agent will later integrate.\n' +
   '- Good `agent` cases: compare several fetched/web sources and report differences; inspect repo or directory structure with approval-free tools and return a shortlist; research options and summarize tradeoffs; do a focused review pass and report findings back.\n' +
   '- Do NOT include `agent` for trivial work, one or two direct tool calls, or when the main agent can just do the work itself without losing control flow.\n' +
@@ -42,7 +42,7 @@ const SYSTEM_PROMPT =
   '- If the available approval-free tools would not materially help the delegated subtask, omit `agent`.\n' +
   '- Do NOT use `agent` to restate or fully execute the entire user request; use it only for bounded intermediate results.\n' +
   '- Prefer 1-3 tools; only exceed that when a multi-step workflow clearly needs it.\n' +
-  '- If a task likely needs a longer sequential workflow in one turn (for example inspect -> edit -> verify), include each needed tool and add `todo` only when the workflow is not trivial.\n' +
+  '- If a task likely needs a longer sequential workflow in one turn (for example inspect -> edit -> verify), include each needed tool and add `plan` only when the workflow is not trivial.\n' +
   "- Approval-gated tools (shell, write_file, edit, delete_file, etc.) may be selected when the task likely needs them. The user will separately approve or reject each use — your job is only to include them when the task calls for them, not to preempt the user's decision.\n" +
   '- Return a JSON array of tool names. Example: ["web","fetch"].\n' +
   '- If no tool is needed, return [].\n' +

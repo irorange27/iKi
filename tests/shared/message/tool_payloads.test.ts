@@ -17,30 +17,6 @@ describe('parseToolInput', () => {
     expect(parsed).toEqual({ kind: 'unknown', input: 'not json' });
   });
 
-  it('parses todo tool payloads from JSON', () => {
-    const parsed = parseToolInput(
-      'write_todo_list',
-      '{"title":"Today","items":[{"content":"Ship feature","completed":false}]}'
-    );
-
-    expect(parsed.kind).toBe('write_todo_list');
-    if (parsed.kind !== 'write_todo_list') throw new Error('Expected todo tool payload');
-    expect(parsed.input.title).toBe('Today');
-    expect(parsed.input.items?.[0]?.content).toBe('Ship feature');
-  });
-
-  it('parses execution todo inputs from JSON', () => {
-    const parsed = parseToolInput(
-      'todo',
-      '{"items":[{"id":"1","text":"Inspect current code","status":"in_progress"}]}'
-    );
-
-    expect(parsed.kind).toBe('todo');
-    if (parsed.kind !== 'todo') throw new Error('Expected todo payload');
-    expect(parsed.input.items?.[0]?.text).toBe('Inspect current code');
-    expect(parsed.input.items?.[0]?.status).toBe('in_progress');
-  });
-
   it('parses delegated agent inputs from JSON', () => {
     const parsed = parseToolInput(
       'agent',
@@ -128,30 +104,6 @@ describe('parseToolOutput', () => {
   it('returns unknown for unsupported tools', () => {
     const parsed = parseToolOutput('nope', { ok: true });
     expect(parsed).toEqual({ kind: 'unknown', output: { ok: true } });
-  });
-
-  it('parses todo tool outputs from JSON', () => {
-    const parsed = parseToolOutput(
-      'read_todo_list',
-      '{"list":{"id":"todo_1","title":"Today","items":[{"content":"Ship feature","status":"pending"}]}}'
-    );
-
-    expect(parsed.kind).toBe('read_todo_list');
-    if (parsed.kind !== 'read_todo_list') throw new Error('Expected read_todo_list payload');
-    expect(parsed.output.list?.title).toBe('Today');
-    expect(parsed.output.list?.items?.[0]?.status).toBe('pending');
-  });
-
-  it('parses execution todo outputs from JSON', () => {
-    const parsed = parseToolOutput(
-      'todo',
-      '{"items":[{"id":"1","text":"Inspect current code","status":"completed"}],"rendered":"[x] #1: Inspect current code\\n\\n(1/1 completed)","totalCount":1,"completedCount":1}'
-    );
-
-    expect(parsed.kind).toBe('todo');
-    if (parsed.kind !== 'todo') throw new Error('Expected todo output payload');
-    expect(parsed.output.items?.[0]?.status).toBe('completed');
-    expect(parsed.output.completedCount).toBe(1);
   });
 
   it('parses delegated agent outputs from JSON', () => {

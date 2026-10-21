@@ -37,7 +37,6 @@ const {
   getMcpServerLabelMock,
   configStoreState,
   useChatStreamingMock,
-  useChatThreadTodoPlanMock,
   useToolMetadataMock,
   useChatViewLifecycleMock,
   useConfigStoreMock,
@@ -125,7 +124,6 @@ const {
   };
 
   const useChatStreamingMock = vi.fn();
-  const useChatThreadTodoPlanMock = vi.fn();
   const useToolMetadataMock = vi.fn();
   const useChatViewLifecycleMock = vi.fn();
   const useConfigStoreMock = vi.fn(() => configStoreState);
@@ -162,8 +160,7 @@ const {
     getMcpServerLabelMock,
     configStoreState,
     useChatStreamingMock,
-    useChatThreadTodoPlanMock,
-    useToolMetadataMock,
+      useToolMetadataMock,
     useChatViewLifecycleMock,
     useConfigStoreMock,
     getTokenUsageSummaryMock,
@@ -180,9 +177,6 @@ vi.mock('../../../packages/desktop/src/renderer/composables/useChatStreaming', (
   useChatStreaming: useChatStreamingMock,
 }));
 
-vi.mock('../../../packages/desktop/src/renderer/composables/useChatThreadTodoPlan', () => ({
-  useChatThreadTodoPlan: useChatThreadTodoPlanMock,
-}));
 
 vi.mock('../../../packages/desktop/src/renderer/composables/useToolMetadata', () => ({
   useToolMetadata: useToolMetadataMock,
@@ -243,7 +237,6 @@ const ChatInputStub = defineComponent({
     isIncognito: { type: Boolean, default: false },
     selectedWorkspaceId: { type: String, default: null },
     latestTokenUsage: { type: Object, default: null },
-    todoPlan: { type: Object, default: null },
     prepareMessageSend: { type: Function, default: null },
     submitTurn: { type: Function, default: null },
   },
@@ -346,7 +339,6 @@ describe('ChatView', () => {
     openSkillReferenceMock.mockReset();
     getMcpServerLabelMock.mockReset();
     useChatStreamingMock.mockReset();
-    useChatThreadTodoPlanMock.mockReset();
     useToolMetadataMock.mockReset();
     useChatViewLifecycleMock.mockReset();
     getTokenUsageSummaryMock.mockReset();
@@ -381,13 +373,6 @@ describe('ChatView', () => {
       loadToolSources: loadToolSourcesMock,
       getMcpServerLabel: getMcpServerLabelMock,
       openSkillReference: openSkillReferenceMock,
-    }));
-
-    useChatThreadTodoPlanMock.mockImplementation(() => ({
-      activeTodoPlan: { value: null, __v_isRef: true as const },
-      handleChatChunk: vi.fn(),
-      refreshTodoPlan: vi.fn(async () => undefined),
-      todoPlan: { value: null, __v_isRef: true as const },
     }));
 
     getTokenUsageSummaryMock.mockImplementation(() => ({ inputTokens: null }));
@@ -578,30 +563,6 @@ describe('ChatView', () => {
       providerType: 'openai',
       providerId: 'openai',
     });
-  });
-
-  it('passes the active thread todo plan down to the composer region', async () => {
-    const activePlan = {
-      thread_id: 'thread_1',
-      items: [
-        { id: '1', text: 'Inspect state', status: 'completed' as const },
-        { id: '2', text: 'Implement UI card', status: 'in_progress' as const },
-      ],
-      created_at: '2026-03-30T00:00:00.000Z',
-      updated_at: '2026-03-30T00:01:00.000Z',
-    };
-
-    useChatThreadTodoPlanMock.mockImplementation(() => ({
-      activeTodoPlan: { value: activePlan, __v_isRef: true as const },
-      handleChatChunk: vi.fn(),
-      refreshTodoPlan: vi.fn(async () => undefined),
-      todoPlan: { value: activePlan, __v_isRef: true as const },
-    }));
-
-    const wrapper = await mountChatView();
-    const chatInput = wrapper.findComponent(ChatInputStub);
-
-    expect(chatInput.props('todoPlan')).toEqual(activePlan);
   });
 
   it('hydrates the composer when the welcome flow emits a starter prompt', async () => {

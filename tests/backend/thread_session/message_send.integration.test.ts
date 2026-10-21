@@ -2,7 +2,6 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { z } from 'zod';
 
 const callPiChatMock = vi.hoisted(() => vi.fn());
-const writeThreadTodoPlanMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
@@ -27,10 +26,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
     getModelGenerationSettings: vi.fn(() => ({})),
   };
 });
-
-vi.mock('@iki/backend/db/thread_todos', () => ({
-  writeThreadTodoPlan: writeThreadTodoPlanMock,
-}));
 
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -159,7 +154,6 @@ describe('createMessageSend integration', () => {
       },
     });
     expect((observedContext as { runId?: string }).runId).toMatch(/^run_/);
-    expect(writeThreadTodoPlanMock).toHaveBeenCalledWith({ threadId: 'thread_1', items: [] });
     expect(callPiChatMock).toHaveBeenCalled();
     expect((callPiChatMock.mock.calls[0] as unknown[])[0]).toMatchObject({
       id: 'gpt-4o-mini',

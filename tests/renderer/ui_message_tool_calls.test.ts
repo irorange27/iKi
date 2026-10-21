@@ -28,23 +28,6 @@ describe('ui_message_tool_calls', () => {
     expect(title).toBe('Check the current working directory.');
   });
 
-  it('uses a stable execution-plan title for todo tool cards', () => {
-    const title = getToolTitle({
-      type: 'tool-result',
-      toolCallId: 'call_todo',
-      toolName: 'todo',
-      state: 'output-available',
-      input: {
-        items: [{ id: '1', text: 'Inspect current code', status: 'in_progress' }],
-      },
-      output: {
-        items: [{ id: '1', text: 'Inspect current code', status: 'in_progress' }],
-      },
-    });
-
-    expect(title).toBe('Execution Plan');
-  });
-
   it('uses the delegated task text as the card title for agent tool cards', () => {
     const title = getToolTitle({
       type: 'tool-call',

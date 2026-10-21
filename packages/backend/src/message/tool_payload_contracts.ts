@@ -16,16 +16,11 @@ export type ToolPayloadKind =
   | 'read_personal_skill'
   | 'write_personal_skill'
   | 'delete_personal_skill'
-  | 'todo'
   | 'agent'
   | 'list_awaiters'
   | 'read_awaiter'
   | 'write_awaiter'
   | 'delete_awaiter'
-  | 'list_todo_lists'
-  | 'read_todo_list'
-  | 'write_todo_list'
-  | 'delete_todo_list'
   | 'list_proactive_tasks'
   | 'read_proactive_task'
   | 'write_proactive_task'
@@ -52,16 +47,11 @@ const TOOL_PAYLOAD_KINDS = {
   read_personal_skill: true,
   write_personal_skill: true,
   delete_personal_skill: true,
-  todo: true,
   agent: true,
   list_awaiters: true,
   read_awaiter: true,
   write_awaiter: true,
   delete_awaiter: true,
-  list_todo_lists: true,
-  read_todo_list: true,
-  write_todo_list: true,
-  delete_todo_list: true,
   list_proactive_tasks: true,
   read_proactive_task: true,
   write_proactive_task: true,

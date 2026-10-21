@@ -18,6 +18,7 @@ import { migration as dropChatMessages } from './010_drop_chat_messages';
 import { migration as dropContinuity } from './011_drop_continuity';
 import { migration as dropIdentityProfiles } from './012_drop_identity_profiles';
 import { migration as dropAwaiterWakeEvents } from './013_drop_awaiter_wake_events';
+import { migration as dropTodoTables } from './014_drop_todo_tables';
 
 export const registeredMigrations: Migration[] = [
   baseline,
@@ -33,6 +34,7 @@ export const registeredMigrations: Migration[] = [
   dropContinuity,
   dropIdentityProfiles,
   dropAwaiterWakeEvents,
+  dropTodoTables,
 ];
 
 export const initializeMigrations = (db: SqliteDatabase) => {

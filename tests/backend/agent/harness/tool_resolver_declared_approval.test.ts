@@ -87,11 +87,9 @@ describe("resolveTools honours a tool's declared approval requirement", () => {
       .sort();
     expect(declaring).toEqual([
       'delete_file',
-      'delete_todo_list',
       'edit',
       'undo_edit',
       'write_file',
-      'write_todo_list',
     ]);
 
     const tools = resolveTools({

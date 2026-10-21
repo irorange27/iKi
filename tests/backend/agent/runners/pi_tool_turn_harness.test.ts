@@ -178,12 +178,12 @@ describe('pi tool turn harness (switch item 3a)', () => {
     ]);
     const counts: number[] = [];
     const modelCall: PiToolModelCall = (_config, request) => {
-      counts.push(JSON.stringify(request.messages).match(/Update your todos\./g)?.length ?? 0);
+      counts.push(JSON.stringify(request.messages).match(/Reminder probe\./g)?.length ?? 0);
       return scripted(_config, request as never);
     };
     const harness = new PiToolTurnHarness(harnessConfig(), {
       modelCall,
-      stepReminder: steps => (steps.length >= 1 ? '<reminder>Update your todos.</reminder>' : undefined),
+      stepReminder: steps => (steps.length >= 1 ? '<reminder>Reminder probe.</reminder>' : undefined),
     });
 
     await collect(harness, { prompt: 'probe' });

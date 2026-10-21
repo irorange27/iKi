@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 const callPiChatMock = vi.hoisted(() => vi.fn());
-const writeThreadTodoPlanMock = vi.hoisted(() => vi.fn());
 const prepareChatTurnMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
@@ -27,10 +26,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
-}));
-
-vi.mock('@iki/backend/db/thread_todos', () => ({
-  writeThreadTodoPlan: writeThreadTodoPlanMock,
 }));
 
 vi.mock('@iki/backend/db/agent_runs', () => ({
@@ -218,7 +213,6 @@ describe('createChatStreaming integration', () => {
       },
     });
     expect((observedContext as { runId?: string }).runId).toMatch(/^run_/);
-    expect(writeThreadTodoPlanMock).toHaveBeenCalledWith({ threadId: 'thread_1', items: [] });
     expect(usage.recordUsageEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         source: 'chat.stream',

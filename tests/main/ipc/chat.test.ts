@@ -10,7 +10,6 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
   chatServiceMock: {
     listThreads: vi.fn(() => [{ id: 'thread_1' }]),
     getThread: vi.fn((id: string) => ({ id })),
-    getThreadTodoPlan: vi.fn((threadId: string) => ({ thread_id: threadId, items: [] })),
     createThread: vi.fn((thread: Record<string, unknown>) => ({ id: 'thread_new', ...thread })),
     clearThread: vi.fn((id: string, thread: Record<string, unknown>) => ({ id, ...thread })),
     updateThread: vi.fn((id: string, thread: Record<string, unknown>) => ({ id, ...thread })),
@@ -112,10 +111,6 @@ describe('chat IPC', () => {
     expect(await ipcHandlers.get('chat:threads:get')?.(null, 'thread_1')).toEqual({
       id: 'thread_1',
     });
-    expect(await ipcHandlers.get('chat:threads:todo:get')?.(null, 'thread_1')).toEqual({
-      thread_id: 'thread_1',
-      items: [],
-    });
     expect(await ipcHandlers.get('chat:threads:create')?.(null, threadPayload)).toEqual({
       id: 'thread_new',
       title: 'Thread',
@@ -202,7 +197,6 @@ describe('chat IPC', () => {
 
     expect(chatServiceMock.listThreads).toHaveBeenCalledTimes(1);
     expect(chatServiceMock.getThread).toHaveBeenCalledWith('thread_1');
-    expect(chatServiceMock.getThreadTodoPlan).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.createThread).toHaveBeenCalledWith(threadPayload);
     expect(chatServiceMock.clearThread).toHaveBeenCalledWith('thread_1', threadPayload);
     expect(chatServiceMock.updateThread).toHaveBeenCalledWith('thread_1', threadPayload);

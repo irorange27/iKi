@@ -11,8 +11,6 @@ import {
   DeletePersonalSkillOutputSchema,
   DeleteProactiveTaskInputSchemaUi,
   DeleteProactiveTaskOutputSchema,
-  DeleteTodoListInputSchemaUi,
-  DeleteTodoListOutputSchema,
   EditFileInputSchemaUi,
   EditFileOutputSchema,
   FetchToolInputSchemaUi,
@@ -23,8 +21,6 @@ import {
   ListPersonalSkillsOutputSchema,
   ListProactiveTasksInputSchemaUi,
   ListProactiveTasksOutputSchema,
-  ListTodoListsInputSchemaUi,
-  ListTodoListsOutputSchema,
   LoadSkillInputSchemaUi,
   LoadSkillOutputSchema,
   ReadAwaiterInputSchemaUi,
@@ -35,12 +31,8 @@ import {
   ReadPersonalSkillOutputSchema,
   ReadProactiveTaskInputSchemaUi,
   ReadProactiveTaskOutputSchema,
-  ReadTodoListInputSchemaUi,
-  ReadTodoListOutputSchema,
   ShellToolInputSchemaUi,
   ShellToolOutputSchema,
-  TodoToolInputSchemaUi,
-  TodoToolOutputSchema,
   WebToolInputSchemaUi,
   WebToolOutputSchema,
   WriteAwaiterInputSchemaUi,
@@ -51,8 +43,6 @@ import {
   WritePersonalSkillOutputSchema,
   WriteProactiveTaskInputSchemaUi,
   WriteProactiveTaskOutputSchema,
-  WriteTodoListInputSchemaUi,
-  WriteTodoListOutputSchema,
 } from '@iki/backend/tools/schemas';
 import {
   parseToolInputPayload,
@@ -73,16 +63,11 @@ export type ListPersonalSkillsToolInput = z.infer<typeof ListPersonalSkillsInput
 export type ReadPersonalSkillToolInput = z.infer<typeof ReadPersonalSkillInputSchemaUi>;
 export type WritePersonalSkillToolInput = z.infer<typeof WritePersonalSkillInputSchemaUi>;
 export type DeletePersonalSkillToolInput = z.infer<typeof DeletePersonalSkillInputSchemaUi>;
-export type TodoToolInput = z.infer<typeof TodoToolInputSchemaUi>;
 export type AgentToolInput = z.infer<typeof AgentToolInputSchemaUi>;
 export type ListAwaitersToolInput = z.infer<typeof ListAwaitersInputSchemaUi>;
 export type ReadAwaiterToolInput = z.infer<typeof ReadAwaiterInputSchemaUi>;
 export type WriteAwaiterToolInput = z.infer<typeof WriteAwaiterInputSchemaUi>;
 export type DeleteAwaiterToolInput = z.infer<typeof DeleteAwaiterInputSchemaUi>;
-export type ListTodoListsToolInput = z.infer<typeof ListTodoListsInputSchemaUi>;
-export type ReadTodoListToolInput = z.infer<typeof ReadTodoListInputSchemaUi>;
-export type WriteTodoListToolInput = z.infer<typeof WriteTodoListInputSchemaUi>;
-export type DeleteTodoListToolInput = z.infer<typeof DeleteTodoListInputSchemaUi>;
 export type ListProactiveTasksToolInput = z.infer<typeof ListProactiveTasksInputSchemaUi>;
 export type ReadProactiveTaskToolInput = z.infer<typeof ReadProactiveTaskInputSchemaUi>;
 export type WriteProactiveTaskToolInput = z.infer<typeof WriteProactiveTaskInputSchemaUi>;
@@ -100,16 +85,11 @@ export type ListPersonalSkillsToolOutput = z.infer<typeof ListPersonalSkillsOutp
 export type ReadPersonalSkillToolOutput = z.infer<typeof ReadPersonalSkillOutputSchema>;
 export type WritePersonalSkillToolOutput = z.infer<typeof WritePersonalSkillOutputSchema>;
 export type DeletePersonalSkillToolOutput = z.infer<typeof DeletePersonalSkillOutputSchema>;
-export type TodoToolOutput = z.infer<typeof TodoToolOutputSchema>;
 export type AgentToolOutput = z.infer<typeof AgentToolOutputSchema>;
 export type ListAwaitersToolOutput = z.infer<typeof ListAwaitersOutputSchema>;
 export type ReadAwaiterToolOutput = z.infer<typeof ReadAwaiterOutputSchema>;
 export type WriteAwaiterToolOutput = z.infer<typeof WriteAwaiterOutputSchema>;
 export type DeleteAwaiterToolOutput = z.infer<typeof DeleteAwaiterOutputSchema>;
-export type ListTodoListsToolOutput = z.infer<typeof ListTodoListsOutputSchema>;
-export type ReadTodoListToolOutput = z.infer<typeof ReadTodoListOutputSchema>;
-export type WriteTodoListToolOutput = z.infer<typeof WriteTodoListOutputSchema>;
-export type DeleteTodoListToolOutput = z.infer<typeof DeleteTodoListOutputSchema>;
 export type ListProactiveTasksToolOutput = z.infer<typeof ListProactiveTasksOutputSchema>;
 export type ReadProactiveTaskToolOutput = z.infer<typeof ReadProactiveTaskOutputSchema>;
 export type WriteProactiveTaskToolOutput = z.infer<typeof WriteProactiveTaskOutputSchema>;
@@ -128,16 +108,11 @@ export type ParsedToolInput =
   | { kind: 'read_personal_skill'; input: ReadPersonalSkillToolInput }
   | { kind: 'write_personal_skill'; input: WritePersonalSkillToolInput }
   | { kind: 'delete_personal_skill'; input: DeletePersonalSkillToolInput }
-  | { kind: 'todo'; input: TodoToolInput }
   | { kind: 'agent'; input: AgentToolInput }
   | { kind: 'list_awaiters'; input: ListAwaitersToolInput }
   | { kind: 'read_awaiter'; input: ReadAwaiterToolInput }
   | { kind: 'write_awaiter'; input: WriteAwaiterToolInput }
   | { kind: 'delete_awaiter'; input: DeleteAwaiterToolInput }
-  | { kind: 'list_todo_lists'; input: ListTodoListsToolInput }
-  | { kind: 'read_todo_list'; input: ReadTodoListToolInput }
-  | { kind: 'write_todo_list'; input: WriteTodoListToolInput }
-  | { kind: 'delete_todo_list'; input: DeleteTodoListToolInput }
   | { kind: 'list_proactive_tasks'; input: ListProactiveTasksToolInput }
   | { kind: 'read_proactive_task'; input: ReadProactiveTaskToolInput }
   | { kind: 'write_proactive_task'; input: WriteProactiveTaskToolInput }
@@ -157,16 +132,11 @@ export type ParsedToolOutput =
   | { kind: 'read_personal_skill'; output: ReadPersonalSkillToolOutput }
   | { kind: 'write_personal_skill'; output: WritePersonalSkillToolOutput }
   | { kind: 'delete_personal_skill'; output: DeletePersonalSkillToolOutput }
-  | { kind: 'todo'; output: TodoToolOutput }
   | { kind: 'agent'; output: AgentToolOutput }
   | { kind: 'list_awaiters'; output: ListAwaitersToolOutput }
   | { kind: 'read_awaiter'; output: ReadAwaiterToolOutput }
   | { kind: 'write_awaiter'; output: WriteAwaiterToolOutput }
   | { kind: 'delete_awaiter'; output: DeleteAwaiterToolOutput }
-  | { kind: 'list_todo_lists'; output: ListTodoListsToolOutput }
-  | { kind: 'read_todo_list'; output: ReadTodoListToolOutput }
-  | { kind: 'write_todo_list'; output: WriteTodoListToolOutput }
-  | { kind: 'delete_todo_list'; output: DeleteTodoListToolOutput }
   | { kind: 'list_proactive_tasks'; output: ListProactiveTasksToolOutput }
   | { kind: 'read_proactive_task'; output: ReadProactiveTaskToolOutput }
   | { kind: 'write_proactive_task'; output: WriteProactiveTaskToolOutput }
@@ -198,16 +168,11 @@ const TOOL_SCHEMAS: Record<ToolPayloadKind, { input: z.ZodTypeAny; output: z.Zod
     input: DeletePersonalSkillInputSchemaUi,
     output: DeletePersonalSkillOutputSchema,
   },
-  todo: { input: TodoToolInputSchemaUi, output: TodoToolOutputSchema },
   agent: { input: AgentToolInputSchemaUi, output: AgentToolOutputSchema },
   list_awaiters: { input: ListAwaitersInputSchemaUi, output: ListAwaitersOutputSchema },
   read_awaiter: { input: ReadAwaiterInputSchemaUi, output: ReadAwaiterOutputSchema },
   write_awaiter: { input: WriteAwaiterInputSchemaUi, output: WriteAwaiterOutputSchema },
   delete_awaiter: { input: DeleteAwaiterInputSchemaUi, output: DeleteAwaiterOutputSchema },
-  list_todo_lists: { input: ListTodoListsInputSchemaUi, output: ListTodoListsOutputSchema },
-  read_todo_list: { input: ReadTodoListInputSchemaUi, output: ReadTodoListOutputSchema },
-  write_todo_list: { input: WriteTodoListInputSchemaUi, output: WriteTodoListOutputSchema },
-  delete_todo_list: { input: DeleteTodoListInputSchemaUi, output: DeleteTodoListOutputSchema },
   list_proactive_tasks: {
     input: ListProactiveTasksInputSchemaUi,
     output: ListProactiveTasksOutputSchema,

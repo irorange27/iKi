@@ -2,7 +2,6 @@
   <div class="chat-input-outer">
     <!-- Width is owned by the parent (.composer-area tracks the chat column). -->
     <div>
-      <ChatTodoPlan v-if="props.todoPlan" class="chat-input-plan" :plan="props.todoPlan" />
       <ChatComposerShell
         :set-input-ref="setInputRef"
         v-model="message"
@@ -281,7 +280,6 @@ import type { Component } from 'vue';
 import type { UiFilePart as FileUIPart } from '@iki/backend/message/ui_protocol';
 import { Check, Hand, Settings, ShieldCheck, Zap } from 'lucide-vue-next';
 import type { Provider } from '@iki/backend/types/provider';
-import type { TaskPlan } from '@iki/backend/types/task_plan';
 import {
   buildContextCompositionRows,
   buildTokenUsageIndicator,
@@ -294,7 +292,6 @@ import type {
   PrepareMessageSendPayload,
 } from '../modules/chat/chat_prepare_send';
 import type { SubmitTurnParams, SubmitTurnResult } from '../composables/useChatComposerSend';
-import ChatTodoPlan from './chat/ChatTodoPlan.vue';
 import ChatComposerActions from './ChatComposerActions.vue';
 import ChatModelSelector from './ChatModelSelector.vue';
 import ChatComposerShell from './ChatComposerShell.vue';
@@ -396,7 +393,6 @@ const props = defineProps<{
   submitTurn: (params: SubmitTurnParams) => Promise<SubmitTurnResult>;
   latestTokenUsage?: TokenUsageSummary | null;
   sessionPerfStats?: SessionPerfStats | null;
-  todoPlan?: TaskPlan | null;
 }>();
 
 type ComposerTextControl = HTMLInputElement | HTMLTextAreaElement;

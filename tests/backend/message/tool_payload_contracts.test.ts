@@ -10,7 +10,6 @@ describe('resolveToolPayloadKind', () => {
   it('normalizes the tool name and applies aliases', () => {
     expect(resolveToolPayloadKind('web_search')).toBe('web');
     expect(resolveToolPayloadKind('Web Search')).toBe('web');
-    expect(resolveToolPayloadKind('read-todo-list')).toBe('read_todo_list');
     expect(resolveToolPayloadKind('nope')).toBeNull();
   });
 });

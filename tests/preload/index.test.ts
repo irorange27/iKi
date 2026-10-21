@@ -193,7 +193,6 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.chat.approveTool('approval_1', true);
     await exposedApi.chat.threads.list();
     await exposedApi.chat.threads.get('thread_1');
-    await exposedApi.chat.threads.getTodoPlan('thread_1');
     await exposedApi.chat.threads.create({ title: 'Thread' });
     await exposedApi.chat.threads.clear('thread_1', { title: 'Cleared' });
     await exposedApi.chat.threads.update('thread_1', { title: 'Updated' });
@@ -294,7 +293,6 @@ describe('preload task IPC payload serialization', () => {
         'chat:approve-tool',
         'chat:threads:list',
         'chat:threads:get',
-        'chat:threads:todo:get',
         'chat:threads:create',
         'chat:threads:update',
         'chat:threads:delete',

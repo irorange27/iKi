@@ -6,7 +6,6 @@ import {
   getSessionEvents,
 } from '@iki/backend/db/session_events';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import * as threadTodoDb from '@iki/backend/db/thread_todos';
 import * as awaitersDb from '@iki/backend/db/awaiters';
 import * as tasksDb from '@iki/backend/db/tasks';
 import { getDb } from '@iki/backend/db/database';
@@ -92,7 +91,6 @@ export const createChatPersistence = () => {
     ensureThreadWorkspaceSelection(id);
     return chatThreadDb.getChatThread(id);
   };
-  const getThreadTodoPlan = (threadId: string) => threadTodoDb.getThreadTodoPlan(threadId);
   const createThread = (input: unknown) => {
     const normalizedThread = normalizeThreadInput(input);
     chatThreadDb.addChatThread(normalizedThread);
@@ -281,7 +279,6 @@ export const createChatPersistence = () => {
 
     listThreads,
     getThread,
-    getThreadTodoPlan,
     createThread,
     clearThread,
     updateThread,

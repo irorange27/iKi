@@ -4,18 +4,11 @@ import { createLogger } from '@iki/backend/logger';
 import { selectToolsWithAgent } from '../provider/tool_selection';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 import { toLlmChatMessages } from '@iki/backend/message/ui_messages';
-import { TODO_PLANNING_TOOL_NAME } from '@iki/backend/tools/task_plan_tools';
 
 type ToolResolveMode = 'manual' | 'auto';
 type ToolMetadata = ReturnType<typeof defaultToolRegistry.getToolMetadata>[number];
 const toolGuardLogger = createLogger({ module: 'tool_guard' });
 const AGENT_TOOL_NAME = 'agent';
-const TODO_EXPLICIT_REQUEST_PATTERN =
-  /\b(todo|to-do|checklist|plan|planning|progress|roadmap|milestone|step|steps|track)\b|待办|计划|规划|进度|路线图|里程碑|步骤|拆解/u;
-const TODO_MULTI_STEP_PATTERN =
-  /\b(first|then|after|before|finally|next|multi-step|several)\b|先|然后|再|接着|最后|分步|逐步|多步/u;
-const TODO_COMPLEX_ACTION_PATTERN =
-  /\b(inspect|implement|fix|debug|refactor|migrate|investigate|audit|review|analy[sz]e|design|integrate|wire|rewrite|update|patch|test|verify|trace)\b|检查|实现|修复|排查|重构|迁移|调查|审查|分析|设计|集成|接入|改写|更新|补丁|测试|验证|追踪/giu;
 
 const normalizeExplicitTools = (tools: unknown[]): string[] => {
   const resolved: string[] = [];
@@ -90,44 +83,6 @@ const getAutoToolNames = (
   allowedMcpServerIds: Set<string> | null
 ): string[] =>
   getAutoToolCatalog(autoApproveToolRequests, allowedMcpServerIds).map(tool => tool.name);
-
-const countComplexTodoActionMatches = (value: string): number => {
-  if (!value.trim()) return 0;
-  return [...value.matchAll(TODO_COMPLEX_ACTION_PATTERN)].length;
-};
-
-const shouldRetainTodoTool = (messages: ChatInputMessage[], selectedTools: string[]): boolean => {
-  if (!selectedTools.includes(TODO_PLANNING_TOOL_NAME)) return true;
-
-  const nonTodoTools = selectedTools.filter(toolName => toolName !== TODO_PLANNING_TOOL_NAME);
-  const llmMessages = toLlmChatMessages(messages);
-  const latestUserText =
-    [...llmMessages]
-      .reverse()
-      .find(message => message.role === 'user')
-      ?.content.trim() ?? '';
-
-  if (!latestUserText) return false;
-  if (TODO_EXPLICIT_REQUEST_PATTERN.test(latestUserText)) return true;
-
-  const actionMatchCount = countComplexTodoActionMatches(latestUserText);
-  const hasMultiStepSignal = TODO_MULTI_STEP_PATTERN.test(latestUserText);
-
-  if (nonTodoTools.length >= 3) return true;
-  if (nonTodoTools.length >= 2 && (actionMatchCount >= 1 || hasMultiStepSignal)) return true;
-  if (nonTodoTools.length >= 1 && actionMatchCount >= 2) return true;
-
-  return false;
-};
-
-const filterOvereagerTodoSelection = (
-  messages: ChatInputMessage[],
-  selectedTools: string[]
-): string[] => {
-  if (!Array.isArray(messages) || messages.length === 0) return selectedTools;
-  if (shouldRetainTodoTool(messages, selectedTools)) return selectedTools;
-  return selectedTools.filter(toolName => toolName !== TODO_PLANNING_TOOL_NAME);
-};
 
 const filterUnsupportedAgentSelection = (
   selectedTools: string[],
@@ -208,12 +163,7 @@ export const resolveToolNames = async (params: {
       ? getAutoToolNames(autoApproveToolRequests, allowedMcpServerIds)
       : selection.filter(toolName => catalog.some(tool => tool.name === toolName));
 
-  const filteredResolvedTools = filterOvereagerTodoSelection(
-    params.inputMessages ?? [],
-    resolvedTools
-  );
-
-  const filteredAgentTools = filterUnsupportedAgentSelection(filteredResolvedTools, catalog);
+  const filteredAgentTools = filterUnsupportedAgentSelection(resolvedTools, catalog);
 
   return { explicitTools, resolvedTools: filteredAgentTools, mode };
 };

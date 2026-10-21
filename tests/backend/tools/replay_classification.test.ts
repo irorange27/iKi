@@ -16,7 +16,6 @@ import {
   DeletePersonalSkillTool,
 } from '@iki/backend/tools/skill_tools';
 import { PlanTool } from '@iki/backend/tools/plan_tools';
-import { TodoTool } from '@iki/backend/tools/task_plan_tools';
 import { HandoffTool } from '@iki/backend/tools/handoff_tool';
 import {
   ListProactiveTasksTool,
@@ -53,7 +52,6 @@ const TABLE: ReadonlyArray<[tool: BaseTool, replay: 'safe' | 'unsafe', why: stri
   [new DelegatedAgentTool(), 'unsafe', 'runs a whole child turn'],
   [new WritePersonalSkillTool(), 'unsafe', 'writes a row'],
   [new DeletePersonalSkillTool(), 'unsafe', 'deletes a row'],
-  [new TodoTool(), 'unsafe', 'persists the thread turn plan'],
   [new WriteProactiveTaskTool(), 'unsafe', 'writes a row'],
   [new DeleteProactiveTaskTool(), 'unsafe', 'deletes a row'],
   [new WriteAwaiterTool(), 'unsafe', 'writes a row'],
@@ -75,13 +73,7 @@ describe('the replay classification table', () => {
   it('leaves no registered tool undeclared', () => {
     const declared = new Set(TABLE.map(([tool]) => tool.name));
     const undeclared = getBuiltinToolNames().filter(name => !declared.has(name));
-    const ownedElsewhere = new Set([
-      'list_todo_lists',
-      'read_todo_list',
-      'write_todo_list',
-      'delete_todo_list',
-    ]);
-    expect(undeclared.filter(name => !ownedElsewhere.has(name))).toEqual([]);
+    expect(undeclared).toEqual([]);
   });
 
   it('defaults to unsafe: an undeclared tool carries no permission to rerun', () => {
