@@ -2,10 +2,6 @@ import { createLogger } from '@iki/backend/logger';
 import type { ToolModelConfig } from '../provider/tool_model';
 import { type PromptTextGenerator, type PromptTextGeneratorConfig } from './prompt_text_generator';
 
-export interface TitleRuntime {
-  run(content: string): Promise<string | null>;
-}
-
 export type LlmTitleRuntimeDeps = {
   getToolModel: () => ToolModelConfig | null;
   createGenerator: (config?: PromptTextGeneratorConfig) => PromptTextGenerator;
@@ -27,7 +23,7 @@ export const sanitizeGeneratedTitle = (value: string): string | null => {
   return title || null;
 };
 
-export class LlmTitleRuntime implements TitleRuntime {
+export class LlmTitleRuntime {
   constructor(private readonly deps: LlmTitleRuntimeDeps) {}
 
   async run(content: string): Promise<string | null> {
@@ -56,7 +52,6 @@ export class LlmTitleRuntime implements TitleRuntime {
         maxTokens: 50,
         maxIterations: 1,
         enableTools: false,
-        enableMemory: false,
       });
 
       const prompt = [

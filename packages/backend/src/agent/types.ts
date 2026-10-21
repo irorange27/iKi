@@ -24,7 +24,6 @@ export const AgentConfigSchema = z.object({
 
   maxIterations: z.number().int().positive().default(200),
   enableTools: z.boolean().default(false),
-  enableMemory: z.boolean().default(false),
 });
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;

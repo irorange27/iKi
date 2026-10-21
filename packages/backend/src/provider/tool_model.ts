@@ -1,7 +1,7 @@
 import { getProviders } from '../db/providers';
 import { getAppConfig } from '../config';
 import { createLogger } from '@iki/backend/logger';
-import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
+import { LlmTitleRuntime } from '../runtimes/title_runtime';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
 import { generateChatWithModelMessages } from '../provider/llm/factory';
 import { parseModelList } from '@iki/backend/utils/provider_models';
@@ -184,7 +184,6 @@ export const testToolModelLatency = async (
   };
 };
 
-export type { TitleRuntime };
 export { LlmTitleRuntime };
 
 export const generateTitle = async (conversationContent: string): Promise<string | null> => {
@@ -197,5 +196,3 @@ export const generateTitle = async (conversationContent: string): Promise<string
   });
   return runtime.run(trimmed);
 };
-
-export const generateTitleWithAgent = generateTitle;

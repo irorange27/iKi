@@ -79,7 +79,7 @@ vi.mock('../../../packages/desktop/src/main/services/speech/speech_service', () 
 
 vi.mock('@iki/backend/provider/tool_model', () => ({
   getToolModel: vi.fn(),
-  generateTitleWithAgent: vi.fn(),
+  generateTitle: vi.fn(),
   testToolModelLatency: vi.fn(),
 }));
 
@@ -103,7 +103,7 @@ import {
   transcribeSpeech,
 } from '../../../packages/desktop/src/main/services/speech/speech_service';
 import {
-  generateTitleWithAgent,
+  generateTitle,
   getToolModel,
   testToolModelLatency,
 } from '@iki/backend/provider/tool_model';
@@ -119,7 +119,7 @@ const downloadWhisperNodeModelMock = vi.mocked(downloadWhisperNodeModel);
 const getSpeechStatusMock = vi.mocked(getSpeechStatus);
 const listWhisperNodeModelsMock = vi.mocked(listWhisperNodeModels);
 const transcribeSpeechMock = vi.mocked(transcribeSpeech);
-const generateTitleWithAgentMock = vi.mocked(generateTitleWithAgent);
+const generateTitleMock = vi.mocked(generateTitle);
 const getToolModelMock = vi.mocked(getToolModel);
 const testToolModelLatencyMock = vi.mocked(testToolModelLatency);
 const getAppConfigRuntimeMock = vi.mocked(getAppConfig);
@@ -423,13 +423,13 @@ describe('system IPC modules', () => {
       })
     );
 
-    generateTitleWithAgentMock.mockResolvedValueOnce('Generated Title');
+    generateTitleMock.mockResolvedValueOnce('Generated Title');
     expect(await ipcHandlers.get('toolModel:generateTitle')?.(null, 'Conversation')).toBe(
       'Generated Title'
     );
 
     const titleError = new Error('title failed');
-    generateTitleWithAgentMock.mockRejectedValueOnce(titleError);
+    generateTitleMock.mockRejectedValueOnce(titleError);
     expect(await ipcHandlers.get('toolModel:generateTitle')?.(null, 'Conversation')).toBeNull();
     expect(loggerEventMock).toHaveBeenCalledWith(
       expect.objectContaining({

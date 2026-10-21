@@ -2,22 +2,21 @@ import {
   buildTranscript,
   extractJsonCandidate,
   LlmCatalogSelectionRuntime,
-  normalizeWhitespace,
   tryParseJson,
   type CatalogSelectionRequest,
-  type CatalogSelectionRuntime,
   type SelectionMessage,
 } from '../runtimes/catalog_selection_runtime';
 import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
+import { normalizeWhitespace } from '@iki/backend/utils/text';
 import { getToolModel } from './tool_model';
 
 export type { CatalogSelectionRequest as CatalogSelectorParams };
-export type { CatalogSelectionRuntime, SelectionMessage };
+export type { SelectionMessage };
+export { normalizeWhitespace };
 export {
   LlmCatalogSelectionRuntime,
   buildTranscript,
   extractJsonCandidate,
-  normalizeWhitespace,
   tryParseJson,
 };
 

@@ -3,7 +3,7 @@ import { buildPromptContext } from '@iki/backend/message/prompt_context';
 import {
   loadAgentConfig,
   validateAgentConfig,
-} from '../agent/ai_sdk_config';
+} from '../agent/config';
 import type { AgentConfig, AgentResult, PartialAgentConfig } from '@iki/backend/agent/types';
 import { generateChatWithModelMessages, getModelGenerationSettings } from '../provider/llm/factory';
 

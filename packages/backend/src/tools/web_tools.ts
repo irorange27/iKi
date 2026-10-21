@@ -4,6 +4,7 @@ import { fetchWithTimeout, getNetworkRetryAttempts, getNetworkTimeoutMs } from '
 import { RetryableError } from '@iki/backend/utils/errors';
 import { getAppConfig } from '../config';
 import type { WebSearchEngine } from '../types/config';
+import { normalizeWhitespace } from '@iki/backend/utils/text';
 import {
   DEFAULT_FETCH_MAX_CHARS,
   DEFAULT_SEARCH_RESULT_LIMIT,
@@ -89,7 +90,6 @@ const decodeHtmlEntities = (value: string): string =>
     return match;
   });
 
-const normalizeWhitespace = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
 const htmlToPlainText = (html: string): string => {
   const withoutNoise = html

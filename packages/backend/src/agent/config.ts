@@ -5,7 +5,7 @@ import {
   type PartialAgentConfig,
 } from '@iki/backend/agent/types';
 
-const configLogger = createLogger({ module: 'ai_sdk_config' });
+const configLogger = createLogger({ module: 'agent_config' });
 
 export const getDefaultAgentConfig = (): AgentConfig =>
   AgentConfigSchema.parse({
@@ -18,7 +18,6 @@ export const getDefaultAgentConfig = (): AgentConfig =>
     maxTokens: 2000,
     maxIterations: 10,
     enableTools: false,
-    enableMemory: false,
   });
 
 export const loadAgentConfig = (overrideConfig?: PartialAgentConfig): AgentConfig => {
@@ -30,29 +29,18 @@ export const loadAgentConfig = (overrideConfig?: PartialAgentConfig): AgentConfi
   try {
     return AgentConfigSchema.parse(merged);
   } catch (error) {
+    // Retrying the same parse cannot succeed; the schema rejected this input.
+    // Falling back to defaults keeps auxiliary callers (titles, summaries,
+    // routing) alive instead of taking the caller down with it.
     configLogger.event({
       level: 'error',
       event: 'agent.config.parse',
-      outcome: 'failed',
+      outcome: 'degraded',
       error,
+      message: 'Agent config rejected; falling back to defaults.',
       data: { source: 'primary' },
     });
-    try {
-      return AgentConfigSchema.parse({
-        ...getDefaultAgentConfig(),
-        ...(overrideConfig ?? {}),
-      });
-    } catch (parseError) {
-      configLogger.event({
-        level: 'error',
-        event: 'agent.config.parse',
-        outcome: 'degraded',
-        error: parseError,
-        message: 'Fallback agent config parsing failed; using defaults.',
-        data: { source: 'fallback' },
-      });
-      return getDefaultAgentConfig();
-    }
+    return getDefaultAgentConfig();
   }
 };
 

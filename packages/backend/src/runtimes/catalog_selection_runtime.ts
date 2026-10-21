@@ -1,6 +1,7 @@
 import { createLogger } from '@iki/backend/logger';
 import type { ToolModelConfig } from '../provider/tool_model';
 import { type PromptTextGenerator, type PromptTextGeneratorConfig } from './prompt_text_generator';
+import { normalizeWhitespace } from '@iki/backend/utils/text';
 
 export type SelectionMessage = {
   role: 'system' | 'user' | 'assistant';
@@ -20,17 +21,10 @@ export type CatalogSelectionRequest<T> = {
   logLabel: string;
 };
 
-export interface CatalogSelectionRuntime {
-
-  run<T>(request: CatalogSelectionRequest<T>): Promise<string[] | null>;
-}
-
 export type LlmCatalogSelectionRuntimeDeps = {
   getToolModel: () => ToolModelConfig | null;
   createGenerator: (config?: PromptTextGeneratorConfig) => PromptTextGenerator;
 };
-
-export const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 
 const formatRole = (role: SelectionMessage['role']) =>
   role === 'assistant' ? 'Assistant' : role === 'system' ? 'System' : 'User';
@@ -102,7 +96,7 @@ export const tryParseJson = (raw: string): unknown => {
   return null;
 };
 
-export class LlmCatalogSelectionRuntime implements CatalogSelectionRuntime {
+export class LlmCatalogSelectionRuntime {
   constructor(private readonly deps: LlmCatalogSelectionRuntimeDeps) {}
 
   async run<T>(request: CatalogSelectionRequest<T>): Promise<string[] | null> {
@@ -131,7 +125,6 @@ export class LlmCatalogSelectionRuntime implements CatalogSelectionRuntime {
       maxTokens: request.maxOutputTokens,
       maxIterations: 1,
       enableTools: false,
-      enableMemory: false,
     });
 
     try {
