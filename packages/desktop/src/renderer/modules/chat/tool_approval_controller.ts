@@ -55,10 +55,12 @@ export const createToolApprovalController = (deps: {
         throw new Error(result?.error || 'Tool approval failed');
       }
 
+      // No `reason`: authoring the user-level decision text is the backend's
+      // job (thread_session/approval.ts owns the persisted-decision wording and
+      // its fallback). A renderer copy would fork that fact.
       deps.chat.addToolApprovalResponse({
         id: approvalId,
         approved,
-        reason: approved ? 'User approved tool execution.' : 'User rejected tool execution.',
       });
 
       // approveTool resolves only after the backend pushed the whole resumed

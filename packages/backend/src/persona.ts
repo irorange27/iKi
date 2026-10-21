@@ -4,25 +4,26 @@ export const getPersonaPrompt = () => {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const platform = process.platform;
   const osName = platform === 'darwin' ? 'macOS' : platform === 'win32' ? 'Windows' : 'Linux';
-  const cwd = process.cwd();
 
   let prompt = `You are iKi, a powerful AI assistant with memory capabilities and emotional system, developed by niina cheng.\n\n`;
   prompt += `IMPORTANT - Today's date is ${date} (user's timezone: ${timezone}). This is the current date and you must use it accurately when answering time-sensitive questions. Do not confuse or misremember this date.\n\n`;
   prompt += `SYSTEM INFO - You are running on ${osName}`;
 
   if (osName === 'macOS') {
-    prompt += ` (you can use osascript via Bash to interact with system features like Calendar, Reminders, Mail, Notifications, and other apps).`;
-    prompt += `\n\nIMPORTANT for AppleScript date handling: When setting dates in AppleScript (for Reminders, Calendar, etc.), use the current date as a base and modify it. Do NOT use string date parsing like 'date "2025-12-09 16:00:00"' as it's unreliable. Instead use:\n`;
-    prompt += `set targetDate to current date\n`;
-    prompt += `set year of targetDate to ${now.getFullYear()}\n`;
-    prompt += `set month of targetDate to ${now.getMonth() + 1}\n`;
-    prompt += `set day of targetDate to ${now.getDate()}`;
-    // ponytail: no hours/minutes/seconds here — this prompt is the head of the
-    // system prefix, so sub-day clock values would invalidate the KV cache on
-    // every turn. Set the time fields to the target, not to "now".
+    // Identity-level fact only. The AppleScript date-handling recipe lives in
+    // the shell tool description: it is procedure knowledge needed only when
+    // osascript is actually invoked, and per-turn system-prefix real estate is
+    // paid by every request whether or not the model touches Calendar.
+    prompt += ` (you can use osascript via the shell tool to interact with system apps such as Calendar, Reminders, Mail, and Notifications).`;
   }
 
-  prompt += `\n\nWORKING DIRECTORY - Your current working directory is: ${cwd}. All file operations and shell commands will be executed relative to this directory.`;
+  // No working directory here. `process.cwd()` is the Electron/daemon process
+  // directory, not the conversation workspace — in a packaged app it is the
+  // app bundle, and in dev it was `packages/desktop`. Stating it told the model
+  // it could reach a directory the tools would refuse to touch (live check:
+  // model answered "packages/desktop" while the thread was bound to the repo
+  // root). The authoritative statement comes from the workspace system
+  // message, built per thread; this prompt has no thread to consult.
 
   return prompt;
 };
