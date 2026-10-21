@@ -8,7 +8,6 @@ vi.mock('@iki/backend/db/database', () => ({
 import { getDb } from '@iki/backend/db/database';
 import {
   addAwaiter,
-  addAwaiterWakeEvent,
   listDueAwaiters,
   updateAwaiter,
   updateAwaiterIfStatus,
@@ -115,39 +114,6 @@ describe('updateAwaiterIfStatus', () => {
     expect(params.next_wake_at).toBeNull();
   });
 });
-
-describe('addAwaiterWakeEvent', () => {
-  it('persists nullable wake-event fields and returns the normalized record', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-04-23T04:30:00.000Z'));
-
-    const { runMock } = setupDb();
-
-    const event = addAwaiterWakeEvent({
-      id: 'awaiter_wake_1',
-      awaiter_id: 'awaiter_1',
-      trigger_fired_at: '2026-04-23T04:29:00.000Z',
-      outcome: 'error',
-    });
-
-    const params = runMock.mock.calls[0][0] as Record<string, unknown>;
-    expect(params.run_id).toBeNull();
-    expect(params.trigger_snapshot_json).toBeNull();
-    expect(params.error).toBeNull();
-    expect(params.created_at).toBe('2026-04-23T04:30:00.000Z');
-    expect(event).toEqual({
-      id: 'awaiter_wake_1',
-      awaiter_id: 'awaiter_1',
-      run_id: null,
-      trigger_fired_at: '2026-04-23T04:29:00.000Z',
-      trigger_snapshot_json: null,
-      outcome: 'error',
-      error: null,
-      created_at: '2026-04-23T04:30:00.000Z',
-    });
-  });
-});
-
 describe('listDueAwaiters', () => {
   it('selects both armed and waking due awaiters and maps notify flags back into typed rows', () => {
     const allMock = vi.fn(() => [

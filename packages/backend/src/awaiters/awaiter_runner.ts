@@ -119,51 +119,6 @@ export const createAwaiterRunner = (deps: AwaiterRunnerDeps) => {
   return uiMessage;
 };
 
-const persistWakeEvent = (params: {
-  awaiter: Awaiter;
-  triggerFiredAt: string;
-  outcome: 'success' | 'error';
-  error?: string | null;
-  runId?: string | null;
-}) => {
-  try {
-    awaitersDb.addAwaiterWakeEvent({
-      id: createPrefixedId('awaiter_wake'),
-      awaiter_id: params.awaiter.id,
-      run_id: params.runId ?? null,
-      trigger_fired_at: params.triggerFiredAt,
-      trigger_snapshot_json: JSON.stringify({
-        triggerKind: params.awaiter.trigger_kind,
-        triggerSpec: parseAwaiterTriggerSpec(
-          params.awaiter.trigger_spec_json,
-          params.awaiter.trigger_kind
-        ),
-        scheduledFor: params.awaiter.next_wake_at ?? null,
-      }),
-      outcome: params.outcome,
-      error: params.error ?? null,
-    });
-    return true;
-  } catch (error) {
-    const errorText = getErrorMessage(error);
-    if (errorText.includes('FOREIGN KEY constraint failed')) {
-      awaiterLogger.event({
-        level: 'warn',
-        event: 'awaiter.wake_event',
-        outcome: 'skipped',
-        message: 'Skipped wake audit row because the awaiter was removed before persistence.',
-        error,
-        entity: {
-          awaiter_id: params.awaiter.id,
-          run_id: params.runId ?? null,
-        },
-      });
-      return false;
-    }
-    throw error;
-  }
-};
-
 const isAwaiterRunnable = (awaiter: Awaiter): boolean =>
   awaiter.status === 'armed' || awaiter.status === 'waking';
 
@@ -211,12 +166,6 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
       last_error: 'Target thread is unavailable',
       last_wake_at: startedAt,
       next_wake_at: null,
-    });
-    persistWakeEvent({
-      awaiter,
-      triggerFiredAt: startedAt,
-      outcome: 'error',
-      error: 'Target thread is unavailable',
     });
     return { success: false, error: 'Target thread is unavailable' };
   }
@@ -297,17 +246,6 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
       if (failureDisposition === 'suppress') {
         return buildSuppressedAwaiterResult(runId);
       }
-      if (
-        !persistWakeEvent({
-          awaiter,
-          triggerFiredAt: startedAt,
-          outcome: 'error',
-          error: errorText,
-          runId,
-        })
-      ) {
-        return buildSuppressedAwaiterResult(runId);
-      }
 
       const uiMessage = createThreadMessage({
         awaiter,
@@ -375,17 +313,6 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
       if (deliveryFailureDisposition === 'suppress') {
         return buildSuppressedAwaiterResult(runId);
       }
-      if (
-        !persistWakeEvent({
-          awaiter,
-          triggerFiredAt: startedAt,
-          outcome: 'error',
-          error: deliveryError,
-          runId,
-        })
-      ) {
-        return buildSuppressedAwaiterResult(runId);
-      }
 
       const failedDeliveryMessage = createThreadMessage({
         awaiter,
@@ -435,16 +362,6 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
     if (completionDisposition === 'suppress') {
       return buildSuppressedAwaiterResult(runId);
     }
-    if (
-      !persistWakeEvent({
-        awaiter,
-        triggerFiredAt: startedAt,
-        outcome: 'success',
-        runId,
-      })
-    ) {
-      return buildSuppressedAwaiterResult(runId);
-    }
 
     const uiMessage = createThreadMessage({
       awaiter,
@@ -481,16 +398,6 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
       next_wake_at: null,
     });
     if (catchDisposition === 'suppress') {
-      return buildSuppressedAwaiterResult();
-    }
-    if (
-      !persistWakeEvent({
-        awaiter,
-        triggerFiredAt: startedAt,
-        outcome: 'error',
-        error: errorText,
-      })
-    ) {
       return buildSuppressedAwaiterResult();
     }
     return { success: false, error: errorText };

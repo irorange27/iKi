@@ -20,7 +20,6 @@ vi.mock('electron', () => {
 });
 
 vi.mock('@iki/backend/db/awaiters', () => ({
-  addAwaiterWakeEvent: vi.fn(),
   getAwaiter: vi.fn(),
   listDueAwaiters: vi.fn(),
   updateAwaiter: vi.fn(),
@@ -102,7 +101,6 @@ describe('runAwaiterWake', () => {
   const listDueAwaitersMock = vi.mocked(awaitersDb.listDueAwaiters);
   const updateAwaiterMock = vi.mocked(awaitersDb.updateAwaiter);
   const updateAwaiterIfStatusMock = vi.mocked(awaitersDb.updateAwaiterIfStatus);
-  const addAwaiterWakeEventMock = vi.mocked(awaitersDb.addAwaiterWakeEvent);
   const reclaimStaleWakingAwaitersMock = vi.mocked(awaitersDb.reclaimStaleWakingAwaiters);
   const touchChatThreadMock = vi.mocked(chatThreadDb.touchChatThread);
   const deliverBridgeThreadMessageMock = vi.mocked(deliverBridgeThreadMessage);
@@ -187,13 +185,6 @@ describe('runAwaiterWake', () => {
       threadId: 'thread_1',
       text: expect.stringContaining('Wake complete.'),
     });
-    expect(addAwaiterWakeEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        awaiter_id: 'awaiter_1',
-        run_id: 'run_wake_1',
-        outcome: 'success',
-      })
-    );
 
     const messageMetaRaw = chatServiceMock.createMessage.mock.calls.at(-1)?.[0]?.metadata;
     const messageMeta = messageMetaRaw ? JSON.parse(messageMetaRaw) : null;
@@ -248,14 +239,6 @@ describe('runAwaiterWake', () => {
         next_wake_at: null,
       })
     );
-    expect(addAwaiterWakeEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        awaiter_id: 'awaiter_1',
-        run_id: 'run_failed_1',
-        outcome: 'error',
-        error: 'Boom',
-      })
-    );
 
     const messageMetaRaw = chatServiceMock.createMessage.mock.calls.at(-1)?.[0]?.metadata;
     const messageMeta = messageMetaRaw ? JSON.parse(messageMetaRaw) : null;
@@ -293,13 +276,6 @@ describe('runAwaiterWake', () => {
         status: 'failed',
         last_error: 'Target thread is unavailable',
         next_wake_at: null,
-      })
-    );
-    expect(addAwaiterWakeEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        awaiter_id: 'awaiter_1',
-        outcome: 'error',
-        error: 'Target thread is unavailable',
       })
     );
     expect(chatServiceMock.send).not.toHaveBeenCalled();
@@ -377,13 +353,6 @@ describe('runAwaiterWake', () => {
       last_error: null,
       next_wake_at: null,
     });
-    expect(addAwaiterWakeEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        awaiter_id: 'awaiter_1',
-        outcome: 'success',
-        run_id: 'run_wake_rearmed',
-      })
-    );
     expect(chatServiceMock.createMessage).toHaveBeenCalled();
     expect(sendMock).toHaveBeenCalledWith(
       'awaiters:push',
@@ -417,7 +386,6 @@ describe('runAwaiterWake', () => {
       error: 'Awaiter no longer exists',
       runId: 'run_wake_deleted',
     });
-    expect(addAwaiterWakeEventMock).not.toHaveBeenCalled();
     expect(chatServiceMock.createMessage).not.toHaveBeenCalled();
     expect(sendMock).not.toHaveBeenCalled();
   });
