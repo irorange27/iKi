@@ -14,15 +14,18 @@
  * - `planPrompt` — the execution plan's system prompt (mode prompt +
  *   personality style, the latter owned by `message/personality.ts`),
  *   assembled by `thread_session/execution_plan.ts`;
- * - `extraPrompt` — a per-call extra prompt (aux/single-shot callers);
+ * - `extraPrompt` — a per-call extra prompt (aux/single-shot callers, and
+ *   the no-tools turn's mode prompt added by the factory);
  * - `transcriptSystem` — system message(s) carried in the prepared history.
- *   The AI SDK path folds every one of them into the system prompt; the Pi
- *   adapter folds the first into the system prompt and replays the rest as
- *   Pi system messages.
+ *   The Pi adapter folds the first into the system prompt and replays the
+ *   rest as Pi system messages.
  *
  * Every model request in the repo builds its system prompt through
- * `assembleRequestSystemPrompt`. A new part claims a slot in the table —
- * no caller ever joins prompt strings by hand.
+ * `assembleRequestSystemPrompt`, including aux calls (through
+ * `assembleAuxRequestSystemPrompt`, which DECLARES the auxiliary slot instead
+ * of letting a caller pass a bare string through). A new part claims a slot
+ * in the table — no caller ever joins prompt strings by hand, and no caller
+ * bypasses the table with a pre-joined override.
  */
 
 /** Centrally owned placement (ascending). Slot names are the stable
@@ -67,4 +70,28 @@ export const assembleRequestSystemPrompt = (
       (a, b) => REQUEST_SYSTEM_PROMPT_SLOTS[a.slot] - REQUEST_SYSTEM_PROMPT_SLOTS[b.slot]
     );
   return { slots, prompt: slots.map(part => part.text).join('\n\n') };
+};
+
+/**
+ * Contributed parts of an AUXILIARY (single-shot) request — summarizer, title,
+ * catalog selection, tool router.
+ *
+ * Aux callers legitimately need a system prompt that is NOT the chat request's
+ * persona-led assembly: their whole prompt is runtime-owned content and a
+ * chat persona would only dilute it. What they must not do is hand the supply
+ * layer a bare string and skip the slot table: that made the same string a
+ * `planPrompt` in one assembler and an `extraPrompt` in another, so per-slot
+ * budgets, attribution and diagnostics were meaningless for aux traffic.
+ *
+ * So the slot is declared here — by the slot owner — and the auxiliary
+ * semantics live in this one function instead of at every call site.
+ */
+export const assembleAuxRequestSystemPrompt = (params: {
+  /** The runtime's own instruction text (owner: the runtime that wrote it). */
+  instruction: string;
+  /** Extra context lines the runtime wants appended in the same slot. */
+  details?: readonly string[];
+}): AssembledRequestSystemPrompt => {
+  const text = [params.instruction, ...(params.details ?? [])].join('\n\n');
+  return assembleRequestSystemPrompt([{ slot: 'extraPrompt', text }]);
 };

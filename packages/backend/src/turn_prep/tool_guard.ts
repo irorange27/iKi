@@ -1,5 +1,5 @@
 import { defaultToolRegistry } from '@iki/backend/tools';
-import { applyToolApprovalPolicyList } from '@iki/backend/utils/tool_approval';
+import { decideToolApproval } from '@iki/backend/utils/action_risk';
 import { createLogger } from '@iki/backend/logger';
 import { selectToolsWithAgent } from '../provider/tool_selection';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
@@ -59,10 +59,25 @@ const isMcpToolFromAllowedServer = (
   return serverId.length > 0 && allowedServerIds.has(serverId);
 };
 
+/**
+ * The registry metadata as the auto router sees it, with the approval answer
+ * ANNOTATED — never rewritten.
+ *
+ * This used to call `applyToolApprovalPolicyList`, which rewrote
+ * `needsApproval: true` into `false` whenever the global auto-approve switch
+ * was on. That rewriter was a second approval policy: it decided (and
+ * published to the tool-selection model and the renderer) a claim the registry
+ * never made, and the same rewrite in `agent/harness/tool_resolver.ts` was a
+ * third. Both are gone; the tool's own declaration is now read through
+ * `decideToolApproval`, so the catalog can say "this tool needs a decision"
+ * without pretending the tool changed.
+ */
 const getRegisteredToolMetadata = (autoApproveToolRequests: boolean) =>
-  applyToolApprovalPolicyList(defaultToolRegistry.getToolMetadata(), {
-    autoApproveToolRequests,
-  });
+  defaultToolRegistry.getToolMetadata().map(tool => ({
+    ...tool,
+    needsApproval:
+      decideToolApproval(tool, { autoApprove: autoApproveToolRequests }) === 'ask',
+  }));
 
 const getAutoToolCatalog = (
   autoApproveToolRequests: boolean,

@@ -1,25 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  createAnthropicMock,
-  createDeepSeekMock,
   createLoggerMock,
-  createMinimaxMock,
-  createOpenAICompatibleMock,
-  createOpenAIMock,
   ensureThreadWorkspaceSelectionMock,
   fetchWithTimeoutMock,
-  generateTextMock,
   getProviderMock,
   getProvidersMock,
   getPersonaPromptMock,
   getToolRuntimeContextMock,
   getUserDataPathMock,
   listMcpServersMock,
-  streamTextMock,
 } = vi.hoisted(() => ({
-  createAnthropicMock: vi.fn(),
-  createDeepSeekMock: vi.fn(),
   createLoggerMock: vi.fn(() => ({
     error: vi.fn(),
     warn: vi.fn(),
@@ -27,45 +18,14 @@ const {
     debug: vi.fn(),
     event: vi.fn(),
   })),
-  createMinimaxMock: vi.fn(),
-  createOpenAICompatibleMock: vi.fn(),
-  createOpenAIMock: vi.fn(),
   ensureThreadWorkspaceSelectionMock: vi.fn(() => null),
   fetchWithTimeoutMock: vi.fn(),
-  generateTextMock: vi.fn(),
   getProviderMock: vi.fn(() => null),
   getProvidersMock: vi.fn(),
   getPersonaPromptMock: vi.fn(),
   getToolRuntimeContextMock: vi.fn(() => ({})),
   getUserDataPathMock: vi.fn(() => '/tmp/iki-user-data'),
   listMcpServersMock: vi.fn(() => []),
-  streamTextMock: vi.fn(),
-}));
-
-vi.mock('ai', () => ({
-  generateText: generateTextMock,
-  smoothStream: vi.fn(),
-  streamText: streamTextMock,
-}));
-
-vi.mock('@ai-sdk/openai', () => ({
-  createOpenAI: createOpenAIMock,
-}));
-
-vi.mock('@ai-sdk/anthropic', () => ({
-  createAnthropic: createAnthropicMock,
-}));
-
-vi.mock('@ai-sdk/deepseek', () => ({
-  createDeepSeek: createDeepSeekMock,
-}));
-
-vi.mock('@ai-sdk/openai-compatible', () => ({
-  createOpenAICompatible: createOpenAICompatibleMock,
-}));
-
-vi.mock('@ai-sdk/minimax', () => ({
-  createMiniMax: createMinimaxMock,
 }));
 
 vi.mock('@iki/backend/db/providers', () => ({
@@ -102,8 +62,6 @@ vi.mock('@iki/backend/utils/runtime_context', () => ({
 }));
 
 import {
-  createModel,
-  disposeLanguageModel,
   resolvePiModelCapability,
   fetchModelCapabilityFromDev,
   getModelCallSettings,
@@ -119,15 +77,6 @@ const createAsyncIterable = <T>(values: T[]) =>
       yield value;
     }
   })();
-
-const createMockLanguageModel = (provider = 'anthropic') => ({
-  specificationVersion: 'v3' as const,
-  provider,
-  modelId: 'claude-sonnet-4-5',
-  supportedUrls: {},
-  doGenerate: vi.fn(),
-  doStream: vi.fn(),
-});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -146,7 +95,6 @@ beforeEach(() => {
   listMcpServersMock.mockReturnValue([]);
   getToolRuntimeContextMock.mockReturnValue({});
   getPersonaPromptMock.mockReturnValue('persona prompt');
-  createOpenAIMock.mockReturnValue(() => 'mock-model');
 });
 
 describe('llm factory', () => {

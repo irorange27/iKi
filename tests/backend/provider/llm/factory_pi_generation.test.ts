@@ -26,6 +26,7 @@ import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { addProvider } from '@iki/backend/db/providers';
 import { generateChatWithModelMessages } from '@iki/backend/provider/llm/factory';
 import { callPiChat } from '@iki/backend/provider/llm/pi_adapter';
+import { getPersonaPrompt } from '@iki/backend/persona';
 import { createScriptedPiServer, sse, type ScriptedPiServer } from '../../pi_candidate/helpers/scripted_pi_server';
 
 let root: string;
@@ -212,7 +213,7 @@ describe('switch item 1: single-shot generation routing', () => {
     expect(model?.api).toBe(expectedApi);
   });
 
-  it('honors systemPromptOverride and temperature on the Pi path (#126 aux consolidation)', async () => {
+  it('lands the caller-declared aux instruction in the aux slot, never as a persona-led override', async () => {
     server.setScript('aux override probe', {
       chunks: [
         sse.delta('ok'),
@@ -225,14 +226,21 @@ describe('switch item 1: single-shot generation routing', () => {
       providerId: 'provider_pi_path',
       modelId: 'pi-model',
       messages: [{ role: 'user', content: 'aux override probe' }],
-      systemPromptOverride: 'exact runtime system',
+      auxSystemInstruction: 'exact runtime system',
       temperature: 0.3,
     });
     expect(result.text).toBe('ok');
 
-    // The override is the EXACT request system — the persona-led join is
-    // skipped entirely (fails on the old code, which ignored the override);
-    // the temperature rides into the adapter call.
+    // The caller declares the AUX slot; the slot owner assembles it. The old
+    // `systemPromptOverride` let the caller pick the slot outright, which is
+    // exactly the "same string, two different slots" defect the 2026-10 audit
+    // found (C-F6). The temperature still rides into the adapter call.
+    //
+    // This caller passes a BARE instruction (no persona of its own), and a
+    // factory-level `auxSystemInstruction` is not a chat turn, so the factory
+    // adds no persona. Production is unaffected: every real aux caller goes
+    // through `prompt_text_generator`, which composes persona into the string
+    // it declares (see the duplicate check below).
     const [model, context, options] = vi.mocked(callPiChat).mock.calls.at(-1)!;
     void model;
     expect(context.systemPrompt).toBe('exact runtime system');
@@ -240,6 +248,33 @@ describe('switch item 1: single-shot generation routing', () => {
     expect((options as { temperature?: number }).temperature).toBe(0.3);
     const wire = server.getWire('aux override probe');
     expect(JSON.stringify(wire.messages)).toContain('aux override probe');
+  });
+
+  it('carries a runtime-composed aux system exactly once, persona included', async () => {
+    // Regression for the "same string, two different slots" family: an aux
+    // caller composes persona+instruction ITSELF and declares it as the aux
+    // slot. If the factory ALSO joined persona, the wire would carry it twice —
+    // and a model-facing identity duplicated in one prompt is a real defect,
+    // not cosmetics.
+    server.setScript('aux duplicate probe', {
+      chunks: [sse.delta('ok'), sse.finish('stop', usageChunk())],
+    });
+
+    const composed = `${getPersonaPrompt()}\n\nAnswer the question briefly.`;
+    await generateChatWithModelMessages({
+      providerType: 'custom-openai',
+      providerId: 'provider_pi_path',
+      modelId: 'pi-model',
+      messages: [{ role: 'user', content: 'aux duplicate probe' }],
+      auxSystemInstruction: composed,
+    });
+
+    const wire = server.getWire('aux duplicate probe');
+    const body = JSON.stringify(wire);
+    const identityMarker = 'You are iKi, a powerful AI assistant';
+    const occurrences = body.split(identityMarker).length - 1;
+    expect(occurrences).toBe(1);
+    expect(body).toContain('Answer the question briefly.');
   });
 
   it('serves a Responses provider through Pi with the openai-responses dialect', async () => {

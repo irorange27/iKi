@@ -43,11 +43,7 @@ export const createChatContextAssembler = (deps: {
       });
     }
 
-    const recentHistory = selectRecentHistory(
-      params.messages,
-      contextConfig,
-      params.modelCapability
-    );
+    const recentHistory = selectRecentHistory(params.messages, params.modelCapability);
     blocks.push(recentHistory.block);
 
     // The identity block must render the SAME world the turn executes in:
@@ -78,14 +74,16 @@ export const createChatContextAssembler = (deps: {
 
     blocks.push(buildDroppedBlock('thread-summary', 'managed at model step boundary'));
 
-    const baseMessages = insertSystemMessages(
+    // Identity and skills are stable instruction blocks: both land in the
+    // system prefix so the cached history prefix stays reusable across turns.
+    // Conversation history is passed through untouched — token-level history
+    // compaction has one owner, the model-step budget in
+    // `agent/runners/pi_turn_budget.ts`, not this assembler.
+    const withIdentity = insertSystemMessages(
       [...recentHistory.systemMessages, ...recentHistory.recentMessages],
       [identityContext.systemMessage]
     );
 
-    // Identity and skills are stable instruction blocks and stay in the system
-    // prefix, so the cached history prefix stays reusable across turns.
-    const baseWithVolatile = baseMessages;
     const skillContext: SkillContext = benchmarkCleanContext
       ? {
           systemMessage: '',
@@ -94,7 +92,7 @@ export const createChatContextAssembler = (deps: {
           block: buildDroppedBlock('skills', 'disabled for benchmark clean mode'),
         }
       : await buildSkillContext({
-          inputMessages: baseWithVolatile,
+          inputMessages: withIdentity,
           threadId: params.threadId,
           skillIds: params.skillIds,
           skillMode: params.skillMode,
@@ -105,7 +103,7 @@ export const createChatContextAssembler = (deps: {
     blocks.push(skillContext.block);
 
     return buildAssembleResult({
-      messages: insertSystemMessages(baseWithVolatile, [skillContext.systemMessage]),
+      messages: insertSystemMessages(withIdentity, [skillContext.systemMessage]),
       usedSkills: skillContext.usedSkills,
       skillMode: skillContext.skillMode,
       retainedRecentMessages: recentHistory.recentMessages.length,

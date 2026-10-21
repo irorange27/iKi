@@ -2,11 +2,19 @@ import { sanitizeModelConversationMessages } from '@iki/backend/agent/model_mess
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 import { buildMessagePreview, countMessageTokens } from './context_helpers';
-import type { ContextConfig, RecentHistoryContext } from './context_types';
+import type { RecentHistoryContext } from './context_types';
 
+/**
+ * History passes through unchanged (sanitized, not clipped).
+ *
+ * There is no token/count budget parameter because assembly time is not where
+ * history is sized: the model-step budget (`agent/runners/pi_turn_budget.ts`
+ * over the pure planner `agent/context_budget.ts`) is the single owner of that
+ * decision and runs at the wire boundary where the real cost is known.
+ * Slicing history here too would make two authorities over one state.
+ */
 export const selectRecentHistory = (
   messages: ChatInputMessage[],
-  _contextConfig: ContextConfig,
   modelCapability?: ModelCapability | null
 ): RecentHistoryContext => {
   const systemMessages = messages.filter(message => message.role === 'system');

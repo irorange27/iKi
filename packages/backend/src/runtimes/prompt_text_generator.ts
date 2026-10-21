@@ -51,7 +51,7 @@ export class SimplePromptTextGenerator implements PromptTextGenerator {
       providerId: this.config.providerId,
       modelId: this.config.model,
       messages,
-      systemPromptOverride: systemPrompt,
+      auxSystemInstruction: systemPrompt,
       ...(typeof generationSettings.temperature === 'number'
         ? { temperature: generationSettings.temperature }
         : {}),

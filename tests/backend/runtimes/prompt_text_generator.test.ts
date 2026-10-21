@@ -69,8 +69,13 @@ describe('SimplePromptTextGenerator', () => {
     const options = generateChatWithModelMessagesMock.mock.calls[0][0] as Record<string, unknown>;
     expect(options.providerType).toBe('openai');
     expect(options.modelId).toBe('gpt-4o-mini');
-    expect(options.systemPromptOverride).toContain('system prompt');
-    expect(options.systemPromptOverride).toContain('persona prompt');
+    // The runtime DECLARES its instruction as the aux slot; the slot owner
+    // (`message/system_prompt.ts`) decides where it lands. It used to hand a
+    // bare `systemPromptOverride`, which let the caller pick the slot — the
+    // 2026-10 audit's F6. The composed text still carries persona+planPrompt
+    // because the caller composes it through the slot table.
+    expect(options.auxSystemInstruction).toContain('system prompt');
+    expect(options.auxSystemInstruction).toContain('persona prompt');
     expect(options.temperature).toBe(0.4);
     expect(options.maxOutputTokens).toBe(256);
     expect(options.messages).toEqual([{ role: 'user', content: 'hello' }]);

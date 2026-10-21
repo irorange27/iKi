@@ -44,8 +44,28 @@ describe('default app config', () => {
 
     expect(config.context.maxSkillTokens).toBe(999);
     expect(config.context.enabled).toBe(true);
-    expect(config.context.maxRecentTokens).toBe(2400);
+    expect(config.context.maxIdentityTokens).toBe(320);
     expect(Object.prototype.hasOwnProperty.call(config, 'memory')).toBe(false);
+  });
+
+  it('does not resurrect retired context budgets from a stale stored config', () => {
+    // A config file written by an older build can still carry the retired
+    // assembly-time budgets. The merge rebuilds `context` field by field, so
+    // they are dropped rather than revived as config nothing reads (C-F1).
+    const config = mergeAppConfig({
+      context: {
+        maxRecentTokens: 9999,
+        maxMessageTokens: 9999,
+        maxSummaryTokens: 9999,
+        maxSkillTokens: 444,
+      },
+    } as never);
+
+    expect(config.context).toEqual({
+      enabled: true,
+      maxIdentityTokens: 320,
+      maxSkillTokens: 444,
+    });
   });
 
   it('drops legacy tool-model providerType config while preserving the selected model', () => {

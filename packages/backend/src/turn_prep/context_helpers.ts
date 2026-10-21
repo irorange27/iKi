@@ -87,10 +87,6 @@ export const summarizeContextComposition = (params: {
   return { estimatedTotalTokens, categories };
 };
 
-/** Inverse of the envelope: exports show what the user wrote, not what we injected. */
-export const stripInjectedContext = (text: string): string =>
-  text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
-
 export const buildAssembleResult = (params: {
   messages: ChatInputMessage[];
   usedSkills: AssembleChatContextResult['usedSkills'];

@@ -25,7 +25,10 @@ import type {
 } from '@iki/backend/types/provider';
 import type { TokenUsageMetrics } from '@iki/backend/types/chat_usage';
 import { getErrorMessage } from '@iki/backend/utils/errors';
-import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
+import {
+  assembleAuxRequestSystemPrompt,
+  assembleRequestSystemPrompt,
+} from '@iki/backend/message/system_prompt';
 import {
   buildPiModel,
   callPiChat,
@@ -506,11 +509,17 @@ const generateViaPi = async (
     modelId: string;
     messages: ModelMessage[];
     extraSystemPrompt?: string;
-    /** The EXACT request system prompt — skips the persona/extra/transcript
-     * assembly entirely (aux callers with their own context, e.g. the
-     * runtimes). A leading system message in `messages` still folds into the
-     * projection's slot but is superseded by the override. */
-    systemPromptOverride?: string;
+    /**
+     * The runtime-owned instruction of an AUXILIARY (single-shot) request —
+     * summarizer, title, catalog selection, tool router.
+     *
+     * This is a SLOT declaration, not a string override: the slot owner
+     * (`message/system_prompt.ts`) decides that aux content travels as
+     * `extraPrompt`, and the persona-led chat assembly is skipped for aux
+     * traffic instead of being silently replaced. A caller can no longer hand
+     * the supply layer a pre-joined string and bypass the slot table.
+     */
+    auxSystemInstruction?: string;
     temperature?: number;
     maxOutputTokens?: number;
     threadId?: string;
@@ -542,14 +551,19 @@ const generateViaPi = async (
     options.modelId,
     options.providerType
   );
-  const assembled = assembleRequestSystemPrompt([
-    { slot: 'persona', text: personaPrompt },
-    ...(typeof options.extraSystemPrompt === 'string'
-      ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
-      : []),
-    { slot: 'transcriptSystem', text: transcriptSystem },
-  ]);
-  const systemPrompt = options.systemPromptOverride ?? assembled.prompt;
+  // Aux traffic assembles through the aux slot: a chat persona would only
+  // dilute a summarizer/title/router request, and the runtime's own
+  // instruction must stay attributable as `extraPrompt`.
+  const systemPrompt =
+    typeof options.auxSystemInstruction === 'string'
+      ? assembleAuxRequestSystemPrompt({ instruction: options.auxSystemInstruction }).prompt
+      : assembleRequestSystemPrompt([
+          { slot: 'persona', text: personaPrompt },
+          ...(typeof options.extraSystemPrompt === 'string'
+            ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
+            : []),
+          { slot: 'transcriptSystem', text: transcriptSystem },
+        ]).prompt;
 
   try {
     const settle = await tracePiGeneration(
@@ -661,10 +675,14 @@ export const generateChatWithModelMessages = async (options: {
   modelId: string;
   messages: ModelMessage[];
   extraSystemPrompt?: string;
-  /** The EXACT request system prompt — skips the persona/extra assembly and
-   * the projection's system slot (aux callers with their own context, e.g.
-   * the runtimes). Applied on BOTH supply paths. */
-  systemPromptOverride?: string;
+  /**
+   * Auxiliary (single-shot) callers declare their runtime-owned instruction
+   * here instead of passing a pre-joined system prompt. The slot it claims is
+   * decided by `message/system_prompt.ts` (`assembleAuxRequestSystemPrompt`),
+   * so aux and chat traffic stay comparable per slot. Mutually exclusive with
+   * `extraSystemPrompt`: an aux request has no chat persona/turn prompt.
+   */
+  auxSystemInstruction?: string;
   temperature?: number;
   /** AI-SDK-path generation options (providerOptions with reasoning-effort
    * settings) — spread after getModelCallSettings so the caller wins. The Pi

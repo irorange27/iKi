@@ -136,10 +136,7 @@ const ChatSchema = z
 const ContextSchema = z
   .object({
     enabled: booleanField(DEFAULT_APP_CONFIG.context.enabled),
-    maxRecentTokens: intField(DEFAULT_APP_CONFIG.context.maxRecentTokens),
-    maxMessageTokens: intField(DEFAULT_APP_CONFIG.context.maxMessageTokens),
     maxIdentityTokens: intField(DEFAULT_APP_CONFIG.context.maxIdentityTokens),
-    maxSummaryTokens: intField(DEFAULT_APP_CONFIG.context.maxSummaryTokens),
     maxSkillTokens: intField(DEFAULT_APP_CONFIG.context.maxSkillTokens),
   })
   .catch(DEFAULT_APP_CONFIG.context);

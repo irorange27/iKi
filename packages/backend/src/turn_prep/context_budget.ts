@@ -4,11 +4,7 @@ import type { ModelCapability } from '@iki/backend/utils/provider_models';
 type ContextConfig = typeof DEFAULT_APP_CONFIG.context;
 
 type ScaledBudgetItem = {
-  key:
-    | 'maxRecentTokens'
-    | 'maxIdentityTokens'
-    | 'maxSummaryTokens'
-    | 'maxSkillTokens';
+  key: 'maxIdentityTokens' | 'maxSkillTokens';
   value: number;
   minValue: number;
 };
@@ -23,9 +19,7 @@ export type EffectiveContextConfig = ContextConfig & {
 };
 
 const CONTEXT_BUDGET_FLOORS: Record<ScaledBudgetItem['key'], number> = {
-  maxRecentTokens: 256,
   maxIdentityTokens: 48,
-  maxSummaryTokens: 96,
   maxSkillTokens: 160,
 };
 
@@ -34,19 +28,9 @@ const clampInteger = (value: number, minValue: number, maxValue: number): number
 
 const toScaledBudgetItems = (config: ContextConfig): ScaledBudgetItem[] => [
   {
-    key: 'maxRecentTokens',
-    value: config.maxRecentTokens,
-    minValue: CONTEXT_BUDGET_FLOORS.maxRecentTokens,
-  },
-  {
     key: 'maxIdentityTokens',
     value: config.maxIdentityTokens,
     minValue: CONTEXT_BUDGET_FLOORS.maxIdentityTokens,
-  },
-  {
-    key: 'maxSummaryTokens',
-    value: config.maxSummaryTokens,
-    minValue: CONTEXT_BUDGET_FLOORS.maxSummaryTokens,
   },
   {
     key: 'maxSkillTokens',
@@ -99,11 +83,17 @@ const shrinkBudgetToFit = (
   return nextItems;
 };
 
+/**
+ * The budgets this derivation rescales are ONLY the two clipping caps that
+ * `context_blocks.ts` actually applies. There is deliberately no history or
+ * summary budget here: history is not clipped at assembly time, because the
+ * single owner of that decision is the model-step budget at the wire boundary
+ * (`agent/runners/pi_turn_budget.ts` + the pure planner in
+ * `agent/context_budget.ts`). Re-adding a knob here without a consumer is
+ * exactly what the C-F1 retirement (docs/audit/2026-10-arch-refactor) removed.
+ */
 const buildRequestedContextTokens = (config: ContextConfig): number =>
-  config.maxRecentTokens +
-  config.maxIdentityTokens +
-  config.maxSummaryTokens +
-  config.maxSkillTokens;
+  config.maxIdentityTokens + config.maxSkillTokens;
 
 const resolveMaxOutputTokens = (
   modelInputLimit: number,
@@ -121,24 +111,8 @@ const resolveMaxOutputTokens = (
   return clampInteger(declaredOutput, 256, Math.max(256, Math.floor(modelInputLimit / 2)));
 };
 
-const scaleMessageClipBudget = (
-  config: ContextConfig,
-  scale: number,
-  maxRecentTokens: number
-): number => {
-  if (scale >= 1) {
-    return Math.min(config.maxMessageTokens, maxRecentTokens);
-  }
-
-  return Math.min(
-    maxRecentTokens,
-    clampInteger(
-      Math.floor(config.maxMessageTokens * Math.max(scale, 0.5)),
-      80,
-      config.maxMessageTokens
-    )
-  );
-};
+/** The floor of the fitting range: the smallest identity block we accept. */
+const MIN_AVAILABLE_CONTEXT_TOKENS = CONTEXT_BUDGET_FLOORS.maxIdentityTokens;
 
 export const deriveModelAwareContextConfig = (
   config: ContextConfig,
@@ -166,7 +140,7 @@ export const deriveModelAwareContextConfig = (
   // small relative to the window, and subtracting a guessed reserve would
   // shrink the input budget on behalf of a number we never send.
   const availableContextTokens = Math.max(
-    CONTEXT_BUDGET_FLOORS.maxRecentTokens,
+    MIN_AVAILABLE_CONTEXT_TOKENS,
     modelInputLimit - (maxOutputTokens ?? 0) - safetyReserveTokens
   );
 
@@ -199,10 +173,7 @@ export const deriveModelAwareContextConfig = (
 
   return {
     ...config,
-    maxRecentTokens: itemMap.maxRecentTokens,
-    maxMessageTokens: scaleMessageClipBudget(config, scale, itemMap.maxRecentTokens),
     maxIdentityTokens: itemMap.maxIdentityTokens,
-    maxSummaryTokens: itemMap.maxSummaryTokens,
     maxSkillTokens: itemMap.maxSkillTokens,
     budgetScale: scale,
     availableContextTokens,
