@@ -1,4 +1,4 @@
-import type { UIMessage } from 'ai';
+import type { ChatUiMessage as UIMessage } from '@iki/backend/message/message_parts';
 import { describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 

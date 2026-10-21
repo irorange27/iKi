@@ -15,7 +15,6 @@ import path from 'node:path';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 
 // The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
@@ -28,8 +27,6 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
-  createModel: createModelMock,
-  disposeLanguageModel: vi.fn(),
   resolvePersonaPrompt: () => 'audit system',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({
@@ -249,7 +246,6 @@ describe('approval resume reads the session log alone', () => {
       true
     );
     expect(result.success).toBe(false);
-    expect(createModelMock).not.toHaveBeenCalled();
   });
 
   it('a resume-started fact lost to a write failure releases the decision and fails the child run', async () => {

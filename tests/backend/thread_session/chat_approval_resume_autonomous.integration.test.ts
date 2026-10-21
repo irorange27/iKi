@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 
 // The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
@@ -65,7 +64,6 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
       createdAt: '2026-06-20T00:00:00.000Z',
       updatedAt: '2026-06-20T00:00:00.000Z',
       working: {
-        modelMessages: [],
         accumulatedText: '',
         pendingApprovalIds: [],
         lastStepIndex: (step as { stepIndex: number }).stepIndex,
@@ -96,7 +94,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
     enabledTools: [],
     availableSkillIds: [],
     input: {},
-    working: { modelMessages: [], accumulatedText: '', pendingApprovalIds: [], lastStepIndex: 0 },
+    working: { accumulatedText: '', pendingApprovalIds: [], lastStepIndex: 0 },
     output: null,
     error: null,
     createdAt: '2026-06-20T00:00:00.000Z',
@@ -127,7 +125,7 @@ const makePlan = (overrides: Partial<ExecutionPlan> = {}): ExecutionPlan => ({
   // the remaining steps (same contract the streaming resume restores).
   requireApproval: false,
   autoApproveToolRequests: false,
-  maxIterations: 1,
+  budget: { step: 1 },
   systemPrompt: 'system prompt',
   skillMode: 'manual',
   kind: 'chat-turn',
@@ -222,9 +220,14 @@ describe('approval resume rides the autonomous turn driver', () => {
     } as never);
     const pausedHistory = blockedHarness.getHistory();
 
-    // One tool call per SDK step (maxIterations 1) — every batch ends with
-    // finishReason 'tool-calls', so the turn driver must keep batching until
-    // its own budget (3 batches × 1 step) is spent.
+    // One tool call per SDK step (step budget 1) — every batch ends with
+    // finishReason 'tool-calls', so the turn driver keeps batching until its
+    // own budget (3 batches × 1 step) is spent.
+    //
+    // FOUR scripts for three batches: the resumed segment EXECUTES the
+    // already-approved call first (no model call), then each batch makes its
+    // own model call. A three-entry script stopped one batch short and the
+    // assertion below read 2 instead of 3.
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
         [
@@ -237,6 +240,10 @@ describe('approval resume rides the autonomous turn driver', () => {
         ],
         [
           { kind: 'toolCall', toolName: toolName, args: {}, id: 'call_r3' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'toolCall', toolName: toolName, args: {}, id: 'call_r4' },
           { kind: 'done', reason: 'toolUse' },
         ],
         [
@@ -272,8 +279,15 @@ describe('approval resume rides the autonomous turn driver', () => {
         target: { id: 7, send: vi.fn() },
         history: pausedHistory,
         recoveryContext: {
+          // The resumed plan must describe the SAME turn the pause came from,
+          // policy included: the paused harness resolved its tools under
+          // `approvalPolicy: 'always'` (line ~184). A resume plan that omitted
+          // it re-opened the approval question on the already-approved call,
+          // so the continuation paused again instead of executing — the
+          // failure this test caught.
           plan: makePlan({
-            autonomous: { maxIterations: 3, continuePrompt: 'CONTINUE_THE_PAUSED_WORK' },
+            approvalPolicy: 'always',
+            budget: { step: 1, batch: { max: 3, continuePrompt: 'CONTINUE_THE_PAUSED_WORK' } },
           }),
           sessionId: 'assistant_1',
           assistantMessageId: 'assistant_1',

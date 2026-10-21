@@ -58,6 +58,36 @@ export type IkiChatOptions = {
 
 const EMPTY_ASSISTANT = (id: string): ChatUiMessage => ({ id, role: 'assistant', parts: [] });
 
+/**
+ * The assistant message a paused turn is still waiting on, if any.
+ *
+ * A pause leaves exactly one tool part in `approval-requested`; the message
+ * that holds it is the one the backend will continue. Resolving it here is
+ * what keeps the renderer a view: the resumed segment updates THIS message
+ * instead of reconstructing it from a chunk stream that does not carry the
+ * pre-pause parts.
+ */
+const findPausedAssistant = (
+  messages: readonly ChatUiMessage[]
+): { index: number; message: ChatUiMessage } | null => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index] as ChatUiMessage;
+    if (message.role !== 'assistant') continue;
+    // `handleToolApproval` records the decision BEFORE it resumes, so the part
+    // is already `approval-responded` by the time the stream is adopted. Both
+    // states mean "this message still owns an unresolved call" — matching only
+    // `approval-requested` left the resume path with nothing to attach to.
+    const paused = (message.parts ?? []).some(
+      part =>
+        part.type === 'dynamic-tool' &&
+        ((part as { state?: string }).state === 'approval-requested' ||
+          (part as { state?: string }).state === 'approval-responded')
+    );
+    if (paused) return { index, message };
+  }
+  return null;
+};
+
 export class IkiChat {
   private abortController: AbortController | null = null;
 
@@ -166,14 +196,33 @@ export class IkiChat {
     state.error = undefined;
     state.status = 'streaming';
 
-    // The resumed segment continues the PAUSED message: the backend re-seeds
-    // its pre-pause parts under the same id. Appending a fresh message instead
-    // split one assistant turn in two and lost the tool card that asked for the
-    // approval at all.
-    const assistantId = this.options.generateId();
-    let assistant: ChatUiMessage = EMPTY_ASSISTANT(assistantId);
-    let assistantIndex = state.messages.length;
-    state.pushMessage(assistant);
+    // The resumed segment continues the PAUSED message — and the renderer is a
+    // VIEW, not a second state source: the backend owns what the pause left
+    // behind, so the parts already on screen are the truth and the resumed
+    // chunks UPDATE them in place.
+    //
+    // This used to start from an empty assistant message and re-merge the
+    // pre-pause parts only when the resumed stream opened with a `start` chunk
+    // carrying the paused message id. The real resume carries no such `start`,
+    // so that merge was dead code and the tool card that asked for the approval
+    // vanished the moment the user answered it (2026-10 audit, observed).
+    const paused = findPausedAssistant(state.messages);
+    let assistant: ChatUiMessage;
+    let assistantIndex: number;
+    if (paused) {
+      assistantIndex = paused.index;
+      assistant = {
+        ...paused.message,
+        parts: structuredClone(paused.message.parts ?? []),
+      };
+    } else {
+      // Nothing is paused (a resume that outlived its pause): a fresh message
+      // is still the only option, and the loop below adopts a `start` id when
+      // one arrives.
+      assistant = EMPTY_ASSISTANT(this.options.generateId());
+      assistantIndex = state.messages.length;
+      state.pushMessage(assistant);
+    }
 
     this.abortController = new AbortController();
     let isError = false;

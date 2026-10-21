@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const generationSettingsMock = vi.hoisted(() => vi.fn(() => ({})));
 
@@ -89,9 +88,9 @@ describe('approval resume restores the persisted plan after a restart', () => {
     guardActive: false,
     requireApproval: false,
     autoApproveToolRequests: false,
-    maxIterations: 1,
+    budget: { step: 1 },
     reasoningEffort: 'low',
-    autonomous: { maxIterations: 2, continuePrompt: 'CONTINUE_FROM_PERSISTED_PLAN' },
+    budget: { step: 1, batch: { max: 2, continuePrompt: 'CONTINUE_FROM_PERSISTED_PLAN' } },
     systemPrompt: 'system prompt',
     skillMode: 'manual',
     kind: 'chat-turn',

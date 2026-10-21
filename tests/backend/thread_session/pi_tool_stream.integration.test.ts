@@ -23,7 +23,6 @@ import path from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
@@ -304,7 +303,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(secondWire).toContain('contents of /probe.txt');
 
     // Routing proof: the AI SDK was never constructed; both calls rode Pi.
-    expect(createModelMock).not.toHaveBeenCalled();
     expect(server.countRequests('read the tool probe file')).toBe(2);
   }, 30000);
 
@@ -351,7 +349,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     // Routing proof: this must ride Pi, whose inference records carry no
     // result parts. On the AI SDK harness the observation would come from the
     // inference itself and the case would pass without exercising the join.
-    expect(createModelMock).not.toHaveBeenCalled();
 
     const run = agentRunDb
       .listAgentRunsByThread('thread_pi_tool_stream')
@@ -562,7 +559,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(executions.slice(executionsBefore)).toEqual(['/sdk.txt']);
     expect(publishedText(target)).toContain('pi tool answer');
     expect(lastRunStatus(target)).toBe('completed');
-    expect(createModelMock).not.toHaveBeenCalled();
     expect(server.totalRequests()).toBe(requestsBefore + 2);
   }, 30000);
 
@@ -613,7 +609,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     // rebuilt on the AI SDK — batch 2 never arrives there.
     expect(server.countRequests('pass the baton')).toBe(1);
     expect(server.countRequests('finish phase two')).toBe(1);
-    expect(createModelMock).not.toHaveBeenCalled();
 
     // Fresh history: batch 2's sole user message is the next-steps text;
     // batch 1's transcript is gone. The handoff context rides the request.
@@ -730,7 +725,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(executions.slice(executionsBefore)).toEqual(['/chained.txt']);
     expect(server.countRequests('chained guard probe')).toBe(2);
     expect(server.countRequests('wrap up loose ends')).toBe(1);
-    expect(createModelMock).not.toHaveBeenCalled();
 
     // The chained batch rides the fresh handoff history: sole user message
     // is the next-steps text, the paused transcript is gone.

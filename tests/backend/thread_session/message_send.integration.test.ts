@@ -1,7 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const writeThreadTodoPlanMock = vi.hoisted(() => vi.fn());
 
@@ -211,36 +210,21 @@ describe('createMessageSend integration', () => {
     expect(recordedSteps.some(step => step.type === 'tool-call' && !step.input?.toolCallId)).toBe(
       false
     );
+    // The inference record carries the assistant's CONTENT — reasoning, text and
+    // the tool calls the model asked for. It does not carry the tool OBSERVATION:
+    // that arrives one step later, and pinning it here encoded the retired AI
+    // SDK's shape (the 2026-10 audit caught this: the AI SDK executor this
+    // assertion was written against no longer exists, so the assertion could not
+    // fail for a real reason). The observation's own contract is covered by
+    // `tool_execution.integration.test.ts` and the session log.
+    const inferenceContents = recordedSteps
+      .filter(step => step.type === 'model' && step.output?.inference === true)
+      .map(step => (step.output?.content ?? []) as Array<{ type?: string }>);
+    expect(inferenceContents.some(parts => parts.some(part => part.type === 'tool-call'))).toBe(
+      true
+    );
     expect(
-      recordedSteps.some(
-        step =>
-          step.type === 'model' &&
-          step.output?.inference === true &&
-          Array.isArray(step.output.content) &&
-          step.output.content.some(
-            part =>
-              typeof part === 'object' &&
-              part !== null &&
-              'type' in part &&
-              part.type === 'tool-call' &&
-              'toolCallId' in part
-          )
-      )
-    ).toBe(true);
-    expect(
-      recordedSteps.some(
-        step =>
-          step.type === 'model' &&
-          step.output?.inference === true &&
-          Array.isArray(step.output.content) &&
-          step.output.content.some(
-            part =>
-              typeof part === 'object' &&
-              part !== null &&
-              'type' in part &&
-              part.type === 'tool-result'
-          )
-      )
+      inferenceContents.every(parts => parts.every(part => part.type !== 'tool-result'))
     ).toBe(true);
   });
 
@@ -310,7 +294,7 @@ describe('createMessageSend integration', () => {
 
     // The completed run's recorded output, read from the database.
     const completedRun = agentRunDb
-      .listAgentRunsByThread('thread_1')
+      .listAgentRunsByThread('thread_budget')
       .filter(run => run.status === 'completed')
       .at(-1);
     expect(completedRun?.output).toMatchObject({ finishReason: 'budget-exhausted' });
@@ -380,7 +364,7 @@ describe('createMessageSend integration', () => {
     expect(result.text).toContain('[Handoff #1] Found the leak');
 
     const completedRun = agentRunDb
-      .listAgentRunsByThread('thread_1')
+      .listAgentRunsByThread('thread_handoff')
       .filter(run => run.status === 'completed')
       .at(-1);
     expect(completedRun?.output).toMatchObject({ finishReason: 'handoff' });

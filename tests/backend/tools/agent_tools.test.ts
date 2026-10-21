@@ -29,6 +29,10 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
 }));
 
 import { DelegatedAgentTool, setDelegatedAgentRuntime } from '@iki/backend/tools/agent_tools';
+import {
+  finalizeHarnessTurn,
+  finalizeTurnFailure,
+} from '@iki/backend/thread_session/turn_driver';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { defaultToolRegistry } from '@iki/backend/tools/base';
 import { ReadFileTool, WriteFileTool, UndoEditTool } from '@iki/backend/tools/file_tools';
@@ -77,7 +81,6 @@ describe('DelegatedAgentTool', () => {
       id: 'run_child_1',
       getRun: vi.fn(() => ({ status: 'running' })),
       recordModelStep: vi.fn(),
-      syncModelMessages: vi.fn(),
       recordAgentStep: vi.fn(),
       recordChildRun: vi.fn(),
       markCompleted: vi.fn(),
@@ -99,6 +102,19 @@ describe('DelegatedAgentTool', () => {
         // talks to a provider. Running the real Pi harness here reached
         // `callPiChat` and failed for a reason unrelated to the assertion.
         return createHarnessStub() as never;
+      },
+      // The child finalizes through the session layer's one authority; the
+      // tool reaches it as an INJECTED PORT (arch rule `tools-below-session`),
+      // so the composition root has to supply it. These cases only need the
+      // calls to land on the tracker already mocked above.
+      // Use the REAL session-layer finalizers, not a copy of their mapping:
+      // a stub here would re-encode the outcome→row translation and could then
+      // disagree with production without any test noticing (the exact class of
+      // duplicate this refactor exists to delete). The tracker is mocked, so
+      // the real finalizer still lands on a spy.
+      finalize: {
+        finalizeSuccess: finalizeHarnessTurn,
+        finalizeFailure: finalizeTurnFailure,
       },
     });
   });
@@ -178,8 +194,13 @@ describe('DelegatedAgentTool', () => {
         childKind: 'delegated-agent',
       })
     );
-    expect(createAgentRunTrackerMock.mock.results[0]?.value.syncModelMessages).toHaveBeenCalledWith(
-      [{ role: 'assistant', content: 'delegated history' }]
+    // The delegated child's model history is NOT copied onto its run row
+    // (ADR 010 §3): it lives in the session log and is replayed on recovery.
+    // The tracker no longer exposes `syncModelMessages` at all, so the inverse
+    // invariant is what this pins — a future change that reintroduces the copy
+    // has to reintroduce the surface first and will fail here.
+    expect(createAgentRunTrackerMock.mock.results[0]?.value).not.toHaveProperty(
+      'syncModelMessages'
     );
     expect(createAgentRunTrackerMock.mock.results[0]?.value.markCompleted).toHaveBeenCalledWith(
       expect.objectContaining({

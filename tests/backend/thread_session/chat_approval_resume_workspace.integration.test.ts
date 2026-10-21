@@ -4,7 +4,6 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
 
@@ -19,8 +18,6 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
 vi.mock('@iki/backend/platform', () => ({ getUserDataPath: userDataMock }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
-  createModel: createModelMock,
-  disposeLanguageModel: vi.fn(),
   resolvePersonaPrompt: () => 'audit system',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({
@@ -234,7 +231,7 @@ describe('approval resume keeps the turn-start workspace', () => {
                 requireApproval: true,
                 autoApproveToolRequests: false,
                 approvalPolicy: 'always',
-                maxIterations: 5,
+                budget: { step: 5 },
                 systemPrompt: `Current workspace: ${a}`,
                 skillMode: 'manual',
                 kind: 'chat-turn',

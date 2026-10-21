@@ -13,7 +13,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
-import type { ModelMessage } from 'ai';
 
 const callPiChatMock = vi.hoisted(() => vi.fn());
 

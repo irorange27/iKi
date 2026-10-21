@@ -15,7 +15,6 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
 
@@ -33,8 +32,6 @@ vi.mock('@iki/backend/platform', async importOriginal => ({
 }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
-  createModel: createModelMock,
-  disposeLanguageModel: vi.fn(),
   resolvePersonaPrompt: () => 'persona prompt',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({
@@ -351,7 +348,6 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
 
     expect(result).toMatchObject({ success: false });
     expect(result.error).toContain('cannot be represented from the log');
-    expect(createModelMock).not.toHaveBeenCalled();
   });
 
   it('the replay still shows the whole story for display while the retry continues', async () => {

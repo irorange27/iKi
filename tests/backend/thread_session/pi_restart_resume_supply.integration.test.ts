@@ -23,13 +23,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { z } from 'zod';
 import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-ai';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
-  createModel: createModelMock,
-  disposeLanguageModel: vi.fn(),
   resolvePersonaPrompt: () => 'audit system',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({
@@ -223,7 +220,6 @@ describe('a restart-recovered resume of a Pi-paused turn stays on the Pi supply'
     const approvalId = await pauseOnProbe(buildStreaming(approvalsA), 161);
     // The pause itself ran Pi: one scripted transport call, no AI SDK model.
     expect(callPiChatMock).toHaveBeenCalledTimes(1);
-    expect(createModelMock).not.toHaveBeenCalled();
 
     // A restart: fresh approvals registry, and both old projections are gone.
     const approvalsB = buildApprovals();
@@ -231,9 +227,6 @@ describe('a restart-recovered resume of a Pi-paused turn stays on the Pi supply'
     getDb().exec('DELETE FROM chat_messages');
 
     piScript = [{ content: [{ type: 'text', text: 'resumed on pi' }], deltas: ['resumed ', 'on pi'] }];
-    createModelMock.mockImplementation(() => {
-      throw new Error('AI SDK harness must not run for a restart-recovered Pi resume');
-    });
     const chunks: string[] = [];
     const result = await approvalsB.approveTool(
       {
@@ -256,7 +249,6 @@ describe('a restart-recovered resume of a Pi-paused turn stays on the Pi supply'
     expect(chunks).toContain('finish');
     // The supply did not flip mid-turn: the resumed segment never built an
     // AI SDK model.
-    expect(createModelMock).not.toHaveBeenCalled();
 
     // The decided call executed exactly once through the five-state owner.
     expect(executions).toEqual(['/supply.txt']);

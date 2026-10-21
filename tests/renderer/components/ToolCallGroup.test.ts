@@ -3,7 +3,7 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
-import type { UIMessage } from 'ai';
+import type { ChatUiMessage as UIMessage } from '@iki/backend/message/message_parts';
 
 import ToolCallGroup from '../../../packages/desktop/src/renderer/components/chat/ToolCallGroup.vue';
 import {

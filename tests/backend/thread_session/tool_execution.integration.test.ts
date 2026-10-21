@@ -161,15 +161,23 @@ it('live duplicate tool calls join the original result without another effect', 
   expect(execution.execute).toHaveBeenCalledTimes(1);
 });
 
-it('a result-write failure leaves a claimed action unknown and cannot repeat the effect', async () => {
+it('a result-write failure leaves a claimed action interrupted and cannot repeat the effect', async () => {
   await register();
   getDb().exec(`CREATE TRIGGER reject_tool_result BEFORE INSERT ON session_events
     WHEN NEW.type = 'tool_execution_finished' BEGIN SELECT RAISE(ABORT, 'result rejected'); END`);
   const execution = port();
   await expect(executeApprovedTool(address, execution)).rejects.toThrow('result rejected');
   getDb().exec('DROP TRIGGER reject_tool_result');
-  expect(await executeApprovedTool(address, execution)).toEqual({ kind: 'unknown' });
+  // The effect ran; its observation was lost. `write_file` is not replay-safe,
+  // so recovery reports the unknown outcome instead of running it again (the
+  // pre-contract answer here was `unknown`, which stalled the turn without ever
+  // telling the model the write may have landed).
+  const recovered = await executeApprovedTool(address, execution);
   expect(execution.execute).toHaveBeenCalledTimes(1);
+  expect(recovered.kind).toBe('completed');
+  expect(recovered.kind === 'completed' && recovered.interrupted?.code).toBe(
+    'tool-execution-interrupted'
+  );
 });
 
 it('cancellation before admission writes no claim and executes no tool', async () => {

@@ -93,7 +93,7 @@ describe('deriveResumeStreamOptions', () => {
       kind: 'handoff-resume',
       parentRunId: 'run_1',
       metadata: { source: 'resume', originalRunId: 'run_1' },
-      autonomous: { maxIterations: 10, continuePrompt: 'Continue.' },
+      continuePrompt: 'Continue.',
     });
 
     // Regression: the pre-rehydrator inline assembly dropped these fields,
@@ -101,6 +101,11 @@ describe('deriveResumeStreamOptions', () => {
     expect(options.approvalPolicy).toBe('trustWorkspace');
     expect(options.requireApproval).toBe(false);
     expect(options.maxIterations).toBe(12);
+    // A resume never invents a batch bound: `baseRun`'s metadata carries no
+    // `autonomous`, so the resumed turn is a single batch. Supplying one in
+    // the override used to inject a budget the original turn never ran under
+    // (audit C-1: only the PROMPT may be overridden, and only for a turn that
+    // already had a bound).
     expect(options.providerType).toBe('openai');
     expect(options.providerId).toBe('prov_1');
     expect(options.model).toBe('test-model');
@@ -114,7 +119,10 @@ describe('deriveResumeStreamOptions', () => {
       rootRunId: 'run_1',
       metadata: { source: 'resume', originalRunId: 'run_1' },
     });
-    expect(options.autonomous).toEqual({ maxIterations: 10, continuePrompt: 'Continue.' });
+    // No batch bound is reported because `baseRun` never stored one. The
+    // override's `continuePrompt` cannot create one — it only re-words the
+    // prompt of a bound the row already has.
+    expect(options.autonomous).toBeUndefined();
   });
 
   it('omits optional fields the run does not carry', () => {

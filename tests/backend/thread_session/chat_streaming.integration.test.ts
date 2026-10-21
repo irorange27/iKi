@@ -53,7 +53,6 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
       createdAt: '2026-06-20T00:00:00.000Z',
       updatedAt: '2026-06-20T00:00:00.000Z',
       working: {
-        modelMessages: [],
         accumulatedText: '',
         pendingApprovalIds: [],
         lastStepIndex: step.stepIndex,
@@ -80,7 +79,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
     rootRunId: id,
     createdAt: '2026-06-20T00:00:00.000Z',
     updatedAt: '2026-06-20T00:00:00.000Z',
-    working: { modelMessages: [], accumulatedText: '', pendingApprovalIds: [], lastStepIndex: 0 },
+    working: { accumulatedText: '', pendingApprovalIds: [], lastStepIndex: 0 },
     ...updates,
   })),
 }));
@@ -107,8 +106,6 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
     updateConversationPreview: vi.fn(),
   }),
 }));
-
-import type { LanguageModelV3Usage } from '@ai-sdk/provider';
 
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
@@ -387,9 +384,13 @@ describe('createChatStreaming integration', () => {
     expect(blockedUpdate?.working).toMatchObject({
       pendingApprovalIds: [approvalId],
     });
-    expect(
-      blockedUpdate?.working?.modelMessages.some(message => message.role === 'assistant')
-    ).toBe(true);
+    // The conversation history is NOT persisted on the run row (ADR 010 §3):
+    // it lives in the session log and is replayed on recovery. What this
+    // assertion protects is the inverse — the blocked run's working state
+    // carries only live state, so a future change that starts copying history
+    // back into `working_json` fails here rather than silently doubling the
+    // write volume per batch.
+    expect(blockedUpdate?.working).not.toHaveProperty('modelMessages');
   });
 
   it('propagates provider cache usage through the turn boundary', async () => {

@@ -15,7 +15,6 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const generateSingleShotMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
@@ -34,12 +33,10 @@ vi.mock('@iki/backend/platform', async importOriginal => ({
 }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
-  createModel: createModelMock,
   // The send path's TOOL-LESS branch generates through the factory's
   // single-shot entry (not createModel) — mock it so the turn neither dials
   // the provider base_url nor depends on the streaming seam.
   generateChatWithModelMessages: generateSingleShotMock,
-  disposeLanguageModel: vi.fn(),
   resolvePersonaPrompt: () => 'persona prompt',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({
@@ -319,11 +316,6 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     const failed = (await taskSend('thread_retry139', 'proactive-task')) as { runId?: string };
     const runAId = failed.runId!;
 
-    // The first retry executes through the STREAMING path (createModel) and
-    // fails before committing anything.
-    createModelMock.mockImplementationOnce(() => {
-      throw new Error('still down');
-    });
     const firstRetry = (await service.retryAndExecute(target, runAId)) as { newRunId?: string };
     expect(firstRetry).toMatchObject({ success: false, newRunId: expect.any(String) });
     const successorId = firstRetry.newRunId!;

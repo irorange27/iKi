@@ -249,14 +249,25 @@ describe('system IPC modules', () => {
   });
 
   it('lists tools and falls back to an empty set when metadata resolution fails', async () => {
+    // Every listed tool now carries the resolver's decision: the renderer and
+    // the auto router both ask "does this need a decision?" and must get the
+    // same answer the harness will apply — annotating rather than rewriting
+    // the tool's own declaration.
     getToolMetadataMock.mockReturnValueOnce([{ name: 'web' } as never]);
-    expect(await ipcHandlers.get('tools:list')?.(null)).toEqual([{ name: 'web' }]);
+    expect(await ipcHandlers.get('tools:list')?.(null)).toEqual([
+      { name: 'web', needsApproval: false },
+    ]);
 
     getAppConfigRuntimeMock.mockReturnValueOnce({
       general: {
         autoApproveToolRequests: true,
       },
     } as never);
+    // The GLOBAL auto-approve switch does clear a declared default: that is
+    // exactly what the user turned on, and it is the documented meaning of the
+    // setting (as opposed to a session dial, which may only speak about the
+    // user's tolerance). The floor that survives it is `approvalMode:
+    // 'always'` — asserted in the next block.
     getToolMetadataMock.mockReturnValueOnce([{ name: 'shell', needsApproval: true } as never]);
     expect(await ipcHandlers.get('tools:list')?.(null)).toEqual([
       { name: 'shell', needsApproval: false },

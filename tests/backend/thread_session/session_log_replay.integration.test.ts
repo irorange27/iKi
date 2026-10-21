@@ -245,7 +245,13 @@ describe('session log turn facts and pure replay', () => {
         autonomous: { maxIterations: 3 },
       }
     );
-    const lastPrompt = JSON.stringify(spy.mock.calls.at(-1)?.[0]?.prompt ?? []);
+    // `callPiChat(model, context, options)` — the transcript is `context`, not a
+    // `prompt` field on the model. Reading `[0].prompt` returned `[]` for every
+    // turn and made this assertion unable to fail (found in the 2026-10 audit).
+    const lastCallContext = spy.mock.calls.at(-1)?.[1] as
+      | { messages?: Array<{ content?: unknown }> }
+      | undefined;
+    const lastPrompt = JSON.stringify(lastCallContext?.messages ?? []);
     spy.mockRestore();
 
     // The steering text DID reach the model — the bug is not that steering
@@ -289,14 +295,18 @@ describe('session log turn facts and pure replay', () => {
     // The live serving row exists (legacy authority, unchanged).
     expect(getChatMessages('thread_log').map(row => row.id)).toContain('msg_log_1');
 
-    // Rebuild with the model factory rigged to explode: the replay must not
-    // invoke it (acceptance item 2 — rebuilding calls nothing). The mock is
-    // cleared first so the turn's own legitimate call does not count.
-    createModelMock.mockImplementation(() => {
+    // Rebuild with the transport rigged to explode AND its call log cleared:
+    // the replay must not invoke it (acceptance item 2 — rebuilding calls
+    // nothing). `callPiChat` is the only model executor left (ADR 009), so it
+    // is the seam that can actually go red if the replay starts asking the
+    // model. Clearing first is what makes this a measurement of the replay
+    // rather than of the turn that preceded it.
+    callPiChatMock.mockReset();
+    callPiChatMock.mockImplementation(() => {
       throw new Error('replay must not call the model');
     });
     const view = rebuildThreadViewFromEvents('thread_log');
-    expect(createModelMock).not.toHaveBeenCalled();
+    expect(callPiChatMock).not.toHaveBeenCalled();
 
     // Event order: input → start → the inline tool effect (issue #145) →
     // committed text → committed output → terminal. The streamed answer
@@ -341,7 +351,7 @@ describe('session log turn facts and pure replay', () => {
   });
 
   it('records the terminal failure when the provider errors and the row stays honest', async () => {
-    createModelMock.mockImplementation(() => {
+    callPiChatMock.mockImplementation(() => {
       throw new Error('provider exploded');
     });
     const streaming = buildStreaming();

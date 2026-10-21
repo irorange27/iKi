@@ -25,6 +25,11 @@ import {
   type AwaiterRunnerHostPort,
 } from '@iki/backend/awaiters/awaiter_runner';
 import type { Awaiter } from '@iki/backend/types/awaiters';
+import {
+  INPUT_ACCEPTED,
+  SESSION_EVENT_VERSION,
+  recordSessionEvents,
+} from '@iki/backend/thread_session/session_log';
 
 let dataDir = '';
 let seq = 0;
@@ -119,12 +124,28 @@ describe('awaiter runner (backend)', () => {
       systemPrompt: 'system',
       input: {},
       working: {
-        modelMessages: [{ role: 'user', content: 'earlier conversation turn' }],
         accumulatedText: '',
         pendingApprovalIds: [],
         lastStepIndex: 0,
       },
     } as never);
+    // The origin conversation lives in the SESSION LOG — the run row no longer
+    // carries a history copy (ADR 010 §3). The wake rebuilds its resumed
+    // context by replaying these facts, so the seed must go there.
+    recordSessionEvents(threadId, [
+      {
+        type: INPUT_ACCEPTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          messageId: `user_${runId}`,
+          message: {
+            id: `user_${runId}`,
+            role: 'user',
+            parts: [{ type: 'text', text: 'earlier conversation turn' }],
+          },
+        },
+      },
+    ]);
   };
 
   it('wakes an armed awaiter with resumed context and records the audit row', async () => {
@@ -143,7 +164,6 @@ describe('awaiter runner (backend)', () => {
       systemPrompt: 'system',
       input: {},
       working: {
-        modelMessages: [],
         accumulatedText: '',
         pendingApprovalIds: [],
         lastStepIndex: 0,
@@ -211,7 +231,6 @@ describe('awaiter runner (backend)', () => {
       systemPrompt: 'system',
       input: {},
       working: {
-        modelMessages: [],
         accumulatedText: '',
         pendingApprovalIds: [],
         lastStepIndex: 0,

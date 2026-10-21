@@ -446,7 +446,13 @@ describe('buildRunTrajectory', () => {
     expect(validateAtifTrajectory(trajectory)).toEqual([]);
   });
 
-  it('omits the injected context envelope from the exported user step', () => {
+  it('exports the recorded user text verbatim, envelope included', () => {
+    // The per-turn `<system-reminder>` envelope this used to strip is retired
+    // (nothing produces it any more). A legacy run that still CARRIES one is
+    // exported as recorded: the projection reports history, it does not hold a
+    // second opinion about what the history meant. The strip helper was the
+    // inverse of a deleted producer and only kept the dead envelope looking
+    // alive (2026-10 audit, C-F1).
     const run = {
       ...fixtureRun(),
       input: {
@@ -461,7 +467,8 @@ describe('buildRunTrajectory', () => {
     };
     const trajectory = buildRunTrajectory(run, []);
 
-    expect(trajectory.steps[0].message).toBe('What is 2+2?');
+    expect(trajectory.steps[0].message).toContain('What is 2+2?');
+    expect(trajectory.steps[0].message).toContain('<system-reminder>');
     expect(validateAtifTrajectory(trajectory)).toEqual([]);
   });
 });

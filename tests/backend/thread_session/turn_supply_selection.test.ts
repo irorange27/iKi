@@ -69,7 +69,7 @@ const plan = (overrides: Partial<ExecutionPlan>): ExecutionPlan =>
     guardActive: false,
     requireApproval: false,
     autoApproveToolRequests: false,
-    maxIterations: 8,
+    budget: { step: 8 },
     contextTokens: 1,
     skillMode: 'manual' as const,
     kind: 'chat-turn' as const,
@@ -83,7 +83,7 @@ const history = [{ role: 'user' as const, content: 'probe' }];
 describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
   it('serves an autonomous tool turn with the Pi tool harness (was AI SDK before 3c)', () => {
     const harness = selectTurnHarness(
-      plan({ autonomous: { maxIterations: 3, continuePrompt: 'continue' } }),
+      plan({ budget: { step: 8, batch: { max: 3, continuePrompt: 'continue' } } }),
       history
     );
     expect(harness).toBeInstanceOf(PiToolTurnHarness);
@@ -97,7 +97,7 @@ describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
     const autonomous = plan({
       enableTools: false,
       enabledTools: [],
-      autonomous: { maxIterations: 2 },
+      budget: { step: 8, batch: { max: 2 } },
     });
     expect(selectTurnHarness(autonomous, history)).toBeInstanceOf(PiTextTurnHarness);
   });
@@ -113,7 +113,7 @@ describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
         providerType: 'openai',
         providerId: 'provider_sdk_supply',
         model: 'sdk-model',
-        autonomous: { maxIterations: 3 },
+        budget: { step: 8, batch: { max: 3 } },
       }),
       history
     );
@@ -130,7 +130,7 @@ describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
     // not be worked around at runtime.
     expect(() =>
       selectTurnHarness(
-        plan({ autonomous: { maxIterations: 3 } }),
+        plan({ budget: { step: 8, batch: { max: 3 } } }),
         [
           {
             role: 'assistant',
@@ -150,7 +150,7 @@ describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
     // sent, so the failure is actionable rather than a generic turn error.
     expect(() =>
       selectTurnHarness(
-        plan({ autonomous: { maxIterations: 3 } }),
+        plan({ budget: { step: 8, batch: { max: 3 } } }),
         [
           {
             role: 'assistant',
@@ -167,7 +167,7 @@ describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
 describe('pausedPlanRunsOnPiToolSupply (switch item 3c: autonomous resumes stay on Pi)', () => {
   it('admits an autonomous paused plan (was excluded before 3c)', () => {
     expect(
-      pausedPlanRunsOnPiToolSupply(plan({ autonomous: { maxIterations: 3 } }), history)
+      pausedPlanRunsOnPiToolSupply(plan({ budget: { step: 8, batch: { max: 3 } } }), history)
     ).toBe(true);
   });
 

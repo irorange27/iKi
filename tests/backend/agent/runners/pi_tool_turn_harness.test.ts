@@ -9,7 +9,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '@iki/backend/message/model_history';
 import { z } from 'zod';
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {

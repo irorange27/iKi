@@ -16,7 +16,7 @@ const validPlan: ExecutionPlan = {
   guardActive: false,
   requireApproval: false,
   autoApproveToolRequests: false,
-  maxIterations: 20,
+  budget: { step: 20 },
   systemPrompt: 'system prompt',
   skillMode: 'manual',
   kind: 'chat-turn',
@@ -47,7 +47,11 @@ describe('execution plan codec', () => {
   it('fails closed on plans missing harness-consumed fields', () => {
     const broken = { ...validPlan, enableTools: undefined } as unknown as ExecutionPlan;
     expect(parseExecutionPlan(serializeExecutionPlan(broken))).toBeNull();
-    const noBudget = { ...validPlan, maxIterations: Number.NaN };
+    // The step budget is the field the harness cannot run without; a
+    // non-finite value must fail closed rather than default silently.
+    const noBudget = { ...validPlan, budget: { step: Number.NaN } };
     expect(parseExecutionPlan(serializeExecutionPlan(noBudget))).toBeNull();
+    const missingBudget = { ...validPlan, budget: undefined } as unknown as ExecutionPlan;
+    expect(parseExecutionPlan(serializeExecutionPlan(missingBudget))).toBeNull();
   });
 });

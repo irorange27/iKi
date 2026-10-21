@@ -39,7 +39,7 @@ import {
   TOOL_EXECUTION_STARTED,
 } from '@iki/backend/thread_session/tool_execution';
 import { PiToolTurnHarness } from '@iki/backend/agent/runners/pi_tool_turn_harness';
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '@iki/backend/message/model_history';
 import { createAssistantMessageEventStream, type AssistantMessage } from '@earendil-works/pi-ai';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 

@@ -28,7 +28,20 @@ registerStandardTools({
   },
 });
 
-const needsApprovalFor = (guardActive: boolean, requireApproval: boolean, name: string) => {
+/**
+ * Evaluate the tool's answer for one call.
+ *
+ * The resolver publishes `needsApproval` as a PREDICATE, not a boolean: the
+ * decision may await a function-valued declaration and it reads the per-step
+ * policy snapshot. Asserting on the field's identity (`typeof`, `String(t.n)`)
+ * stopped measuring the decision at all once the shape changed — these cases
+ * now evaluate it.
+ */
+const needsApprovalFor = async (
+  guardActive: boolean,
+  requireApproval: boolean,
+  name: string
+): Promise<boolean | undefined> => {
   const tools = resolveTools({
     enableTools: true,
     enabledToolNames: ['write_file', 'read_file', 'delete_file'],
@@ -37,25 +50,34 @@ const needsApprovalFor = (guardActive: boolean, requireApproval: boolean, name: 
     requireApproval,
     autoApproveToolRequests: false,
   });
-  return tools.find(t => t.name === name)?.needsApproval;
+  return evaluate(tools.find(t => t.name === name));
+};
+
+const evaluate = async (tool: { needsApproval?: unknown } | undefined): Promise<boolean | undefined> => {
+  if (!tool) return undefined;
+  const value = tool.needsApproval;
+  if (typeof value === 'function') {
+    return Boolean(await (value as (input: unknown) => boolean | Promise<boolean>)({}));
+  }
+  return value as boolean | undefined;
 };
 
 describe("resolveTools honours a tool's declared approval requirement", () => {
-  it('does not auto-approve file writes merely because the guard is inactive', () => {
+  it('does not auto-approve file writes merely because the guard is inactive', async () => {
     // Identical user configuration; only the affect-derived guard differs.
     // write_file/delete_file declare needsApproval = true, so an inactive
     // guard must not turn that into an automatic approval.
-    expect(needsApprovalFor(false, false, 'write_file')).toBe(true);
-    expect(needsApprovalFor(false, false, 'delete_file')).toBe(true);
+    expect(await needsApprovalFor(false, false, 'write_file')).toBe(true);
+    expect(await needsApprovalFor(false, false, 'delete_file')).toBe(true);
   });
 
-  it('leaves tools that do NOT declare approval auto-approved', () => {
+  it('leaves tools that do NOT declare approval auto-approved', async () => {
     // read_file declares needsApproval = false — an inactive guard must not
     // start demanding approval for it either. The fix must be neutral here.
-    expect(needsApprovalFor(false, false, 'read_file')).toBe(false);
+    expect(await needsApprovalFor(false, false, 'read_file')).toBe(false);
   });
 
-  it('does not clear a tool that declares a FUNCTION-valued needsApproval', () => {
+  it('does not clear a tool that declares a FUNCTION-valued needsApproval', async () => {
     // The predicate must mirror isApprovalFreeTool (tools/agent_tools.ts): only
     // an explicit false/undefined is approval-free. A `!== true` test would
     // classify a ToolApprovalFunction as free and clear it, silently
@@ -85,14 +107,15 @@ describe("resolveTools honours a tool's declared approval requirement", () => {
       });
       const resolved = tools.find(t => t.name === probeName);
       expect(resolved).toBeDefined();
-      // A function declaration computes its own answer; it is NOT approval-free.
-      expect(typeof resolved!.needsApproval).not.toBe('boolean');
+      // A function declaration computes its own answer (it returns true here),
+      // so the resolved decision is `ask` — not approval-free.
+      expect(await evaluate(resolved)).toBe(true);
     } finally {
       defaultToolRegistry.remove(probeName);
     }
   });
 
-  it('preserves declared approval for EVERY tool in the window, not just writes', () => {
+  it('preserves declared approval for EVERY tool in the window, not just writes', async () => {
     // The window is no-policy + guard-inactive + no-requireApproval. Six tools
     // declare `needsApproval = true` without `approvalMode: 'always'` — the
     // four file tools AND two todo tools. Measured against the live registry
@@ -120,12 +143,13 @@ describe("resolveTools honours a tool's declared approval requirement", () => {
       autoApproveToolRequests: false,
     });
     // Every one keeps its requirement through the resolver.
-    expect(tools.map(t => `${t.name}:${String(t.needsApproval)}`).sort()).toEqual(
-      declaring.map(name => `${name}:true`)
-    );
+    const decisions = await Promise.all(tools.map(t => evaluate(t)));
+    expect(
+      tools.map((t, index) => `${t.name}:${String(decisions[index])}`).sort()
+    ).toEqual(declaring.map(name => `${name}:true`));
   });
 
-  it('still requires approval for writes when the guard is active', () => {
-    expect(needsApprovalFor(true, true, 'write_file')).toBe(true);
+  it('still requires approval for writes when the guard is active', async () => {
+    expect(await needsApprovalFor(true, true, 'write_file')).toBe(true);
   });
 });

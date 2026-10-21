@@ -15,7 +15,7 @@ import {
   type AssistantMessage,
   type AssistantMessageEvent,
 } from '@earendil-works/pi-ai';
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '@iki/backend/message/model_history';
 
 vi.mock('@iki/backend/runtimes/thread_summary', () => ({
   generateThreadSummary: vi.fn(),

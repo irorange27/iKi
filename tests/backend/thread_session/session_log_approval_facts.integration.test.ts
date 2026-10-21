@@ -389,7 +389,7 @@ describe('session log approval facts across entries', () => {
             guardActive: false,
             requireApproval: true,
             autoApproveToolRequests: false,
-            maxIterations: 20,
+            budget: { step: 20 },
             systemPrompt: 'system prompt',
             skillMode: 'manual',
             kind: 'chat-turn',

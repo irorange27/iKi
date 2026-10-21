@@ -16,7 +16,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { AssistantMessage } from '@earendil-works/pi-ai';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
 
@@ -34,8 +33,6 @@ vi.mock('@iki/backend/platform', async importOriginal => ({
 }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
-  createModel: createModelMock,
-  disposeLanguageModel: vi.fn(),
   resolvePersonaPrompt: () => 'persona prompt',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({
@@ -258,7 +255,6 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
     const result = await service.retryAndExecute(target, 'run_malformed_145');
     expect(result).toMatchObject({ success: false });
     expect(result.error).toContain('cannot be represented from the log');
-    expect(createModelMock).not.toHaveBeenCalled();
   });
 
   const seedFailedRunWithMalformedInlineFact = () => {

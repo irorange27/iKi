@@ -14,7 +14,6 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
 
@@ -32,8 +31,6 @@ vi.mock('@iki/backend/platform', async importOriginal => ({
 }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
-  createModel: createModelMock,
-  disposeLanguageModel: vi.fn(),
   resolvePersonaPrompt: () => 'persona prompt',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({
@@ -341,7 +338,6 @@ describe('retry and queued resume read the session log alone', () => {
 
     expect(result.success).toBe(false);
     expect(JSON.stringify(result)).toContain('no recorded session facts ending in its task');
-    expect(createModelMock).not.toHaveBeenCalled();
     // The stale row copy would have "worked" — proving the flip took the
     // loud path, not the silent one.
     expect(
@@ -543,7 +539,6 @@ describe('retry and queued resume read the session log alone', () => {
     const result = await service.retryAndExecute(target, 'run_alive_a');
     expect(result.success).toBe(false);
     expect(JSON.stringify(result)).toContain('ending in its task');
-    expect(createModelMock).not.toHaveBeenCalled();
     expect(
       agentRunDb.listAgentRunsByThread('thread_retry').find(run => run.status === 'queued')
     ).toBeUndefined();
@@ -658,7 +653,6 @@ describe('retry and queued resume read the session log alone', () => {
     const result = await service.retryAndExecute(target, 'run_failed_e3');
 
     expect(result.success).toBe(false);
-    expect(createModelMock).not.toHaveBeenCalled();
     // No orphan queued row beside the refused retry.
     expect(
       agentRunDb.listAgentRunsByThread('thread_retry').find(run => run.status === 'queued')
