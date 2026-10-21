@@ -31,6 +31,10 @@ export class ElementSourceTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  // A probe against the renderer: it reads the component chain, it does not
+  // drive the UI. (It records the last-selected element, which a second probe
+  // overwrites with the same observation.)
+  override replay = 'safe' as const;
   override description =
     'Locate the source file that renders a UI element in the running app window — the "I see it on screen, where is the code?" step. Use `selected` after the user clicks the element in the app (or after opening DevTools with F12 and clicking it), `hovered` for the element under the pointer, `selector` with a CSS selector, or `point` with the `x`/`y` viewport pixel of something you can see in a screenshot. Returns the Vue component chain (component name + source file path), the owning .vue file, and often the line. Read that file before editing; do not guess a path.';
 

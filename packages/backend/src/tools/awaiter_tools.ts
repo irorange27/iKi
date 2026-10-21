@@ -129,6 +129,7 @@ export class ListAwaitersTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  override replay = 'safe' as const;
   override description =
     'List persistent continue-later awaiters so you can inspect, update, or delete an existing deferred continuation.';
   override paramSchema = ListAwaitersInputSchema;
@@ -155,6 +156,7 @@ export class ReadAwaiterTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  override replay = 'safe' as const;
   override description = 'Read an awaiter by id or exact title.';
   override paramSchema = ReadAwaiterInputSchema;
   override outputSchema = zodSchemaToJsonSchema(ReadAwaiterOutputSchema, {
@@ -177,6 +179,7 @@ export class WriteAwaiterTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = true;
+  override replay = 'unsafe' as const;
   override approvalMode = 'always' as const;
   override description =
     'Create or update a persistent continue-later awaiter. New awaiters default to the current chat thread and current chat model unless you override them.';
@@ -248,6 +251,7 @@ export class DeleteAwaiterTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = true;
+  override replay = 'unsafe' as const;
   override approvalMode = 'always' as const;
   override description = 'Delete an awaiter by id or exact title.';
   override paramSchema = DeleteAwaiterInputSchema;

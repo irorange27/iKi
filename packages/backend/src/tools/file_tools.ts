@@ -251,6 +251,7 @@ export class ReadFileTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  override replay = 'safe' as const;
   override description = 'Read the content of a file from the local filesystem.';
 
   override paramSchema = ReadFileInputSchema;
@@ -269,6 +270,9 @@ export class WriteFileTool extends BaseTool {
   override name = 'write_file';
   override type = 'function';
   override autoAllowed = true;
+  // Every write is unsafe: a half-applied overwrite is indistinguishable from
+  // a completed one, so a rerun would duplicate an effect the log cannot bound.
+  override replay = 'unsafe' as const;
   override description = 'Write or overwrite content to a file on the local filesystem.';
   override needsApproval = true;
   override paramSchema = WriteFileInputSchema;
@@ -298,6 +302,9 @@ export class EditFileTool extends BaseTool {
   override name = 'edit';
   override type = 'function';
   override autoAllowed = true;
+  // Fuzzy-match replacement: a replay after a partial write either fails on a
+  // now-missing anchor or applies the replacement twice.
+  override replay = 'unsafe' as const;
   override description =
     'Edit an existing file by applying text replacements. Include 1-3 lines of surrounding context in oldText to make matches unambiguous. Use contextBefore/contextAfter anchors when the same text appears in multiple places. Edited files are syntax-checked before writing (JSON, Python, JS); syntax-breaking edits are rejected and the file stays untouched. Revert the most recent edit to a file with undo_edit.';
   override needsApproval = true;
@@ -449,6 +456,8 @@ export class UndoEditTool extends BaseTool {
   override name = 'undo_edit';
   override type = 'function';
   override autoAllowed = true;
+  // Reverts one edit; a replay would revert a second, different edit.
+  override replay = 'unsafe' as const;
   override description =
     'Revert the most recent successful edit_file change to the given file, restoring the content from before that edit. Only edits made during this session can be undone.';
   override needsApproval = true;
@@ -497,6 +506,7 @@ export class DeleteFileTool extends BaseTool {
   override name = 'delete_file';
   override type = 'function';
   override needsApproval = true;
+  override replay = 'unsafe' as const;
   override description = 'Delete a file from the local filesystem. BE CAREFUL with this tool.';
 
   override paramSchema = DeleteFileInputSchema;

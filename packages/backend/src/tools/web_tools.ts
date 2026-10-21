@@ -402,6 +402,8 @@ export class WebSearchTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  // Outbound read: the second request has no effect beyond the first.
+  override replay = 'safe' as const;
   override description =
     'Search the public web and return candidate result titles/URLs. Use this to discover sources; if the answer depends on page contents, call `fetch` on the selected result before answering.';
 
@@ -579,6 +581,8 @@ export class FetchTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  // HTTP GET: re-fetching a URL cannot do anything the first GET did not.
+  override replay = 'safe' as const;
   override description =
     'Fetch a specific webpage or text URL and return clean extracted text with status and metadata. Use this after `web` when you need facts from the page itself, not just result titles.';
 

@@ -62,6 +62,9 @@ export class PlanTool extends BaseTool<typeof PlanToolInputSchema> {
   override displayName = 'Plan';
   override autoAllowed = true;
   override needsApproval = false;
+  // Pure computation over its own arguments: returns a rendered plan, writes
+  // nothing. A replay yields the same plan and no second effect.
+  override replay = 'safe' as const;
   override description =
     'Create a structured execution plan BEFORE running other tools. ' +
     'Decompose the task into ordered steps with dependencies and expected outputs. ' +

@@ -16,6 +16,9 @@ export class TodoTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  // Persists the thread's turn plan (writeThreadTodoPlan): a replay after a
+  // partial write can resurrect a plan the user has since replaced.
+  override replay = 'unsafe' as const;
   override description =
     'Track progress on the current multi-step task inside this chat thread. Use it to keep a visible plan with pending, in_progress, and completed states.';
   override paramSchema = TodoToolInputSchema;

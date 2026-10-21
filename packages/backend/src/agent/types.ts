@@ -85,6 +85,24 @@ export type AgentTool = Omit<z.infer<typeof AgentToolSchema>, 'needsApproval'> &
    * "no static approval declared".
    */
   declaredNeedsApproval?: boolean;
+  /**
+   * Whether re-running this tool after an interrupted execution is safe.
+   *
+   * Absent means `unsafe`: the absence of a declaration is NOT permission to
+   * rerun. A recovery may replay a call only when the policy stored with its
+   * intent AND the policy the tool declares now both say `safe` — the double
+   * sign implemented in `thread_session/tool_execution.ts`.
+   *
+   * Declare `safe` only for a tool whose effect is a pure read: running it
+   * twice yields an observation and no additional world effect. A `safe` tool
+   * may still be non-deterministic (a search returns whatever the web holds
+   * now); what makes it safe is that a second run cannot *do* anything the
+   * first did not. Anything that writes — a file, a row, a message, a child
+   * agent, a schedule — is `unsafe`, even when it looks idempotent, because
+   * that is a claim about one input shape and the interrupted call may have
+   * been half-applied.
+   */
+  replay?: 'safe' | 'unsafe';
   handler: (args: unknown) => Promise<unknown>;
   paramSchema?: z.ZodTypeAny;
   /** Retry configuration. Applied in buildAiToolSet for non-BaseTool tools. */

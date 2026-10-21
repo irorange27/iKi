@@ -149,6 +149,7 @@ export class ListProactiveTasksTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  override replay = 'safe' as const;
   override description =
     'List persistent proactive tasks so you can inspect, update, or delete an existing recurring task.';
   override paramSchema = ListProactiveTasksInputSchema;
@@ -175,6 +176,7 @@ export class ReadProactiveTaskTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  override replay = 'safe' as const;
   override description = 'Read a proactive task by id or exact name.';
   override paramSchema = ReadProactiveTaskInputSchema;
   override outputSchema = zodSchemaToJsonSchema(ReadProactiveTaskOutputSchema, {
@@ -197,6 +199,7 @@ export class WriteProactiveTaskTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = true;
+  override replay = 'unsafe' as const;
   override approvalMode = 'always' as const;
   override description =
     'Create or update a persistent proactive task. New tasks default to posting into the current chat thread and using the current chat model unless you override them.';
@@ -283,6 +286,7 @@ export class DeleteProactiveTaskTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = true;
+  override replay = 'unsafe' as const;
   override approvalMode = 'always' as const;
   override description = 'Delete a proactive task by id or exact name.';
   override paramSchema = DeleteProactiveTaskInputSchema;

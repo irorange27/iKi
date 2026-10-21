@@ -25,6 +25,16 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   /** Retry configuration. If undefined, no retry is applied. */
   retry?: ToolRetryConfig;
 
+  /**
+   * Whether this tool may be re-run after an interrupted execution.
+   *
+   * Leave it unset for anything that writes. Unset means `unsafe`, and that
+   * default IS the contract: a recovery must never read silence as permission.
+   * Only a pure read declares `'safe'`; see `AgentTool.replay` for what
+   * qualifies and why "looks idempotent" is not enough.
+   */
+  replay?: 'safe' | 'unsafe';
+
 
   /**
    * Raw handler implementation
@@ -86,6 +96,10 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
       source: { kind: 'builtin' },
       handler: (args: unknown) => this.execute(args),
       ...(this.retry ? { retry: this.retry } : {}),
+      // Omitted when undeclared, NOT defaulted to 'unsafe' here: the recovery
+      // branch must be able to tell "declared unsafe" from "never declared",
+      // and the fail-closed default belongs at the read, not the write.
+      ...(this.replay ? { replay: this.replay } : {}),
     };
   }
 }
@@ -188,6 +202,8 @@ export function createTool<P extends z.ZodTypeAny>(options: {
   displayName?: string;
   source?: AgentTool['source'];
   retry?: ToolRetryConfig;
+  /** Absent means `unsafe`; see `BaseTool.replay`. */
+  replay?: AgentTool['replay'];
   handler: (args: z.infer<P>) => Promise<unknown>;
 }): AgentTool {
   const parameters =
