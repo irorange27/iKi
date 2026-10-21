@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { DEFAULT_SHELL_TIMEOUT_MS, toolCallDescriptionField, uiSchema } from './shared';
+import { DEFAULT_SHELL_TIMEOUT_MS, toolCallDescriptionField } from './shared';
 
 const shellInputFields = {
   command: z.string().describe('The shell command to execute'),
@@ -16,4 +16,3 @@ const shellToolInputShape = {
 };
 
 export const ShellToolInputSchema = z.object(shellToolInputShape);
-export const ShellToolInputSchemaUi = uiSchema(shellToolInputShape);

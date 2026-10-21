@@ -4,7 +4,6 @@ import {
   DEFAULT_PERSONAL_SKILL_LIST_LIMIT,
   DEFAULT_PERSONAL_SKILL_READ_MAX_CHARS,
   toolCallDescriptionField,
-  uiSchema,
 } from './shared';
 
 const loadSkillInputFields = {
@@ -22,12 +21,7 @@ export const LoadSkillInputSchema = z.object({
   description: toolCallDescriptionField,
 });
 
-const loadSkillInputShape = {
-  id: loadSkillInputFields.id,
-  description: toolCallDescriptionField,
-};
 
-export const LoadSkillInputSchemaUi = uiSchema(loadSkillInputShape);
 
 const listPersonalSkillsInputShape = {
   query: z.string().trim().describe('Optional search text for matching personal skills').optional(),
@@ -41,7 +35,6 @@ const listPersonalSkillsInputShape = {
 };
 
 export const ListPersonalSkillsInputSchema = z.object(listPersonalSkillsInputShape);
-export const ListPersonalSkillsInputSchemaUi = uiSchema(listPersonalSkillsInputShape);
 
 const readPersonalSkillInputShape = {
   id: personalSkillIdInputFields.id,
@@ -55,7 +48,6 @@ const readPersonalSkillInputShape = {
 };
 
 export const ReadPersonalSkillInputSchema = z.object(readPersonalSkillInputShape);
-export const ReadPersonalSkillInputSchemaUi = uiSchema(readPersonalSkillInputShape);
 
 const writePersonalSkillInputShape = {
   id: personalSkillIdInputFields.id,
@@ -78,16 +70,10 @@ const writePersonalSkillInputShape = {
 };
 
 export const WritePersonalSkillInputSchema = z.object(writePersonalSkillInputShape);
-export const WritePersonalSkillInputSchemaUi = uiSchema(writePersonalSkillInputShape);
 
 export const DeletePersonalSkillInputSchema = z.object({
   id: personalSkillIdInputFields.id,
   description: toolCallDescriptionField,
 });
 
-const deletePersonalSkillInputShape = {
-  id: personalSkillIdInputFields.id,
-  description: toolCallDescriptionField,
-};
 
-export const DeletePersonalSkillInputSchemaUi = uiSchema(deletePersonalSkillInputShape);

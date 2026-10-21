@@ -70,11 +70,6 @@ const CONTROLS: Control[] = [
     to: 'packages/backend/src/tools/probe.ts',
   },
   {
-    rule: 'renderer-no-schema-coupled-message-module',
-    from: 'packages/desktop/src/renderer/probe.ts',
-    to: 'packages/backend/src/message/tool_payloads.ts',
-  },
-  {
     rule: 'renderer-no-schema-heavy-closure',
     from: 'packages/desktop/src/renderer/probe.ts',
     to: 'packages/backend/src/message/hop.ts',

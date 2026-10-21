@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { DEFAULT_PROACTIVE_TASK_LIST_LIMIT, SAFE_PROACTIVE_TASK_TOOLS } from '../../types/tasks';
 
-import { requireEitherField, toolCallDescriptionField, uiSchema } from './shared';
+import { requireEitherField, toolCallDescriptionField } from './shared';
 
 const proactiveTaskLookupInputFields = {
   id: z.string().describe('Proactive task id'),
@@ -72,7 +72,6 @@ const listProactiveTasksInputShape = {
 };
 
 export const ListProactiveTasksInputSchema = z.object(listProactiveTasksInputShape);
-export const ListProactiveTasksInputSchemaUi = uiSchema(listProactiveTasksInputShape);
 
 const proactiveTaskLookupShape = {
   id: proactiveTaskLookupInputFields.id.optional(),
@@ -81,7 +80,6 @@ const proactiveTaskLookupShape = {
 };
 
 export const ReadProactiveTaskInputSchema = z.object(proactiveTaskLookupShape).superRefine(requireEitherField('id', 'name'));
-export const ReadProactiveTaskInputSchemaUi = uiSchema(proactiveTaskLookupShape);
 
 const writeProactiveTaskInputShape = {
   action: z
@@ -200,7 +198,5 @@ export const WriteProactiveTaskInputSchema = z.object(writeProactiveTaskInputSha
     }
   });
 
-export const WriteProactiveTaskInputSchemaUi = uiSchema(writeProactiveTaskInputShape);
 
 export const DeleteProactiveTaskInputSchema = z.object(proactiveTaskLookupShape).superRefine(requireEitherField('id', 'name'));
-export const DeleteProactiveTaskInputSchemaUi = uiSchema(proactiveTaskLookupShape);

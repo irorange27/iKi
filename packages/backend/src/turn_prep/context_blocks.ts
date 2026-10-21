@@ -116,9 +116,4 @@ export const buildSkillContext = async (params: {
   };
 };
 
-export const buildQueryFromMessages = (messages: ChatInputMessage[]): string => {
-  const lastMessage = messages[messages.length - 1];
-  return getPromptFromMessage(lastMessage);
-};
-
 export { buildDroppedBlock };

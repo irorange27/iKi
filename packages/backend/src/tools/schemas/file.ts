@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { DEFAULT_FILE_ENCODING, MAX_EDIT_FILE_OPERATIONS, toolCallDescriptionField, uiSchema } from './shared';
+import { DEFAULT_FILE_ENCODING, MAX_EDIT_FILE_OPERATIONS, toolCallDescriptionField } from './shared';
 
 const readFileInputFields = {
   path: z.string().describe('Absolute path or workspace-relative path to the file to read'),
@@ -59,7 +59,6 @@ const readFileInputShape = {
 };
 
 export const ReadFileInputSchema = z.object(readFileInputShape);
-export const ReadFileInputSchemaUi = uiSchema(readFileInputShape);
 
 const writeFileInputShape = {
   path: writeFileInputFields.path,
@@ -69,7 +68,6 @@ const writeFileInputShape = {
 };
 
 export const WriteFileInputSchema = z.object(writeFileInputShape);
-export const WriteFileInputSchemaUi = uiSchema(writeFileInputShape);
 
 const editFileInputShape = {
   path: editFileInputFields.path,
@@ -79,7 +77,6 @@ const editFileInputShape = {
 };
 
 export const EditFileInputSchema = z.object(editFileInputShape);
-export const EditFileInputSchemaUi = uiSchema(editFileInputShape);
 
 const undoEditInputFields = {
   path: z
@@ -99,9 +96,4 @@ export const DeleteFileInputSchema = z.object({
   description: toolCallDescriptionField,
 });
 
-const deleteFileInputShape = {
-  path: deleteFileInputFields.path,
-  description: toolCallDescriptionField,
-};
 
-export const DeleteFileInputSchemaUi = uiSchema(deleteFileInputShape);

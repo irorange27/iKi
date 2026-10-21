@@ -72,6 +72,3 @@ export const decideToolApproval = (
   }
   return input.requireApproval ? 'ask' : 'allow';
 };
-
-export const approvalDecisionToBoolean = (decision: ToolApprovalDecision): boolean =>
-  decision === 'ask';

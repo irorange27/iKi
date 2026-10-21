@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { toolCallDescriptionField, uiSchema } from './shared';
+import { toolCallDescriptionField } from './shared';
 
 const elementSourceInputShape = {
   target: z
@@ -31,4 +31,3 @@ const elementSourceInputShape = {
 };
 
 export const ElementSourceInputSchema = z.object(elementSourceInputShape);
-export const ElementSourceInputSchemaUi = uiSchema(elementSourceInputShape);

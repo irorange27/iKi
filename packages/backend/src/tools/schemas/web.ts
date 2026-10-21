@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { DEFAULT_FETCH_MAX_CHARS, DEFAULT_SEARCH_RESULT_LIMIT, toolCallDescriptionField, uiSchema } from './shared';
+import { DEFAULT_FETCH_MAX_CHARS, DEFAULT_SEARCH_RESULT_LIMIT, toolCallDescriptionField } from './shared';
 
 const webInputFields = {
   query: z.string().min(1).describe('Search query text'),
@@ -22,7 +22,6 @@ const webToolInputShape = {
 };
 
 export const WebToolInputSchema = z.object(webToolInputShape);
-export const WebToolInputSchemaUi = uiSchema(webToolInputShape);
 
 const fetchToolInputShape = {
   url: fetchInputFields.url,
@@ -31,4 +30,3 @@ const fetchToolInputShape = {
 };
 
 export const FetchToolInputSchema = z.object(fetchToolInputShape);
-export const FetchToolInputSchemaUi = uiSchema(fetchToolInputShape);

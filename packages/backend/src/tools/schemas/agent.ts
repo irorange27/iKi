@@ -5,7 +5,6 @@ import {
   MAX_AGENT_MAX_ITERATIONS,
   MAX_AGENT_TOOL_SELECTION,
   toolCallDescriptionField,
-  uiSchema,
 } from './shared';
 
 export const agentUsedToolOutputSchema = z
@@ -65,4 +64,3 @@ const agentToolInputShape = {
 };
 
 export const AgentToolInputSchema = z.object(agentToolInputShape);
-export const AgentToolInputSchemaUi = uiSchema(agentToolInputShape);

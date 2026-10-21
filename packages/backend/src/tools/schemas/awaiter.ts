@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { DEFAULT_AWAITER_LIST_LIMIT } from '../../types/awaiters';
 
-import { requireEitherField, toolCallDescriptionField, uiSchema } from './shared';
+import { requireEitherField, toolCallDescriptionField } from './shared';
 
 const awaiterLookupInputFields = {
   id: z.string().describe('Awaiter id'),
@@ -39,7 +39,6 @@ const listAwaitersInputShape = {
 };
 
 export const ListAwaitersInputSchema = z.object(listAwaitersInputShape);
-export const ListAwaitersInputSchemaUi = uiSchema(listAwaitersInputShape);
 
 const awaiterLookupShape = {
   id: awaiterLookupInputFields.id.optional(),
@@ -48,7 +47,6 @@ const awaiterLookupShape = {
 };
 
 export const ReadAwaiterInputSchema = z.object(awaiterLookupShape).superRefine(requireEitherField('id', 'title'));
-export const ReadAwaiterInputSchemaUi = uiSchema(awaiterLookupShape);
 
 const writeAwaiterInputShape = {
   action: z.enum(['create', 'update']).describe('Create a new awaiter or update an existing one'),
@@ -133,7 +131,5 @@ export const WriteAwaiterInputSchema = z.object(writeAwaiterInputShape).superRef
     }
   });
 
-export const WriteAwaiterInputSchemaUi = uiSchema(writeAwaiterInputShape);
 
 export const DeleteAwaiterInputSchema = z.object(awaiterLookupShape).superRefine(requireEitherField('id', 'title'));
-export const DeleteAwaiterInputSchemaUi = uiSchema(awaiterLookupShape);

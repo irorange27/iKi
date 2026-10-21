@@ -1,15 +1,5 @@
 import { z } from 'zod';
 
-export function uiSchema<T extends Record<string, z.ZodTypeAny>>(shape: T) {
-  const ui: Record<string, z.ZodTypeAny> = {};
-  for (const key of Object.keys(shape)) {
-    const field = shape[key];
-    ui[key] = (field instanceof z.ZodDefault ? field.removeDefault() : field) as z.ZodTypeAny;
-    ui[key] = (ui[key] as z.ZodTypeAny).optional();
-  }
-  return z.object(ui).passthrough();
-}
-
 export function requireEitherField(a: string, b: string, message?: string) {
   return (value: Record<string, unknown>, ctx: z.RefinementCtx): void => {
     const hasA = typeof value[a] === 'string' && (value[a] as string).trim().length > 0;
@@ -34,7 +24,6 @@ export const toolCallDescriptionField = z
   )
   .optional();
 
-export const MAX_EXECUTION_TASK_PLAN_ITEMS = 5;
 export const DEFAULT_SEARCH_RESULT_LIMIT = 5;
 export const MAX_SEARCH_RESULT_LIMIT = 10;
 export const DEFAULT_FETCH_MAX_CHARS = 12000;

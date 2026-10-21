@@ -76,13 +76,6 @@ module.exports = {
       },
     },
     {
-      name: 'renderer-no-schema-coupled-message-module',
-      comment: 'R5b (P1): message/ is renderer-legal because it is pure — with one exception. message/tool_payloads.ts is the schema-coupled owner (zod + every tool schema), so the renderer must import the kind registry and decode kernels from message/tool_payload_contracts.ts instead, never this module. Direct-edge guard: it fires even if the transitive rule below is ever relaxed.',
-      severity: 'error',
-      from: { path: '^packages/desktop/src/renderer' },
-      to: { path: '^packages/backend/src/message/tool_payloads\\.ts$' },
-    },
-    {
       name: 'renderer-no-schema-heavy-closure',
       comment: 'R7 (P1): R5 only sees a renderer module\'s DIRECT edges, so a whitelisted backend module that reaches a heavy one smuggles the closure into the bundle (that is how tools/schemas got shipped — one transitive hop, 1.6 MB). Flag transitive reach too: nothing under renderer/ may arrive at tools/, provider/, thread_session/ or agent/ at any depth (`reachable: true` = indirect hops count as well as direct ones). db/ is deliberately absent: the one route there (Sidebar -> message/thread_content_search -> db/) is a type-only import that Vite erases, and R5 keeps governing it. Run with --ts-pre-compilation-deps to inspect type-only edges as well.',
       severity: 'error',

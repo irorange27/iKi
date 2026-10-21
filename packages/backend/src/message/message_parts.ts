@@ -310,32 +310,6 @@ export const extractTextFromMessageParts = (parts: unknown): string => {
     .join('');
 };
 
-export const extractTextFromMessageJson = (
-  messageJson: string
-): { role: string; content: string } | null => {
-  try {
-    const parsed = JSON.parse(messageJson) as {
-      role?: string;
-      parts?: unknown[];
-      content?: string;
-    };
-
-    if (!parsed || typeof parsed !== 'object' || typeof parsed.role !== 'string') return null;
-
-    if (Array.isArray(parsed.parts)) {
-      return { role: parsed.role, content: extractTextFromMessageParts(parsed.parts) };
-    }
-
-    if (typeof parsed.content === 'string') {
-      return { role: parsed.role, content: parsed.content };
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-};
-
 export const getSkillUsagePartData = (part: unknown): SkillUsagePartData | null => {
   if (!isSkillUsagePart(part)) return null;
   return isObjectRecord(part.data) ? (part.data as SkillUsagePartData) : {};
