@@ -10,6 +10,7 @@ import {
   type ProactiveTaskToolMode,
 } from '@iki/backend/types/tasks';
 import { createPrefixedId } from '@iki/backend/utils/id';
+import { clampListLimit, normalizeWhitespace } from '@iki/backend/utils/text';
 import {
   clampIntervalMinutes,
   computeNextRunAt,
@@ -39,14 +40,6 @@ export type ProactiveTaskRecord = Omit<ProactiveTask, 'tools'> & {
   tool_summary: string;
 };
 
-const trimString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
-
-const clampListLimit = (value: unknown): number => {
-  const asNumber = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(asNumber)) return DEFAULT_PROACTIVE_TASK_LIST_LIMIT;
-  return Math.max(1, Math.min(MAX_PROACTIVE_TASK_LIST_LIMIT, Math.trunc(asNumber)));
-};
-
 const normalizeToolsInput = (raw: unknown): string[] | null => {
   if (raw === null || typeof raw === 'undefined') return null;
   return parseProactiveTaskTools(raw);
@@ -70,7 +63,7 @@ const validateManualTools = (tools: string[]) => {
 
 const normalizeProviderId = (value: unknown): string | null => {
   if (value === null) return null;
-  const trimmed = trimString(value);
+  const trimmed = normalizeWhitespace(value);
   return trimmed || null;
 };
 
@@ -131,12 +124,12 @@ const resolveTaskByName = (name: string): ProactiveTask | null => {
 };
 
 export const resolveProactiveTask = (reference: ProactiveTaskReference): ProactiveTask | null => {
-  const byId = trimString(reference.id);
+  const byId = normalizeWhitespace(reference.id);
   if (byId) {
     return tasksDb.getProactiveTask(byId);
   }
 
-  const byName = trimString(reference.name);
+  const byName = normalizeWhitespace(reference.name);
   if (byName) {
     return resolveTaskByName(byName);
   }
@@ -171,19 +164,19 @@ const resolveToolConfig = (params: {
 
 export const createProactiveTask = (input: ProactiveTaskCreateInput): ProactiveTask => {
   const now = new Date();
-  const id = trimString(input.id) || createPrefixedId('task');
-  const name = trimString(input.name);
-  const prompt = trimString(input.prompt);
-  const provider_type = trimString(input.provider_type);
+  const id = normalizeWhitespace(input.id) || createPrefixedId('task');
+  const name = normalizeWhitespace(input.name);
+  const prompt = normalizeWhitespace(input.prompt);
+  const provider_type = normalizeWhitespace(input.provider_type);
   const provider_id = normalizeProviderId(input.provider_id);
-  const model = trimString(input.model);
+  const model = normalizeWhitespace(input.model);
   const enabled = input.enabled !== false;
   const notify = input.notify !== false;
   const schedule_type = normalizeScheduleType(input.schedule_type);
   const interval_minutes = clampIntervalMinutes(input.interval_minutes);
   const cron_expression = normalizeCronExpression(input.cron_expression);
   const schedule_timezone = normalizeScheduleTimezone(input.schedule_timezone);
-  const thread_id = trimString(input.thread_id) || null;
+  const thread_id = normalizeWhitespace(input.thread_id) || null;
   const { toolMode, serializedTools } = resolveToolConfig({
     toolModeInput: input.tool_mode,
     toolsInput: input.tools,
@@ -262,17 +255,17 @@ export const updateProactiveTask = (
   const hasTools = Object.prototype.hasOwnProperty.call(updates, 'tools');
 
   if (hasName) {
-    const name = trimString(updates.name);
+    const name = normalizeWhitespace(updates.name);
     if (!name) throw new Error('Task name is required');
     nextUpdates.name = name;
   }
   if (hasPrompt) {
-    const prompt = trimString(updates.prompt);
+    const prompt = normalizeWhitespace(updates.prompt);
     if (!prompt) throw new Error('Task prompt is required');
     nextUpdates.prompt = prompt;
   }
   if (hasProviderType) {
-    const providerType = trimString(updates.provider_type);
+    const providerType = normalizeWhitespace(updates.provider_type);
     if (!providerType) throw new Error('Task provider_type is required');
     nextUpdates.provider_type = providerType;
   }
@@ -280,12 +273,12 @@ export const updateProactiveTask = (
     nextUpdates.provider_id = normalizeProviderId(updates.provider_id);
   }
   if (hasModel) {
-    const model = trimString(updates.model);
+    const model = normalizeWhitespace(updates.model);
     if (!model) throw new Error('Task model is required');
     nextUpdates.model = model;
   }
   if (hasThreadId) {
-    nextUpdates.thread_id = trimString(updates.thread_id) || null;
+    nextUpdates.thread_id = normalizeWhitespace(updates.thread_id) || null;
   }
   if (hasNotify && typeof updates.notify === 'boolean') {
     nextUpdates.notify = updates.notify;
@@ -382,8 +375,8 @@ export const listProactiveTaskRecords = (params?: {
   query?: string;
   limit?: number;
 }): ProactiveTaskRecord[] => {
-  const query = trimString(params?.query);
-  const limit = clampListLimit(params?.limit);
+  const query = normalizeWhitespace(params?.query);
+  const limit = clampListLimit(params?.limit, DEFAULT_PROACTIVE_TASK_LIST_LIMIT, MAX_PROACTIVE_TASK_LIST_LIMIT);
 
   return tasksDb
     .getProactiveTasks()

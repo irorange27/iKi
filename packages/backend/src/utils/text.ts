@@ -45,3 +45,9 @@ export const stringifyPromptData = (value: unknown): string =>
   JSON.stringify(value)
     .replace(/\u2028/g, '\\u2028')
     .replace(/\u2029/g, '\\u2029');
+
+export const clampListLimit = (value: unknown, fallback: number, max: number): number => {
+  const asNumber = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(asNumber)) return fallback;
+  return Math.max(1, Math.min(max, Math.trunc(asNumber)));
+};

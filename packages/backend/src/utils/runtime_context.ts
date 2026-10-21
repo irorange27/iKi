@@ -46,3 +46,42 @@ export const runWithToolRuntimeContext = async <T>(
 ): Promise<T> => {
   return await storage.run(context, fn);
 };
+
+export type ConversationModelDefaults = {
+  provider_type: string;
+  provider_id: string | null;
+  model: string;
+};
+
+export const resolveConversationModelDefaults = (args: {
+  providerType?: string;
+  providerId?: string;
+  model?: string;
+}): ConversationModelDefaults => {
+  const runtimeModel = getToolRuntimeContext().conversationModel;
+  const explicitProviderType = args.providerType?.trim() || '';
+  const providerType = explicitProviderType || runtimeModel?.providerType?.trim() || '';
+  const providerTypeMatchesRuntime =
+    !explicitProviderType ||
+    (runtimeModel?.providerType?.trim() || '') === explicitProviderType;
+
+  const model =
+    args.model?.trim() ||
+    (providerTypeMatchesRuntime ? runtimeModel?.model?.trim() || '' : '');
+  const providerId =
+    args.providerId?.trim() ||
+    (providerTypeMatchesRuntime ? runtimeModel?.providerId?.trim() || '' : '');
+
+  if (!providerType) {
+    throw new Error('providerType is required when no current chat model is available');
+  }
+  if (!model) {
+    throw new Error('model is required when it cannot be inferred from the current chat');
+  }
+
+  return {
+    provider_type: providerType,
+    provider_id: providerId || null,
+    model,
+  };
+};

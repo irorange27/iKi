@@ -10,7 +10,7 @@ import {
 } from '../tasks/proactive_task_manager';
 import { BaseTool } from '@iki/backend/tools/base';
 import { zodSchemaToJsonSchema } from '@iki/backend/tools/json_schema';
-import { getToolRuntimeContext } from '../utils/runtime_context';
+import { getToolRuntimeContext, resolveConversationModelDefaults } from '../utils/runtime_context';
 import {
   DeleteProactiveTaskInputSchema,
   DeleteProactiveTaskOutputSchema,
@@ -112,35 +112,6 @@ const resolveDeliveryThreadId = (params: {
     throw new Error('Current chat thread is unavailable for current_thread delivery');
   }
   return runtimeThreadId;
-};
-
-const resolveConversationModelDefaults = (args: z.infer<typeof WriteProactiveTaskInputSchema>) => {
-  const runtimeModel = getToolRuntimeContext().conversationModel;
-  const explicitProviderType = args.providerType?.trim() || '';
-  const providerType = explicitProviderType || runtimeModel?.providerType?.trim() || '';
-  const providerTypeMatchesRuntime =
-    !explicitProviderType ||
-    (runtimeModel?.providerType?.trim() || '') === explicitProviderType;
-
-  const model =
-    args.model?.trim() ||
-    (providerTypeMatchesRuntime ? runtimeModel?.model?.trim() || '' : '');
-  const providerId =
-    args.providerId?.trim() ||
-    (providerTypeMatchesRuntime ? runtimeModel?.providerId?.trim() || '' : '');
-
-  if (!providerType) {
-    throw new Error('providerType is required when no current chat model is available');
-  }
-  if (!model) {
-    throw new Error('model is required when it cannot be inferred from the current chat');
-  }
-
-  return {
-    provider_type: providerType,
-    provider_id: providerId || null,
-    model,
-  };
 };
 
 export class ListProactiveTasksTool extends BaseTool {
