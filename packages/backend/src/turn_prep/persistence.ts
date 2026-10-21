@@ -183,11 +183,23 @@ export const createChatPersistence = () => {
   };
 
   const listMessages = (threadId: string): ChatMessage[] => {
-    const rows = getSessionEvents(threadId, [MESSAGE_EVENT_TYPES.INPUT_ACCEPTED, MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED]);
+    const rows = getSessionEvents(threadId, [
+      MESSAGE_EVENT_TYPES.INPUT_ACCEPTED,
+      MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED,
+      MESSAGE_EVENT_TYPES.MESSAGES_TRUNCATED,
+    ]);
     const byId = new Map<string, ChatMessage>();
     for (const event of rows) {
+      if (event.type === MESSAGE_EVENT_TYPES.MESSAGES_TRUNCATED) {
+        const deleted = (event.payload as { deletedMessageIds?: unknown }).deletedMessageIds;
+        if (Array.isArray(deleted)) {
+          for (const id of deleted) {
+            if (typeof id === 'string') byId.delete(id);
+          }
+        }
+        continue;
+      }
       const row = projectRow(threadId, event);
-
       if (row) byId.set(row.id, row);
     }
     return [...byId.values()];

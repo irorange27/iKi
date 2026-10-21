@@ -142,6 +142,7 @@ export const findMessageEvent = (
 export const MESSAGE_EVENT_TYPES = {
   INPUT_ACCEPTED: 'input_accepted',
   MODEL_OUTPUT_COMMITTED: 'model_output_committed',
+  MESSAGES_TRUNCATED: 'messages_truncated',
 } as const;
 
 export const SESSION_EVENT_VERSION = 1;
