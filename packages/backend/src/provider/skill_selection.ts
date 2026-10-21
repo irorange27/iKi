@@ -14,7 +14,6 @@ export type SkillCatalogItem = {
   source?: string;
 };
 
-/** Formats one already-normalized catalog entry for the router prompt; injected by the caller. */
 export type SkillCatalogFormatter = (parts: {
   id: string;
   name: string;

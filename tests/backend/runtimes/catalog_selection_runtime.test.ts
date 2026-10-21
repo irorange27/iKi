@@ -72,9 +72,6 @@ describe('LlmCatalogSelectionRuntime failure contract', () => {
       throw new Error('Insufficient Balance');
     });
 
-    // Regression: this used to return [], which the caller read as "the
-    // selector deliberately chose no tools" and skipped its full-catalog
-    // fallback — the turn then ran with only the hand-appended shell.
     await expect(runtime.run(catalogRequest())).resolves.toBeNull();
   });
 
@@ -92,13 +89,10 @@ describe('LlmCatalogSelectionRuntime failure contract', () => {
       getToolModel: () => ({ providerType: 'deepseek', model: 'deepseek-flash' }),
       createGenerator: () =>
         ({
-          // A selector that ran and answered "no tools needed".
           generate: async () => ({ response: '[]' }),
         }) as never,
     });
 
-    // The other half of the contract: a selector that ran and chose nothing
-    // must NOT be overridden by the caller's fallback.
     await expect(
       runtime.run({
         ...(catalogRequest() as Record<string, unknown>),

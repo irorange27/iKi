@@ -1,14 +1,4 @@
-/**
- * The replay contract (P3): a claimed-but-unfinished tool call is recovered by
- * the *double sign* — the policy stored when intent was committed AND the
- * policy the tool declares now must both say `safe`, or the call is answered
- * with an `interrupted` result that says the effect may have partially run.
- *
- * These tests are the boundary for that rule. Before the contract existed,
- * every one of these recoveries returned `{ kind: 'unknown' }` and the turn
- * died with "the turn cannot continue honestly" — the assertions below fail on
- * that code by construction.
- */
+
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -81,7 +71,6 @@ afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 
-/** A tool declaration in the registry — the same shape `toAgentTool()` yields. */
 const declare = (name: string, replay?: 'safe' | 'unsafe') => {
   defaultToolRegistry.register({
     name,
@@ -105,7 +94,6 @@ const registerApproval = (toolName: string) => {
     },
   ]);
   prepareToolExecution(address);
-  // The user's decision, as the approval owner journals it.
   appendSessionEvents(THREAD_ID, getSessionEventRevision(THREAD_ID), [
     {
       type: 'approval_decided',
@@ -115,8 +103,6 @@ const registerApproval = (toolName: string) => {
   ]);
 };
 
-/** Re-write the durable intent as a *crashed* executor left it: STARTED, no
- *  FINISHED. `pid` is the process that claimed the effect. */
 const claimBy = (pid: number) => {
   const prepared = getSessionEvents(THREAD_ID, [TOOL_EXECUTION_PREPARED]).at(-1);
   const payload = prepared?.payload as { binding: unknown; decision: unknown } | undefined;
@@ -130,7 +116,6 @@ const claimBy = (pid: number) => {
   ]);
 };
 
-/** A pid that certainly belonged to a process which has exited. */
 const deadPid = async (): Promise<number> => {
   const child = spawn(process.execPath, ['-e', ''], { stdio: 'ignore' });
   const pid = child.pid as number;
@@ -138,7 +123,6 @@ const deadPid = async (): Promise<number> => {
   return pid;
 };
 
-/** A pid whose process is running right now. */
 const livePid = (): number => {
   const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], {
     stdio: 'ignore',
@@ -201,8 +185,6 @@ it('(c) a policy narrowed from safe to unsafe between intent and recovery blocks
   declare('probe_upgraded', 'safe');
   registerApproval('probe_upgraded');
   claimBy(await deadPid());
-  // The declaration changed (an upgrade, a tool author's fix): the stored sign
-  // no longer stands alone.
   declare('probe_upgraded', 'unsafe');
 
   const execution = port();
@@ -257,10 +239,6 @@ it('(g) the recorded interruption reaches the wire as a paired error tool result
   claimBy(await deadPid());
   await executeApprovedTool(address, port());
 
-  // The consumer boundary: what a provider actually receives. The journaled
-  // observation must project into an isError tool result that carries the code
-  // and the "may have partially run" wording — not vanish, and not read as
-  // success.
   const finished = getSessionEvents(THREAD_ID, [TOOL_EXECUTION_FINISHED]);
   const output = (
     finished[0]!.payload as { result: { output: unknown } }

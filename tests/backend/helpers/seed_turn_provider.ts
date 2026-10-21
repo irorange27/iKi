@@ -1,15 +1,4 @@
-/**
- * Seed the provider row a durable-layer suite needs.
- *
- * Those suites assert what happens AROUND the model call (retry, session log,
- * persistence, recovery). Since ADR 009 the only supply is Pi, and Pi resolves a
- * real provider row before it will admit a turn — a suite that mocks the old
- * `createModel` seam now fails with "provider … is not configured" instead of
- * reaching the code under test.
- *
- * `baseUrl` points at a closed port on purpose: the suite scripts the model, so
- * any attempt to actually dial is a bug the test should surface, not paper over.
- */
+
 import { addProvider } from '@iki/backend/db/providers';
 
 export const seedTurnProvider = (options: {
@@ -18,9 +7,6 @@ export const seedTurnProvider = (options: {
   model: string;
   baseUrl?: string;
 }): void => {
-  // Idempotent per DATABASE, not per process: a suite that rebuilds its
-  // database in `beforeEach` must be able to seed again, while a suite that
-  // seeds twice in one database must not trip the primary key.
   try {
     addProvider({
       id: options.providerId,

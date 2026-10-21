@@ -63,7 +63,7 @@ export const useChatComposerSend = (deps: {
   resolveSendRequest?: (draft: string) => Promise<ResolvedComposerSendRequest>;
   canResolveEmptyDraft?: () => boolean;
   ensureProviderReady: () => Promise<ComposerProviderReadyResult>;
-  /** Work threads: return a feedback message when the project workspace is missing; null = ok. */
+  
   ensureWorkspaceForWork?: () => string | null;
   stopVoiceInput: () => void;
   attachedImages?: Ref<FileUIPart[]>;
@@ -114,9 +114,6 @@ export const useChatComposerSend = (deps: {
         isLoading.value = false;
         isStopping.value = false;
       } else {
-        // Allow user to send a new/steering message immediately after stop.
-        // The old stream will unwind in the background; any late UI chunks
-        // from it are superseded by the new stream when the user sends.
         isLoading.value = false;
         isStopping.value = false;
       }
@@ -167,7 +164,6 @@ export const useChatComposerSend = (deps: {
       return;
     }
 
-    // The composer holds no persistent skill selection; only slash-command overrides apply.
     const effectiveSkillMode = resolvedSendRequest.skillMode ?? 'auto';
     const effectiveSelectedSkillIds =
       resolvedSendRequest.skillMode === 'manual' && Array.isArray(resolvedSendRequest.skillIds)

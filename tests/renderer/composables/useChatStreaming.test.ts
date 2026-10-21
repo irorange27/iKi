@@ -46,7 +46,6 @@ const createHarness = (options?: {
   const messageCreated = vi.fn(async (input: { id: string }) => ({ id: input.id }));
   const messageUpdated = vi.fn(async () => undefined);
   const messageDeleted = vi.fn(async () => undefined);
-  // The backend-owned atomic truncate: one call, returns the ids it deleted.
   const messageTruncateAfter = vi.fn(async () => ({ success: true, deletedIds: [] as string[] }));
   const stream = vi.fn(async () => ({ success: true }));
   const stopStream = vi.fn(async () => ({ success: true }));
@@ -160,7 +159,6 @@ describe('useChatStreaming', () => {
       initialMessages: [userMessage],
     });
 
-    // Bind the transport to thread_1 as an in-flight turn would.
     await chatInstance.chat.sendMessage(
       { ...userMessage },
       { body: { threadId: 'thread_1' } }
@@ -171,7 +169,6 @@ describe('useChatStreaming', () => {
     await state.selectThread('thread_2');
     await flushMicrotasks();
 
-    // One stop from beginEditMessage, one from the thread switch.
     expect(stopStream).toHaveBeenCalledTimes(2);
     expect(selectThread).toHaveBeenCalledWith('thread_2');
     expect(state.editingUserMessageId.value).toBeNull();
@@ -198,7 +195,6 @@ describe('useChatStreaming', () => {
     await state.handleClearCurrentThread();
     await flushMicrotasks();
 
-    // One stop from beginEditMessage, one from clearing the thread.
     expect(stopStream).toHaveBeenCalledTimes(2);
     expect(clearCurrentThread).toHaveBeenCalledTimes(1);
     expect(state.editingUserMessageId.value).toBeNull();
@@ -235,12 +231,9 @@ describe('useChatStreaming', () => {
     });
     await flushMicrotasks();
 
-    // The truncate is ONE backend-owned atomic call (rows + session-log fact
-    // in one transaction) — not a per-row delete loop over the admin channel.
     expect(messageTruncateAfter).toHaveBeenCalledTimes(1);
     expect(messageTruncateAfter).toHaveBeenCalledWith('thread_1', 'user_1');
     expect(messageDeleted).not.toHaveBeenCalled();
-    // The local store (the view) drops its tail only after the truncate lands.
     expect(chatInstance.messageStore.messages).toHaveLength(1);
     expect(getTextPart(chatInstance.messageStore.messages[0] as UIMessage)).toBe(
       'Updated question'
@@ -275,9 +268,7 @@ describe('useChatStreaming', () => {
 
     expect(createNewThread).toHaveBeenCalledWith({ model: 'gpt-4.1' });
     expect(showWelcome.value).toBe(false);
-    // The user message is durably recorded by the backend on stream entry.
     expect(messageCreated).not.toHaveBeenCalled();
-    // The user message lands in the store via chat.sendMessage, not here.
     expect(chatInstance.messageStore.messages).toHaveLength(0);
     expect(getTextPart(result?.userMessage as UIMessage)).toBe('Hello from a fresh composer');
     expect(result?.threadId).toBe('thread_new');

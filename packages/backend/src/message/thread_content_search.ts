@@ -3,17 +3,11 @@ import { getChatThreads } from '../db/chat_thread';
 import * as chatThreadDb from '../db/chat_thread';
 import { extractTextFromMessageParts, isObjectRecord } from './message_parts';
 
-/**
- * Content-level thread search (Codex-style ⌘K search): scans the persisted
- * message JSON for the query and returns per-thread best matches with a
- * plain-text snippet. Title matching stays a renderer concern.
- */
-
 export type ThreadContentMatch = {
   threadId: string;
   threadTitle: string;
   messageId: string;
-  /** Matched message role for context ('user' | 'assistant'). */
+
   role: string;
   snippet: string;
   updatedAt: string;
@@ -33,7 +27,6 @@ const buildSnippet = (text: string, query: string): string => {
   );
 };
 
-/** Extract searchable plain text from a persisted message row. */
 const messageSearchableText = (messageJson: string): { role: string; text: string } | null => {
   try {
     const parsed: unknown = JSON.parse(messageJson);
@@ -50,12 +43,8 @@ export const searchThreadContent = (rawQuery: string, limit = 12): ThreadContent
   const query = rawQuery.trim();
   if (!query) return [];
 
-  // JSON LIKE prefilter narrows the scan; exact per-message matching happens
-  // on the extracted plain text so markup never surfaces in snippets.
   const like = `%${query.replace(/[%_]/g, ch => `\\${ch}`)}%`;
-  // ADR 011: search the session log. The two message-carrying event types are
-  // read per thread through the (thread_id, revision) index, then the same
-  // JSON prefilter narrows before any text extraction.
+
   const rows = getChatThreads()
     .flatMap(thread =>
       getSessionEvents(thread.id, ['input_accepted', 'model_output_committed'])

@@ -8,9 +8,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 const callPiChatMock = vi.hoisted(() => vi.fn());
 
-// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
-// these suites on the durable-layer behaviour they assert without reaching a
-// network endpoint.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -27,9 +24,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
       maxInputTokens: 98000,
       maxOutputTokens: 2000,
     }),
-    // The no-tools send path calls this module-internal function whose own
-    // createModel binding the namespace mock cannot intercept — a partial
-    // mock would let a REAL provider request leave the test process.
     generateChatWithModelMessages: vi.fn(async () => ({
       text: 'send answer',
       usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
@@ -65,12 +59,6 @@ const memory = {
   getAffectContextMessage: () => '',
 };
 
-// Stage C slice 2: every entry records facts. The full approval loop with
-// real components — a stream pauses on a write approval, the decision comes
-// through the real approveTool entry, the continuation completes — and the
-// replay rebuilds the whole story: messages, the paused parent plus its
-// completed continuation, and the approval's requested→decided states. The
-// send entry records the same facts from its waiter transport.
 describe('session log approval facts across entries', () => {
   let dataDir = '';
   let conversation: ReturnType<typeof createChatPersistence>;
@@ -115,11 +103,6 @@ describe('session log approval facts across entries', () => {
   });
 
   beforeEach(() => {
-    // These suites drive the DURABLE layer (streaming, approvals, session-log
-    // facts, retry, persistence) with a scripted AI SDK model. They are not about
-    // which supply serves the turn, so they opt into the legacy executor: the
-    // production default refuses a turn its projection cannot carry, and a
-    // scripted model has no endpoint to project to.
     setTurnHarnessFallback(piTurnHarness);
     vi.clearAllMocks();
     coordinator = createThreadStreamCoordinator();
@@ -127,8 +110,6 @@ describe('session log approval facts across entries', () => {
   });
 
   it('records the full approval loop: request, decision, continuation', async () => {
-    // One approvals registry shared by the stream and the approval entry —
-    // the same wiring the composition root uses.
     const approvals = buildApprovals();
     const streaming = createChatStreaming({
       streamCoordinator: coordinator,
@@ -174,8 +155,6 @@ describe('session log approval facts across entries', () => {
     const pauseResult = await turn;
     expect(pauseResult).toMatchObject({ success: true, awaitingApproval: true });
 
-    // Mid-pause: the approval request is a recorded fact, the paused run has
-    // no terminal event, and the partial output is committed.
     const pausedView = rebuildThreadViewFromEvents('thread_facts');
     const requested = pausedView.events.filter(event => event.type === APPROVAL_REQUESTED);
     expect(requested).toHaveLength(1);
@@ -191,7 +170,6 @@ describe('session log approval facts across entries', () => {
       )
     ).toBe(false);
 
-    // Approve through the real entry; the continuation completes.
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
         [
@@ -205,7 +183,6 @@ describe('session log approval facts across entries', () => {
     expect(approveResult).toMatchObject({ success: true, awaitingApproval: false });
 
     const view = rebuildThreadViewFromEvents('thread_facts');
-    // Decision fact with its source.
     expect(view.events.filter(event => event.type === APPROVAL_DECIDED)).toHaveLength(1);
     expect(view.approvals).toEqual([
       expect.objectContaining({
@@ -216,15 +193,10 @@ describe('session log approval facts across entries', () => {
       }),
     ]);
 
-    // Two segments, both terminal: the parent ran until it paused, and the
-    // approval answered — so it completes as `approval-resumed` — and the
-    // continuation then ran to its natural end. The run rows and the session
-    // log must agree on both.
     const completed = view.turns.filter(turn => turn.status === 'completed');
     expect(completed).toHaveLength(2);
     expect(completed.map(turn => turn.kind).sort()).toEqual(['approval-resume', 'chat-turn']);
 
-    // The rebuilt conversation carries the final assistant message.
     const last = view.messages.at(-1)!;
     expect(last.role).toBe('assistant');
     expect(JSON.stringify(last.parts)).toContain('written and done');
@@ -345,12 +317,9 @@ describe('session log approval facts across entries', () => {
         approvals.approveTool({ id: 97, send: vi.fn() }, approvalId, true)
       ).rejects.toThrow('Failed to append turn facts to the session log.');
     } finally {
-      // This file shares ONE database across its tests — a leaked aborting
-      // trigger cascades into every sibling.
       getDb().exec('DROP TRIGGER IF EXISTS facts_reject_decided');
     }
 
-    // The retried decision heals the fact, not just the flow.
     const retryResult = await approvals.approveTool({ id: 98, send: vi.fn() }, approvalId, true);
     expect(retryResult).toMatchObject({ success: true, awaitingApproval: false });
 
@@ -404,8 +373,6 @@ describe('session log approval facts across entries', () => {
       }
     );
 
-    // The run is cancelled: its pending approval expires as a system
-    // decision on the stream, not a pending-forever replay record.
     expect(approvals.cancelPendingApprovalsForRun('run_cancelled')).toBe(1);
 
     const view = rebuildThreadViewFromEvents('thread_facts');

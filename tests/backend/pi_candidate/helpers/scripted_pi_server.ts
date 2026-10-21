@@ -1,10 +1,4 @@
-/**
- * Scripted OpenAI-compatible SSE server for the Pi candidate integration
- * (issue #96). Unlike the sandbox probes, this server keeps the evidence the
- * review demanded: a per-script request counter, the full wire body of every
- * request, and strict "unknown script" failures so a candidate loop cannot
- * silently consume a wrong-numbered response.
- */
+
 import type { Server } from 'node:http';
 import http from 'node:http';
 
@@ -13,7 +7,7 @@ export type ScriptAction = SseChunk | 'DESTROY';
 
 export type ScriptedResponse = {
   chunks: ScriptAction[];
-  /** Delay between chunks (ms) so mid-stream aborts have a window. */
+  
   delayMs?: number;
 };
 
@@ -24,11 +18,9 @@ export type RecordedRequest = {
 
 export type ScriptedPiServer = {
   port: number;
-  /** Keyed by the LAST user message content on the wire. */
+  
   setScript: (key: string, response: ScriptedResponse) => void;
-  /** Sequential scripts: request N serves responses[N]; when exhausted, the
-   * last response repeats (multi-step tool turns need different scripts per
-   * model request). */
+  
   setScriptSequence: (key: string, responses: ScriptedResponse[]) => void;
   countRequests: (key: string) => number;
   totalRequests: () => number;

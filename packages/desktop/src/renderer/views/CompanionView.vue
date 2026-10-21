@@ -128,7 +128,6 @@ const resolveSprite = (phase: string, nudgeKind?: string): string => {
   return PHASE_SPRITE[phase] ?? DEFAULT_SPRITE;
 };
 
-// ---- Idle random rotation ----
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
 const resolveIdleSprite = (): string | null => {
@@ -155,7 +154,6 @@ const clearIdleRotation = () => {
   }
 };
 
-// ---- Thinking depth ----
 let thinkingCheckTimer: ReturnType<typeof setInterval> | null = null;
 let thinkingStartMs = 0;
 let toolPreviewCount = 0;
@@ -181,7 +179,6 @@ const stopThinkingDepthCheck = () => {
   toolPreviewCount = 0;
 };
 
-// ---- Interaction micro-reactions ----
 const reactionActive = ref(false);
 let reactionRestoreTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -230,7 +227,6 @@ const handleStageClick = () => {
   void handleOpenMainWindow();
 };
 
-// ---- Phase watcher ----
 watch(
   () => snapshot.value.phase,
   (phase) => {
@@ -249,7 +245,6 @@ watch(
   }
 );
 
-// Track tool previews for thinking depth
 watch(
   () => snapshot.value.preview?.kind,
   (kind) => {

@@ -1,21 +1,5 @@
 // @vitest-environment node
 
-/**
- * Cancellation must reach the execution it names, not just the run row.
- *
- * The defect: `chatService.cancelRun(runId)` looked only at the stream
- * registry (`abortStreamByRunId`). The non-streaming `send` transport holds
- * its own AbortController and registers no stream, so cancelRun fell through
- * to `rehydrateAgentRunTracker(runId).markCancelled(...)` — a durable
- * terminal write with nothing actually stopped. The tool handler kept
- * running, and when it finished, the live tracker appended a step at an
- * index the cancellation writer had already used:
- * `UNIQUE constraint failed: agent_run_steps.run_id, agent_run_steps.step_index`.
- *
- * These tests pin the contract at the real consumer boundary (the chat
- * service + SQLite), not a mocked registry: a cancelled run's execution
- * observes its abort signal, and no writer may append to a cancelled run.
- */
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,9 +10,6 @@ import { z } from 'zod';
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
 
-// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
-// these suites on the durable-layer behaviour they assert without reaching a
-// network endpoint.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -47,12 +28,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     maxInputTokens: 98000,
     maxOutputTokens: 2000,
   }),
-  // These suites verify DURABLE behaviour (effect-aware retry, cancel routing,
-  // handoff facts, inline journaling) using a scripted AI SDK model. They are
-  // not about supply routing, so they pin the AI SDK harness explicitly: Pi
-  // claims every provider type now, and a stubbed `createModel` would never be
-  // reached. Routing itself is covered by factory_pi_generation.test.ts and
-  // turn_supply_selection.test.ts.
   supportsPiTurnSupply: () => false,
 }));
 
@@ -78,11 +53,6 @@ describe('cancelling a run reaches the execution that owns it', () => {
   const target = { id: 11, send: vi.fn() };
 
   beforeEach(async () => {
-    // These suites drive the DURABLE layer (streaming, approvals, session-log
-    // facts, retry, persistence) with a scripted AI SDK model. They are not about
-    // which supply serves the turn, so they opt into the legacy executor: the
-    // production default refuses a turn its projection cannot carry, and a
-    // scripted model has no endpoint to project to.
     setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-cancel-'));
     userDataMock.mockReturnValue(root);
@@ -153,8 +123,6 @@ describe('cancelling a run reaches the execution that owns it', () => {
       ])
     );
 
-    // The non-streaming send transport: it registers no stream, so nothing
-    // in the stream registry names this run.
     const pending = service
       .send({
         providerType: 'openai',
@@ -180,15 +148,11 @@ describe('cancelling a run reaches the execution that owns it', () => {
     const cancelled = service.cancelRun(run!.id);
     expect(cancelled).toEqual({ success: true });
 
-    // Contract 1: the execution that owns the run observes the cancellation.
     expect(observedSignal?.aborted).toBe(true);
 
     release();
     const outcome = await pending;
 
-    // Contract 2: the cancelled run stays cancelled and no late writer
-    // appended to it (the old behavior surfaced as a UNIQUE step-index
-    // constraint failure here).
     expect('error' in outcome ? String(outcome.error) : '').not.toContain('UNIQUE constraint');
     expect(agentRunDb.getAgentRun(run!.id)?.status).toBe('cancelled');
 

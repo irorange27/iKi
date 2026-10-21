@@ -82,9 +82,6 @@ describe('chat IPC', () => {
 
     registerChatIpc();
 
-    // Namespace invariant instead of a full channel mirror: every registered
-    // handler must belong to the chat IPC surface. Exact channel lists are the
-    // registration code's own concern.
     const channels = [...ipcHandlers.keys()];
     expect(channels.length).toBeGreaterThan(0);
     expect(channels.every(channel => channel.startsWith('chat:'))).toBe(true);
@@ -144,8 +141,6 @@ describe('chat IPC', () => {
     expect(await ipcHandlers.get('chat:messages:get')?.(null, 'message_1')).toEqual({
       id: 'message_1',
     });
-    // chat:messages:create was removed with A3: turn-driven persistence is
-    // backend-owned; the renderer keeps only user-driven edit/delete channels.
     expect(
       await ipcHandlers.get('chat:messages:update')?.(null, 'message_1', messagePayload)
     ).toEqual({
@@ -153,8 +148,6 @@ describe('chat IPC', () => {
       thread_id: 'thread_1',
       message: '{}',
     });
-    // The backend-owned atomic truncate (P5): ONE channel — the renderer never
-    // deletes rows individually for an edit/resend truncation.
     expect(
       await ipcHandlers.get('chat:messages:truncate-after')?.(null, 'thread_1', 'message_1')
     ).toEqual({ success: true, threadId: 'thread_1', messageId: 'message_1', deletedIds: [] });

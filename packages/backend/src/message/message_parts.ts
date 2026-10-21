@@ -52,21 +52,21 @@ export type TokenUsagePartData = {
   cacheWriteTokens?: number;
   reasoningTokens?: number;
   estimatedCostUsd?: number;
-  /** Billed input of the final SDK step — the real context size the model last saw (absent on legacy messages). */
+
   lastStepInputTokens?: number;
   maxInputTokens?: number;
   maxOutputTokens?: number;
   model?: string;
   providerType?: string;
   providerId?: string;
-  /** Turn perf metrics (undefined on messages produced before instrumentation). */
+
   llmMs?: number;
   toolMs?: number;
   firstTokenMs?: number;
   firstTokenSamples?: number;
   steps?: number;
   toolCalls?: number;
-  /** Estimated per-category context assembly breakdown (absent on legacy messages). */
+
   contextComposition?: ContextCompositionSummary;
 };
 
@@ -82,9 +82,6 @@ export type ChatUiDataTypes = {
   'token-usage': TokenUsagePartData;
 };
 
-// These used to be AI SDK generic instantiations (`UIMessage`,
-// `UIMessageChunk`), which made that package the type authority for iKi's own
-// persisted format (ADR 009). They now come from the protocol module.
 import type {
   UiDataPart,
   UiGenericDataPart,
@@ -96,13 +93,6 @@ import type {
 export type { ChatUiMessage };
 export type ChatUiMessageChunk = ChatUiChunk;
 
-/**
- * The data-part members of a message's parts, one per entry in
- * `ChatUiDataTypes`.
- *
- * Generated from the map so the `type` literal of each member is exact — the
- * nine `Extract<UiMessagePart, { type: 'data-…' }>` aliases below depend on it.
- */
 type ChatUiDataPart = {
   [K in keyof ChatUiDataTypes]: UiDataPart<K & string, ChatUiDataTypes[K]>;
 }[keyof ChatUiDataTypes];
@@ -110,9 +100,7 @@ type ChatUiDataPart = {
 export type UiMessagePart =
   | Exclude<ChatUiPart, { type: `data-${string}` }>
   | ChatUiDataPart
-  // An unknown `data-*` key still produces a valid part at runtime (the
-  // renderer switches on the prefix); typing it away would force every generic
-  // producer to invent a key.
+
   | UiGenericDataPart;
 export type TextPart = Extract<UiMessagePart, { type: 'text' }>;
 export type ReasoningPart = Extract<UiMessagePart, { type: 'reasoning' }>;
@@ -322,12 +310,6 @@ export const extractTextFromMessageParts = (parts: unknown): string => {
     .join('');
 };
 
-/**
- * Project a stored message JSON blob into `{ role, content }`.
- *
- * Moved here from the removed memory module: continuity capture needs the plain
- * text of a persisted message and has nothing to do with memory retrieval.
- */
 export const extractTextFromMessageJson = (
   messageJson: string
 ): { role: string; content: string } | null => {

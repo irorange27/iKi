@@ -14,7 +14,6 @@ import {
   WebToolInputSchema,
 } from './schemas';
 
-// Give search a bit more time than the global default, but keep it interactive.
 const MIN_WEB_SEARCH_TIMEOUT_MS = 12000;
 const DEFAULT_WEB_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36';
@@ -162,7 +161,7 @@ const normalizeDuckDuckGoSearchHref = (href: string): string | null => {
   if (!trimmed) return null;
 
   const tryDecodeUddg = (raw: string): string => {
-    // DuckDuckGo occasionally double-encodes the `uddg` value; decode at most twice.
+
     let decoded = raw;
     for (let i = 0; i < 2; i += 1) {
       try {
@@ -321,8 +320,6 @@ const parseDuckDuckGoResults = (html: string, limit: number): SearchResult[] => 
   const results: SearchResult[] = [];
   const seen = new Set<string>();
 
-  // DuckDuckGo's HTML is not stable about attribute ordering. Parse anchors and
-  // extract `class`/`href` explicitly instead of relying on a single regex.
   const anchorRegex = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
   let match: RegExpExecArray | null = anchorRegex.exec(html);
   while (match && results.length < limit) {
@@ -402,7 +399,7 @@ export class WebSearchTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
-  // Outbound read: the second request has no effect beyond the first.
+
   override replay = 'safe' as const;
   override description =
     'Search the public web and return candidate result titles/URLs. Use this to discover sources; if the answer depends on page contents, call `fetch` on the selected result before answering.';
@@ -581,7 +578,7 @@ export class FetchTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
-  // HTTP GET: re-fetching a URL cannot do anything the first GET did not.
+
   override replay = 'safe' as const;
   override description =
     'Fetch a specific webpage or text URL and return clean extracted text with status and metadata. Use this after `web` when you need facts from the page itself, not just result titles.';

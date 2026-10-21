@@ -30,13 +30,13 @@ export interface Provider {
   name: string;
   type: string;
   api_key: string;
-  models: string; // JSON string of models
-  model_options?: string; // JSON string keyed by model id
+  models: string;
+  model_options?: string;
   base_url?: string;
   enabled: boolean;
   created_at: string;
   updated_at: string;
-  available_models: string; // JSON string
+  available_models: string;
   api_version?: string;
   is_response_api?: boolean;
 }

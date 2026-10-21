@@ -1,13 +1,4 @@
-/**
- * §C-F1 / task-7 — the three retired context budgets must be GONE, not idle.
- *
- * `maxRecentTokens` / `maxMessageTokens` / `maxSummaryTokens` had zero
- * consumers: writing them into the config file changed nothing on the wire.
- * That is a lying configuration surface, so the audit's option A declared the
- * capability retired. These assertions are the retirement proof — each one
- * fails on the pre-retirement code (where the keys existed and the derivation
- * rescaled them) and passes only when the keys are gone from every layer.
- */
+
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,13 +9,11 @@ import { DEFAULT_APP_CONFIG, mergeAppConfig } from '@iki/backend/config/defaults
 import { AppConfigSchema } from '@iki/backend/config/schema';
 import { deriveModelAwareContextConfig } from '@iki/backend/turn_prep/context_budget';
 
-// tests/backend/turn_prep/<this file> → repo root
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const BACKEND_SRC = path.join(REPO_ROOT, 'packages/backend/src');
 
 const RETIRED_CONTEXT_KEYS = ['maxRecentTokens', 'maxMessageTokens', 'maxSummaryTokens'] as const;
 
-/** Context budgets that DO have a consumer — `context_blocks.ts` clips to them. */
 const LIVE_CONTEXT_KEYS = ['enabled', 'maxIdentityTokens', 'maxSkillTokens'] as const;
 
 const listSourceFiles = (dir: string): string[] =>
@@ -39,8 +28,6 @@ describe('retired context budgets (C-F1 option A)', () => {
     for (const key of RETIRED_CONTEXT_KEYS) {
       expect(Object.prototype.hasOwnProperty.call(DEFAULT_APP_CONFIG.context, key)).toBe(false);
     }
-    // The live budget face is exactly what has a consumer: no dead knobs, and
-    // no silent loss of the two clippers that actually run.
     expect(Object.keys(DEFAULT_APP_CONFIG.context).sort()).toEqual([...LIVE_CONTEXT_KEYS].sort());
   });
 
@@ -49,7 +36,6 @@ describe('retired context budgets (C-F1 option A)', () => {
       const parsed = AppConfigSchema.parse({ context: { [key]: 9999 } });
       expect(Object.prototype.hasOwnProperty.call(parsed.context, key)).toBe(false);
     }
-    // A live budget still round-trips — the schema was not gutted.
     expect(AppConfigSchema.parse({ context: { maxSkillTokens: 999 } }).context.maxSkillTokens).toBe(
       999
     );
@@ -89,7 +75,6 @@ describe('retired context budgets (C-F1 option A)', () => {
     for (const key of RETIRED_CONTEXT_KEYS) {
       expect(Object.prototype.hasOwnProperty.call(derived, key)).toBe(false);
     }
-    // The derivation still owns the live decision: output cap from capability.
     expect(derived.maxOutputTokens).toBe(1024);
   });
 

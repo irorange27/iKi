@@ -10,16 +10,8 @@ export const useTurnRail = (
   threadId: Ref<string | undefined>,
   visible: Ref<boolean>
 ) => {
-  // ── Fixed turn rail (Codex-style outline scrubber) ─────────────────────
-  // A strip pinned to the conversation's left edge carries one lines-marker per
-  // user message, stacked as a vertically centered column regardless of scroll.
-  // Hovering a marker previews the turn; clicking the marker or the preview card
-  // smooth-scrolls back to the turn's first message. The rail only appears once
-  // the conversation actually overflows.
   const TURN_PREVIEW_HIDE_DELAY_MS = 220;
   const TURN_RAIL_MIN_OVERFLOW_PX = 80;
-  // A rail over a short conversation is noise — it earns its place once there
-  // are enough turns to navigate between (and the thread actually overflows).
   const TURN_RAIL_MIN_TURNS = 5;
 
   const turnPreview = ref<{

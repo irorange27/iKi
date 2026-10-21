@@ -254,7 +254,6 @@ describe('Sidebar', () => {
     expect(settingsButton).not.toBeNull();
     (settingsButton as HTMLButtonElement).click();
 
-    // Settings open inside the main window via hash routing (no extra window).
     expect(window.location.hash).toBe('#settings');
   });
 
@@ -373,7 +372,6 @@ describe('Sidebar', () => {
       'iKi',
     ]);
     expect(headers.map(header => header.attributes('aria-expanded'))).toEqual(['true', 'true']);
-    // Projects view hides plain chats — loose threads live in the recent view.
     expect(wrapper.findAll('.chat-item')).toHaveLength(3);
     expect(wrapper.text()).not.toContain('Loose thread');
 
@@ -492,7 +490,6 @@ describe('Sidebar', () => {
       workspaces: [{ id: 'ws_iki', name: 'iKi', path: '/dev/iki', is_temporary: 0 }],
     });
 
-    // Default recent mode: everything flat, no project headers.
     expect(wrapper.findAll('.chat-item')).toHaveLength(2);
     expect(wrapper.find('.sidebar-section-toggle').exists()).toBe(false);
 
@@ -502,7 +499,6 @@ describe('Sidebar', () => {
     expect(projectsTab).toBeDefined();
     await projectsTab!.trigger('click');
 
-    // Projects mode: work thread grouped under iKi, plain chat hidden.
     expect(wrapper.findAll('.sidebar-section-toggle')).toHaveLength(1);
     expect(wrapper.text()).toContain('Work thread');
     expect(wrapper.text()).not.toContain('Plain chat');

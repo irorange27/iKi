@@ -480,22 +480,6 @@ describe('configureDaemonWebSockets', () => {
   });
 
   it('relays the approval-request chunk unwrapped so a client can discover the id', () => {
-    // A daemon turn that blocks on approval is only actionable if the client
-    // can learn the approval id. The desktop renderer reads it off the
-    // `tool-approval-request` UI chunk, and this relay is the same mechanism:
-    // it is the only PUSH path, and the only discovery path available to a
-    // `chat:write`-only client — the stream RESULT carries `awaitingApproval`
-    // but no ids (message_send.ts).
-    //
-    // It is NOT the only path overall: `GET /v1/chat/runs` spreads the whole
-    // run row (server_http.ts), so `working.pendingApprovalIds` is readable for
-    // a blocked run by a client holding `chat:read`. And after a first
-    // approve, `waitingForApprovals` carries sibling ids back on the
-    // approve result (approval.ts). This test pins the chunk relay because it
-    // is the one a write-only client depends on.
-    //
-    // The existing approve-tool test cannot catch a regression here: it
-    // hardcodes 'approval_1' and mocks the service.
     const harness = createHarness({ scopes: ['chat:write', 'tools:approve'] });
     const session = harness.sessions.get(1) as { target: { send: (c: string, ...a: unknown[]) => void } };
     expect(session).toBeDefined();
@@ -507,13 +491,10 @@ describe('configureDaemonWebSockets', () => {
       toolName: 'write_file',
     });
 
-    // Unwrapped: the client parses `type`/`approvalId` at the top level.
     const relayed = JSON.parse(harness.ws.sent.at(-1) || '') as Record<string, unknown>;
     expect(relayed.type).toBe('tool-approval-request');
     expect(relayed.approvalId).toBe('approval_probe_1');
 
-    // A non-chunk channel keeps the wrapped envelope, so the two are
-    // distinguishable on one socket.
     session.target.send('chat:other', { ok: true });
     expect(JSON.parse(harness.ws.sent.at(-1) || '')).toEqual({
       channel: 'chat:other',
@@ -644,16 +625,12 @@ describe('configureDaemonWebSockets', () => {
       scopes: ['chat:write'],
     });
 
-    // Record how many sends happened so far (the 'ready' message)
     const sentBefore = harness.ws.sent.length;
 
-    // Set the socket to CLOSED state
     harness.ws.readyState = 3;
 
-    // Try to send a message — the error response should be swallowed
     await harness.ws.emitMessage('{not-valid-json');
 
-    // No additional send should have occurred
     expect(harness.ws.sent.length).toBe(sentBefore);
   });
 });

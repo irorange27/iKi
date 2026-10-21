@@ -182,13 +182,9 @@ export const createUiChunkEmitter = (
   let reasoningStarted = false;
   let terminated = false;
   let textSegmentIndex = 0;
-  // Tool call ids that already have a tool part on the wire. The AI SDK
-  // stream processor attaches outputs/errors/denials/approvals onto an
-  // existing tool part and fails otherwise — the old hand-rolled renderer
-  // created parts on demand instead, so keep that tolerance here.
+
   const seededToolCallIds = new Set<string>();
-  // Every chunk the target receives, kept so the turn's durable message can
-  // be reduced from the same facts the client consumed.
+
   const chunkLog: ChatUiMessageChunk[] = [];
 
   const emitChunk = (chunk: ChatUiMessageChunk) => {
@@ -202,9 +198,6 @@ export const createUiChunkEmitter = (
     started = true;
   };
 
-  // Text is segmented around tool events so the SDK's id-keyed accumulation
-  // renders a multi-step turn interleaved (text → tool → text) instead of
-  // merging every segment into the first text part.
   const getTextSegmentId = (index: number): string => `${messageId}-t${index}`;
 
   const ensureTextStarted = () => {
@@ -223,8 +216,6 @@ export const createUiChunkEmitter = (
     textSegmentIndex += 1;
   };
 
-  // Reasoning streams into its own SDK-accumulated reasoning part so the UI
-  // can render it as a live "thinking" block instead of inline answer text.
   const ensureReasoningStarted = () => {
     ensureStarted();
     if (terminated) return;
@@ -256,10 +247,7 @@ export const createUiChunkEmitter = (
 
   return {
     messageId,
-    // Close the open text/reasoning parts WITHOUT terminating the channel:
-    // the persisted projection must carry closed parts, while the session-log
-    // record and persist that follow still need a live error channel
-    // (ADR 008 F1 — a write failure must be able to emit its error chunk).
+
     settleParts: () => {
       if (terminated) return;
       ensureStarted();
@@ -372,13 +360,11 @@ export const createUiChunkEmitter = (
     },
     buildPersistedMessage: async (seedParts?: unknown[]) => {
       if (!started || chunkLog.length === 0) return null;
-      // Reduce through iKi's own chunk reducer (ADR 009): it is the same
-      // vocabulary the renderer's chat applies, so the persisted parts and the
-      // renderer-accumulated message converge on identical content.
+
       let reduced: { parts: unknown[] } | null = null;
       try {
         reduced = reduceChunkLogToMessage(chunkLog, {
-          // Every chunk of this turn belongs to the stream's single message.
+
           messageId,
           ...(Array.isArray(seedParts) ? { seed: { messageId, parts: seedParts as never } } : {}),
         });

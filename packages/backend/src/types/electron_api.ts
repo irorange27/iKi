@@ -172,11 +172,7 @@ export interface ElectronApi {
       list: (threadId: string) => Promise<ChatMessage[]>;
       get: (id: string) => Promise<ChatMessage | null>;
       update: (id: string, message: ChatMessageInput) => Promise<unknown>;
-      /** User-driven history rewrite (edit/resend): ONE backend-owned
-       * transaction deletes this thread's messages strictly after
-       * `messageId` AND appends the matching session-log fact, so a crash
-       * replay yields the truncated state. The anchor row is kept. Idempotent
-       * when the anchor is missing; refuses an unknown thread. */
+
       truncateAfter: (
         threadId: string,
         messageId: string
@@ -307,25 +303,24 @@ export interface ElectronApi {
     openMainWindow: () => Promise<WindowActionResult>;
     disable: () => Promise<WindowActionResult>;
   };
-  /** Development runtime: restart for main-process edits, hot-reload facts. */
+
   dev: {
     getStatus: () => Promise<DevRuntimeStatus>;
     restartApp: () => Promise<{ ok: boolean; reason?: string }>;
   };
-  /** Element → source bridge: which file renders the element on screen. */
+
   devtools: {
     installRecorder: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
     probeElement: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
     resolveElement: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
   };
   openSettings: (section?: string) => void;
-  /** Focus the main window and switch its chat view to the given thread. */
+
   focusThread: (threadId: string) => void;
   onFocusThread: (callback: (threadId: string) => void) => () => void;
   closeWindow: () => void;
   setWindowShadow: (enabled: boolean) => void;
-  /** macOS only: the renderer draws the traffic lights, so the window
-   * controls ride along with them (native buttons are hidden). */
+
   windowControls?: {
     minimize: () => void;
     toggleMaximize: () => void;

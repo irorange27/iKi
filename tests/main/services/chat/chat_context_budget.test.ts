@@ -2,9 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { deriveModelAwareContextConfig } from '@iki/backend/turn_prep/context_budget';
 
-// Only the two clipping caps with a consumer (turn_prep/context_blocks.ts).
-// Assembly-time history/summary budgets are retired — see audit §C-F1 and
-// tests/backend/turn_prep/context_config_retirement.test.ts.
 const baseConfig = {
   enabled: true,
   maxIdentityTokens: 320,
@@ -23,9 +20,6 @@ describe('chat_context_budget', () => {
   });
 
   it('shrinks the live clipping caps when the window cannot hold them', () => {
-    // The surviving caps are only 320 + 1200, so the window has to be
-    // genuinely small before the shrink path engages (it did not with the
-    // retired 3920-token history budget inflating `requested`).
     const result = deriveModelAwareContextConfig(baseConfig, {
       providerType: 'openai',
       providerKey: 'openai',

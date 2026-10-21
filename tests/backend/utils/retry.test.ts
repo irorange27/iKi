@@ -43,7 +43,6 @@ describe('withRetry', () => {
 
     const advanceRetries = async (): Promise<unknown> => {
       const p = wrapped();
-      // Advance timers through each retry delay
       for (let i = 0; i < 2; i++) {
         await vi.advanceTimersByTimeAsync(250 * Math.pow(2, i));
       }
@@ -107,7 +106,6 @@ describe('withRetry', () => {
     const wrapped = withRetry(handler, { maxRetries: 5, backoffMs: 1000 });
 
     const p = wrapped();
-    // backoffMs=1000: delays should be 1000, 2000, 2000, 2000, 2000
     await vi.advanceTimersByTimeAsync(1000); // attempt 1 delay (1000, capped OK)
     await vi.advanceTimersByTimeAsync(2000); // attempt 2 delay (2000, at cap)
     await vi.advanceTimersByTimeAsync(2000); // attempt 3 delay

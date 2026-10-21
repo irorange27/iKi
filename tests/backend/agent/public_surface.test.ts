@@ -9,7 +9,6 @@ describe('core agent public surface', () => {
     expect(currentAgentApi).not.toHaveProperty('createPlanThenExecutePrepareStep');
     expect(currentAgentApi).not.toHaveProperty('composePrepareSteps');
 
-    // Implementation runners moved to @iki/backend/agent/runners/
     expect(currentAgentApi).not.toHaveProperty('createSimpleAgentRunner');
     expect(currentAgentApi).not.toHaveProperty('SimpleAgentRunner');
     expect(currentAgentApi).not.toHaveProperty('createAgentRunTracker');
@@ -17,7 +16,6 @@ describe('core agent public surface', () => {
     expect(currentAgentApi).not.toHaveProperty('ClaudeCodeRunner');
     expect(currentAgentApi).not.toHaveProperty('createClaudeCodeRunner');
 
-    // Legacy agent exports removed
     expect(currentAgentApi).not.toHaveProperty('createSimpleConversationRunner');
     expect(currentAgentApi).not.toHaveProperty('SimpleConversationRunner');
     expect(currentAgentApi).not.toHaveProperty('SimpleAgent');

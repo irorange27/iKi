@@ -154,8 +154,6 @@ const createElectronApi = (options?: {
           return options?.configured ?? true;
         }),
         stopStream: vi.fn(async () => ({ success: true })),
-        // Required by the ElectronApi contract; useRunStatus subscribes
-        // unconditionally, so every mount provides it.
         onRunStatus: vi.fn(() => () => undefined),
         stream,
         threads: {
@@ -197,7 +195,6 @@ const createElectronApi = (options?: {
   };
 };
 
-// Panel content renders through a reka body portal — query document-wide.
 const findInPortal = (selector: string) => {
   const match = Array.from(document.querySelectorAll(selector)).at(-1);
   if (!match) throw new Error(`Element not found in portal: ${selector}`);
@@ -288,9 +285,6 @@ const mountChatInput = async (options?: {
   const pinia = createPinia();
   setActivePinia(pinia);
   const threadSession = useThreadSessionStore();
-  // Workspace/permission actions persist through the runtime; without it the
-  // store throws after the click handlers resolve and vitest reports
-  // unhandled rejections even though the assertions pass.
   threadSession.initRuntime({
     electronAPI: api as never,
     messageStore: { setMessages: vi.fn(), getMessages: vi.fn(async () => []) } as never,
@@ -394,7 +388,6 @@ describe('ChatInput', () => {
     await wrapper.find('.model-selector-trigger').trigger('click');
     await flushPromises();
 
-    // The menu opens on the root pane; models live behind the drill-in cell.
     const menuCells = wrapper.findAll('.model-menu-cell');
     expect(menuCells.length).toBeGreaterThan(0);
     await menuCells[0].trigger('click');
@@ -508,8 +501,6 @@ describe('ChatInput', () => {
     await wrapper.find('.model-selector-trigger').trigger('click');
     await flushPromises();
 
-    // Drill into the provider pane the same way ChatModelSelector's own
-    // tests do for the new root-pane menu.
     const updateMenuCells = wrapper.findAll('.model-menu-cell');
     expect(updateMenuCells.length).toBeGreaterThan(0);
     await updateMenuCells[0].trigger('click');
@@ -940,8 +931,6 @@ describe('ChatInput', () => {
       },
     });
 
-    // The tooltip moved into the hover panel; the percent is encoded on the
-    // ring arc as stroke-dashoffset = circumference × (1 − percent/100), r=8.
     const ringCircumference = 2 * Math.PI * 8;
     expect(
       Number(wrapper.find('.composer-context-ring-arc').attributes('stroke-dashoffset'))
@@ -995,8 +984,6 @@ describe('ChatInput', () => {
       },
     });
 
-    // The tooltip moved into the hover panel; the percent is encoded on the
-    // ring arc as stroke-dashoffset = circumference × (1 − percent/100), r=8.
     const ringCircumference = 2 * Math.PI * 8;
     expect(
       Number(wrapper.find('.composer-context-ring-arc').attributes('stroke-dashoffset'))
@@ -1086,9 +1073,6 @@ describe('ChatInput', () => {
     await wrapper.find('.send-btn').trigger('click');
     await flushPromises();
 
-    // Manual tool/MCP selection is gone: a thread's persisted allowlist must
-    // never leak into the turn, or it silently restricts tools with no UI to
-    // see or clear it.
     const preparePayload = prepareMessageSend.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(preparePayload).not.toHaveProperty('tools');
     expect(preparePayload).not.toHaveProperty('mcpServerIds');

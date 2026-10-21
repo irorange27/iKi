@@ -1,10 +1,5 @@
 // @vitest-environment node
 
-/**
- * The chunk reducer is what turns a turn's chunk log into the persisted
- * assistant message. It replaced the AI SDK's `readUIMessageStream` (ADR 009),
- * so these cases pin the behaviours the persisted row depends on.
- */
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -80,7 +75,6 @@ describe('reduceChunkLogToMessages', () => {
   });
 
   it('records a tool result whose call chunk was lost', () => {
-    // Dropping it would hide an effect that really executed.
     const chunks: ChatUiChunk[] = [
       { type: 'start', messageId: mid },
       {
@@ -105,7 +99,6 @@ describe('reduceChunkLogToMessages', () => {
     const chunks: ChatUiChunk[] = [
       { type: 'start', messageId: mid },
       { type: 'text-delta', messageId: mid, delta: 'partial answer' },
-      // no text-end / finish: the turn was aborted
     ];
 
     const parts = reduceChunkLogToMessage(chunks)?.parts ?? [];
@@ -121,7 +114,6 @@ describe('reduceChunkLogToMessages', () => {
     ];
 
     const parts = reduceChunkLogToMessage(chunks)?.parts ?? [];
-    // Two text parts: the closed one and the resumed one, both preserved.
     expect(parts.map(part => (part as { text?: string }).text)).toEqual(['first', 'second']);
   });
 

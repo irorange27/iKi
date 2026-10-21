@@ -92,7 +92,7 @@ export class ShellExecutionTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = true;
-  // Arbitrary commands: no bound on what a replay would re-do.
+
   override replay = 'unsafe' as const;
   override approvalMode = 'always' as const;
   override description =

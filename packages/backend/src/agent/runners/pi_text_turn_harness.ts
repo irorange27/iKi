@@ -27,54 +27,6 @@ import type { HarnessConfig, TurnEvent, TurnInput, TurnOutput } from '../harness
 
 const logger = createLogger({ module: 'pi_text_turn_harness' });
 
-/**
- * The text-only streaming turn harness over the Pi supply layer (switch item
- * 2c, issue #110). Routed by session_loop for turns whose plan has
- * `enableTools: false` on a Pi-eligible provider; tool turns, approval
- * resume and handoff chains stay on AgentHarness until their own switch
- * items.
- *
- * Contract parity with AgentHarness/SimpleAgentRunner for the text subset:
- * - one model call per attempt; no tools are resolved and a non-empty
- *   `toolsOverride` is refused (routing keeps this surface text-only);
- * - the request system prompt is the same three-part join the factory's Pi
- *   branch uses: persona (resolvePersonaPrompt — identity, date/timezone, OS,
- *   cwd), the plan's system prompt, then the transcript's own leading system
- *   message;
- * - history stays ModelMessage-shaped end to end: the prompt is appended by
- *   the same helper the AI SDK runner uses, the response is appended as an
- *   assistant message (thinking → reasoning parts), and `getHistory` returns
- *   a clone — run-row sync, persistence and recovery are untouched;
- * - the input budget is enforced by the same owners as the AI SDK
- *   prepareStep path (autoCompactHistory + generateThreadSummary). Compaction
- *   runs once per turn before the attempts; without a cache prefix the
- *   summarizer falls back to its standalone call — the same accepted
- *   degradation as custom-model runs;
- * - retry parity: transient failures and refusals (empty response,
- *   content-filter) are retried with the runner's bounds (3 retries, the
- *   shared isRetryableError classifier, exponential backoff) but only while
- *   NOTHING has been streamed — a delta already shown is never re-shown. The
- *   recovery note joins the stored history on success, exactly like the
- *   runner's;
- * - an empty response with no tool calls is a RefusalError, matching the
- *   runner; a provider content-filter finish reason maps to the same
- *   RefusalError shape;
- * - failures follow the driver's classification contract: provider errors
- *   throw (Pi delivers them as a RESOLVED error message, never a rejection —
- *   the stopReason must be checked), aborts throw DOMException('AbortError');
- * - `input.onInference` records the request facts onto the run row in the AI
- *   SDK part vocabulary (reasoning parts, not Pi thinking blocks) so
- *   downstream record consumers (ATIF export) keep reading one vocabulary.
- *
- * Live text/thinking deltas stream as message_update steps — shown ⊆
- * committed stays downstream, in the TurnDriver's buffer gate.
- */
-
-/** The narrow call surface this harness consumes. The harness hands the
- * harness config plus the already-projected request; the production
- * implementation resolves the provider row, builds the Pi model and calls
- * the adapter — tests hand a scripted double that never touches the
- * provider database. */
 export type PiTextModelCall = (
   config: HarnessConfig,
   request: {
@@ -96,12 +48,9 @@ const defaultPiTextModelCall: PiTextModelCall = (config, request) => {
     id: config.model,
     providerType: config.providerType,
     baseUrl: provider.baseURL,
-    // Responses providers speak the Responses dialect (see buildPiModel).
+
     api: resolveProviderApi(config.providerType, provider),
-    // Same convention as the factory's Pi branch: the catalog's window is
-    // informational here (the harness enforces the input budget from the
-    // capability the turn preparer resolved), and the output cap rides the
-    // call options.
+
     contextWindow: capability?.contextWindow ?? 128000,
     maxTokens: config.maxOutputTokens ?? capability?.maxTokens ?? 4096,
     ...(capability?.input ? { input: capability.input } : {}),
@@ -128,8 +77,6 @@ const ZERO_USAGE: AgentUsage = {
   estimatedCostUsd: 0,
 };
 
-// The runner's retry bounds (simple_agent_runner): 3 retries, exponential
-// backoff capped at 30s, only while nothing has been emitted.
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 const RETRY_MAX_DELAY_MS = 30000;
@@ -157,11 +104,6 @@ export class PiTextTurnHarness {
 
     this.history = this.buildTurnHistory(input.history, input.prompt);
 
-    // Input budget — the AI SDK prepareStep semantics, shared owner with the
-    // tool harness: compact at tool-exchange boundaries, summarize the
-    // omitted prefix, then refuse if protected instructions or the current
-    // turn alone exceed the budget. Compaction is request-scoped; the stored
-    // history keeps the full text.
     const personaPrompt = resolvePersonaPrompt(this.config.providerType, this.config.providerId);
     const firstTranscriptSystem = this.history.find(
       (message): message is Extract<ModelMessage, { role: 'system' }> => message.role === 'system'
@@ -180,9 +122,7 @@ export class PiTextTurnHarness {
     });
 
     const projected = projectHistoryToPiContext(requestHistory, this.config.model, this.config.providerType);
-    // Persona, then the plan's system prompt, then the transcript's own
-    // leading system message — placement owned by the assembly module, the
-    // same join every other request path uses.
+
     const { prompt: systemPrompt } = assembleRequestSystemPrompt([
       { slot: 'persona', text: personaPrompt },
       { slot: 'planPrompt', text: this.config.systemPrompt },
@@ -193,10 +133,7 @@ export class PiTextTurnHarness {
     let llmMs = 0;
     let firstDeltaMs: number | null = null;
     let streamedText = '';
-    // Retry-track notes: they ride the requests immediately and join the
-    // STORED (uncompacted) history only on success — a failed recovery
-    // attempt leaves no note behind, and compaction never touches stored
-    // history (runner parity).
+
     const storedTrack = this.history;
     const recoveryNotes: ModelMessage[] = [];
 
@@ -239,15 +176,12 @@ export class PiTextTurnHarness {
         }
         final = await resultPromise;
       } catch (error) {
-        // The Pi stream itself does not throw (failures arrive as events); an
-        // iterator throw here is a teardown race — classify it like one.
+
         if (signal?.aborted) throw new DOMException('Run cancelled', 'AbortError');
         throw error;
       }
       llmMs += Math.max(0, Date.now() - attemptStartedAt);
 
-      // Pi resolves provider failures into a result message — never a
-      // rejection. The stopReason is the failure surface.
       if (final.stopReason === 'aborted') {
         throw new DOMException(final.errorMessage || 'Run cancelled', 'AbortError');
       }
@@ -269,17 +203,14 @@ export class PiTextTurnHarness {
             )
           : new Error(final.errorMessage || 'Provider returned an error stop reason');
       } else if (!finalText.trim()) {
-        // Soft refusal, matching the AI SDK runner: a text turn that produces
-        // neither text nor tool calls fails instead of committing an empty
-        // reply.
+
         failure = new RefusalError(
           'Model returned an empty response with no tool calls',
           final.stopReason,
           undefined
         );
       }
-      // The generation observation records the SETTLED call — success or
-      // failure — before the turn continues or retries.
+
       this.traceCall(attemptRequest.maxTokens, final, failure);
       if (!failure) {
         yield* this.finishTurn(input, final, finalText, systemPrompt, {
@@ -334,7 +265,6 @@ export class PiTextTurnHarness {
       );
     }
 
-    // Unreachable: the loop returns on success or throws on the last attempt.
     throw new Error('Pi text turn exhausted all retry attempts');
   }
 
@@ -342,20 +272,9 @@ export class PiTextTurnHarness {
     return cloneModelMessages(this.history);
   }
 
-  /**
-   * One attempt's model call, recorded as a Langfuse generation when
-   * tracing is on. The drain stays with the caller (it needs the live
-   * deltas); this wrapper only observes the settle: the final message's
-   * text, usage buckets and cost. A no-op when tracing is off, so the
-   * hot path pays one boolean check.
-   */
   private traceCall(maxTokens: number | undefined, final: AssistantMessage, failure?: Error): void {
     if (!isLangfuseEnabled()) return;
-    // Fire-and-forget: the span records an already-settled call, so nothing
-    // in the turn waits on it. The catch keeps a future field computation
-    // that throws (or a tracer that rejects) from becoming an unhandled
-    // rejection that takes the process down — a lost span is the cheap
-    // failure, a crash is not.
+
     void tracePiGeneration(
       {
         name: 'pi.text.turn',
@@ -393,14 +312,11 @@ export class PiTextTurnHarness {
 
   private buildTurnHistory(history: ModelMessage[] | undefined, prompt: string): ModelMessage[] {
     const base = cloneModelMessages(history);
-    // Same rule as the AI SDK runner: an empty prompt over existing history
-    // (resume shapes) must not append an empty user message.
+
     if (!prompt.trim() && base.length > 0) return base;
     return appendUserPromptToHistory(base, prompt);
   }
 
-  /** Success path: append the response to history, record the inference
-   * fact, and yield turn_end + done. Split out so the retry loop reads flat. */
   private *finishTurn(
     input: TurnInput,
     final: AssistantMessage,
@@ -416,8 +332,7 @@ export class PiTextTurnHarness {
     const mappedUsage: AgentUsage = final.usage
       ? {
           ...projectUsageToIki(final.usage),
-          // The Pi model carries the catalog's cost rates (D35), so the
-          // provider-computed cost is real here, not a placeholder.
+
           estimatedCostUsd: final.usage.cost.total,
         }
       : ZERO_USAGE;
@@ -430,9 +345,6 @@ export class PiTextTurnHarness {
       steps: 1,
     };
 
-    // The stored history is the UNCOMPACTED turn history plus any recovery
-    // notes, then the response as ModelMessage parts (thinking → reasoning,
-    // in content order) — the shape the AI SDK response messages carry.
     const responseParts: Array<
       { type: 'text'; text: string } | { type: 'reasoning'; text: string }
     > = [];

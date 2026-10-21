@@ -11,7 +11,6 @@ export const registerChatIpc = (): void => {
   if (chatIpcRegistered) return;
   chatIpcRegistered = true;
 
-  // Chat Thread Management
   ipcMain.handle('chat:threads:list', () => chatService.listThreads());
   ipcMain.handle('chat:threads:get', (_, id) => chatService.getThread(id));
   ipcMain.handle('chat:threads:todo:get', (_, threadId) => chatService.getThreadTodoPlan(threadId));
@@ -23,15 +22,11 @@ export const registerChatIpc = (): void => {
   );
   ipcMain.handle('chat:threads:delete', (_, id) => chatService.deleteThread(id));
 
-  // Chat Message Management
   ipcMain.handle('chat:messages:list', (_, threadId) => chatService.listMessages(threadId));
   ipcMain.handle('chat:messages:get', (_, id) => chatService.getMessage(id));
   ipcMain.handle('chat:messages:update', (_, id, message) =>
     chatService.updateMessage(id, message)
   );
-  // Backend-owned atomic truncate (rows + session-log fact in one
-  // transaction): the renderer's edit/resend flow makes this ONE call rather
-  // than deleting rows one at a time.
   ipcMain.handle('chat:messages:truncate-after', (_, threadId, messageId) =>
     chatService.truncateAfterMessage(threadId, messageId)
   );
@@ -62,7 +57,6 @@ export const registerChatIpc = (): void => {
     return await chatService.resumeRun(target, runId);
   });
 
-  // Chat/LLM Integration
   ipcMain.handle(
     'chat:getModels',
     async (
@@ -101,7 +95,6 @@ export const registerChatIpc = (): void => {
     return await chatService.approveTool(target, approvalId, approved);
   });
 
-  // Agent Evaluation
   ipcMain.handle('chat:eval:export-trace', async (_, runId: string) => {
     return chatService.eval.exportTrace(runId);
   });

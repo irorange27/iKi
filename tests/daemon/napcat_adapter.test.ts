@@ -459,8 +459,6 @@ describe('createNapCatReverseBridge', () => {
         thread_id: 'napcat_10001_private_20002',
       })
     );
-    // The assistant reply is persisted by the backend turn-output seam (run
-    // derived id), not by the adapter — no second createMessage here.
     expect(chatService.createMessage).toHaveBeenCalledTimes(1);
   });
 
@@ -1031,9 +1029,6 @@ describe('createNapCatReverseBridge', () => {
 
     await Promise.resolve();
 
-    // Only the user message is persisted by the adapter; the assistant reply
-    // is persisted by the backend turn-output seam (raw markdown, run-derived
-    // id). The QQ-normalized text is the display payload below.
     expect(chatService.createMessage).toHaveBeenCalledTimes(1);
 
     const outbound = JSON.parse(socket.sent[0]);
@@ -1357,7 +1352,6 @@ describe('createNapCatReverseBridge', () => {
     const { ws } = connectBridge(chatService);
     const socket = expectSocket(ws);
 
-    // Send malformed JSON
     socket.emitMessage('{not-valid');
 
     expect(daemonLoggerEventMock).toHaveBeenCalledWith(

@@ -59,7 +59,6 @@ export const useChatViewLifecycle = (deps: {
           runSafe(() => deps.handleTaskPush(payload));
         }) ?? (() => undefined);
     } catch {
-      // Ignore missing tasks IPC in older builds.
     }
 
     try {
@@ -69,7 +68,6 @@ export const useChatViewLifecycle = (deps: {
           runSafe(() => deps.handleAwaiterPush(payload));
         }) ?? (() => undefined);
     } catch {
-      // Ignore missing awaiter IPC in older builds.
     }
   });
 
@@ -77,12 +75,10 @@ export const useChatViewLifecycle = (deps: {
     try {
       removeTaskPushListener();
     } catch {
-      // ignore
     }
     try {
       removeAwaiterPushListener();
     } catch {
-      // ignore
     }
   });
 };

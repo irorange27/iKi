@@ -149,9 +149,6 @@ const totalDurationLabel = computed(() => getToolCallGroupTotalDurationLabel(pro
 
 const summaryIcon = computed(() => getToolIconComponent(props.parts[0]));
 
-// No manual override: open while any call is running, pending approval, or
-// failed (failures must stay visible), collapse back once all settle. A user
-// click pins the choice (also persisted per group key so re-renders keep it).
 const userOverride = ref<boolean | null>(null);
 const isOpen = computed(() => {
   if (userOverride.value !== null) return userOverride.value;
@@ -166,8 +163,6 @@ const toggleGroup = () => {
   setToolCallGroupCollapsed(props.groupKey, next);
 };
 
-// Row detail visibility: undefined falls back to auto — active calls
-// (running / awaiting / failed) show their detail, settled ones stay quiet.
 const rowOverrides = ref<Record<string, boolean>>({});
 const rowKey = (part: unknown, index: number): string =>
   getToolCallIdFromPart(part) || `row-${index}`;

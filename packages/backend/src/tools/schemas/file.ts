@@ -52,10 +52,6 @@ const deleteFileInputFields = {
   path: z.string().describe('Absolute path or workspace-relative path to the file to delete'),
 };
 
-// ---------------------------------------------------------------------------
-// Read file schemas
-// ---------------------------------------------------------------------------
-
 const readFileInputShape = {
   path: readFileInputFields.path,
   encoding: readFileInputFields.encoding.optional().default(DEFAULT_FILE_ENCODING),
@@ -64,10 +60,6 @@ const readFileInputShape = {
 
 export const ReadFileInputSchema = z.object(readFileInputShape);
 export const ReadFileInputSchemaUi = uiSchema(readFileInputShape);
-
-// ---------------------------------------------------------------------------
-// Write file schemas
-// ---------------------------------------------------------------------------
 
 const writeFileInputShape = {
   path: writeFileInputFields.path,
@@ -79,10 +71,6 @@ const writeFileInputShape = {
 export const WriteFileInputSchema = z.object(writeFileInputShape);
 export const WriteFileInputSchemaUi = uiSchema(writeFileInputShape);
 
-// ---------------------------------------------------------------------------
-// Edit file schemas
-// ---------------------------------------------------------------------------
-
 const editFileInputShape = {
   path: editFileInputFields.path,
   edits: editFileInputFields.edits,
@@ -92,10 +80,6 @@ const editFileInputShape = {
 
 export const EditFileInputSchema = z.object(editFileInputShape);
 export const EditFileInputSchemaUi = uiSchema(editFileInputShape);
-
-// ---------------------------------------------------------------------------
-// Undo edit schemas
-// ---------------------------------------------------------------------------
 
 const undoEditInputFields = {
   path: z
@@ -109,10 +93,6 @@ const undoEditInputShape = {
 };
 
 export const UndoEditInputSchema = z.object(undoEditInputShape);
-
-// ---------------------------------------------------------------------------
-// Delete file schemas
-// ---------------------------------------------------------------------------
 
 export const DeleteFileInputSchema = z.object({
   path: deleteFileInputFields.path,

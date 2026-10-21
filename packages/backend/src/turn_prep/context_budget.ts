@@ -83,15 +83,6 @@ const shrinkBudgetToFit = (
   return nextItems;
 };
 
-/**
- * The budgets this derivation rescales are ONLY the two clipping caps that
- * `context_blocks.ts` actually applies. There is deliberately no history or
- * summary budget here: history is not clipped at assembly time, because the
- * single owner of that decision is the model-step budget at the wire boundary
- * (`agent/runners/pi_turn_budget.ts` + the pure planner in
- * `agent/context_budget.ts`). Re-adding a knob here without a consumer is
- * exactly what the C-F1 retirement (docs/audit/2026-10-arch-refactor) removed.
- */
 const buildRequestedContextTokens = (config: ContextConfig): number =>
   config.maxIdentityTokens + config.maxSkillTokens;
 
@@ -101,17 +92,13 @@ const resolveMaxOutputTokens = (
 ): number | null => {
   const declaredOutput = capability?.maxOutputTokens ?? null;
   if (!declaredOutput || declaredOutput <= 0) {
-    // Undeclared output limit: do not invent one. Whatever we pick here is
-    // sent as the request's hard max_tokens, so a guess larger than the real
-    // per-model limit fails the entire turn (HTTP 400). Leaving it null lets
-    // the provider apply its own default, which is always valid.
+
     return null;
   }
 
   return clampInteger(declaredOutput, 256, Math.max(256, Math.floor(modelInputLimit / 2)));
 };
 
-/** The floor of the fitting range: the smallest identity block we accept. */
 const MIN_AVAILABLE_CONTEXT_TOKENS = CONTEXT_BUDGET_FLOORS.maxIdentityTokens;
 
 export const deriveModelAwareContextConfig = (
@@ -136,9 +123,7 @@ export const deriveModelAwareContextConfig = (
 
   const maxOutputTokens = resolveMaxOutputTokens(modelInputLimit, capability);
   const safetyReserveTokens = clampInteger(Math.floor(modelInputLimit * 0.05), 128, 1024);
-  // An unknown output limit reserves nothing: the provider's own default is
-  // small relative to the window, and subtracting a guessed reserve would
-  // shrink the input budget on behalf of a number we never send.
+
   const availableContextTokens = Math.max(
     MIN_AVAILABLE_CONTEXT_TOKENS,
     modelInputLimit - (maxOutputTokens ?? 0) - safetyReserveTokens

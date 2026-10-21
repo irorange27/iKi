@@ -15,7 +15,6 @@ const createUserMessage = (): UIMessage =>
 
 const mountChatMessageItem = (message = createUserMessage(), attachTo = false) =>
   mount(ChatMessageItem, {
-    // Focus assertions need a connected tree; detached VTU roots drop focus().
     attachTo: attachTo ? document.body : undefined,
     props: {
       message,

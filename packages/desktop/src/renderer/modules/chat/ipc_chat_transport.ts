@@ -10,11 +10,6 @@ const transportLogger = createLogger({ module: 'ipc_chat_transport' });
 
 type ChunkTap = (chunk: ChatUiMessageChunk) => void;
 
-/**
- * One in-flight wire stream. Chunks enqueue into the ReadableStream the Chat
- * consumes; `bound` flips when the stream's `start` chunk arrives — anything
- * enqueued before that belonged to a superseded stream.
- */
 type InboundSlot = {
   stream: ReadableStream<ChatUiMessageChunk>;
   enqueue: (chunk: ChatUiMessageChunk) => void;
@@ -22,8 +17,7 @@ type InboundSlot = {
   fail: (error: Error) => void;
   bound: boolean;
   closed: boolean;
-  /** Compact descriptors of the chunks this slot fed — dumped on stream
-   *  processing errors so a reducer failure carries its input sequence. */
+  
   trace: string[];
 };
 
@@ -70,7 +64,6 @@ const createInboundSlot = (): InboundSlot => {
     try {
       controller.close();
     } catch {
-      // Already closed by the platform.
     }
   };
   slot.fail = error => {
@@ -79,7 +72,6 @@ const createInboundSlot = (): InboundSlot => {
     try {
       controller.error(error);
     } catch {
-      // Already closed by the platform.
     }
   };
 
@@ -90,41 +82,25 @@ const isTerminalChunkType = (type: string): boolean =>
   type === 'finish' || type === 'abort' || type === 'error';
 
 export type IpcChatTransport = UiChatTransport & {
-  /**
-   * Arms a catch-all stream for chunks the backend pushes without a matching
-   * `chat.stream` invoke — the tool-approval resume path. The next `start`
-   * chunk binds it; `reconnectToStream` hands it to the Chat as a resume.
-   */
+  
   expectFollowUpStream: () => void;
-  /** Drops the armed follow-up slot (e.g. when the approve IPC failed). */
+  
   disarmFollowUpStream: () => void;
-  /**
-   * Ends the armed follow-up segment without dropping buffered chunks. A
-   * blocked resume (another approval requested) emits no terminal chunk, so
-   * the reader side would never finish; reconnectToStream still replays what
-   * was buffered.
-   */
+  
   closeFollowUpStream: () => void;
-  /** Detaches the active stream and closes its reader side. */
+  
   detachActiveStream: () => void;
-  /** Thread id of the stream this transport is currently bound to. */
+  
   getBoundThreadId: () => string | null;
-  /** Observe every routed chunk (tool timing, todo-plan projection, …). */
+  
   onChunk: (tap: ChunkTap) => () => void;
-  /** Chunk traces of the active and armed slots — error-path diagnostics. */
+  
   getRecentTraces: () => string[];
 };
 
 export const createIpcChatTransport = (deps: {
   electronAPI: Pick<ElectronApi, 'chat'>;
 }): IpcChatTransport => {
-  // Wire protocol over one shared IPC channel:
-  //  - `active`  — the send/resume stream the Chat is currently consuming.
-  //  - `resume`  — armed by expectFollowUpStream(); the next `start` chunk
-  //                adopts it as the active stream (approval resume arrives
-  //                without a matching send).
-  // A chunk only feeds a slot that has seen its `start`; earlier chunks
-  // belong to a superseded stream and are dropped (the stale-stream guard).
   let active: InboundSlot | null = null;
   let resume: InboundSlot | null = null;
   let resumeHandedOff = false;
@@ -196,8 +172,6 @@ export const createIpcChatTransport = (deps: {
     },
 
     async sendMessages({ messages, body, abortSignal }) {
-      // A new send supersedes whatever was active or armed: their late
-      // chunks no longer have a `start` binding and are dropped above.
       active?.close();
       active = null;
       resume?.close();
@@ -217,8 +191,6 @@ export const createIpcChatTransport = (deps: {
 
       if (abortSignal) {
         const onAbort = (): void => {
-          // The backend unwind emits the terminal `abort` chunk; nudge it in
-          // case the run already ended without one.
           void deps.electronAPI.chat.stopStream().catch((): void => undefined);
         };
         if (abortSignal.aborted) {
@@ -236,8 +208,6 @@ export const createIpcChatTransport = (deps: {
             if (active === slot) active = null;
             return;
           }
-          // The turn ended; if no terminal chunk closed the stream, close it
-          // here so the SDK flushes.
           slot.close();
           if (active === slot) active = null;
         })
@@ -258,8 +228,6 @@ export const createIpcChatTransport = (deps: {
     async reconnectToStream() {
       if (resumeHandedOff) return null;
       if (resume) {
-        // Also covers the already-adopted (even already-closed) slot: the
-        // buffered chunks replay when the Chat starts reading.
         resumeHandedOff = true;
         return resume.stream;
       }

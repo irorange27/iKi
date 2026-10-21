@@ -90,11 +90,6 @@ export const getToolStateKind = (part: unknown): ToolStateKind => {
 export const getToolStatePillClass = (part: unknown): string =>
   `tool-state-${getToolStateKind(part)}`;
 
-/**
- * The recorded failure reason of an output-error part. Surfaced in the card's
- * meta row so interrupted/failed calls say why instead of a bare "Failed"
- * pill — even while the card is collapsed.
- */
 export const getToolErrorText = (part: unknown): string => {
   if (!isObjectRecord(part) || getToolStateKind(part) !== 'error') return '';
   if (typeof part.errorText !== 'string') return '';
@@ -518,7 +513,6 @@ export const canToggleToolCollapse = (part: unknown): boolean =>
   isToolCallPart(part) || isToolResultPart(part);
 
 export const toggleToolCollapse = (_message: ChatUiMessage, part: unknown) => {
-  // Collapse state is a purely UI concern; do not persist it.
   const toolCallId = getToolCallIdFromPart(part);
   if (!toolCallId) return;
   updateToolUiState(toolCallId, { collapsed: !isToolCollapsed(part) });
@@ -644,10 +638,6 @@ export const getToolDiffStat = (part: unknown): ToolDiffStat => {
   return stat;
 };
 
-// Output for the raw-JSON section: hide `diff` when it is rendered as a dedicated view.
-// Diff-stripped output views are rebuilt on every streaming re-render of an
-// expanded card; cache per part, invalidated when the raw output reference
-// moves (same freshness rule as the payload caches in ./tool_payloads).
 const displayOutputCache = new WeakMap<object, { source: unknown; value: unknown }>();
 
 export const getToolOutputForDisplay = (part: unknown): unknown => {
@@ -660,8 +650,6 @@ export const getToolOutputForDisplay = (part: unknown): unknown => {
     displayOutputCache.set(part, { source: output, value: rest });
     return rest;
   }
-  // Error results carry their reason in errorText — the Output section falls
-  // back to it (embedded views have no meta row to show it in).
   if (typeof getToolErrorText(part) === 'string' && getToolErrorText(part)) {
     return getToolErrorText(part);
   }
@@ -675,10 +663,6 @@ export type ToolTerminalView = {
   exitCode: number | null;
 };
 
-/**
- * Terminal-style view for shell calls: `$ command` plus captured output.
- * Returns null for anything that is not a settled shell invocation.
- */
 export const getToolTerminalView = (part: unknown): ToolTerminalView | null => {
   const input = getParsedToolInput(part);
   const output = getParsedToolOutput(part);
@@ -704,9 +688,6 @@ export const hasDisplayValue = (value: unknown): boolean => {
   return true;
 };
 
-// Expanded tool cards re-render on every stream chunk; formatting large
-// payloads is the hot cost. Sources are treated as immutable: new content
-// always arrives as a new reference, so reference-keyed caches stay fresh.
 const formatJsonObjectCache = new WeakMap<object, string>();
 const formatJsonStringCache = new Map<string, string>();
 const FORMAT_JSON_STRING_CACHE_LIMIT = 200;

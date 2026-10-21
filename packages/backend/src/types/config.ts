@@ -130,13 +130,13 @@ export interface AppConfig {
     autoApproveToolRequests: boolean;
   };
   ui: {
-    fontSize: number; // 10-32px
+    fontSize: number;
     density: 'compact' | 'comfortable' | 'spacious';
-    chatContentPadding: number; // 8-40px
-    composerPadding: number; // 4-24px
-    messageBubblePaddingX: number; // 8-28px
-    messageBubblePaddingY: number; // 6-20px
-    messageGap: number; // 8-32px
+    chatContentPadding: number;
+    composerPadding: number;
+    messageBubblePaddingX: number;
+    messageBubblePaddingY: number;
+    messageGap: number;
     companion: {
       enabled: boolean;
       alwaysOnTop: boolean;
@@ -173,8 +173,8 @@ export interface AppConfig {
     logLevel: 'debug' | 'info' | 'warn' | 'error';
   };
   keybindings: {
-    sendMessage: string; // e.g. "Enter"
-    openSettings: string; // e.g. "Cmd+," or "Ctrl+,"
+    sendMessage: string;
+    openSettings: string;
   };
   chat: {
     composer: {
@@ -182,20 +182,7 @@ export interface AppConfig {
       preferredModel: string;
     };
   };
-  /**
-   * Context assembly budgets that have a consumer. Only two token caps are
-   * live, and both are clipping caps owned by `turn_prep/context_blocks.ts`:
-   * `maxIdentityTokens` for the identity block, `maxSkillTokens` for the
-   * skills block.
-   *
-   * Conversation history is NOT token-clipped here. That decision has exactly
-   * one owner — the model-step budget (`agent/runners/pi_turn_budget.ts` with
-   * the pure planner in `agent/context_budget.ts`) — which compacts at the
-   * wire boundary where the real cost is known. Assembly-time history budgets
-   * were retired (docs/audit/2026-10-arch-refactor §C-F1): nothing read them,
-   * so writing them changed no request. Do not add a budget here unless a
-   * consumer reads it.
-   */
+
   context: {
     enabled: boolean;
     maxIdentityTokens: number;

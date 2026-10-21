@@ -118,7 +118,6 @@ describe('agent_eval db', () => {
 
   it('updates a label', () => {
     const runMock = vi.fn();
-    // updateEvalLabel calls prepare twice: first for UPDATE, then getEvalLabel for SELECT
     const getMock = vi.fn(() => ({
       id: 'eval_1',
       run_id: 'run_1',

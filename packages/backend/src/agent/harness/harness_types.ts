@@ -10,8 +10,6 @@ import type {
 } from '@iki/backend/agent/types';
 import type { ApprovalPolicy } from './tool_resolver';
 
-// ── Harness configuration ─────────────────────────────────────────────
-
 export type HarnessConfig = {
   providerType: string;
   providerId?: string;
@@ -21,22 +19,18 @@ export type HarnessConfig = {
   enabledToolNames: string[];
   availableSkillIds: string[];
   requireApproval?: boolean;
-  /** Bypass approval for tools when user has opted in globally. */
+
   autoApproveToolRequests?: boolean;
-  /** ADR 005: session/turn-level approval policy. Overrides guard flags. */
+
   approvalPolicy?: ApprovalPolicy;
   maxIterations: number;
   maxOutputTokens?: number;
   maxInputTokens?: number;
-  /** Reasoning-effort override forwarded to the provider call (e.g. 'low' | 'medium' | 'high'). */
+
   reasoningEffort?: string;
   threadId?: string;
 };
 
-// ── Turn input / output ───────────────────────────────────────────────
-
-/** One inline tool execution to journal (issue #145). The composition root
- * binds threadId + the fact writer; the harness supplies the execution. */
 export type InlineExecutionRecord = {
   runId: string;
   toolCallId: string;
@@ -48,18 +42,13 @@ export type InlineExecutionRecord = {
 export type TurnInput = {
   prompt: string;
   history?: ModelMessage[];
-  /** Pre-resolved tools (used by DelegatedAgentTool). */
+
   toolsOverride?: AgentTool[];
-  /** The executing run's identity (issue #145): the driver injects the
-   * tracker id so inline tool executions journal under the run the
-   * effect-aware retry attributes them to; the delegated-agent tool passes
-   * its child tracker id (its recorder stays unwired — ledgered in #145). */
+
   runId?: string;
-  /** The inline-execution fact port (issue #145): R5 keeps the fact writer
-   * in thread_session, so it reaches the harnesses as an injected port —
-   * same shape as onInference. Absent → no journaling. */
+
   recordInlineExecution?: (execution: InlineExecutionRecord) => void;
-  /** Persistable model facts are returned to the orchestration owner. */
+
   onInference?: (record: ModelInferenceRecord) => void;
   abortSignal?: AbortSignal;
 };
@@ -67,20 +56,14 @@ export type TurnInput = {
 export type TurnOutput = {
   text: string;
   usage?: AgentUsage;
-  /** Billed input of the final SDK step — the real context size the model last saw. */
+
   lastStepInputTokens?: number;
-  /** Wall-clock perf metrics measured by the runner (llm/tool time, TTFT, steps). */
+
   perf?: AgentTurnPerf;
-  /** Estimated tokens of the resolved tool schemas sent with the request. */
+
   toolSchemaTokens?: { builtin: number; mcp: number };
   toolCalls?: AgentResult['toolCalls'];
-  /**
-   * Calls the harness could not consume: the step budget ran out with them
-   * pending (they EXECUTED — their results are on the transcript — but no
-   * model call read them), or they wait for approval (they did NOT run).
-   * Without this field the remainder of a budget-exhausted turn vanishes at
-   * this seam and the run row reports a whole answer (audit C-1/A-3).
-   */
+
   pendingToolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   requiresApproval: boolean;
   finishReason?: string;
@@ -92,25 +75,11 @@ export type TurnOutput = {
   };
 };
 
-// ── Turn event ────────────────────────────────────────────────────────
-
-/** Each yield is either an AgentStep to forward, or the final result. */
 export type TurnEvent = { event: 'step'; step: AgentStep } | { event: 'done'; output: TurnOutput };
 
-/**
- * The structural harness surface the TurnDriver consumes. AgentHarness
- * satisfies it; switch-item harnesses (the Pi text harness today) implement
- * it directly — the driver must not know which supply served the turn.
- */
 export type TurnDriverHarness = {
   turn(input: TurnInput): AsyncGenerator<TurnEvent, void>;
   getHistory(): ModelMessage[];
 };
 
-/**
- * Tools that END the turn when the model calls them (`handoff` restarts the run
- * as a new segment). Shared vocabulary: both the Pi loop and its callers test
- * against it, and it used to live in the AI SDK runner file, which made the Pi
- * harness import its retired sibling.
- */
 export const TERMINAL_TOOL_NAMES = new Set(['handoff']);

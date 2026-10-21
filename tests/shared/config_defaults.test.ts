@@ -6,8 +6,6 @@ describe('default app config', () => {
   it('exposes context budgets at the top level, with no memory section', () => {
     const config = createDefaultAppConfig();
 
-    // Memory and affect/emotion are gone; the context-assembly budgets that
-    // used to be nested under `memory.context` now live at the root.
     expect(Object.prototype.hasOwnProperty.call(config, 'memory')).toBe(false);
     expect(config.context.enabled).toBe(true);
     expect(config.context.maxSkillTokens).toBe(1200);
@@ -35,9 +33,6 @@ describe('default app config', () => {
   });
 
   it('keeps the context budget reachable after the memory namespace was removed', () => {
-    // The budget used to live at memory.context and is what turn_prep's
-    // context_budget reads. Deleting the memory subsystem must NOT take it
-    // along: a missing budget silently disables history/skill clipping.
     const config = mergeAppConfig({
       context: { maxSkillTokens: 999 },
     } as never);
@@ -49,9 +44,6 @@ describe('default app config', () => {
   });
 
   it('does not resurrect retired context budgets from a stale stored config', () => {
-    // A config file written by an older build can still carry the retired
-    // assembly-time budgets. The merge rebuilds `context` field by field, so
-    // they are dropped rather than revived as config nothing reads (C-F1).
     const config = mergeAppConfig({
       context: {
         maxRecentTokens: 9999,

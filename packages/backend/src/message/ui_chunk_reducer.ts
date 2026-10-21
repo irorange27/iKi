@@ -1,24 +1,4 @@
-/**
- * Fold a chunk log into the message it produced.
- *
- * Replaces the AI SDK's `readUIMessageStream`, which iKi used only for this one
- * job: replaying a turn's chunk log to rebuild the persisted assistant message
- * (ADR 009). This reducer consumes iKi's own `ChatUiChunk` vocabulary and
- * produces iKi's `ChatUiMessage`, so persistence no longer depends on a removed
- * package.
- *
- * The rules here are shared with the renderer's incremental applier
- * (`chat_chunk_apply.ts`) — same chunk types, same tool-state transitions — so
- * the persisted row and the rendered transcript converge.
- *
- * Persistence-relevant rules:
- * - A tool result updates the part its `toolCallId` names instead of appending a
- *   second entry, so a call and its outcome never show up as two rows.
- * - Deltas append to an open text/reasoning part; a part that never closed (an
- *   aborted turn) is marked `done` so the renderer stops waiting on it.
- * - `seed` prepends a pre-existing part list, which is the approval-pause resume
- *   case: the row already holds the pre-pause parts and the continuation appends.
- */
+
 import type { ChatUiChunk, ChatUiMessage, ChatUiPart, UiDynamicToolPart } from './ui_protocol';
 
 const toolParts = (parts: ChatUiPart[]): UiDynamicToolPart[] =>
@@ -27,15 +7,6 @@ const toolParts = (parts: ChatUiPart[]): UiDynamicToolPart[] =>
 const findToolPart = (parts: ChatUiPart[], toolCallId: string): UiDynamicToolPart | undefined =>
   toolParts(parts).find(part => part.toolCallId === toolCallId);
 
-/**
- * The message a chunk belongs to.
- *
- * Only `start`/`finish` carry a `messageId`; every other chunk belongs to the
- * stream that opened it. Splitting on a per-chunk id therefore put the text and
- * the tool cards of ONE turn into different messages, and the persisted row kept
- * only the last — the tool cards vanished from history. The fallback id is the
- * stream's own, so all of a turn's chunks converge.
- */
 const messageIdOf = (chunk: ChatUiChunk, fallback: string): string => {
   const candidate = (chunk as { messageId?: unknown }).messageId;
   return typeof candidate === 'string' && candidate.length > 0 ? candidate : fallback;
@@ -60,9 +31,9 @@ const closePart = (parts: ChatUiPart[], kind: 'text' | 'reasoning'): void => {
 };
 
 export type ReduceOptions = {
-  /** Message id every chunk without its own `messageId` is attributed to. */
+
   messageId?: string;
-  /** Pre-existing parts prepended to that message (approval-pause resume). */
+
   seed?: { messageId: string; parts: ChatUiPart[] };
 };
 
@@ -135,16 +106,13 @@ const applyChunk = (
     case 'tool-input-delta': {
       const found = findToolPart(parts, chunk.toolCallId);
       if (!found) return;
-      // The streamed arguments are a partial JSON string until
-      // `tool-input-available` replaces them with the parsed object.
+
       const accumulated = typeof found.input === 'string' ? found.input : '';
       found.input = accumulated + chunk.inputTextDelta;
       return;
     }
     case 'tool-input-available': {
-      // The harness may emit only the settled call (no `tool-input-start`) when
-      // the arguments arrive with the end event. Create the part instead of
-      // dropping it — a missing tool card in history was exactly this.
+
       const found = findToolPart(parts, chunk.toolCallId);
       if (!found) {
         parts.push({
@@ -179,8 +147,7 @@ const applyChunk = (
     case 'tool-output-available': {
       const found = findToolPart(parts, chunk.toolCallId);
       if (!found) {
-        // A result whose call chunk was lost still belongs in history: the
-        // effect happened, and dropping it hides that.
+
         parts.push({
           type: 'dynamic-tool',
           toolCallId: chunk.toolCallId,
@@ -196,8 +163,7 @@ const applyChunk = (
     case 'tool-output-error': {
       const found = findToolPart(parts, chunk.toolCallId);
       if (!found) {
-        // A result whose call chunk was lost still belongs in history: the
-        // effect happened, and dropping it hides that.
+
         parts.push({
           type: 'dynamic-tool',
           toolCallId: chunk.toolCallId,
@@ -213,8 +179,7 @@ const applyChunk = (
     case 'tool-output-denied': {
       const found = findToolPart(parts, chunk.toolCallId);
       if (!found) {
-        // A result whose call chunk was lost still belongs in history: the
-        // effect happened, and dropping it hides that.
+
         parts.push({
           type: 'dynamic-tool',
           toolCallId: chunk.toolCallId,
@@ -261,13 +226,6 @@ const applyChunk = (
   }
 };
 
-/**
- * Rebuild the messages a chunk log produced.
- *
- * `options.seed` prepends a pre-existing part list to the message id it names —
- * that is the approval-pause resume case, where the row already holds the
- * pre-pause parts and the continuation appends to them.
- */
 export const reduceChunkLogToMessages = (
   chunks: readonly ChatUiChunk[],
   options: ReduceOptions = {}
@@ -290,8 +248,7 @@ export const reduceChunkLogToMessages = (
   const messages = [...byMessageId.values()];
   for (const message of messages) {
     for (const part of message.parts) {
-      // A streaming part that never closed is still real content (an aborted
-      // turn); mark it done so the renderer does not wait for more.
+
       if (part.type === 'text' || part.type === 'reasoning') {
         const stateful = part as { state?: string };
         if (stateful.state === 'streaming') stateful.state = 'done';
@@ -301,7 +258,6 @@ export const reduceChunkLogToMessages = (
   return messages;
 };
 
-/** The last message a chunk log produced, which is the one a turn persists. */
 export const reduceChunkLogToMessage = (
   chunks: readonly ChatUiChunk[],
   options: ReduceOptions = {}

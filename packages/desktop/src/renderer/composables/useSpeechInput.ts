@@ -208,7 +208,6 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
       try {
         waveformSource.disconnect();
       } catch {
-        // Ignore disconnect errors
       }
       waveformSource = null;
     }
@@ -216,7 +215,6 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
       try {
         waveformAnalyser.disconnect();
       } catch {
-        // Ignore disconnect errors
       }
       waveformAnalyser = null;
     }

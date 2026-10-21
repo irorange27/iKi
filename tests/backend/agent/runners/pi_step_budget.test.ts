@@ -1,23 +1,11 @@
 // @vitest-environment node
 
-/**
- * Switch debt #122: the Pi tool harness's per-request budget cadence —
- * prepareStep parity with the AI SDK runner. Every model call re-checks the
- * input budget; over the threshold the REQUEST view compacts (summary
- * message replaces the omitted prefix, chained within the turn) while the
- * stored mirror keeps the full text, the snapshot basis switches to what
- * was actually sent, and a view that cannot fit even compacted refuses
- * loudly. A differential leg drives the SAME scenario through the AI SDK
- * harness (faux model) and asserts the same compaction invariants.
- */
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
 
 const callPiChatMock = vi.hoisted(() => vi.fn());
 
-// Pi is the only supply (ADR 009); script it here instead of the retired
-// `createModel`.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -60,11 +48,6 @@ import type { HarnessConfig, TurnEvent, TurnInput } from '@iki/backend/agent/har
 
 const TOOL_NAME = 'probe_budget';
 
-// Sizes measured against the real BPE tokenizer with ~1.5x margin over the
-// compaction threshold: maxInputTokens 600, overhead ≈ 32 → threshold ≈ 454,
-// keep ≈ 284. The pre-turn old text (~302) starts UNDER the threshold; each
-// step's output (~326/~312 on the wire) pushes the view over it, so the
-// compaction lands mid-turn.
 const OLD_TEXT = 'lorem ipsum dolor sit amet consectetur adipiscing elit sed do '.repeat(30);
 const STEP_ONE_TEXT = 'alpha beta gamma delta epsilon zeta eta theta iota kappa '.repeat(25);
 const STEP_TWO_TEXT = 'one two three four five six seven eight nine ten eleven twelve '.repeat(20);
@@ -174,9 +157,6 @@ const collect = async (harness: PiToolTurnHarness, input: TurnInput) => {
   return { events, records };
 };
 
-/** Wire sanity: every toolResult on the wire is preceded by its assistant
- * toolCall — an orphaned toolResult is the signature of a mis-spliced
- * compaction (providers 400 it; lenient ones run corrupted context). */
 const expectToolPairsAligned = (messages: CapturedRequest['messages']) => {
   const calledIds = new Set<string>();
   for (const message of messages) {
@@ -233,9 +213,6 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     expect(summarize).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(summarize.mock.calls[0][0])).toContain(OLD_TEXT);
 
-    // Request 2 carried the compacted view: the summary replaced the omitted
-    // prefix; the old text is gone from the WIRE. (On the old code the
-    // second request still carried the full view — this assertion fails.)
     expect(modelCall.requests).toHaveLength(2);
     expect(JSON.stringify(modelCall.requests[1]!.messages)).toContain(
       'Earlier conversation summary'
@@ -243,11 +220,8 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     expect(JSON.stringify(modelCall.requests[1]!.messages)).not.toContain(OLD_TEXT);
     expect(JSON.stringify(modelCall.requests[1]!.messages)).toContain(STEP_ONE_TEXT);
 
-    // The stored mirror keeps the full text (compaction is request-scoped).
     expect(JSON.stringify(harness.getHistory())).toContain(OLD_TEXT);
 
-    // The snapshot basis switched: the inference record reflects what was
-    // actually sent, not the full mirror.
     expect(JSON.stringify(records[1]!.messages)).not.toContain(OLD_TEXT);
     expect(JSON.stringify(records[1]!.messages)).toContain('Earlier conversation summary');
   }, 30000);
@@ -273,9 +247,6 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     expect(secondCall.existingSummary).toContain('Earlier conversation summary');
     expect(secondCall.existingSummary).toContain('summary#1');
 
-    // Runner parity: the new summary REPLACES the prior one on the wire —
-    // no accumulation. The protected turn prompt survives; step one's output
-    // is summarized away, step two's is the kept tail.
     expect(JSON.stringify(modelCall.requests[2]!.messages)).toContain('summary#2');
     expect(JSON.stringify(modelCall.requests[2]!.messages)).not.toContain('summary#1');
     expect(JSON.stringify(modelCall.requests[2]!.messages)).not.toContain(STEP_ONE_TEXT);
@@ -299,8 +270,6 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     }
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain('Context budget exceeded');
-    // No second request: the turn refused instead of sending an over-budget
-    // view. (On the old code there was no per-request check at all.)
     expect(modelCall.requests).toHaveLength(1);
   }, 30000);
 
@@ -317,8 +286,6 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     });
 
     expect(summarize).toHaveBeenCalledTimes(1);
-    // The first snapshot is the compacted request view — the old code
-    // snapshotted the full mirror here.
     expect(JSON.stringify(records[0]!.messages)).not.toContain('x'.repeat(500));
     expect(JSON.stringify(harness.getHistory())).toContain('x'.repeat(500));
     expect(JSON.stringify(modelCall.requests[0]!.messages)).not.toContain('x'.repeat(500));
@@ -339,16 +306,10 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
       ],
     });
 
-    // Compaction 1 at turn start; the mid-turn compaction chains its text —
-    // the old code started the chain from scratch (existingSummary undefined).
     expect(summarize).toHaveBeenCalledTimes(2);
     const secondCall = summarize.mock.calls[1][0] as { existingSummary?: string };
     expect(secondCall.existingSummary).toContain('Earlier conversation summary');
 
-    // No-transcript-system shape: the turn-start summary rode the assembled
-    // system prompt (first system → slot); after the mid-turn re-compaction
-    // the summaries live as MESSAGES and the stale one must leave the system
-    // prompt — the wire carries the new summary exactly once.
     const second = modelCall.requests[1]!;
     expect(second.systemPrompt).not.toContain('Earlier conversation summary');
     expect(second.systemPrompt).toContain('persona prompt');
@@ -364,10 +325,6 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     ]);
     const harness = new PiToolTurnHarness(budgetConfig(600), { modelCall });
 
-    // Two systems in the view at compaction time: the handoff text (first →
-    // systemPrompt slot) and the turn-start summary (second → transcript
-    // entry). This is the shape whose leading entry in MESSAGES broke the
-    // count-based splice (round-1 finding c).
     await collect(harness, {
       prompt: 'go',
       history: [
@@ -404,9 +361,6 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
       ],
     });
 
-    // The handoff system stays EXACTLY once — in the assembled system prompt
-    // (never duplicated into the messages by the rebuild); the summary rides
-    // as a message; the wire stays paired.
     const second = modelCall.requests[1]!;
     expect(second.systemPrompt).toContain('[HANDOFF CONTEXT]');
     expect(JSON.stringify(second.messages)).not.toContain('[HANDOFF CONTEXT]');
@@ -423,9 +377,6 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     ]);
     const harness = new PiToolTurnHarness(budgetConfig(600), { modelCall });
 
-    // Production shape from prior AI SDK turns: one `tool` ModelMessage
-    // grouping N tool results (the projection expands each part into its own
-    // wire entry — a count-based splice under-deletes exactly here).
     const { records } = await collect(harness, {
       prompt: 'go',
       history: [

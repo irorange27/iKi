@@ -1,14 +1,5 @@
 // @vitest-environment node
 
-/**
- * Does the per-step cost stay flat as the history grows?
- *
- * The end-to-end profile of real turns (56 runs in the app database) shows the
- * wall time is model-bound, but that verdict only holds if OUR work per step
- * does not scale with the transcript. This measures one step against histories
- * of very different sizes: a per-step rebuild that walked the whole transcript
- * would show up here as a linear slope, and would eventually dominate.
- */
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -60,9 +51,6 @@ const historyOf = (pairs: number): ModelMessage[] => {
 
 const timedStep = Object.assign(
   async (pairs: number): Promise<number> => {
-  // Two entries: a turn with `maxIterations: 1` still made a second model call
-  // here (counted, not assumed). The extra entry keeps the benchmark measuring
-  // projection cost instead of dying on an undersized script.
   callPiChatMock.mockImplementation(
     createScriptedPiChat([
       [{ kind: 'text', text: 'done' }, { kind: 'done', reason: 'stop' }],
@@ -109,9 +97,6 @@ describe('per-step cost vs transcript size', () => {
       })
     );
     try {
-      // SEQUENTIAL, not Promise.all: `callPiChatMock` is ONE shared mock, so
-      // concurrent runs would overwrite each other's script and the reported
-      // time would belong to whichever run lost the race.
       const best = async (pairs: number): Promise<number> => {
         let min = Number.POSITIVE_INFINITY;
         for (let i = 0; i < 3; i += 1) min = Math.min(min, await timedStep(pairs));
@@ -127,8 +112,6 @@ describe('per-step cost vs transcript size', () => {
         `HARNESS_PROJECTION 10 msgs=${small.toFixed(2)}ms 800 msgs=${large.toFixed(2)}ms ratio=${(large / Math.max(small, 0.01)).toFixed(1)}x modelCallsPerStep=${timedStep.lastCalls}`
       );
 
-      // 80x the transcript must not cost 80x the per-step time: the projection
-      // is O(request size), but there is no per-step rebuild over history.
       expect(large).toBeLessThan(Math.max(60, small * 80));
     } finally {
       defaultToolRegistry.remove(TOOL);

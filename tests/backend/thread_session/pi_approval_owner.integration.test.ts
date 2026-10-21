@@ -1,19 +1,5 @@
 // @vitest-environment node
 
-/**
- * Switch item 3b (issue #116): the Pi tool resume through the REAL five-state
- * owner. The harness carries resumeCommands + the owner port; the decisions
- * are recorded the way the approval flow records them (answerToolCallApproval).
- * Proven at the owner boundary:
- *   - an approved call executes exactly once, with the bound args;
- *   - the owner's execution facts (prepared/started/finished) land in the
- *     session log;
- *   - a REPLAY of the same resume joins the recorded result — no second
- *     effect (the owner's duplicate contract, exercised through the Pi path);
- *   - a rejected call yields the canonical execution-denied result with zero
- *     effects.
- */
-
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -75,8 +61,6 @@ const buildHarness = (commands: Array<{ approvalId: string; toolCallId: string }
       threadId: address.threadId,
     },
     {
-      // The resumed segment continues the loop: one model call asks the model
-      // to speak over the executed result.
       modelCall: () => {
         const final: AssistantMessage = {
           role: 'assistant',
@@ -93,7 +77,6 @@ const buildHarness = (commands: Array<{ approvalId: string; toolCallId: string }
         stream.push({ type: 'done', reason: 'stop', message: final });
         return {
           events: (async function* () {
-            // The resumed continuation's deltas are not under test here.
             return;
             // eslint-disable-next-line no-unreachable
             yield {} as never;
@@ -197,8 +180,6 @@ describe('pi tool resume through the real five-state owner (switch item 3b)', ()
       },
     ]);
     answerToolCallApproval(address.approvalId, 'approved', 'integration approval');
-    // The real flow records the decision as a session fact alongside the row
-    // answer — the owner reads the reason from the event.
     recordSessionEvents(address.threadId, [
       {
         type: 'approval_decided',
@@ -223,10 +204,8 @@ describe('pi tool resume through the real five-state owner (switch item 3b)', ()
       output: { type: 'text', value: 'contents of /owner.txt' },
     });
 
-    // Exactly once, with the bound args from the approval row.
     expect(executions).toEqual(['/owner.txt']);
 
-    // The owner's execution facts are session-log records.
     const factTypes = getSessionEvents(address.threadId, [
       TOOL_EXECUTION_PREPARED,
       TOOL_EXECUTION_STARTED,
@@ -234,14 +213,10 @@ describe('pi tool resume through the real five-state owner (switch item 3b)', ()
     ]).map(e => e.type);
     expect(factTypes).toEqual([TOOL_EXECUTION_PREPARED, TOOL_EXECUTION_STARTED, TOOL_EXECUTION_FINISHED]);
 
-    // The mirror: user, assistant(tool-call), tool(result), assistant(done)
-    // — the tool result sits between the paused exchange and the continuation.
     const history = harness.getHistory();
     expect(history[2]).toMatchObject({ role: 'tool' });
     expect(history.at(-1)).toMatchObject({ role: 'assistant' });
 
-    // Replay: a SECOND resume of the same approval joins the owner's
-    // recorded result — no second effect.
     const replayHarness = buildHarness([{ approvalId: address.approvalId, toolCallId: 'call_owner' }]);
     const replayEvents = await collect(replayHarness);
     const replaySteps = replayEvents.filter(e => e.event === 'step').map(e => e.step);
@@ -284,9 +259,6 @@ describe('pi tool resume through the real five-state owner (switch item 3b)', ()
       output: { type: 'execution-denied', reason: 'integration rejection' },
     });
     expect(executions).toEqual([]);
-    // The denial is an outcome like any other: journaled (issue #143), so an
-    // effect-aware recovery pairs the refused call with its denial and the
-    // model does not re-ask a user who already said no.
     const denialFacts = getSessionEvents(address.threadId, [TOOL_EXECUTION_FINISHED], {
       path: '$.binding.approvalId',
       value: rejectedApprovalId,

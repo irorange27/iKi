@@ -13,12 +13,6 @@ export type ThreadWorkspaceSelection = {
   workspace: Workspace | null;
 };
 
-/**
- * Parse the stored turn-start workspace binding. `undefined` = not recorded
- * (legacy row) — recovery then resolves fresh as before. `null` = the turn
- * started with no workspace selected; the resume must rebind that same
- * "no workspace" world, not the thread's current selection.
- */
 export const parseStoredWorkspaceSelection = (
   stored: string | null | undefined
 ): ThreadWorkspaceSelection | null | undefined => {
@@ -69,9 +63,6 @@ const ensureThreadWorkspaceRecord = (threadId: string): Workspace | null => {
     if (existingWorkspace) return existingWorkspace;
   }
 
-  // Chat/worktree-style threads have no project workspace: plain chats never
-  // get an auto-created scratch dir — filesystem/shell tools report that a
-  // workspace must be chosen instead.
   if (!thread || resolveThreadWorkMode(thread) !== 'work') return null;
 
   const workspacePath = getThreadWorkspacePath(threadId);
@@ -139,22 +130,11 @@ export const ensureThreadWorkspaceSelection = (
   };
 };
 
-/**
- * Turn-start snapshot used by the agent harness to freeze the workspace for a
- * whole run: later thread-state changes cannot redirect tools already running
- * under the frozen context.
- */
 export const resolveThreadWorkspaceSelectionSnapshot = (
   threadId?: string | null
 ): ThreadWorkspaceSelection | null =>
   ensureThreadWorkspaceSelection(threadId) ?? getThreadWorkspaceSelection(threadId);
 
-/**
- * Format the workspace system message from an explicit selection. Context
- * projection must render the SAME world the turn's tools run in — callers
- * that hold a turn-start snapshot pass it here instead of letting this
- * re-resolve the thread's current selection.
- */
 export const buildWorkspaceSystemMessageForSelection = (
   selection: ThreadWorkspaceSelection | null | undefined
 ): string => {

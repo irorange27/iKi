@@ -1,13 +1,5 @@
 // @vitest-environment node
 
-/**
- * ADR 008 unit F3 (issue #134): retry and queued-resume rebuild their input
- * from the session log replay — the run row's input copy is no longer the
- * authority. Two consequences pinned here: a run whose row lost its input
- * copy still retries from the recorded facts, and a retry carries the failed
- * turn's COMMITTED partial exchange (the old row-copy source discarded it, so
- * the provider could re-issue a tool call whose effect already happened).
- */
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,9 +9,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
 
-// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
-// these suites on the durable-layer behaviour they assert without reaching a
-// network endpoint.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -38,8 +27,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     maxInputTokens: 98000,
     maxOutputTokens: 2000,
   }),
-  // No database in this suite: answer the provider lookup directly so the Pi
-  // supply admits the turn (the address is never dialled — callPiChat is mocked).
   getProviderConfig: () => ({
     type: 'openai',
     apiKey: 'key-test',
@@ -83,7 +70,6 @@ describe('retry and queued resume read the session log alone', () => {
       systemPrompt: 'resume system',
       enabledTools: [],
       availableSkillIds: [],
-      // The row's input copy is LOST — the recovery source is the log.
       input: {
         prompt: '',
         messages: [],
@@ -118,17 +104,10 @@ describe('retry and queued resume read the session log alone', () => {
   };
 
   beforeEach(async () => {
-    // These suites drive the DURABLE layer (streaming, approvals, session-log
-    // facts, retry, persistence) with a scripted AI SDK model. They are not about
-    // which supply serves the turn, so they opt into the legacy executor: the
-    // production default refuses a turn its projection cannot carry, and a
-    // scripted model has no endpoint to project to.
     setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-retry-events-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'retry.db') });
-    // A real provider row: the supply resolves it, so this suite does not have
-    // to stub the admission decision.
     seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
     addWorkspace({ id: 'ws_retry', path: root, name: 'retry' });
     const conversation = (service = createChatService()) as unknown as {
@@ -164,12 +143,6 @@ describe('retry and queued resume read the session log alone', () => {
   it('a retry excludes the dead turn’s own committed output and re-runs the original task', async () => {
     seedRun('run_failed_e2', 'thread_retry', 'failed');
     recordTaskFact('thread_retry', 'PARTIAL_TASK_MARKER');
-    // The turn committed a partial answer before it failed (F1 discipline:
-    // committed facts survive the failure). The log keeps them — display and
-    // replay show the whole story — but the retried request re-runs the
-    // ORIGINAL task from the conversation before the turn, so the dead run's
-    // partial does not leak into it. (The pre-existing double-effect question
-    // for committed tool effects is ledgered in #134, not changed here.)
     recordSessionEvents('thread_retry', [
       {
         type: MODEL_OUTPUT_COMMITTED,
@@ -205,7 +178,6 @@ describe('retry and queued resume read the session log alone', () => {
       requestPrompt,
       'the dead run’s own partial must not ride the retried request'
     ).not.toContain('PARTIAL_PROGRESS_TEXT');
-    // The log still tells the whole story.
     const replay = rebuildThreadViewFromEvents('thread_retry');
     expect(JSON.stringify(replay.messages)).toContain('PARTIAL_PROGRESS_TEXT');
   });
@@ -230,10 +202,6 @@ describe('retry and queued resume read the session log alone', () => {
   });
 
   it('a two-step retry (queued row created first) excludes the failed parent’s output', async () => {
-    // The daemon flow: retryRun creates the queued successor, the resume
-    // happens later. The queued row never records facts under its own id —
-    // the dead output lives under the parent, and THAT is what the resume
-    // must exclude.
     seedRun('run_failed_p', 'thread_retry', 'failed');
     recordTaskFact('thread_retry', 'TWOSTEP_TASK_MARKER');
     recordSessionEvents('thread_retry', [
@@ -294,12 +262,6 @@ describe('retry and queued resume read the session log alone', () => {
   });
 
   it('a wake run whose log has no recorded input facts refuses instead of re-running the wrong task', async () => {
-    // Wake/task sends are id-less ModelMessages: rows written before the
-    // input-facts slice (#139) recorded no input_accepted fact, so the replay
-    // cannot reconstruct their task. The kind is admitted for retry since
-    // #139, but the missing-facts refusal keeps the same guarantee — the
-    // unguarded flip silently answered the thread's last CHAT message under
-    // the wake's plan; this refuses loudly instead.
     agentRunDb.createAgentRun({
       id: 'run_wake_1',
       kind: 'awaiter-wake',
@@ -338,18 +300,12 @@ describe('retry and queued resume read the session log alone', () => {
 
     expect(result.success).toBe(false);
     expect(JSON.stringify(result)).toContain('no recorded session facts ending in its task');
-    // The stale row copy would have "worked" — proving the flip took the
-    // loud path, not the silent one.
     expect(
       agentRunDb.listAgentRunsByThread('thread_retry').find(run => run.status === 'queued')
     ).toBeUndefined();
   });
 
   it('a handoff-chained failure retries the original task with the whole dead chain excluded', async () => {
-    // Issue #141 — the F3 pin used to refuse this shape ("chain attribution
-    // is a later design"); the dead chain IS the design now: the parent and
-    // its failed child are both dead attempts of the same task, so both
-    // outputs are excluded and the retry re-runs the original task.
     seedRun('run_failed_h', 'thread_retry', 'failed');
     recordTaskFact('thread_retry', 'CHAIN_TASK_MARKER');
     recordSessionEvents('thread_retry', [
@@ -409,10 +365,6 @@ describe('retry and queued resume read the session log alone', () => {
   });
 
   it('a retry of a stacked failure excludes every dead attempt above and below it', async () => {
-    // Issue #141: A fails after a text flush, B = retry(A) fails after a
-    // text flush. Retrying B must exclude BOTH dead attempts' committed
-    // text — the parent-only exclusion left A's text standing between the
-    // task and the tail guard, bricking the retry surface.
     seedRun('run_stack_a', 'thread_retry', 'failed');
     agentRunDb.createAgentRun({
       id: 'run_stack_b',
@@ -451,18 +403,11 @@ describe('retry and queued resume read the session log alone', () => {
         },
       ]);
     }
-    // Retrying the NEWEST failure (the surface the user actually clicks):
-    // the retry itself fails too (a third dead attempt joins the chain), and
-    // the NEXT retry of the ORIGINAL still finds the task — every dead
-    // attempt above and below is excluded.
-    // B's retry must still fail at the MODEL: script a provider error.
     callPiChatMock.mockImplementation(() => {
       throw new Error('still failing');
     });
     const retryB = await service.retryAndExecute(target, 'run_stack_b');
     expect(retryB).toMatchObject({ success: false });
-    // It failed at the MODEL (the chain let it re-run), not at the tail
-    // guard — pre-fix this leg refused at the guard instead.
     expect(JSON.stringify(retryB)).not.toContain('ending in its task');
 
     callPiChatMock.mockImplementation(
@@ -476,18 +421,12 @@ describe('retry and queued resume read the session log alone', () => {
     const providerCalls2 = callPiChatMock;
     const retryA = await service.retryAndExecute(target, 'run_stack_a');
     if (!retryA.success) throw new Error(`retry A failed: ${JSON.stringify(retryA)}`);
-    // `callPiChat(model, context, options)` — the request context is arg 1.
     const promptA = JSON.stringify(providerCalls2.mock.calls[0][1]);
     expect(promptA).toContain('STACK_TASK_MARKER');
     expect(promptA).not.toContain('DEAD_ATTEMPT_TEXT_');
   });
 
   it('a succeeded turn is never treated as a dead attempt', async () => {
-    // The chain walks failed/cancelled rows only: a succeeded descendant's
-    // output is real history the user saw — excluding it would re-run the
-    // task past it and duplicate its effects. Retrying above it therefore
-    // still refuses at the tail guard (its content ends the replay), which
-    // is the honest outcome.
     seedRun('run_alive_a', 'thread_retry', 'failed');
     recordTaskFact('thread_retry', 'ALIVE_TASK_MARKER');
     recordSessionEvents('thread_retry', [
@@ -545,9 +484,6 @@ describe('retry and queued resume read the session log alone', () => {
   });
 
   it('a succeeded ancestor keeps its output in the retried wake replay', async () => {
-    // An awaiter wake's origin run SUCCEEDED: its committed exchange is real
-    // history the retried wake must still see. The chain stops at any
-    // non-dead ancestor (a blocked one is live approval state — same rule).
     agentRunDb.createAgentRun({
       id: 'run_wake_origin',
       kind: 'chat-turn',
@@ -653,12 +589,9 @@ describe('retry and queued resume read the session log alone', () => {
     const result = await service.retryAndExecute(target, 'run_failed_e3');
 
     expect(result.success).toBe(false);
-    // No orphan queued row beside the refused retry.
     expect(
       agentRunDb.listAgentRunsByThread('thread_retry').find(run => run.status === 'queued')
     ).toBeUndefined();
-    // Sanity: the refusal came from the missing recovery input, not the
-    // stream's empty-prompt guard after a real attempt.
     expect(getDb().prepare('SELECT COUNT(*) AS n FROM session_events').get()).toMatchObject({
       n: 0,
     });

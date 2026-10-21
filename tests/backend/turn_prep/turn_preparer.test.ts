@@ -3,11 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { normalizeAppConfig } from '@iki/backend/config/normalize';
 import { createChatTurnPreparer } from '@iki/backend/turn_prep/turn_preparer';
 
-// The affect/emotion guard that used to DERIVE `requireApproval` is gone
-// (memory + affect subsystem removal). What remains is the explicit policy: a
-// turn requires approval only when the caller says so. These assertions pin
-// that the derivation cannot come back silently — a re-introduced guard would
-// flip the unset case to true and fail here.
 const prepare = (options: { requireApproval?: boolean; approvalPolicy?: string } = {}) => {
   const preparer = createChatTurnPreparer({
     getRuntimeConfig: () => ({

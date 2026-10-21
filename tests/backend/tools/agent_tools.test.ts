@@ -53,23 +53,16 @@ describe('DelegatedAgentTool', () => {
     vi.clearAllMocks();
     createHarnessStub.mockReturnValue({
       getHistory: getHistoryMock,
-      // The tool drives the child through `turn()` (an async iterable of
-      // events) and then reads its history; the stub only has to satisfy that
-      // shape for these assertions.
       turn: async function* (input: unknown) {
         createHarnessTurnMock(input);
-        // `setRunResult` installs an async GENERATOR, so the scripted result is
-        // its return value; iterating to completion is what yields it.
         const generator = runMock() as AsyncGenerator<unknown, unknown>;
         let step = await generator.next();
         while (!step.done) step = await generator.next();
-        // `done` carries the TurnOutput the tool reads (`text`, `usage`).
         const scripted = step.value as { response?: string; toolCalls?: unknown[] } | undefined;
         yield {
           event: 'done',
           output: {
             text: scripted?.response ?? '',
-            // The tool summarises the delegated turn's calls from here.
             toolCalls: (scripted?.toolCalls as unknown[]) ?? [],
           },
         };
@@ -91,27 +84,10 @@ describe('DelegatedAgentTool', () => {
     setDelegatedAgentRuntime({
       createRunTracker: createAgentRunTrackerMock,
       getConversationToolModel: getToolModelMock,
-      // These cases assert WHAT the tool hands its child harness (tool set,
-      // run wiring, cancellation, alias); the supply is the composition root's
-      // choice, covered by factory_pi_generation / startPiTurnHarness. The
-      // legacy assembly keeps a scripted runner available here.
       createHarness: assembly => {
         createHarnessSpy(assembly);
-        // A stub harness: these cases assert what the tool HANDS the child
-        // (tool set, run wiring, cancellation, alias), never how the child
-        // talks to a provider. Running the real Pi harness here reached
-        // `callPiChat` and failed for a reason unrelated to the assertion.
         return createHarnessStub() as never;
       },
-      // The child finalizes through the session layer's one authority; the
-      // tool reaches it as an INJECTED PORT (arch rule `tools-below-session`),
-      // so the composition root has to supply it. These cases only need the
-      // calls to land on the tracker already mocked above.
-      // Use the REAL session-layer finalizers, not a copy of their mapping:
-      // a stub here would re-encode the outcome→row translation and could then
-      // disagree with production without any test noticing (the exact class of
-      // duplicate this refactor exists to delete). The tracker is mocked, so
-      // the real finalizer still lands on a spy.
       finalize: {
         finalizeSuccess: finalizeHarnessTurn,
         finalizeFailure: finalizeTurnFailure,
@@ -162,14 +138,10 @@ describe('DelegatedAgentTool', () => {
     );
 
     expect(createHarnessSpy).toHaveBeenCalledTimes(1);
-    // The child is configured through the harness ASSEMBLY, and driven through
-    // `turn({ prompt, toolsOverride })` — that is the Pi contract the tool now
-    // speaks (the old `run({ providerType, model, tools })` shape is gone).
     expect(createHarnessSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'openai',
         model: 'gpt-4o-mini',
-        // Harness assembly names the output cap `maxOutputTokens`.
         maxOutputTokens: 768,
         maxIterations: 3,
         enableTools: true,
@@ -194,11 +166,6 @@ describe('DelegatedAgentTool', () => {
         childKind: 'delegated-agent',
       })
     );
-    // The delegated child's model history is NOT copied onto its run row
-    // (ADR 010 §3): it lives in the session log and is replayed on recovery.
-    // The tracker no longer exposes `syncModelMessages` at all, so the inverse
-    // invariant is what this pins — a future change that reintroduces the copy
-    // has to reintroduce the surface first and will fail here.
     expect(createAgentRunTrackerMock.mock.results[0]?.value).not.toHaveProperty(
       'syncModelMessages'
     );
@@ -245,8 +212,6 @@ describe('DelegatedAgentTool', () => {
         })
     );
 
-    // The tool hands the child its tool set via `turn({ toolsOverride })`, not
-    // through a runner constructor argument.
     const turnRequest = createHarnessStub() as unknown as {
       turn: (input: { toolsOverride: Array<{ name: string }> }) => unknown;
     };
@@ -265,9 +230,6 @@ describe('DelegatedAgentTool', () => {
   });
 
   it('aliases the child run onto the execution that runs it', async () => {
-    // The child has no execution of its own — it inherits the parent's abort
-    // signal. This alias is what makes a cancel naming the child reach the
-    // executing parent instead of refusing a run that is executing here.
     setRunResult({ response: 'done.', iterations: 0, toolCalls: [] });
 
     const aliases: Array<[string, string]> = [];
@@ -292,13 +254,10 @@ describe('DelegatedAgentTool', () => {
       'run_parent_1',
       expect.stringMatching(/^run_/)
     );
-    // Disposed on the success path too, so the alias never outlives the call.
     expect(disposed).toEqual([['run_parent_1', expect.stringMatching(/^run_/)]]);
   });
 
   it('disposes the child alias when the delegation fails', async () => {
-    // The alias must not survive a failed delegation: a stale alias could
-    // route a later cancel to an execution that no longer exists.
     createHarnessSpy.mockImplementation(() => {
       throw new Error('delegation boom');
     });
@@ -326,9 +285,6 @@ describe('DelegatedAgentTool', () => {
       )
     ).rejects.toThrow('delegation boom');
 
-    // The child harness is built BEFORE the alias is registered, so a build
-    // failure never creates an alias to leak. Asserting a disposal here would
-    // assert the opposite of the invariant this case is named for.
     expect(disposed).toHaveLength(0);
     expect(capturedRegister).toBeUndefined();
   });
@@ -403,8 +359,6 @@ describe('DelegatedAgentTool', () => {
 
   it('passes parent cancellation to the child run', async () => {
     const controller = new AbortController();
-    // The signal rides `turn({ abortSignal })` on the Pi harness contract; the
-    // child is expected to observe the parent's controller, not a fresh one.
     createHarnessTurnMock.mockImplementation((input: { abortSignal?: AbortSignal }) => {
       expect(input.abortSignal).toBe(controller.signal);
     });
@@ -442,11 +396,6 @@ describe('DelegatedAgentTool', () => {
   });
 
   it('builds the child harness through the injected runtime, not a hardcoded implementation', async () => {
-    // Regression (ADR 009): the child harness used to be named `AgentHarness`
-    // in this tool, which pinned delegation to the AI SDK supply. The tool now
-    // asks the composition root for a `TurnDriverHarness`, and startPiTurnHarness
-    // serves it — this asserts the SEAM, so a future supply change needs no edit
-    // here, only a different registration.
     setRunResult({ response: 'done', iterations: 0, toolCalls: [] });
     const tool = new DelegatedAgentTool();
 
@@ -461,7 +410,6 @@ describe('DelegatedAgentTool', () => {
 
     expect(createHarnessSpy).toHaveBeenCalledTimes(1);
     const assembly = createHarnessSpy.mock.calls[0][0] as Record<string, unknown>;
-    // The child runs approval-free: a subagent has no surface to answer a card.
     expect(assembly.approvalPolicy).toBe('never');
     expect(assembly.enableTools).toBe(true);
   });

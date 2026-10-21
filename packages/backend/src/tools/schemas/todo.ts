@@ -25,10 +25,6 @@ const todoListItemInputSchema = z.object({
   completed: z.boolean().describe('Whether the item is already completed').optional(),
 });
 
-// ---------------------------------------------------------------------------
-// Todo tool (execution task planning) schemas
-// ---------------------------------------------------------------------------
-
 const todoToolInputShape = {
   items: z
     .array(todoPlanItemInputSchema)
@@ -43,10 +39,6 @@ const todoToolInputShape = {
 
 export const TodoToolInputSchema = z.object(todoToolInputShape);
 export const TodoToolInputSchemaUi = uiSchema(todoToolInputShape);
-
-// ---------------------------------------------------------------------------
-// Todo Lists schemas
-// ---------------------------------------------------------------------------
 
 const listTodoListsInputShape = {
   query: z.string().trim().describe('Optional search text for matching todo lists').optional(),

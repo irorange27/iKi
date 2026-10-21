@@ -297,10 +297,6 @@ const persistDraftModelSelection = async (selection: {
   await configStore.saveConfig();
 };
 
-// Chat runtime: SDK-owned message state + IPC transport (P6). Persistence,
-// the message-store view and the approval controller hang off the same
-// instance. `currentThread` and the thread callbacks are declared below —
-// referenced lazily from closures.
 const chatInstance = createChatInstance({
   electronAPI,
   generateId: () => createPrefixedId('msg'),
@@ -322,12 +318,6 @@ const focusViewTab = (id: string) => {
   void nextTick(() => document.getElementById(id)?.focus());
 };
 
-// The AI SDK appends usage parts to a message in place, which does not
-// invalidate computeds that only iterate `chat.messages`. Bump a counter when
-// a usage chunk has been applied so session stats and the context indicator
-// refresh within the same turn. The tap fires before the SDK consumes the
-// chunk, hence the deferred bump; the status->ready watch is the guaranteed
-// end-of-turn pass.
 const usageChunkTick = ref(0);
 let usageRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 const removeUsageListener = chatInstance.transport.onChunk(chunk => {
@@ -359,12 +349,8 @@ const { latestAssistantTokenUsage, sessionPerfStats } = useChatUsage(
 );
 
 const showMessageCount = computed(() => chatMessages.value.length > 0);
-// The header always renders (it carries the workspace seat), so the sidebar's
-// floating collapsed toolbar never has to stand in for it.
 const showHeaderMeta = true;
 const showWelcomeScreen = computed(() => showWelcome.value && chatMessages.value.length === 0);
-// A work thread's project binding is immutable once the conversation has
-// started — switching mid-flight would silently move the tool roots.
 const isWorkspaceLocked = computed(
   () => Boolean(currentThread.value?.id) && chatMessages.value.length > 0
 );
@@ -400,9 +386,6 @@ const handleMessagesScroll = () => {
   pinnedToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_TAIL_THRESHOLD_PX;
 };
 
-// Stream activity coalesces into one scroll per frame and yields to a user
-// who scrolled up; explicit jumps (send, thread switch) go through
-// scrollToBottom and re-engage following.
 const scheduleFollowScroll = () => {
   if (!pinnedToBottom || followScrollRaf !== null) return;
   followScrollRaf = requestAnimationFrame(() => {
@@ -483,8 +466,6 @@ const { activeTodoPlan, handleChatChunk } = useChatThreadTodoPlan({
   electronAPI,
   threadId: computed(() => currentThread.value?.id || null),
 });
-// The transport is the single tap point for routed ui chunks (the todo-plan
-// projection mirrors them; stale chunks never reach it).
 chatInstance.transport.onChunk(handleChatChunk);
 
 const streaming = useChatStreaming({
@@ -555,8 +536,6 @@ useChatViewLifecycle({
   handleAwaiterPush,
 });
 
-// Cross-window jumps (e.g. the settings automations review queue) ask the
-// main window to open a specific thread.
 electronAPI.onFocusThread?.(threadId => {
   void selectThread(threadId);
 });

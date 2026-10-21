@@ -123,12 +123,6 @@ describe('core logger', () => {
     });
   });
 
-  // The desktop shell silences the terminal mirror so `electron-forge start`
-  // stops vomiting window/daemon chatter. The file sinks are the observable
-  // contract (logs/combined.log, error.log — the e2e gate reads them), so they
-  // must survive that switch untouched. A regression here would either bring
-  // the console back or, worse, make the logs directory look clean because
-  // nothing is written to it anymore.
   it('stops mirroring to the terminal without dropping file sinks', async () => {
     const logDir = createTempLogDir();
     process.env.IKI_LOG_DIR = logDir;

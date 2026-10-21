@@ -59,10 +59,7 @@ export const createChatStreamingModels = () => {
     providerOverride?: ProviderModelDiscoveryOverride | null
   ): Promise<ProviderModelDescriptor[]> => {
     try {
-      // A named provider row (or an unsaved draft carrying one) gets live
-      // discovery: the endpoint's own /models is the only source that can know
-      // about a private gateway's models. Anonymous/static types keep the
-      // catalog path.
+
       const overrideBaseUrl = providerOverride?.base_url?.trim();
       const overrideApiKey = providerOverride?.api_key?.trim();
       const shouldUseRecord =

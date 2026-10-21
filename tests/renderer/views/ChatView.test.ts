@@ -285,8 +285,6 @@ const mountChatView = async () => {
 
   const pinia = createPinia();
   setActivePinia(pinia);
-  // ChatView reads the sidebar singleton (collapsed-state header clearance);
-  // tests bypass App.vue, so seed it here.
   const { createSidebar } = await import(
     '../../../packages/desktop/src/renderer/composables/useSidebar'
   );
@@ -315,8 +313,6 @@ const mountChatView = async () => {
   });
 
   await flushPromises();
-  // The sidebar singleton is what the header controls act on, so the tests
-  // that exercise those controls need it alongside the wrapper.
   return Object.assign(wrapper, { sidebar });
 };
 
@@ -678,11 +674,6 @@ describe('ChatView', () => {
   });
 
   it('reopens a collapsed sidebar from the header control', async () => {
-    // Live defect this pins: the header's collapsed-state control carried the
-    // "Toggle sidebar" label but ran handleNewChat, so a folded sidebar had NO
-    // way back — the one affordance that claimed to reopen it created a chat
-    // instead. Both the label and the handler were individually plausible,
-    // which is why only an interaction test catches it.
     const wrapper = await mountChatView();
     wrapper.sidebar.collapse();
     await flushPromises();
@@ -696,13 +687,10 @@ describe('ChatView', () => {
     await flushPromises();
 
     expect(wrapper.sidebar.isCollapsed.value).toBe(false);
-    // The control must do ONLY that: a new chat is a different button.
     expect(handleNewChatMock).not.toHaveBeenCalled();
   });
 
   it('creates a new chat from the header control while collapsed', async () => {
-    // The companion half: the square-pen control still creates a chat. Asserting
-    // both keeps a future edit from swapping the two handlers again.
     const wrapper = await mountChatView();
     wrapper.sidebar.collapse();
     await flushPromises();

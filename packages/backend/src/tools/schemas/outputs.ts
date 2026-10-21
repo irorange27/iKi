@@ -2,10 +2,6 @@ import { z } from 'zod';
 
 import { agentUsedToolOutputSchema } from './agent';
 
-// ---------------------------------------------------------------------------
-// Built-in tool output schemas
-// ---------------------------------------------------------------------------
-
 const TodoPlanItemOutputSchema = z
   .object({
     id: z.string().optional(),
@@ -157,10 +153,6 @@ export const PlanToolOutputSchema = z
     stepCount: z.number().optional(),
   })
   .passthrough();
-
-// ---------------------------------------------------------------------------
-// App-level output schemas
-// ---------------------------------------------------------------------------
 
 const PersonalSkillSummaryOutputSchema = z
   .object({

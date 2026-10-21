@@ -52,9 +52,6 @@ describe('devtools ipc', () => {
   });
 
   it('arms the page recorder for every window at registration', async () => {
-    // Without this the recorder is only installed on the first probe, so the
-    // click that prompted the question is the one that gets lost. Re-imported
-    // because `clearMocks` wipes the history of the `beforeAll` registration.
     vi.resetModules();
     armRecorderMock.mockClear();
     const { registerDevToolsIpc: registerAgain } = await import(
@@ -91,7 +88,6 @@ describe('devtools ipc', () => {
       webContentsId: 7,
     });
 
-    // An explicit id still wins: a CDP caller may address another window.
     await call('devtools:probe-element', { target: 'hovered', webContentsId: 99 });
     expect(resolveElementMock).toHaveBeenLastCalledWith({ target: 'hovered', webContentsId: 99 });
   });

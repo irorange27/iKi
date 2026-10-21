@@ -16,25 +16,15 @@ import { toIsoNow } from '@iki/backend/utils/text';
 
 const logger = createLogger({ module: 'proactive_task_runner' });
 
-/**
- * The proactive-task execution business: prompt construction, the run
- * orchestration, result persistence and delivery. This module owns WHEN a
- * task last ran, what it produced and WHEN it next runs — the host shell
- * contributes only the clock, notifications and transport via the injected
- * port (stage E: the business used to live in desktop main).
- */
-
-/** Host capabilities the runner needs — no Electron types cross this line. */
 export type TaskRunnerHostPort = {
-  /** Desktop notification (no-op hosts skip it). */
+
   notify?: (params: { title: string; body: string }) => void;
-  /** Push a task event to subscribed UIs. */
+
   pushTaskEvent?: (payload: unknown) => void;
-  /** Nudge the companion surface. */
+
   pushTaskNudge?: (nudge: { kind: 'task-error' | 'task-success'; taskName: string }) => void;
 };
 
-/** The chat-service surface the runner drives. */
 export type TaskRunnerChatPort = {
   getThread: (threadId: string) => { id: string } | null;
   createThread: (input: {
@@ -162,10 +152,8 @@ const ensureTaskThread = async (
 
   const threadId = createdThread.id;
 
-  // Persist thread id back to the task so future runs push into the same place.
   tasksDb.updateProactiveTask(task.id, { thread_id: threadId });
 
-  // Write a "pinned" intro message so the thread explains what it is.
   const introText = [
     `### ⏰ Proactive Task Created`,
     `**Name:** ${task.name}`,
@@ -484,19 +472,18 @@ export const createProactiveTaskRunner = (deps: ProactiveTaskRunnerDeps) => {
     }
   };
 
-  /** One scheduler pass: run everything due. The clock stays with the host. */
   const tick = async (): Promise<void> => {
     const due = tasksDb.listDueProactiveTasks(toIsoNow());
     for (const task of due) {
       if (!task.enabled) continue;
-      // Avoid overlap between scheduler ticks.
+
       if (taskInFlight.has(task.id)) continue;
       await runProactiveTask(task.id, { reason: 'schedule' });
     }
   };
 
   let tickInFlight = false;
-  /** Tick with overlap protection — the host clock calls this. */
+
   const guardedTick = async (): Promise<void> => {
     if (tickInFlight) return;
     tickInFlight = true;

@@ -39,8 +39,6 @@ describe('chat_ui message conversion', () => {
     expect(converted[0]?.content).toEqual([{ type: 'text', text: 'Final answer.' }]);
   });
 
-  // A persisted mid-turn snapshot (crash/quit during tool execution or while a
-  // tool approval was pending) contains tool parts in non-terminal states.
   describe('interrupted tool calls from persisted snapshots', () => {
     const expectPairedToolCalls = (
       converted: Awaited<ReturnType<typeof toModelInputMessages>>
@@ -145,8 +143,6 @@ describe('chat_ui message conversion', () => {
         approvalId: 'approval_live_1',
         toolCallId: 'toolu_live_approval',
       });
-      // No fabricated response or result: the real decision rides in the tool
-      // message appended by the approval layer.
       expect(converted.some(message => message.role === 'tool')).toBe(false);
     });
 

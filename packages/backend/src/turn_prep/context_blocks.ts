@@ -17,12 +17,6 @@ const hasMeaningfulContent = (value: string): boolean => {
   return stripped.length > 0;
 };
 
-/**
- * Project instructions derived from an explicit selection — the context
- * projection must read the same world the turn's tools run in, never
- * re-resolve current thread state. `readAgentInstructions(threadId)` is the
- * legacy wrapper that resolves the current selection fresh.
- */
 export const readAgentInstructionsForSelection = (
   selection: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null | undefined
 ): string => {
@@ -58,10 +52,7 @@ export const buildIdentityContext = (
   modelCapability: ModelCapability | null | undefined,
   agentInstructions: string
 ): IdentityContext => {
-  // The assistant-profile block was the continuity subsystem's prompt
-  // contribution; it is gone with that subsystem. What remains here is the
-  // turn's own identity context: the workspace binding and the agent's
-  // instructions, neither of which needed a database.
+
   const identityText = [
     workspaceSystemMessage?.(threadId)?.trim() ?? '',
     agentInstructions?.trim() ?? '',

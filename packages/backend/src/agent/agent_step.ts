@@ -9,20 +9,6 @@ export type ModelInferenceRecord = {
   usage: AgentUsage;
 };
 
-/**
- * Agent step vocabulary — what `AgentHarness.turn()` yields inside its
- * `TurnEvent` envelope (`{ event: 'step' | 'done' }`).
- *
- * Naming: `message_update` and `tool_execution_start/end` follow the
- * `scope_lifecycle` convention; `approval_request`, `handoff`, and
- * `turn_end` are named protocol events that predate the convention and
- * are deliberately not scope-paired (ADR 001 non-goal: migrating them
- * would rewrite consumers for no behavioral gain).
- *
- * The runner yields these; thread_session forwards them to the UI emitter
- * and the run tracker.
- */
-
 export interface MessageUpdateStep {
   type: 'message_update';
   text: string;
@@ -69,7 +55,7 @@ export interface TurnEndStep {
   usage?: AgentUsage;
   message?: string;
   code?: string;
-  /** Citations / references produced during the turn. */
+
   sources?: SourceInfo[];
 }
 

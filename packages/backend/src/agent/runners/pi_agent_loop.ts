@@ -1,55 +1,7 @@
 import type { AssistantMessage, Message as PiMessage, Tool as PiTool, ToolCall } from '@earendil-works/pi-ai';
 
-/**
- * The iKi-owned agent loop over the Pi supply layer (switch item 2a/2b,
- * generator form since 3a — issue #114). Semantics are pinned against the
- * existing harness:
- *
- * - one model call = one step; the step budget (maxSteps) bounds calls;
- * - tool calls in ANY step — including the last — execute (the harness
- *   semantics: stopWhen stops AFTER the step's tools ran);
- * - when the budget exhausts with pending tool calls, the turn ends
- *   budget-exhausted: effects were executed and recorded, but no further
- *   model call happens and the pending calls are reported (D7–D8);
- * - cancellation is checked before each model call and before each effect;
- * - tools flagged needsApproval pause the turn BEFORE any effect: the
- *   injected approval surface registers them with the approval owner and
- *   the outcome is awaiting-approval — decisions and resumption belong to
- *   a new loop run over the recovered history (the five-state contract
- *   lives in the approval owner, not here);
- * - usage accumulates in raw Pi buckets — the mapping to iKi's
- *   total-prompt convention is linear, so the caller may map the sum
- *   (projectUsageToIki) or map per step and add;
- * - terminal tools (handoff) execute in their step and then end the turn —
- *   `stopWhen: hasToolCall('handoff')` parity (switch item 3a review).
- *
- * The loop is an ASYNC GENERATOR (switch item 3a, issue #114 — the
- * deliberate contract extension the wiring needed): it yields live events
- * and returns the outcome. Generator suspension is what lets "tool
- * executing right now" stream through the harness to the TurnDriver while
- * the effect is still running — a callback loop cannot regain control
- * mid-await. Event order is the runner's order: this call's deltas, then
- * StepEnd; per tool: ToolStart BEFORE the effect, ToolEnd AFTER it.
- *
- * The model call is injected: wiring hands this loop the Pi adapter's
- * callPiChat wrapped for live deltas; tests hand a scripted double. It
- * receives the loop's LIVE transcript — a retry wrapper persists its
- * recovery notes by pushing user messages before re-attempts (runner
- * parity), and those notes then ride every later step. The wrapper owns
- * retry bounds; the loop treats a non-aborted error stopReason as a
- * terminal failure and classifies aborts as AbortError for the driver.
- * This module owns ORCHESTRATION only — protocol, history projection and
- * tool ownership stay with their modules.
- * maxSteps values that are not finite fall back to 1.
- */
-
 export type PiLoopTool = PiTool & {
-  /** Whether a call to this tool pauses the loop before its effect: the
-   * injected approval surface registers the call with the approval owner and
-   * the turn ends awaiting-approval (the resume is a new loop run). A
-   * FUNCTION is evaluated per call — the resolver's per-call policy decision
-   * (the policy box state lives in its closure); a boolean applies to every
-   * call. */
+
   needsApproval?: boolean | ((input: unknown, context: { toolCallId: string; messages: PiMessage[] }) => boolean | Promise<boolean>);
 };
 
@@ -62,8 +14,7 @@ export type PiLoopToolCall = {
 export type PiLoopStep = {
   index: number;
   text: string;
-  /** Thinking blocks of this step's final message, joined — the ModelMessage
-   * mirror maps them to reasoning parts. */
+
   thinking: string;
   toolCalls: PiLoopToolCall[];
   usage: PiUsageBuckets;
@@ -76,14 +27,10 @@ export type PiUsageBuckets = {
   cacheWrite: number;
   reasoning: number;
   totalTokens: number;
-  /** USD cost of this call, computed by Pi from the model's catalog rates
-   * (usage.cost.total). 0 when the model carries no rates — the loop never
-   * invents a price. */
+
   costUsd: number;
 };
 
-/** Event discriminators for the loop's event stream. The wiring maps these
- * onto the TurnDriver's protocol one-to-one. */
 export enum PiLoopEventType {
   TextDelta = 'text_delta',
   ThinkingDelta = 'thinking_delta',
@@ -100,8 +47,7 @@ export type PiLoopEvent =
   | {
       type: PiLoopEventType.ToolEnd;
       call: PiLoopToolCall;
-      /** The tool result in the repo's canonical ToolResultOutput vocabulary —
-       * the shape the driver projects to the UI and history keeps. */
+
       output: unknown;
     };
 
@@ -110,35 +56,20 @@ export type PiLoopOutcome = {
   finalText: string;
   steps: PiLoopStep[];
   usage: PiUsageBuckets;
-  /** Budget-exhausted: tool calls from the final step — EXECUTED, results
-   * recorded on the transcript, but not yet consumed by a model call.
-   * Awaiting-approval: the calls that REQUIRE approval and were registered
-   * with the approval surface — they have NOT run. Reporting both lets the
-   * driver surface what happened without implying unexecuted side effects. */
+
   pendingToolCalls: PiLoopToolCall[];
 };
 
-/** One live delta from the model call's event stream. */
 export type PiLoopDelta = {
   type: 'text_delta' | 'thinking_delta';
   delta: string;
 };
 
-/**
- * The injected call streams deltas LIVE (an async iterable consumed as they
- * arrive) and resolves with the final message. It receives the loop's LIVE
- * transcript array: a retry wrapper pushes its recovery notes onto it before
- * re-attempts, so notes persist across the turn (runner parity). Abort and
- * error stop reasons on the final message are the loop's failure surface —
- * the wrapper handles retries before that.
- */
 export type PiLoopModelCall = (context: {
   systemPrompt: string;
   messages: PiMessage[];
   tools?: PiTool[];
-  /** Steps that already settled, oldest first. A caller that needs to react
-   * to what the loop has done so far (e.g. the todo reminder) reads this
-   * instead of reconstructing history from `messages`. */
+
   steps: ReadonlyArray<PiLoopStep>;
 }) =>
   | {
@@ -152,10 +83,6 @@ export type PiLoopModelCall = (context: {
 
 export type PiLoopToolExecutor = (call: PiLoopToolCall) => Promise<unknown>;
 
-/** Registers an approval-needing call with the approval owner (the real
- * implementation is the approval surface's registration primitive). The
- * turn ends awaiting-approval after registration; decisions and resumption
- * are the approval owner's, via a NEW loop run over the recovered history. */
 export type PiLoopApprovalRequester = (call: PiLoopToolCall) => Promise<void>;
 
 const EMPTY_USAGE: PiUsageBuckets = {
@@ -194,18 +121,13 @@ export const runPiAgentLoop = async function* (
     messages: PiMessage[];
     tools?: PiLoopTool[];
     maxSteps: number;
-    /** Terminal tools stop the turn after their step executes — the AI SDK
-     * path's `stopWhen: hasToolCall('handoff')` parity. The tool still
-     * executes; no further model call follows. Owned by the runner
-     * (TERMINAL_TOOL_NAMES), passed in by the wiring. */
+
     terminalToolNames?: ReadonlySet<string>;
     callModel: PiLoopModelCall;
     executeTool: PiLoopToolExecutor;
     requestApproval?: PiLoopApprovalRequester;
     signal?: AbortSignal;
-    /** Observability hook, called once per settled model call with that
-     * call's usage. Injected (not imported) so this module keeps owning
-     * orchestration only. */
+
     onModelCall?: (settled: {
       step: number;
       text: string;
@@ -223,8 +145,7 @@ export const runPiAgentLoop = async function* (
 
   for (let index = 0; index < maxSteps; index++) {
     signal?.throwIfAborted();
-    // The call may await request preparation (per-step budget compaction,
-    // prepareStep parity) before handing back the live attempt.
+
     const call = await callModel({
       systemPrompt: params.systemPrompt,
       messages,
@@ -240,8 +161,6 @@ export const runPiAgentLoop = async function* (
     }
     const final = await call.final;
 
-    // Pi resolves provider failures into a result message — the stopReason
-    // is the failure surface; the retry wrapper (if any) had its chance.
     if (final.stopReason === 'aborted') {
       throw new DOMException(final.errorMessage || 'Run cancelled', 'AbortError');
     }
@@ -265,9 +184,7 @@ export const runPiAgentLoop = async function* (
     usage = addUsage(usage, stepUsage);
     const step: PiLoopStep = { index, text, thinking, toolCalls, usage: stepUsage };
     steps.push(step);
-    // One generation observation per model call (Langfuse cost views need
-    // per-call usage, and a tool turn is several calls). Injected so the
-    // loop stays free of the observability import; a no-op when off.
+
     onModelCall?.({
       step: index,
       text,
@@ -281,14 +198,6 @@ export const runPiAgentLoop = async function* (
       return { status: 'completed', finalText: text, steps, usage, pendingToolCalls: [] };
     }
 
-    // Approval pause BEFORE the needing calls' effects: the needing calls
-    // are decided PER CALL (the resolver's function, evaluated with the
-    // current step's policy snapshot). The step's NON-needing calls EXECUTE
-    // first — the AI SDK path runs them and leaves only the needing ones
-    // pending; a step mixing both is the ordinary askRisky case. The
-    // assistant message is pushed ONCE before any effect (providers reject a
-    // tool_calls message answered piecemeal), and the free calls' results
-    // ride the transcript so the resumed request stays wire-valid.
     const needingApproval: PiLoopToolCall[] = [];
     for (const call of toolCalls) {
       const tool = params.tools?.find(candidate => candidate.name === call.name);
@@ -329,14 +238,10 @@ export const runPiAgentLoop = async function* (
       };
     }
 
-    // Tools in ANY step execute — including the last (harness semantics).
-    // The results ride the transcript; the budget decides whether another
-    // model call follows.
     for (const call of toolCalls) {
       signal?.throwIfAborted();
       yield { type: PiLoopEventType.ToolStart, call };
-      // The executor gets its own copy: a mutating executor must not corrupt
-      // the recorded trajectory (the transcript references the same args).
+
       const output = await executeTool({ ...call, arguments: structuredClone(call.arguments) });
       yield { type: PiLoopEventType.ToolEnd, call, output };
       messages.push({
@@ -349,9 +254,6 @@ export const runPiAgentLoop = async function* (
       });
     }
 
-    // Terminal tools (handoff parity): the step's tools executed; the turn
-    // ends now — no further model call, and budget does not apply (the
-    // driver's handoff branch reads the executed call from the outcome).
     if (toolCalls.some(call => terminalToolNames?.has(call.name))) {
       return { status: 'completed', finalText: lastText, steps, usage, pendingToolCalls: [] };
     }
@@ -367,13 +269,9 @@ export const runPiAgentLoop = async function* (
     }
   }
 
-  // Unreachable: the loop returns inside the last iteration.
   return { status: 'budget-exhausted', finalText: lastText, steps, usage, pendingToolCalls: [] };
 };
 
-/** The transcript text for one tool result output — the documented protocol
- * (a JSON tool result is read by the model as text). Exported for the resume
- * path, which appends owner-produced results to the same transcript shape. */
 export const toolResultText = (output: unknown): string => {
   if (output === null || typeof output !== 'object' || !('type' in output)) {
     return JSON.stringify(output ?? null);

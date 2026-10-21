@@ -1,8 +1,4 @@
-// Minimal structural type over node:sqlite shared by the database singleton
-// and the migration chain. Kept dependency-free so migration modules can
-// import the type without touching the database singleton module — the
-// bootstrap handle flows DOWN (initializeDatabase → initializeMigrations(db)),
-// never back up through a getDb import.
+
 
 export type SqliteRunResult = { changes: number; lastInsertRowid: number | bigint };
 

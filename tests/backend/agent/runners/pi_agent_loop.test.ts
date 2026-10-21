@@ -29,13 +29,6 @@ import {
   type PiLoopModelCall,
 } from '@iki/backend/agent/runners/pi_agent_loop';
 
-// Loop-semantics tests: the model call is a scripted double (the stream
-// parsing itself is covered at the real HTTP boundary by the adapter and
-// differential suites). What is under test here is ORCHESTRATION: step
-// budget, effect ordering and usage accumulation — plus the 3a generator
-// contract: live deltas, tool events around the effect, and the live
-// transcript a retry wrapper can persist notes onto.
-
 const assistant = (
   content: AssistantMessage['content'],
   usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; reasoning?: number; totalTokens?: number },
@@ -155,9 +148,6 @@ describe('pi agent loop — orchestration semantics', () => {
   });
 
   it('parallel tool calls in ONE message: the assistant is pushed once, both results follow in order', async () => {
-    // Regression (review B1): pushing the assistant message per tool call
-    // duplicated it in the transcript — providers reject a tool_calls
-    // message answered piecemeal.
     const callModel = scriptedCall([
       {
         content: [
@@ -187,7 +177,6 @@ describe('pi agent loop — orchestration semantics', () => {
 
     expect(outcome.status).toBe('completed');
     expect(executed).toEqual(['/1.txt', '/2.txt']);
-    // Exactly ONE assistant entry carrying BOTH calls, then both results.
     expect(transcripts[1].map(m => m.role)).toEqual(['user', 'assistant', 'toolResult', 'toolResult']);
     const serialized = JSON.stringify(outcome.steps);
     expect(serialized).toContain('/1.txt');
@@ -213,8 +202,6 @@ describe('pi agent loop — orchestration semantics', () => {
       },
     });
 
-    // Harness semantics: the last step's tools RUN, then the turn ends
-    // budget-exhausted with the pending calls reported and no further call.
     expect(outcome.status).toBe('budget-exhausted');
     expect(executed).toEqual(['/last-step.txt']);
     expect(outcome.pendingToolCalls).toHaveLength(1);
@@ -274,9 +261,6 @@ describe('pi agent loop — orchestration semantics', () => {
       },
     });
 
-    // The turn pauses BEFORE the needing call's effect: registration covers
-    // the needing call only; the step's FREE call executed (AI SDK parity);
-    // no second model call.
     expect(outcome.status).toBe('awaiting-approval');
     expect(registered).toEqual(['call_ap']);
     expect(executed).toEqual(['announce']);
@@ -318,8 +302,6 @@ describe('pi agent loop — orchestration semantics', () => {
       },
     });
 
-    // AI SDK parity: the step's safe call EXECUTES (its result rides the
-    // transcript), only the risky call stays pending for the owner.
     expect(outcome.status).toBe('awaiting-approval');
     expect(registered).toEqual(['call_risky']);
     expect(executed).toEqual(['read_file']);
@@ -421,8 +403,6 @@ describe('pi agent loop — orchestration semantics', () => {
   });
 
   it('events: deltas, step ends and tool events stream live, tool start BEFORE the effect', async () => {
-    // The executor gates on a deferred: ToolStart must be observable while
-    // the effect is still running — that is the generator's whole point.
     let releaseEffect: (() => void) | undefined;
     const effectStarted = new Promise<void>(resolve => {
       releaseEffect = resolve;
@@ -451,8 +431,6 @@ describe('pi agent loop — orchestration semantics', () => {
       else if (event.type === PiLoopEventType.StepEnd) seen.push('step_end');
       else if (event.type === PiLoopEventType.ToolStart) {
         seen.push(`tool_start:${event.call.id}`);
-        // The effect is gated: receiving ToolStart proves it streams BEFORE
-        // the executor resolves.
         releaseEffect?.();
       } else {
         seen.push(`tool_end:${event.call.id}:${JSON.stringify(event.output)}`);
@@ -495,8 +473,6 @@ describe('pi agent loop — orchestration semantics', () => {
         final: Promise.resolve(assistant([textBlock('recovered')], { input: 5, output: 2, totalTokens: 7 })),
       };
     };
-    // The wiring's retry wrapper: on a retryable failure it pushes the
-    // recovery note onto the LIVE transcript and re-calls.
     const retryingCall: PiLoopModelCall = context => {
       const attempt = callModel(context);
       return {
@@ -523,13 +499,10 @@ describe('pi agent loop — orchestration semantics', () => {
 
     expect(outcome.status).toBe('completed');
     expect(outcome.finalText).toBe('recovered');
-    // The note persisted onto the transcript the second request saw.
     expect(JSON.stringify(transcripts[1])).toContain('recovery note');
   });
 });
 
-
-/** A PiToolModelCall double: each scripted step is one model call. */
 const harnessModelCall = (
   steps: Array<{ text?: string; toolCall?: { id: string; name: string; args: Record<string, unknown> } }>
 ): PiToolModelCall => {
@@ -561,11 +534,6 @@ const harnessModelCall = (
   };
 };
 
-// ── differential: the same scenario through the REAL harness ────────────────
-// Both engines must satisfy the same invariants for the text+tools scenario:
-// the tool executes exactly once with the same args, and the turn ends with
-// the same final answer. (Event protocols differ by design; the wiring PR
-// maps the candidate loop onto the TurnDriver's protocol.)
 describe('differential: same scenario through the real harness', () => {
   const toolName = 'loop_diff_read_file';
 
@@ -653,10 +621,6 @@ describe('differential: same scenario through the real harness', () => {
     expect(outcome.finalText).toBe('diff done');
   });
   it('reports one settled observation per model call, carrying that call’s usage and cost', async () => {
-    // The Langfuse seam (observability item of PR #173): the tool path is
-    // several calls per turn, and per-call cost is what the cost views
-    // compare. Without this the hook could be dropped — or the bucket
-    // mapping regressed to zeros — and nothing would fail.
     const observed: Array<{
       step: number;
       text: string;
@@ -703,7 +667,6 @@ describe('differential: same scenario through the real harness', () => {
     const outcome = next.value;
 
     expect(outcome.status).toBe('completed');
-    // Exactly one observation per model call — no more, no fewer.
     expect(observed).toEqual([
       {
         step: 0,
@@ -721,15 +684,10 @@ describe('differential: same scenario through the real harness', () => {
   });
 
   it('accumulates usage across steps including the per-call cost the catalog rates produce', async () => {
-    // mapBuckets' costUsd term: the loop must SUM the per-call cost (not drop
-    // it), so a multi-step tool turn's total cost is the sum of its calls.
-    // The scripted doubles carry the cost as Pi's calculateCost would report
-    // it for a priced model.
     const withCall = scriptedCall([
       { content: [toolCallBlock('call_c', 'probe', {})], usage: { input: 1000, output: 500, totalTokens: 1500 } },
       { content: [textBlock('end')], usage: { input: 100, output: 50, totalTokens: 150 } },
     ]);
-    // Patch the cost onto each finalized assistant message via a wrapper.
     let calls = 0;
     const callModel: PiLoopModelCall = () => {
       const inner = withCall();
@@ -757,7 +715,6 @@ describe('differential: same scenario through the real harness', () => {
     const outcome = next.value;
 
     expect(outcome.status).toBe('completed');
-    // 0.0105 + 0.0006 — the per-call costs are summed, not last-write-wins.
     expect(outcome.usage.costUsd).toBeCloseTo(0.0111, 10);
   });
 });

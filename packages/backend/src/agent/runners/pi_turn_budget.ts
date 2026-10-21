@@ -4,27 +4,6 @@ import { generateThreadSummary } from '../../runtimes/thread_summary';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { autoCompactHistory, estimateMessageTokens, estimateTextTokens } from '../context_budget';
 
-/**
- * The input budget owner shared by the Pi harnesses (text and tool) — the
- * AI SDK prepareStep semantics over the same owners: compact at
- * tool-exchange boundaries, summarize the omitted prefix, then refuse if
- * protected instructions or the current turn alone exceed the budget.
- * Compaction is request-scoped: the caller's stored history keeps the full
- * text. Cadence (switch debt #122, prepareStep parity): the TOOL harness
- * checks every request — once at turn start through `preparePiTurnHistory`
- * and again before each later model call through `compactPiRequestStep` —
- * so an autonomous chain no longer grows its request unbounded within a
- * batch. The text harness is single-call and keeps the turn-start check
- * only.
- *
- * The summarizer takes no cache prefix on the Pi path (falls back to its
- * standalone call) — the same accepted degradation as custom-model runs,
- * tracked for both Pi surfaces.
- */
-
-/** The summarizer's input shape over omitted history (shared by both
- * compaction entry points). Tool messages fold into a JSON payload — the
- * summarizer's LLM cannot address tool roles. */
 const summarizerMessages = (omitted: ModelMessage[]) =>
   omitted.map(message => ({
     role: message.role === 'user' ? ('user' as const) : ('assistant' as const),
@@ -52,14 +31,12 @@ const summarizeOmitted = async (params: {
   return summary.summary;
 };
 
-/** The turn-start check: compact once before the first request. */
 export const preparePiTurnHistory = async (params: {
   history: ModelMessage[];
   personaPrompt: string;
   planPrompt: string;
   transcriptSystemText: string;
-  /** Tool-schema estimate on the Pi wire — part of the fixed overhead, the
-   * same term the AI SDK overhead carries (omitting it delays compaction). */
+
   toolSchemaTokens?: number;
   maxInputTokens?: number;
   threadId?: string;
@@ -114,46 +91,26 @@ export const preparePiTurnHistory = async (params: {
 export type CompactPiRequestStepResult =
   | {
       compacted: true;
-      /** The compacted request view — systems, the summary message, then the
-       * kept tail. Replaces the caller's view; the caller's STORED history is
-       * untouched (compaction is request-scoped). */
+
       requestView: ModelMessage[];
-      /** The summary message — chained into the next compaction's
-       * `existingSummary` within the same turn. */
+
       summaryMessage: ModelMessage;
       omittedCount: number;
-      /** Estimate of the compacted view alone — the caller adds its overhead
-       * and refuses when the total still exceeds the budget. */
+
       viewTokens: number;
     }
   | { compacted: false; viewTokens: number };
 
-/**
- * The per-request check inside a multi-step tool turn (prepareStep parity):
- * estimate the request view; over the compaction threshold, summarize the
- * omitted prefix and return the compacted view. UNDER the threshold this is
- * one reduce pass — checks are cheap, compaction is rare. The caller owns
- * the placement effects: rebuild its request transcript from the returned
- * view, switch its snapshot basis, and refuse when `viewTokens + overhead`
- * still exceeds the budget. `existingSummary` chains compactions within one
- * turn (the same per-turn scope as the AI SDK runner's summary message).
- */
 export const compactPiRequestStep = async (params: {
   requestView: ModelMessage[];
   maxInputTokens: number;
   overheadTokens: number;
-  /** Over-length rescue path (#124): bypass the 0.8 threshold — the budget
-   * becomes the view's own current estimate, so the cut always fires and
-   * keep-half decides what survives. The caller refuses loudly if the view
-   * still cannot fit. */
+
   force?: boolean;
   threadId?: string;
   signal?: AbortSignal;
   existingSummary?: string;
-  /** The view's CURRENT summary message — excluded from the kept systems so
-   * the new summary REPLACES it (the AI SDK runner never accumulates
-   * summaries; it chains their text via `existingSummary`). Identity
-   * comparison: pass the exact object previously returned. */
+
   previousSummaryMessage?: ModelMessage;
 }): Promise<CompactPiRequestStepResult> => {
   const totalTokens = params.requestView.reduce((sum, message) => sum + estimateMessageTokens(message), 0);

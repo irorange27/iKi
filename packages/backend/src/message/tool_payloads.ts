@@ -173,16 +173,6 @@ export type ParsedToolOutput =
   | { kind: 'delete_proactive_task'; output: DeleteProactiveTaskToolOutput }
   | { kind: 'unknown'; output: unknown };
 
-/**
- * Schema-coupled tool payload parsing — **server-side only**.
- *
- * This module pulls `@iki/backend/tools/schemas` (zod + every tool schema,
- * ~1.6 MB of bundled source). The renderer must not import it, directly or
- * transitively; that is R5 (direct edge) and R7 (reachability) in
- * `.dependency-cruiser.cjs`, and the renderer has its own seam at
- * `packages/desktop/src/renderer/modules/chat/tool_payloads.ts` which parses
- * through `./tool_payload_contracts` without validating.
- */
 const TOOL_SCHEMAS: Record<ToolPayloadKind, { input: z.ZodTypeAny; output: z.ZodTypeAny }> = {
   web: { input: WebToolInputSchemaUi, output: WebToolOutputSchema },
   fetch: { input: FetchToolInputSchemaUi, output: FetchToolOutputSchema },
@@ -236,9 +226,6 @@ const TOOL_SCHEMAS: Record<ToolPayloadKind, { input: z.ZodTypeAny; output: z.Zod
   },
 };
 
-// Registry values are typed `z.ZodTypeAny`, so `safeParse` yields `any` per
-// branch; the parseToolInput/Output casts below pin the per-kind result types,
-// exactly like the pre-split parseWithSchema did.
 const validateInputPayload: ToolPayloadValidator = (kind, normalizedValue) => {
   const parsed = TOOL_SCHEMAS[kind].input.safeParse(normalizedValue);
   return parsed.success ? parsed.data : null;

@@ -1,4 +1,4 @@
-// Pure re-export shim over the per-domain modules under ./schemas/.
+
 export * from './schemas/shared';
 export * from './schemas/web';
 export * from './schemas/shell';

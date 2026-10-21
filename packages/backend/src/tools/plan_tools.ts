@@ -25,7 +25,7 @@ const validateNoCircularDeps = (steps: PlanStepInput[]): void => {
   for (const step of steps) {
     for (const dep of step.dependsOn) {
       const depIndex = idToIndex.get(dep);
-      if (depIndex === undefined) continue; // validated separately
+      if (depIndex === undefined) continue;
       const stepIndex = idToIndex.get(step.id);
       if (stepIndex !== undefined && depIndex >= stepIndex) {
         throw new Error(
@@ -62,8 +62,7 @@ export class PlanTool extends BaseTool<typeof PlanToolInputSchema> {
   override displayName = 'Plan';
   override autoAllowed = true;
   override needsApproval = false;
-  // Pure computation over its own arguments: returns a rendered plan, writes
-  // nothing. A replay yields the same plan and no second effect.
+
   override replay = 'safe' as const;
   override description =
     'Create a structured execution plan BEFORE running other tools. ' +

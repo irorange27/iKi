@@ -6,12 +6,6 @@ export const getErrorMessage = (error: unknown): string => {
 
 const MAX_ERROR_CAUSE_DEPTH = 5;
 
-/**
- * Message for stream failures. AI SDK wrappers like NoOutputGeneratedError
- * hide the provider's own detail ("Invalid max_tokens value...", rate limits)
- * behind a generic top-level message; walk the cause chain and prefer the
- * first API-call error, which carries the provider response.
- */
 export const getStreamErrorMessage = (error: unknown): string => {
   const fallback = getErrorMessage(error);
   let current: unknown = error;
@@ -28,9 +22,6 @@ export const getStreamErrorMessage = (error: unknown): string => {
   return fallback;
 };
 
-/**
- * Error thrown when the model refuses to respond (content filter, safety, etc.).
- */
 export class RefusalError extends Error {
   constructor(
     message: string,
@@ -42,9 +33,6 @@ export class RefusalError extends Error {
   }
 }
 
-/**
- * Error thrown by tool handlers for transient failures that should be retried.
- */
 export class RetryableError extends Error {
   constructor(
     message: string,
@@ -55,13 +43,6 @@ export class RetryableError extends Error {
   }
 }
 
-/**
- * Check whether a provider rejection is a context-over-length failure —
- * the one failure class a REQUEST rebuild (compaction) can fix, as opposed
- * to transient conditions a retry fixes or content problems nothing fixes.
- * Conservative lowercase matching: a miss classifies as terminal (today's
- * behavior); a false positive costs one wasted compaction.
- */
 export const isContextOverflowError = (message: unknown): boolean => {
   const msg = typeof message === 'string' ? message.toLowerCase() : '';
   if (!msg) return false;
@@ -79,19 +60,10 @@ export const isContextOverflowError = (message: unknown): boolean => {
   );
 };
 
-/**
- * Check whether an error is transient and should be retried.
- *
- * Detects:
- * - RetryableError instances
- * - Common Node.js transient error codes (ECONNRESET, ETIMEDOUT, EBUSY, etc.)
- * - Rate-limiting and temporary-unavailable patterns in error messages
- */
 export const isRetryableError = (error: unknown): boolean => {
   if (error instanceof RetryableError) return true;
   if (error instanceof RefusalError) return true;
 
-  // Extract message from Error instances or plain objects with .message
   const candidate =
     error instanceof Error
       ? error
@@ -103,10 +75,8 @@ export const isRetryableError = (error: unknown): boolean => {
 
   const err = candidate as NodeJS.ErrnoException & { message: unknown };
 
-  // Intentional cancellation — not retryable
   if (err.name === 'AbortError') return false;
 
-  // Common Node.js transient system errors
   if (
     err.code === 'ECONNRESET' ||
     err.code === 'ECONNREFUSED' ||
@@ -124,7 +94,6 @@ export const isRetryableError = (error: unknown): boolean => {
 
   const msg = typeof err.message === 'string' ? err.message.toLowerCase() : '';
 
-  // Rate limiting, server errors, and temporary-unavailable indicators
   return (
     msg.includes('rate limit') ||
     msg.includes('too many requests') ||

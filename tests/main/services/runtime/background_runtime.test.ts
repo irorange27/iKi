@@ -49,9 +49,6 @@ describe('background runtime', () => {
     expect(() => startBackgroundRuntime()).not.toThrow();
   });
 
-  // The clipboard collector and its module are gone (desktop README, Don't
-  // list: never poll or persist the system clipboard). Assert on the source so
-  // re-introducing the collector fails here instead of silently shipping.
   it('does not collect clipboard contents in the background', () => {
     const source = readFileSync(RUNTIME_SOURCE, 'utf8');
     expect(source).not.toMatch(/clipboard/i);

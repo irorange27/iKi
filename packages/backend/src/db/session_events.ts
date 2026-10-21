@@ -1,18 +1,5 @@
 import { getDb } from './database';
 
-/**
- * The Session log's storage: one append-only event stream per conversation
- * (thread). Events are business facts — what was accepted, what was decided,
- * how a turn started and ended — written once with a per-stream revision and
- * never updated. Rebuildable projections (chat history, run audit) derive
- * from this stream; they are not independent authorities.
- *
- * Concurrency: appendSessionEvents checks the stream's current revision
- * against the caller's expectation inside the insert transaction. Two
- * writers basing decisions on the same revision cannot both commit — the
- * loser gets null and must re-read the stream before judging again.
- */
-
 export type StoredSessionEvent = {
   revision: number;
   type: string;
@@ -57,8 +44,6 @@ export const getSessionEvents = (
   }));
 };
 
-/** Remove a thread's stream — conversation deletion must take its log with
- *  it (the table has no FK cascade; payloads are plaintext). */
 export const deleteSessionEvents = (threadId: string): void => {
   getDb().prepare('DELETE FROM session_events WHERE thread_id = ?').run(threadId);
 };
@@ -76,16 +61,6 @@ export type NewSessionEvent = {
   payload: unknown;
 };
 
-/**
- * Assign consecutive revisions at the current head and insert. NOT its own
- * transaction: a caller that must land the append together with another write
- * (history truncation deletes rows in the SAME transaction) calls this inside
- * its own `db.transaction(...)` — an append that could commit on its own
- * would let one side of a boundary land without the other. The head read and
- * the inserts run on the caller's connection, so the enclosing transaction is
- * what makes them atomic; BEGIN IMMEDIATE in the wrapper already holds the
- * write lock.
- */
 export const insertSessionEventsAtHead = (
   threadId: string,
   events: NewSessionEvent[]
@@ -106,13 +81,6 @@ export const insertSessionEventsAtHead = (
   return revision;
 };
 
-/**
- * Append events to a thread's stream. `expectedRevision` is the revision the
- * caller based its decision on (0 for an empty stream); the write commits
- * only while that still holds, assigning consecutive revisions inside one
- * transaction. Returns the new head revision, or null when another writer
- * moved the stream first — nothing is written on conflict.
- */
 const append = (
   threadId: string,
   expectedRevision: number | null,
@@ -135,24 +103,9 @@ export const appendSessionEvents = (
   events: NewSessionEvent[]
 ) => append(threadId, expectedRevision, events);
 
-/** Observations already happened: append at the current head atomically.
- * Only decisions derived from a read snapshot need expected-revision CAS. */
 export const appendSessionFacts = (threadId: string, events: NewSessionEvent[]): number =>
   append(threadId, null, events)!;
 
-/**
- * Find the newest message fact carrying `messageId`, across every thread.
- *
- * Messages are events (ADR 011), so a lookup by message id is a scan over the
- * two event types that carry one. There is no `(payload->message->id)` index:
- * the column is a JSON TEXT blob and SQLite would need a generated column to
- * index it, which is a schema change this removal does not need yet.
- *
- * The `LIKE` prefilter narrows the scan before any JSON is parsed; it is a
- * superset match (`%id%`), so the caller still confirms the id. Callers that
- * already hold the thread should pass it — the per-thread form uses the
- * `(thread_id, revision)` index and does not scan the whole log.
- */
 export const findMessageEvent = (
   messageId: string,
   threadId?: string
@@ -180,23 +133,12 @@ export const findMessageEvent = (
         return { threadId: row.thread_id, payload };
       }
     } catch {
-      // A malformed row cannot match; keep scanning rather than failing the
-      // caller over one bad record.
-    }
+    // Intentionally ignored: the caller cannot act on it.
+  }
   }
   return null;
 };
 
-/**
- * The event types that carry a message payload, and the payload schema
- * version they are written with.
- *
- * These are PERSISTED PROTOCOL, not an implementation detail: a value here is
- * written into rows that outlive the code. They live in the db layer because
- * `turn_prep` writes them and may not import `thread_session` (R5); the
- * reducer in `thread_session/session_log.ts` reads the same strings. Changing
- * a value means migrating the stored rows, not editing a constant.
- */
 export const MESSAGE_EVENT_TYPES = {
   INPUT_ACCEPTED: 'input_accepted',
   MODEL_OUTPUT_COMMITTED: 'model_output_committed',

@@ -1,12 +1,4 @@
-/**
- * The replay classification table (P3).
- *
- * Every registered tool must answer "may I be re-run after an interrupted
- * execution?" explicitly. This file is the table's lock: it fails when a tool is
- * added without a decision, and it pins the read-only/write split so a future
- * edit cannot quietly widen `safe` — which is the one mistake that turns a
- * recovery into a duplicated write.
- */
+
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { getBuiltinToolNames } from '@iki/backend/tools';
@@ -39,9 +31,7 @@ import {
   DeleteAwaiterTool,
 } from '@iki/backend/tools/awaiter_tools';
 
-/** The declared classification, tool by tool. A `safe` entry must be a pure read. */
 const TABLE: ReadonlyArray<[tool: BaseTool, replay: 'safe' | 'unsafe', why: string]> = [
-  // Pure reads: a second run observes again and does nothing else.
   [new ReadFileTool(), 'safe', 'reads a file'],
   [new WebSearchTool(), 'safe', 'outbound search, no local effect'],
   [new FetchTool(), 'safe', 'HTTP GET'],
@@ -55,7 +45,6 @@ const TABLE: ReadonlyArray<[tool: BaseTool, replay: 'safe' | 'unsafe', why: stri
   [new ListAwaitersTool(), 'safe', 'lists rows'],
   [new ReadAwaiterTool(), 'safe', 'reads one row'],
 
-  // Writes and control flow: a replay can duplicate or half-apply an effect.
   [new WriteFileTool(), 'unsafe', 'writes a file'],
   [new EditFileTool(), 'unsafe', 'fuzzy-match replacement, applies twice'],
   [new UndoEditTool(), 'unsafe', 'would revert a second, different edit'],
@@ -84,14 +73,8 @@ describe('the replay classification table', () => {
   });
 
   it('leaves no registered tool undeclared', () => {
-    // `getBuiltinToolNames` is the registration list; the ones absent from TABLE
-    // are the modules this task does not own. Anything else missing is a tool
-    // that was added without a replay decision, and silence means unsafe — the
-    // assertion documents that rather than letting it pass unnoticed.
     const declared = new Set(TABLE.map(([tool]) => tool.name));
     const undeclared = getBuiltinToolNames().filter(name => !declared.has(name));
-    // todo_tools' four list/read/write/delete tools are owned by the dead-code
-    // pass (P5) and are being deleted; they are expected here until then.
     const ownedElsewhere = new Set([
       'list_todo_lists',
       'read_todo_list',
@@ -102,8 +85,6 @@ describe('the replay classification table', () => {
   });
 
   it('defaults to unsafe: an undeclared tool carries no permission to rerun', () => {
-    // The whole point of the contract. A tool that declares nothing must not
-    // come out of the declaration surface looking replayable.
     const bare = new (class extends BaseTool {
       override name = 'probe_undeclared_tool';
       override type = 'function';
@@ -114,10 +95,6 @@ describe('the replay classification table', () => {
       }
     })();
     expect(bare.replay).toBeUndefined();
-    // Undeclared is OMITTED, not defaulted to 'safe' at the source: the
-    // fail-closed default belongs at the read (`declaredReplayPolicy`), and
-    // writing 'unsafe' here would erase the difference between "declared
-    // unsafe" and "never said anything".
     expect(Object.hasOwn(bare.toAgentTool(), 'replay')).toBe(false);
   });
 });

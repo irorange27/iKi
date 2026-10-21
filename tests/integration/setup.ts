@@ -21,7 +21,6 @@ const checkAuth = (): boolean => {
 
 const hasAuth = checkAuth();
 
-// Lazy-init tools so we don't need a DB at module eval time
 let toolsRegistered = false;
 const ensureTools = () => {
   if (!toolsRegistered) {

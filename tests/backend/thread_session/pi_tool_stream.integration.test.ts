@@ -1,28 +1,10 @@
 // @vitest-environment node
 
-/**
- * Switch item 3a (issue #114): a real tool turn under the never-approve
- * policy streams end to end through the real streaming entry, the real turn
- * driver, the real Pi adapter and a real registered tool, against the
- * scripted SSE server. Proven at the consumer boundary:
- *   - the tool executes exactly once with the scripted args, mid-turn;
- *   - the UI sees the tool-call event BEFORE the result and the text deltas;
- *   - shown text === committed text (D22);
- *   - the run row completes and usage lands on the total-prompt convention;
- *   - the second model request carries the tool result;
- *   - the AI SDK is never constructed (routing proof).
- * Regression: an `openai` provider under the same policy keeps the AI SDK
- * harness — Pi never sees the request.
- * Switch item 3c (issue #118): an AUTONOMOUS tool turn chains a handoff into
- * a fresh Pi batch — the supply survives the chained harness rebuild.
- */
-
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
@@ -191,10 +173,6 @@ beforeAll(async () => {
   addProvider({
     id: 'provider_sdk_tool_regress',
     name: 'Formerly SDK-pinned tool provider (now Pi-served)',
-    // `openai` would ask for the Responses dialect (the scripted server speaks
-    // completions); the dialect mapping has its own coverage in
-    // factory_pi_generation.test.ts. What this case asserts is that a provider
-    // type the selector used to EXCLUDE now rides Pi.
     type: 'deepseek',
     api_key: 'key-sdk',
     models: '["sdk-model"]',
@@ -273,10 +251,8 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     });
     expect(result).toMatchObject({ success: true });
 
-    // The tool executed exactly once, mid-turn, with the scripted args.
     expect(executions).toEqual(['/probe.txt']);
 
-    // The UI saw the tool call BEFORE its result, then the answer streamed.
     const toolCalls = chunksOf(target, 'tool-input-available');
     const toolResults = chunksOf(target, 'tool-output-available');
     expect(toolCalls[0]).toMatchObject({ toolName: TOOL_NAME, input: { path: '/probe.txt' } });
@@ -287,31 +263,21 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       }
     );
 
-    // Shown text === committed text (D22).
     const shown = publishedText(target);
     expect(shown).toBe('reading the file says hi');
     expect(committedText('thread_pi_tool_stream')).toBe(shown);
 
-    // The run row completed; usage is the per-step CUMULATIVE on the
-    // total-prompt convention (30 + 100 billed inputs; 60 cached on step 2).
     expect(lastRunStatus(target)).toBe('completed');
     const usage = usageEvents.find(event => event.source === 'chat.stream');
     expect(usage?.usage).toMatchObject({ inputTokens: 130, cacheReadTokens: 60 });
 
-    // The second model request carried the tool result on the wire.
     const secondWire = JSON.stringify(server.getWire('read the tool probe file', 1).messages);
     expect(secondWire).toContain('contents of /probe.txt');
 
-    // Routing proof: the AI SDK was never constructed; both calls rode Pi.
     expect(server.countRequests('read the tool probe file')).toBe(2);
   }, 30000);
 
   it('exports the Pi tool observation into the trajectory', async () => {
-    // The Pi harness records a completed inference whose content carries only
-    // the assistant parts — the tool RESULT is a separate tool-result audit
-    // step. The ATIF projection must join them: the trajectory is the export
-    // surface other tools replay from, and a call without its observation is
-    // not a replayable trajectory.
     server.setScriptSequence('trajectory the probe file', [
       {
         chunks: [
@@ -346,9 +312,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     });
     expect(result).toMatchObject({ success: true });
     expect(lastRunStatus(target)).toBe('completed');
-    // Routing proof: this must ride Pi, whose inference records carry no
-    // result parts. On the AI SDK harness the observation would come from the
-    // inference itself and the case would pass without exercising the join.
 
     const run = agentRunDb
       .listAgentRunsByThread('thread_pi_tool_stream')
@@ -370,7 +333,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
   }, 30000);
 
   it('full cycle: an always-policy turn pauses, the approval decides, the resume completes on Pi', async () => {
-    // The REAL approval module, wired like the service does.
     const coordinator = createThreadStreamCoordinator();
     const chatApprovals = createChatApproval({
       streams: {
@@ -427,8 +389,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       tools: [TOOL_NAME],
     });
 
-    // The turn PAUSED: awaiting-approval, the tool NOT executed, the
-    // approval request surfaced on the UI.
     expect(first).toMatchObject({ success: true, awaitingApproval: true });
     expect(executions.slice(executionsBefore)).toHaveLength(0);
     const approvalRequests = chunksOf(target, 'tool-approval-request') as Array<{
@@ -438,8 +398,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(lastRunStatus(target)).toBe('blocked');
     expect(server.countRequests('guarded tool probe')).toBe(1);
 
-    // The user approves: the resume runs on Pi — the tool executes exactly
-    // once, the second request carries the result, the run completes.
     const decision = await chatApprovals.approveTool(
       target,
       approvalRequests[0]!.approvalId!,
@@ -452,15 +410,8 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(server.countRequests('guarded tool probe')).toBe(2);
     const secondWire = JSON.stringify(server.getWire('guarded tool probe', 1).messages);
     expect(secondWire).toContain('contents of /guarded.txt');
-    // Supply discriminator: the turn rode Pi (compat default for unknown
-    // baseUrls is the newer max-token field; the AI SDK path sends
-    // max_tokens instead).
     expect(server.getWire('guarded tool probe', 0).max_completion_tokens).toBe(2000);
-    // The resumed segment runs with notifyRunStatus off (waiter parity with
-    // the AI SDK resume) — the target's last status stays 'blocked'; the
-    // completion is proven by the continuation text on the wire.
     expect(publishedText(target)).toContain('approved and done');
-    // shown ⊆ committed across the pause boundary.
     expect(committedText('thread_pi_tool_stream')).toContain(publishedText(target));
   }, 40000);
 
@@ -498,12 +449,9 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     });
     expect(result).toMatchObject({ success: true });
 
-    // stopWhen parity: the turn ENDS at the handoff step — no second model
-    // call happens even though the step budget would allow one.
     expect(server.countRequests('hand the task over')).toBe(1);
     expect(lastRunStatus(target)).toBe('completed');
 
-    // The driver projects its own handoff event from the executed call.
     const handoffEvents = chunksOf(target, 'tool-input-available').filter(
       chunk => (chunk as { toolName?: string }).toolName === 'handoff'
     );
@@ -513,13 +461,9 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
   }, 30000);
 
   it('serves a formerly SDK-pinned provider through Pi under the same never policy', async () => {
-    // Contract change: static-factory provider types used to stay on the AI SDK
-    // harness. They are admitted to the single Pi supply now, so the tool turn
-    // must reach the scripted server and the AI SDK model must not be built.
     server.setScriptSequence('read the sdk probe file', [
       {
         chunks: [
-          // Arguments stream as fragments, matching the Pi wire shape.
           sse.toolCallDelta('call_sdk', TOOL_NAME, '{"path":'),
           sse.toolCallDelta(null, null, '"/sdk.txt"}'),
           sse.finish('tool_calls', { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }),
@@ -555,7 +499,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     });
     expect(result).toMatchObject({ success: true });
 
-    // The tool ran, and it ran on the Pi supply.
     expect(executions.slice(executionsBefore)).toEqual(['/sdk.txt']);
     expect(publishedText(target)).toContain('pi tool answer');
     expect(lastRunStatus(target)).toBe('completed');
@@ -563,9 +506,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
   }, 30000);
 
   it('chains a handoff into a fresh Pi batch in autonomous mode (3c: supply survives the rebuild)', async () => {
-    // Batch 1 calls the handoff tool; the chained batch 2 resumes from the
-    // fresh [HANDOFF CONTEXT] history — its sole user message is the
-    // next-steps text, so the scripted server keys it separately.
     server.setScriptSequence('pass the baton', [
       {
         chunks: [
@@ -604,14 +544,9 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     });
     expect(result).toMatchObject({ success: true });
 
-    // The chain ran batch 2 ON PI: both requests hit the scripted server and
-    // the AI SDK was never constructed. Before 3c the chained harness was
-    // rebuilt on the AI SDK — batch 2 never arrives there.
     expect(server.countRequests('pass the baton')).toBe(1);
     expect(server.countRequests('finish phase two')).toBe(1);
 
-    // Fresh history: batch 2's sole user message is the next-steps text;
-    // batch 1's transcript is gone. The handoff context rides the request.
     const chainedWire = server.getWire('finish phase two', 0);
     const chainedMessages = chainedWire.messages as Array<{ role?: string; content?: unknown }>;
     expect(chainedMessages.filter(m => m.role === 'user')).toHaveLength(1);
@@ -619,7 +554,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(JSON.stringify(chainedWire.messages)).not.toContain('pass the baton');
     expect(JSON.stringify(chainedWire)).toContain('phase one done');
 
-    // The driver projected its handoff event; both text and run completed.
     const handoffEvents = chunksOf(target, 'tool-input-available').filter(
       chunk => (chunk as { toolName?: string }).toolName === 'handoff'
     );
@@ -631,7 +565,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
   }, 30000);
 
   it('autonomous pause → approve → resumed Pi segment chains a handoff into a fresh Pi batch (3c composite)', async () => {
-    // The REAL approval module, wired like the service does.
     const coordinator = createThreadStreamCoordinator();
     const chatApprovals = createChatApproval({
       streams: {
@@ -645,9 +578,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       usage: { recordUsageEvent: () => undefined },
     });
 
-    // Batch 1 pauses on the always policy; the resumed segment executes the
-    // approved call, calls again (handoff), and the chained batch resumes
-    // from the fresh handoff history — its own script key.
     server.setScriptSequence('chained guard probe', [
       {
         chunks: [
@@ -718,16 +648,10 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     );
     expect(decision).toMatchObject({ success: true });
 
-    // The approved call executed EXACTLY once on the resumed Pi segment, the
-    // continuation called the model again (handoff), and the chained batch
-    // rebuilt ON PI — the AI SDK was never constructed across pause, resume
-    // and chain rebuild.
     expect(executions.slice(executionsBefore)).toEqual(['/chained.txt']);
     expect(server.countRequests('chained guard probe')).toBe(2);
     expect(server.countRequests('wrap up loose ends')).toBe(1);
 
-    // The chained batch rides the fresh handoff history: sole user message
-    // is the next-steps text, the paused transcript is gone.
     const chainedWire = server.getWire('wrap up loose ends', 0);
     const chainedMessages = chainedWire.messages as Array<{ role?: string; content?: unknown }>;
     expect(chainedMessages.filter(m => m.role === 'user')).toHaveLength(1);
@@ -741,7 +665,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       input: expect.objectContaining({ summary: 'resumed work done' }),
     });
     expect(publishedText(target)).toContain('loose ends wrapped');
-    // shown ⊆ committed across the pause, resume and chain boundaries.
     expect(committedText('thread_pi_tool_stream')).toContain(publishedText(target));
   }, 40000);
 });

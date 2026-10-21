@@ -6,10 +6,6 @@ import { restartApp, shouldOfferRestart } from '../windows/app_restart';
 
 let devIpcRegistered = false;
 
-/**
- * `electron-forge start` sets a dev-server URL for the renderer; a packaged
- * build loads `.vite/renderer/main_window/index.html` instead.
- */
 export const isHotReloadAvailable = (devServerUrl: string | undefined): boolean =>
   typeof devServerUrl === 'string' && devServerUrl.trim().length > 0;
 
@@ -21,10 +17,6 @@ const status = (): DevRuntimeStatus => ({
   appPath: app.getAppPath(),
 });
 
-/**
- * Development-only IPC: the in-app half of "change my own code without
- * finding a terminal".
- */
 export const registerDevIpc = (): void => {
   if (devIpcRegistered) return;
   devIpcRegistered = true;

@@ -59,19 +59,6 @@ const isMcpToolFromAllowedServer = (
   return serverId.length > 0 && allowedServerIds.has(serverId);
 };
 
-/**
- * The registry metadata as the auto router sees it, with the approval answer
- * ANNOTATED — never rewritten.
- *
- * This used to call `applyToolApprovalPolicyList`, which rewrote
- * `needsApproval: true` into `false` whenever the global auto-approve switch
- * was on. That rewriter was a second approval policy: it decided (and
- * published to the tool-selection model and the renderer) a claim the registry
- * never made, and the same rewrite in `agent/harness/tool_resolver.ts` was a
- * third. Both are gone; the tool's own declaration is now read through
- * `decideToolApproval`, so the catalog can say "this tool needs a decision"
- * without pretending the tool changed.
- */
 const getRegisteredToolMetadata = (autoApproveToolRequests: boolean) =>
   defaultToolRegistry.getToolMetadata().map(tool => ({
     ...tool,
@@ -187,8 +174,6 @@ export const resolveToolNames = async (params: {
     : null;
   const mode: ToolResolveMode = hasExplicitToolsParam ? 'manual' : 'auto';
 
-  // Default behavior: expose every tool that has not explicitly opted out of auto mode.
-  // Explicit empty array disables tools.
   if (mode === 'manual') {
     return {
       explicitTools,
@@ -207,11 +192,6 @@ export const resolveToolNames = async (params: {
         })
       : null;
 
-  // `null` = the router could not answer (no tool model, or its call failed).
-  // Falling back to the FULL catalog is the safe direction — a turn must never
-  // lose capabilities because an auxiliary model was unavailable — but it must
-  // not be silent: a dead tool model used to shrink the tool set to the single
-  // hand-appended tool with nothing in the logs to explain why.
   if (selection === null && catalog.length > 0 && hasMessages) {
     toolGuardLogger.event({
       level: 'warn',

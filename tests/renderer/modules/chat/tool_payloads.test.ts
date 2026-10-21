@@ -5,12 +5,6 @@ import {
   getParsedToolOutput,
 } from '../../../../packages/desktop/src/renderer/modules/chat/tool_payloads';
 
-/**
- * Runtime behaviour of the renderer tool-payload seam (P1). The boundary
- * assertion (no schema-coupled backend import) lives in
- * tool_payloads_boundary.test.ts; this file pins what the chat cards read.
- */
-
 const shellPart = (overrides: Record<string, unknown> = {}) => ({
   type: 'dynamic-tool',
   toolName: 'shell',
@@ -53,8 +47,6 @@ describe('getParsedToolInput', () => {
   });
 
   it('handles a non-object part without throwing', () => {
-    // Parity with the pre-split getParsedToolPayload: a non-record part yields
-    // an unknown payload with undefined input/output, not the part itself.
     expect(getParsedToolInput('nope')).toEqual({ kind: 'unknown', input: undefined });
     expect(getParsedToolInput(undefined)).toEqual({ kind: 'unknown', input: undefined });
   });

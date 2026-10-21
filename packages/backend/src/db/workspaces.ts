@@ -86,8 +86,8 @@ export const updateWorkspace = (id: string, workspace: Partial<Workspace>) => {
   if (!fields) return null;
 
   const stmt = getDb().prepare(`
-        UPDATE workspaces 
-        SET ${fields}, updated_at = @updated_at 
+        UPDATE workspaces
+        SET ${fields}, updated_at = @updated_at
         WHERE id = @id
     `);
 

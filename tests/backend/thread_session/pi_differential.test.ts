@@ -1,19 +1,5 @@
 // @vitest-environment node
 
-/**
- * Differential run (issue #104 step 2): the SAME confirmed scenario driven
- * through BOTH supply paths — the current engine (AI SDK harness + faux
- * model) and the candidate (Pi adapter + scripted HTTP server) — asserting
- * the SAME invariants over each. The libraries differ in chunk shapes and
- * internals; the CONTRACT must not:
- *   1. the tool executes exactly once, with the same bound args;
- *   2. shown text === committed text (D22);
- *   3. replay from the session log alone reproduces what was shown;
- *   4. the second model request carries the tool result;
- *   5. the turn ends with the expected final answer.
- */
-
-// ── current-engine scaffolding (AI SDK harness, faux model) ────────────────
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,9 +8,6 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 const callPiChatMock = vi.hoisted(() => vi.fn());
 
-// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
-// these suites on the durable-layer behaviour they assert without reaching a
-// network endpoint.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -105,7 +88,6 @@ import {
   type ScriptedPiServer,
 } from '../pi_candidate/helpers/scripted_pi_server';
 
-// ── shared scenario state: ONE real tool, ONE effect log, shared DB ────────
 let root: string;
 let server: ScriptedPiServer;
 const executions: string[] = [];
@@ -131,19 +113,14 @@ type Capture = {
 };
 
 const assertScenarioInvariants = (label: string, c: Capture) => {
-  // 1. exactly once, same args — regardless of engine.
   expect(c.toolExecutions, `${label}: tool executions`).toEqual(['read_file:/scenario.txt']);
-  // 2. shown ⊆ committed, and everything the model said was shown.
   expect(c.publishedText).toContain('first segment.');
   expect(c.publishedText).toContain('second segment.');
   expect(c.committedText).toBe(c.publishedText);
-  // 3. replay from the log alone reproduces the shown text.
   expect(c.replayText).toBe(c.publishedText);
-  // 4. the second model request carries the tool result.
   expect(c.secondRequestCarries('contents of /scenario.txt'), `${label}: second request`).toBe(
     true
   );
-  // 5. final answer.
   expect(c.finalText).toContain('all done');
 };
 
@@ -169,7 +146,6 @@ afterAll(async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 
-// ── driver A: current engine ────────────────────────────────────────────────
 describe('differential: candidate (Pi supply adapter)', () => {
   it('runs the same scenario through the Pi supply layer', async () => {
     const model = createScriptedModel(server.port);
@@ -195,7 +171,6 @@ describe('differential: candidate (Pi supply adapter)', () => {
       ],
     };
 
-    // Turn 1: leading text + the tool call.
     const turn1 = await callModel(model, context, { apiKey: 'test-key' });
     const result1 = turn1.final;
     const toolCall = result1.content.find(b => b.type === 'toolCall') as {
@@ -205,19 +180,11 @@ describe('differential: candidate (Pi supply adapter)', () => {
     };
     expect(toolCall.name).toBe('read_file');
 
-    // The segment boundary is a commit point: the pre-tool text lands in the
-    // log before the effect runs. The ordering is ENACTED by this test — the
-    // decide-on-write-result gate itself lives in the fixed owner (driver A
-    // exercises it).
     const turn1Text = turn1.deltas.join('');
     recordSessionText(threadId, 0, turn1Text);
 
-    // The REAL tool executes (shared instance, shared effect log).
     const output = await readFileTool.handler(toolCall.arguments);
 
-    // Turn 2: the candidate commits the result and asks for the answer. The
-    // commit-then-publish ORDERING is enacted here; the decide-on-actual-
-    // write-result gate is driver A's (and the owner's) to exercise.
     server.setScript('read the scenario file', {
       chunks: [sse.delta('second segment. all done'), sse.finish('stop')],
     });
@@ -244,7 +211,6 @@ describe('differential: candidate (Pi supply adapter)', () => {
     const turn2Text = turn2.deltas.join('');
     recordSessionText(threadId, 1, turn2Text);
     const published = turn1Text + turn2Text;
-    // The assistant-output fact closes the turn (replay needs it).
     recordSessionEvents(threadId, [
       {
         type: MODEL_OUTPUT_COMMITTED,
@@ -270,7 +236,6 @@ describe('differential: candidate (Pi supply adapter)', () => {
       .parts.map(p => (p as { text?: string }).text ?? '')
       .join('');
 
-    // The second request's wire must carry the tool result.
     const wire = server.getWire('read the scenario file', 1);
     const wireJson = JSON.stringify(wire.messages);
 
@@ -285,11 +250,7 @@ describe('differential: candidate (Pi supply adapter)', () => {
   });
 });
 
-// ── helpers ────────────────────────────────────────────────────────────────
 function recordSessionText(threadId: string, seq: number, text: string) {
-  // One commit for the whole (single-delta) tail — the gate ordering under
-  // test lives in the fixed owner and the candidate's own scenario C; this
-  // file compares contract outcomes, not flush cadence.
   recordSessionEvents(threadId, [
     {
       type: MODEL_TEXT_COMMITTED,

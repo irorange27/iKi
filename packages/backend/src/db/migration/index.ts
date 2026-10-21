@@ -17,10 +17,6 @@ import { migration as indexConversationReadPaths } from './009_index_conversatio
 import { migration as dropChatMessages } from './010_drop_chat_messages';
 import { migration as dropContinuity } from './011_drop_continuity';
 
-// Forward-only migrations after the baseline. Add new ones above 001 in name
-// order (002_*, 003_*, …) — runMigrations sorts by name. Tables introduced
-// after the squash are bootstrap-created in database.ts (initCoreTables), not
-// by migrations: post-baseline migrations must not emit CREATE TABLE.
 export const registeredMigrations: Migration[] = [
   baseline,
   renameChatToolApprovals,
@@ -36,15 +32,7 @@ export const registeredMigrations: Migration[] = [
 ];
 
 export const initializeMigrations = (db: SqliteDatabase) => {
-  // Databases created before the migration squash already carry the full
-  // schema: detect any pre-existing user table and mark the baseline as
-  // applied so they open unchanged. Fresh databases run the baseline to
-  // create the schema from scratch. config/providers/migrations are excluded
-  // because database.ts bootstrap-creates them before migrations run.
-  // hasPreBaselineSchema detection must ignore every table initCoreTables
-  // bootstrap-creates (config, providers, thread_run_locks, session_events,
-  // migrations) or a fresh database gets misread as pre-squash and skips the
-  // baseline.
+
   const hasPreBaselineSchema = Boolean(
     db
       .prepare(
@@ -54,7 +42,7 @@ export const initializeMigrations = (db: SqliteDatabase) => {
   );
 
   if (hasPreBaselineSchema && !isMigrationExecuted(db, baseline.name)) {
-    runMigrations(db, []); // ensures the migrations bookkeeping table exists
+    runMigrations(db, []);
     markMigrationExecuted(db, baseline.name);
   }
 

@@ -55,12 +55,7 @@ type CreateAgentRunTrackerParams = {
   availableSkillIds: string[];
   input: AgentRunInput;
   working: AgentRunWorkingState;
-  /**
-   * Adopt an existing (already claimed) run row instead of creating a new id —
-   * a queued resume or retry executes IN the queued identity. The row's own
-   * fields are authoritative; the descriptive params above are ignored.
-   * Claim via `claimQueuedAgentRun` first.
-   */
+
   adoptExistingRunId?: string;
 };
 
@@ -68,12 +63,7 @@ type FinalizeRunParams = {
   text?: string;
   finishReason?: string;
   usage?: Record<string, unknown>;
-  /**
-   * Calls the step budget left pending at the end of the turn. Part of the
-   * run's OUTPUT, not its transcript: they executed, but no model call read
-   * their results, so a `budget-exhausted` row must say what is missing
-   * instead of reading like a complete answer.
-   */
+
   pendingToolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
 };
 
@@ -145,7 +135,7 @@ export type AgentRunTracker = {
   markCompleted: (params: FinalizeRunParams) => AgentRun;
   markBlocked: (params: BlockRunParams) => AgentRun;
   markFailed: (params: FailRunParams) => AgentRun;
-  /** Conditional recovery finalize (see appendStepIfStatus). */
+
   markFailedIfStatus: (
     expectedStatuses: readonly AgentRunStatus[],
     params: FailRunParams
@@ -204,14 +194,6 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
     return step;
   };
 
-  /**
-   * Recovery-only conditional finalize: the step and terminal run update are
-   * written only while the run row is still in one of `expectedStatuses`.
-   * Returns null (nothing written) when another writer finalized or reclaimed
-   * the run first. The transition guard checks `expectedStatuses` statically
-   * — not the in-memory `currentRun`, which a concurrent finalizer may have
-   * made stale between listing and this call; the DB claim is the real gate.
-   */
   const appendStepIfStatus = (
     params: Parameters<typeof appendStep>[0],
     updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>,
@@ -584,7 +566,7 @@ export type RunRecoveryResult = {
   totalRuns: number;
   expiredApprovals: number;
   interruptedToolParts: number;
-  /** Stuck runs left untouched because their thread lease is still alive. */
+
   skippedLiveLease: number;
 };
 
@@ -595,10 +577,6 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
   let blockedRuns = 0;
   let skippedLiveLease = 0;
 
-  // Recovery may only take over executions whose run right is gone. A stuck
-  // row whose thread lease is unexpired can belong to another live process
-  // sharing this database — reclaiming it (or its approvals/UI rows) would
-  // corrupt a run that is still executing.
   const reclaimable = runs.filter(run => {
     if (run.threadId && hasLiveThreadRunLease(run.threadId)) {
       skippedLiveLease += 1;
@@ -611,10 +589,7 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
   const expiredApprovalRecords =
     runIds.length > 0 ? expirePendingToolCallApprovalsByRunIds(runIds) : [];
   const expiredApprovals = expiredApprovalRecords.length;
-  // Session log: the reclamation is a system decision on each expired
-  // approval — replay must not keep them pending forever. The run rows above
-  // already recorded their own terminal facts. Each record's own session row
-  // decides which thread's stream carries it.
+
   for (const record of expiredApprovalRecords) {
     const sessionId = record.session_id;
     const threadId = sessionId
@@ -637,20 +612,10 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
   const threadIds = Array.from(
     new Set(reclaimable.map(run => run.threadId).filter((id): id is string => typeof id === 'string'))
   );
-  // ADR 011: the repair pass that used to REWRITE unfinished tool parts in
-  // `chat_messages` is gone with the table. An append-only log cannot be
-  // patched, and it does not need to be: `toModelInputMessages` already
-  // repairs an unfinished `dynamic-tool` part at READ time
-  // (`repairInterruptedTools`), so every consumer sees the interrupted state
-  // without any row being touched. The counter stays for the recovery result
-  // shape; it now reports 0 because nothing is rewritten.
+
   const interruptedToolParts = 0;
   void threadIds;
 
-  // Reconcile approval and UI records before making the Run terminal. If any
-  // reconciliation fails, the next startup still finds the Run as stuck and
-  // can retry the remaining work. The terminal write is conditional: a run
-  // that reached a terminal state in between is left as-is.
   for (const run of reclaimable) {
     const tracker = rehydrateAgentRunTracker(run.id);
     if (!tracker) continue;
@@ -673,11 +638,7 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
     } else {
       blockedRuns += 1;
     }
-    // Session log: the reclamation is the turn's terminal fact — replay must
-    // show it failed, not running forever. Only recorded once this process
-    // actually took the run (owner-aware: a live lease in another process
-    // means their run, their log, untouched). Loud-guarded: recovery must
-    // continue over the remaining reclaimable runs (ADR 008 F1).
+
     if (run.threadId) {
       recordFailureTerminalEvent(run.threadId, turnFactsToEvents({
         terminal: {

@@ -44,16 +44,7 @@ export const useChatStreaming = (deps: {
 }) => {
   const editingUserMessageId = ref<string | null>(null);
 
-  // Turn-driven persistence lives in the backend conversation seam; the
-  // renderer keeps only user-driven history management (edit update, delete).
-
-  /** User-driven history rewrite: ONE backend call truncates the durable
-   *  rows after the edited message ATOMICALLY with the session-log fact the
-   *  replay needs (thread_session/history_truncation.ts) — the old per-row
-   *  delete loop could half-truncate and never reached the event log, so a
-   *  crash replay rebuilt the deleted messages. The local store (the view)
-   *  drops its tail only after the durable truncate succeeded; a failure
-   *  aborts the send with display and authority still agreeing. */
+  
   const truncateConversationAfterIndex = async (messageIndex: number) => {
     const threadId = deps.currentThread.value?.id;
     if (!threadId) return;
@@ -130,12 +121,7 @@ export const useChatStreaming = (deps: {
     return clearDraftMessage();
   };
 
-  /**
-   * Prepares thread/workspace/model state and builds the user message (and
-   * persists it). The message is *not* appended to the store here — the
-   * Chat's `sendMessage` owns that, then hands the whole history to the
-   * transport.
-   */
+  
   const prepareMessageSend = async (
     payload: PrepareMessageSendPayload
   ): Promise<PreparedMessageSend | null> => {
@@ -217,9 +203,6 @@ export const useChatStreaming = (deps: {
           };
 
           deps.messageStore.replaceAt(messageIndex, updatedUserMessage);
-          // The edited row must be updated before the next turn streams — the
-          // backend stream-entry create is idempotent on this id and would
-          // otherwise keep the pre-edit text.
           await deps.electronAPI.chat.messages.update(updatedUserMessage.id, {
             message: JSON.stringify(updatedUserMessage),
             metadata: JSON.stringify({ format: 'ai-ui-message-v1' }),
@@ -252,8 +235,6 @@ export const useChatStreaming = (deps: {
     };
 
     const threadId = deps.currentThread.value.id;
-    // The user message is durably recorded by the backend on stream entry
-    // (create-only, idempotent on this client-generated id).
 
     deps.scrollToBottom();
     return {
@@ -262,11 +243,7 @@ export const useChatStreaming = (deps: {
     };
   };
 
-  /**
-   * Submits the prepared turn through the Chat: `sendMessage` appends the
-   * user message, streams the response via the IPC transport into the SDK's
-   * UIMessage accumulation, and resolves when the turn settles.
-   */
+  
   const submitTurn = async (params: SubmitTurnParams): Promise<SubmitTurnResult> => {
     const { preparedMessageSend, body } = params;
     try {

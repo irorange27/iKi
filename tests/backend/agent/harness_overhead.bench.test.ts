@@ -1,19 +1,5 @@
 // @vitest-environment node
 
-/**
- * HARNESS OVERHEAD, isolated from the model.
- *
- * The end-to-end number a user feels is dominated by things iKi does not own:
- * the provider's time-to-first-token, the tool handler's own runtime, and (when
- * a turn pauses) however long the human takes to answer an approval card. A
- * profile that reports one number cannot tell you whether to optimise the
- * harness or the prompt.
- *
- * So this measures the part iKi DOES own: everything between "a scripted model
- * replied instantly" and "the turn settled" — projection, hook plumbing, step
- * recording, finalize. The scripted provider resolves immediately, so any
- * duration here is ours.
- */
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -72,9 +58,6 @@ const buildHarness = (maxIterations: number) =>
   } as never);
 
 const runOnce = async (maxIterations: number, steps: number): Promise<number> => {
-  // The budget bounds MODEL CALLS, so the script needs one entry per call: the
-  // tool steps above it. An undersized script is the benchmark's own bug and
-  // the scripted provider says so loudly rather than replaying an earlier reply.
   callPiChatMock.mockImplementation(
     createScriptedPiChat(
       Array.from({ length: maxIterations }, (_, index) => [
@@ -104,7 +87,6 @@ describe('harness overhead with an instant model', () => {
       })
     );
     try {
-      // Warm up: the first turn pays module init and registry resolution.
       await runOnce(2, 1);
 
       const samples: number[] = [];
@@ -119,9 +101,6 @@ describe('harness overhead with an instant model', () => {
         `HARNESS_OVERHEAD one tool step: median=${median.toFixed(1)}ms p95=${p95.toFixed(1)}ms min=${sorted[0]!.toFixed(1)}ms max=${sorted[sorted.length - 1]!.toFixed(1)}ms n=${sorted.length}`
       );
 
-      // A single scripted step must not cost tens of milliseconds of our own
-      // work; if it does, something on this path got expensive (a per-step
-      // re-read, a rebuild, an accidental await on I/O).
       expect(median).toBeLessThan(50);
     } finally {
       defaultToolRegistry.remove(TOOL);

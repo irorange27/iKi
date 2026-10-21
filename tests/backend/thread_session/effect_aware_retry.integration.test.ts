@@ -1,14 +1,5 @@
 // @vitest-environment node
 
-/**
- * Issue #143 (the #141 fork decision (b)): a retry CONTINUES from the dead
- * chain's journaled tool effects. The recovery history carries the executed
- * exchange pairs (APPROVAL_REQUESTED × TOOL_EXECUTION_FINISHED join by
- * approvalId) after the task input, the tail guard accepts the tool tail,
- * and the streaming path's empty-prompt guard stands down for the
- * continuation shape — the model sees what already happened instead of
- * re-issuing it.
- */
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,9 +9,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
 
-// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
-// these suites on the durable-layer behaviour they assert without reaching a
-// network endpoint.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -39,12 +27,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     maxInputTokens: 98000,
     maxOutputTokens: 2000,
   }),
-  // These suites verify DURABLE behaviour (effect-aware retry, cancel routing,
-  // handoff facts, inline journaling) using a scripted AI SDK model. They are
-  // not about supply routing, so they pin the AI SDK harness explicitly: Pi
-  // claims every provider type now, and a stubbed `createModel` would never be
-  // reached. Routing itself is covered by factory_pi_generation.test.ts and
-  // turn_supply_selection.test.ts.
   supportsPiTurnSupply: () => false,
 }));
 
@@ -175,10 +157,6 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
   let service: ReturnType<typeof createChatService>;
   const target = { id: 3, send: vi.fn() };
 
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted model. They are not about which
-  // supply serves the turn, so they force the Pi harness explicitly: the script
-  // is installed on `callPiChat`, and no endpoint is ever dialled.
   beforeEach(async () => {
     vi.clearAllMocks();
     setTurnHarnessFallback(piTurnHarness);
@@ -210,7 +188,6 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
     seedRun('run_effect143_a', 'failed');
     recordInputFact();
     recordExecutedCall();
-    // The dead attempt's committed text — chain-excluded, never on the wire.
     recordSessionEvents('thread_effect143', [
       {
         type: MODEL_TEXT_COMMITTED,
@@ -237,21 +214,15 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
 
     if (!result.success) throw new Error(`retry failed: ${JSON.stringify(result)}`);
     const wire = JSON.stringify(providerCalls.mock.calls[0][1]);
-    // The task input AND the executed effect both ride; the dead text does not.
     expect(wire).toContain(TASK_TEXT);
     expect(wire).toContain('call_effect143');
     expect(wire).toContain(EXECUTED_OUTPUT);
     expect(wire).not.toContain('DEAD_TEXT_143');
-    // The exchange pair is well-formed: assistant tool-call + tool result.
     expect(wire).toContain('report.txt');
     expect(result).toMatchObject({ success: true });
   });
 
   it('a denied execution pairs with its execution-denied result', async () => {
-    // The FINISHED shape here is what the owner journals for a denial since
-    // #143 (pinned end-to-end in pi_approval_owner.integration.test.ts);
-    // this test pins the READER: the refusal rides the recovery history, so
-    // the model does not re-ask a user who already said no.
     seedRun('run_effect143_a', 'failed');
     recordInputFact();
     recordExecutedCall({
@@ -293,7 +264,6 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
 
     if (!result.success) throw new Error(`retry failed: ${JSON.stringify(result)}`);
     const wire = JSON.stringify(providerCalls.mock.calls[0][1]);
-    // Plain re-run shape: the task input ends the history, no fabricated pair.
     expect(wire).toContain(TASK_TEXT);
     expect(wire).not.toContain('call_effect143');
   });
@@ -366,8 +336,6 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
     await service.retryAndExecute(target, 'run_effect143_a');
 
     const view = rebuildThreadViewFromEvents('thread_effect143');
-    // Facts stay in the log: the journaled execution and the continuation
-    // are both part of the thread's story.
     expect(view.events.filter(event => event.type === TOOL_EXECUTION_FINISHED)).toHaveLength(1);
     expect(view.turns.filter(turn => turn.status === 'completed').length).toBeGreaterThanOrEqual(1);
   });

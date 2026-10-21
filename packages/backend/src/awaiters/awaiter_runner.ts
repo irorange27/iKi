@@ -12,13 +12,6 @@ import { getErrorMessage } from '@iki/backend/utils/errors';
 
 const awaiterLogger = createLogger({ module: 'awaiters' });
 
-/**
- * How long a `waking` row may sit untouched before the scheduler treats its
- * holder as dead and reclaims it. A live wake refreshes `updated_at` as it
- * advances; the cutoff only has to exceed that cadence, and being generous
- * costs nothing (a reclaimed row simply wakes on the next tick) while being
- * too eager would double-run an in-flight wake.
- */
 const WAKE_STALE_AFTER_MS = 10 * 60 * 1000;
 
 const AWAITER_WAKE_SYSTEM_PROMPT = [
@@ -60,11 +53,6 @@ const buildAwaiterWakePrompt = (
   return sections.filter(Boolean).join('\n\n');
 };
 
-/**
- * Host capabilities the runner needs — no Electron types cross this line.
- * The host shell supplies desktop notifications and renderer transport;
- * the chat service is injected at assembly.
- */
 export type AwaiterRunnerHostPort = {
   notify?: (params: { title: string; body: string }) => void;
   pushAwaiterEvent?: (payload: unknown) => void;
@@ -235,25 +223,6 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
 
   awaiterInFlight.add(awaiterId);
 
-  // CLAIM the wake atomically, CAS on status.
-  //
-  // This used to be an unconditional updateAwaiter(status:'waking'), so two
-  // schedulers sharing one database (the desktop embeds the daemon, so both
-  // processes run a tick) could each read the same due row and both proceed:
-  // one recorded a successful wake, the other recorded "A turn is already
-  // running on this thread". The in-process `awaiterInFlight` set cannot see
-  // across processes.
-  //
-  // The claim is `armed -> waking` via a conditional UPDATE, so exactly one
-  // racer's statement matches a row. It ALSO clears `next_wake_at`: the due
-  // query matches on that column (`status IN ('armed','waking') AND
-  // next_wake_at <= now`), so leaving it set keeps the row selectable for the
-  // whole wake — the next tick re-picks it while the first wake is still
-  // awaiting the model, and the loser records a spurious "A turn is already
-  // running on this thread" (observed live: success at T+0, error at T+2.6s).
-  // Clearing it makes the row invisible to the due query the instant it is
-  // claimed. A row left `waking` by a process that died mid-wake therefore has
-  // no slot and is recovered by `reclaimStaleWakingAwaiters`, not by re-picking.
   const claim = awaitersDb.updateAwaiterIfStatus(awaiterId, 'armed', {
     status: 'waking',
     last_error: null,
@@ -270,11 +239,7 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
     ];
 
     if (awaiter.origin_run_id) {
-      // The origin conversation comes from the session-log replay (ADR 010
-      // §3), not from the run row's removed `working.modelMessages` copy.
-      // The row is read only for its threadId: the replay is keyed by
-      // conversation, so a row without one has no log to rebuild from and
-      // the wake keeps its plain shape (no fabricated context).
+
       const originRun = agentRunDb.getAgentRun(awaiter.origin_run_id);
       const originThreadId = originRun?.threadId;
       const resumedMessages = originThreadId
@@ -535,15 +500,13 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
 };
 
   let tickInFlight = false;
-  /** One scheduler pass — the host clock calls this. */
+
   const tick = async (): Promise<void> => {
     if (tickInFlight) return;
     tickInFlight = true;
 
     try {
-      // Reclaim rows whose wake holder went silent BEFORE listing due work.
-      // Without this, a `waking` row left by a dead process is refused by the
-      // claim forever and the awaiter never wakes again.
+
       const reclaimed = awaitersDb.reclaimStaleWakingAwaiters(
         new Date(Date.now() - WAKE_STALE_AFTER_MS).toISOString()
       );

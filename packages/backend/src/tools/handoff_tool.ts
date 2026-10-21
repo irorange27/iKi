@@ -20,9 +20,7 @@ export class HandoffTool extends BaseTool<typeof HandoffInputSchema> {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
-  // The handler only echoes, but the CALL is a control-flow effect: the driver
-  // ends this turn and starts a successor run. Replaying it would start a
-  // second successor for one intended handoff.
+
   override replay = 'unsafe' as const;
   override description =
     'Hand off the current task to another agent instance. Call this tool when you cannot or should not continue — for example when the task is too large for one session, you are approaching context limits, or the user asked to pause. Provide a clear summary of what was done and what remains so the next agent can pick up seamlessly.';

@@ -14,13 +14,6 @@ import { TOOL_EXECUTION_FINISHED, TOOL_EXECUTION_STARTED } from './tool_executio
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { resolveToolCallMaxIterations } from './constants';
 
-/**
- * Single derivation of "rebuild a turn from a run row". resumeRun,
- * retryAndExecute and approval recovery must agree on these fields; before
- * this module each call site re-derived them and drifted — resume and retry
- * silently dropped the stored approval policy and iteration cap, degrading
- * restored turns to the legacy approval flags.
- */
 export type RunTurnPlan = {
   providerType: string;
   providerId?: string;
@@ -29,24 +22,15 @@ export type RunTurnPlan = {
   enabledTools: string[];
   availableSkillIds: string[];
   approvalPolicy?: ApprovalPolicy;
-  /**
-   * The stored requireApproval decision — undefined when the run never stored
-   * one. Callers apply their own default: stream options omit the field (the
-   * guard derivation stays authoritative), approval recovery falls back to
-   * true (its pre-rehydrator default).
-   */
+
   requireApproval?: boolean;
-  /** The harness step budget (ExecutionPlan.budget.step). */
+
   maxIterations: number;
-  /** Restored execution configuration (run metadata); undefined when the row
-   *  never stored it. */
+
   reasoningEffort?: string;
-  /** The autonomous batch bound (ExecutionPlan.budget.batch); undefined when
-   *  the turn was a single batch. */
+
   autonomous?: { maxIterations: number; continuePrompt?: string };
-  /** The original turn's workspace world (D30): a retry/queued-resume is the
-   *  same turn re-executing, so it rebinds this world rather than adopting
-   *  the thread's current selection. Undefined for legacy rows. */
+
   workspaceSelection?: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null;
 };
 
@@ -72,11 +56,6 @@ export const getRunMaxIterations = (run: AgentRun | null | undefined): number | 
   return Math.max(1, Math.trunc(value));
 };
 
-/**
- * Layer a run row over optional fallbacks (the approval-session row). A field
- * present on the run wins; nullish run fields fall back. Arrays use nullish
- * semantics — an empty run array is a deliberate value, not a missing one.
- */
 export const deriveRunTurnPlan = (
   run: AgentRun | null | undefined,
   fallback?: RunTurnPlanFallback
@@ -134,31 +113,6 @@ export const deriveRunTurnPlan = (
 
 type ResumeKind = NonNullable<NonNullable<ChatTurnOptions['runConfig']>['kind']>;
 
-/**
- * The dead chain's journaled tool effects, as wire exchange pairs (issue
- * #143, the #141 fork decision (b); inline executions since #145): one pass
- * over the replay events in log order —
- *   - `APPROVAL_REQUESTED` facts attributed to the excluded runs join
- *     `TOOL_EXECUTION_FINISHED` facts by approvalId (the FINISHED binding
- *     carries toolCallId/toolName/args, the result the observation);
- *   - `TOOL_EXECUTED` facts whose `runId` ∈ dead chain pair directly (the
- *     inline execution carries its own full shape).
- * Appended after the recovered task input, the pairs let the retry CONTINUE
- * from effects that already happened instead of re-issuing them; a denied
- * execution pairs with its execution-denied result, and a
- * requested-but-never-finished approval produces NO pair (the model
- * re-issues and a fresh approval flow applies). An execution whose recorded
- * shape cannot be represented — missing/non-object args, a result that does
- * not match its binding — throws: the recovery refuses loudly, an effect
- * the log cannot explain is not continuable.
- *
- * Coverage boundary: the unknown-effect barrier fires for every approval the
- * chain has an `approval_requested` fact for, which is every approval the
- * production writers create (the run tracker supplies the runId). A legacy
- * thread whose request lacks a runId, or a STARTED fact whose binding has no
- * approvalId, is skipped — matching the long-standing TOOL_EXECUTION_FINISHED
- * branch, which ignores the same shapes.
- */
 export const journaledExchangePairs = (
   events: RebuiltThreadView['events'],
   chainRunIds: string[]
@@ -166,10 +120,9 @@ export const journaledExchangePairs = (
   if (chainRunIds.length === 0) return [];
   const chain = new Set(chainRunIds);
   const chainApprovalIds = new Set<string>();
-  /** Approvals of the dead chain the owner actually STARTED (effect may have
-   *  run) — their outcomes are required, not optional. */
+
   const startedApprovalIds = new Set<string>();
-  /** Approvals of the dead chain whose outcome WAS recorded. */
+
   const finishedApprovalIds = new Set<string>();
   for (const event of events) {
     if (event.type !== APPROVAL_REQUESTED) continue;
@@ -202,8 +155,7 @@ export const journaledExchangePairs = (
             type: 'tool-result',
             toolCallId,
             toolName,
-            // The journal wrote a real ToolResult — the output is the SDK's
-            // ToolResultOutput union by construction.
+
             output: output as Extract<
               Extract<ModelMessage, { role: 'tool' }>['content'][number],
               { type: 'tool-result' }
@@ -282,14 +234,6 @@ export const journaledExchangePairs = (
     }
   }
 
-  // An execution that STARTED but never recorded an outcome is an UNKNOWN
-  // effect: the tool may have run and the process died before the result
-  // landed. Dropping it would let the retry re-issue the call — and re-issue
-  // means the effect can run twice. The owner already refuses to re-execute
-  // that same approvalId, so a new call id would sidestep that protection
-  // entirely. Refuse loudly instead: the log cannot explain the outcome, so
-  // the recovery is not continuable. (An approval that never STARTED is not
-  // here — nothing happened, and re-asking is correct.)
   for (const approvalId of startedApprovalIds) {
     if (!finishedApprovalIds.has(approvalId)) {
       throw new Error(
@@ -300,18 +244,6 @@ export const journaledExchangePairs = (
   return pairs;
 };
 
-/**
- * The recovery history for re-entering a turn, rebuilt from the session log
- * replay alone (ADR 008 F3): the run row's `input.messages` copy is no
- * longer read as authority. Non-terminal tool parts stay intact
- * (`repairInterruptedTools: false`) — a committed partial exchange rides the
- * recovered request so the provider does not re-run an effect that already
- * happened. Memory injection is the caller's seam: the retry path re-enters
- * through the preparer (which owns it); the approval path bypasses the
- * preparer and injects persisted context itself.
- * Returns null when the log has no messages — missing input is refused by
- * the caller, never fabricated.
- */
 export const resumeHistoryFromReplay = async (
   replay: RebuiltThreadView
 ): Promise<ModelMessage[] | null> => {
@@ -319,20 +251,6 @@ export const resumeHistoryFromReplay = async (
   return await toModelInputMessages(replay.messages, { repairInterruptedTools: false });
 };
 
-/**
- * The full recovery INPUT for a run: the replay history, the system prompts
- * recorded with the tail input fact (issue #139 — wake/task sends bind their
- * agent system prompt to the input; a resume without it would re-run the
- * task under the wrong persona), the tail fact's `runId` when it carries one
- * (the recovery gate joins it against the retried run's ancestry), and —
- * issue #143 — the dead chain's journaled exchange pairs appended after the
- * task input (`continuation: true`), so the retry continues from effects
- * that already happened. `excludeRunIds` carries the dead task chain the
- * CALLER computes (issue #141 — the run-rights layer owns which attempts are
- * dead). Chat-turn recoveries without journaled executions see empty
- * `systemPrompts`, no `inputRunId` and `continuation: false`, keeping the
- * plain re-run shape.
- */
 export const rebuildResumeHistoryFromEvents = async (
   threadId: string,
   excludeRunIds?: string[]
@@ -354,29 +272,19 @@ export const rebuildResumeHistoryFromEvents = async (
   };
 };
 
-/**
- * Stream options for re-entering the turn loop from a run row (queued resume,
- * blocked resume, retry). Restores the plan fields the original turn ran
- * under — approval policy and iteration cap included — and carries the
- * recovery history from `rebuildResumeHistoryFromEvents` so the resumed turn
- * targets the original task instead of an empty prompt.
- */
 export const deriveResumeStreamOptions = (
   run: AgentRun,
   overrides: {
     kind: ResumeKind;
     parentRunId?: string;
     metadata?: Record<string, unknown>;
-    /** Overrides the prompt a batch continuation uses. The batch BOUND is the
-     *  row's own restored one — a resume never invents a budget. */
+
     continuePrompt?: string;
-    /** Adopt this run id as the executing identity (queued resume / retry). */
+
     adoptRunId?: string;
-    /** The session-log recovery history (rebuildResumeHistoryFromEvents). */
+
     inputMessages?: ModelMessage[];
-    /** The system prompts recorded with the tail input fact (issue #139) —
-     * prepended ahead of the recorded input so a resumed wake/task turn runs
-     * under the persona it was accepted with. Empty for chat recoveries. */
+
     systemPrompts?: string[];
   }
 ): ChatTurnOptions => {
@@ -385,12 +293,7 @@ export const deriveResumeStreamOptions = (
   const systemMessages = (overrides.systemPrompts ?? []).map(
     content => ({ role: 'system', content }) as ModelMessage
   );
-  // Issue #143: a recovery history ending in a journaled tool result is a
-  // CONTINUATION — the turn runs with an empty prompt over existing history
-  // and the streaming path's empty-prompt guard must stand down. The tail
-  // shape is the honest source; a caller-supplied `continuation` flag is
-  // stripped so the guard can never be stood down for a non-continuation
-  // turn. Carried on the runConfig metadata; no prompt is fabricated.
+
   const continuation = recordedMessages.at(-1)?.role === 'tool';
   const { continuation: _stripped, ...callerMetadata } = (overrides.metadata ??
     {}) as Record<string, unknown>;
@@ -398,9 +301,7 @@ export const deriveResumeStreamOptions = (
     ...callerMetadata,
     ...(continuation ? { continuation: true } : {}),
   };
-  // The batch bound is the row's own restored one; only the prompt may be
-  // overridden, and only for a turn that already had a batch bound. A resume
-  // never invents a budget (audit C-1).
+
   const batch =
     plan.autonomous && overrides.continuePrompt
       ? { ...plan.autonomous, continuePrompt: overrides.continuePrompt }
@@ -417,10 +318,7 @@ export const deriveResumeStreamOptions = (
       ? { workspaceSelection: plan.workspaceSelection }
       : {}),
     maxIterations: plan.maxIterations,
-    // The recorded input is the recovery source. A run without recorded
-    // messages resumes empty and fails explicitly downstream — missing input
-    // must not be fabricated. The tail input fact's system prompts lead the
-    // request, matching the fresh wake/task send shape (system first).
+
     messages: [...systemMessages, ...recordedMessages] as ChatTurnOptions['messages'],
     threadId: run.threadId ?? undefined,
     tools: plan.enabledTools,

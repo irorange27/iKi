@@ -4,9 +4,6 @@ import { z } from 'zod';
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const generationSettingsMock = vi.hoisted(() => vi.fn(() => ({})));
 
-// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
-// these suites on the durable-layer behaviour they assert without reaching a
-// network endpoint.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -57,11 +54,6 @@ const memory = {
   getAffectContextMessage: () => '',
 };
 
-// Stage B acceptance: the plan is the versioned authority a resume reads.
-// The approval session row persists the full ExecutionPlan snapshot, so a
-// restart-recovered resume restores every field — including ones the legacy
-// per-column projection never stored (reasoning effort, autonomy) — instead
-// of re-deriving a lossy subset.
 describe('approval resume restores the persisted plan after a restart', () => {
   let root: string;
   let conversation: ReturnType<typeof createChatPersistence>;
@@ -110,7 +102,6 @@ describe('approval resume restores the persisted plan after a restart', () => {
         handler: async () => 'observed',
       })
     );
-    // The model asks for the gated tool; the harness pauses for approval.
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
         [
@@ -139,9 +130,6 @@ describe('approval resume restores the persisted plan after a restart', () => {
             const requests = event.output.toolApprovalRequests;
             if (!requests?.length) throw new Error('Probe did not receive an approval request');
             approvalId = requests[0].approvalId;
-            // What the streaming path persists while approval-pending: the
-            // partial assistant row carries the live approval-request part the
-            // recovery fallback pairs the decision with.
             const partialAssistant = {
               id: 'assistant_plan',
               role: 'assistant' as const,
@@ -161,9 +149,6 @@ describe('approval resume restores the persisted plan after a restart', () => {
               thread_id: 'thread_plan',
               message: partialAssistant,
             });
-            // F2: the restart-recovery history source is the session log — the
-            // pause records its partial output as a fact, exactly what the
-            // streaming entry does in production.
             recordSessionEvents('thread_plan', [
               {
                 type: MODEL_OUTPUT_COMMITTED,
@@ -214,14 +199,9 @@ describe('approval resume restores the persisted plan after a restart', () => {
   it('keeps reasoning effort and autonomous batching across the restart', async () => {
     const { approvalId } = await pauseOnApproval(buildApprovals());
 
-    // Simulate the restart: a fresh approvals registry with no in-memory
-    // state — recovery must come from the persisted row.
     coordinator = createThreadStreamCoordinator();
     const recoveredApprovals = buildApprovals();
 
-    // One tool call per SDK step (maxIterations 1): the restored autonomy
-    // (2 batches) drives exactly 2 provider calls; the legacy derivation
-    // would run 1 and stop.
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
         [
@@ -241,12 +221,7 @@ describe('approval resume restores the persisted plan after a restart', () => {
       await recoveredApprovals.approveTool({ id: 92, send: vi.fn() }, approvalId, true)
     ).toMatchObject({ success: true });
 
-    // One call to ask for the tool, one to answer after the decision.
     expect(doStream.mock.calls.length).toBeGreaterThanOrEqual(2);
-    // The resumed plan is what the model must see: the Pi path carries the
-    // restored autonomous budget as its own `continuePrompt` in the request
-    // context, which is the plan fidelity this case is about (the AI SDK-only
-    // `reasoningEffort` setting no longer rides this supply).
     const resumedContexts = doStream.mock.calls
       .slice(1)
       .map(call => JSON.stringify((call as unknown[])[1]));
@@ -254,12 +229,6 @@ describe('approval resume restores the persisted plan after a restart', () => {
   });
 
   it('does not re-claim the parent’s adopted queued row when approving a paused retry', async () => {
-    // A queued-resume/retry turn executes inside its adopted run id
-    // (plan.adoptRunId). When that turn pauses on an approval, the approval
-    // resume must run under its own NEW identity: re-claiming the adopted
-    // row would fail the conditional claim (the row is `blocked`, not
-    // `queued`), throw after the decision was already consumed, and strand
-    // the run blocked forever.
     defaultToolRegistry.register(
       createTool({
         name: toolName,
@@ -348,7 +317,6 @@ describe('approval resume restores the persisted plan after a restart', () => {
       success: true,
     });
 
-    // The continuation owns a fresh run id — no claim of the adopted row.
     const resumedRuns = listAgentRunsByThread('thread_plan').filter(
       run => run.kind === 'approval-resume'
     );

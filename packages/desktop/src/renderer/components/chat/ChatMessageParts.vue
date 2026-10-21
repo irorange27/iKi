@@ -158,15 +158,9 @@ import ImageViewerOverlay from '../ImageViewerOverlay.vue';
 import { useI18n } from '../../i18n';
 
 const markdownPlugins = [markdownMathPlugin, markdownCodeBlockPlugin];
-// Single newlines render as breaks (ChatGPT-style), so finalized markdown
-// keeps the same line shape the streaming view showed.
 const markdownOptions = { breaks: true } as const;
 
 const { t } = useI18n();
-// Per-part open state (keyed by part index): undefined falls back to the
-// default — open while that part is streaming, collapsed once finished.
-// Reasoning parts have stable render keys, so the <details> never remounts
-// and the override survives streamed deltas.
 const reasoningOpenOverrides = ref<Record<number, boolean>>({});
 
 const isReasoningPartExpanded = (part: unknown, partIndex: number): boolean => {
@@ -185,8 +179,6 @@ const toggleReasoning = (part: unknown, partIndex: number) => {
 const getReasoningLabel = (part: unknown): string =>
   isStreamingReasoningPart(part) ? t('chat.reasoning.thinking') : t('chat.reasoning.thought');
 
-// Single-line collapsed preview: first non-empty line, whitespace-collapsed
-// and capped; CSS ellipsis handles the rest.
 const getReasoningPreview = (part: unknown): string => {
   if (!isReasoningPart(part)) return '';
   const line = getTextPartContent(part)
@@ -219,8 +211,6 @@ const viewerSrc = ref('');
 const getRenderableParts = (parts: ChatUiMessage['parts']): ChatUiMessage['parts'] =>
   parts.filter(part => isComposerInvocationPart(part) || !isDataPart(part));
 
-// Tool-call runs collapse into quiet grouped rows; everything else passes
-// through with its renderable-array index (reasoning expand state keys off it).
 const segments = computed<MessagePartSegment[]>(() =>
   segmentMessageParts(getRenderableParts(props.message.parts))
 );
@@ -236,8 +226,6 @@ const reasoningPreviews = computed(() => {
   return previews;
 });
 
-// User-sent text longer than five lines starts collapsed; the toggle under it
-// reveals the rest. Assistant output is never clamped.
 const USER_TEXT_COLLAPSE_LINES = 5;
 
 const userTextExpanded = ref(false);
@@ -276,15 +264,8 @@ const getPartType = (part: unknown): string =>
 const getSegmentRenderKey = (segment: MessagePartSegment): string => {
   const messageId = props.message.id || String(props.messageIndex);
   if (segment.kind === 'tool-call-group') {
-    // Group key must stay stable while the stream appends calls: key off the
-    // first member only.
     return `${messageId}-tool-call-group-${segment.startIndex}`;
   }
-  // Keys must stay stable across streamed deltas: streaming text renders
-  // through a reactive interpolation and finalized text through VueMarkdown's
-  // source computed, so both update in place. A churning key would remount the
-  // segment per delta and discard rendered output (hljs highlighting); for
-  // reasoning it would also drop the <details> open state.
   return `${messageId}-${getPartType(segment.part)}-${segment.index}`;
 };
 

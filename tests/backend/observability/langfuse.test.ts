@@ -1,5 +1,3 @@
-// ponytail: smallest runnable check for the langfuse helpers.
-// Run with: pnpm vitest run tests/backend/observability/langfuse.test.ts
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -58,19 +56,11 @@ describe('langfuse helpers', () => {
     initLangfuseTracing();
     expect(isLangfuseEnabled()).toBe(true);
 
-    // END-TO-END: install an in-memory exporter on the global tracer
-    // provider that Langfuse's NodeSDK started, then assert the exported
-    // span actually carries the generation type, model, usage and cost.
-    // Without this the wiring is only "it returned without throwing".
     const { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } = await import(
       '@opentelemetry/sdk-trace-base'
     );
     const { setLangfuseTracerProvider } = await import('@langfuse/tracing');
     const exporter = new InMemorySpanExporter();
-    // An ISOLATED tracer provider installed as Langfuse's own: its spans
-    // record to memory instead of exporting. That is the whole point of the
-    // test — no Langfuse network call, but the real span pipeline (start →
-    // update → end → process) runs on the same helper the app uses.
     setLangfuseTracerProvider(
       new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] })
     );
@@ -105,20 +95,15 @@ describe('langfuse helpers', () => {
     const span = spans[0];
     expect(span.name).toBe('pi.chat.generate');
     expect(span.spanContext().traceId).toBeTruthy();
-    // Langfuse generation-specific attributes, as the SDK maps them.
     const attrs = span.attributes as Record<string, unknown>;
     expect(attrs['langfuse.observation.type']).toBe('generation');
     expect(attrs['langfuse.observation.model.name']).toBe('gpt-5-mini');
-    // The helper's own metadata keys (supply/provider/session), flattened by
-    // the SDK as metadata.<key>.
     expect(attrs['langfuse.observation.metadata.supply']).toBe('pi');
     expect(attrs['langfuse.observation.metadata.provider']).toBe('openai');
-    // usage + cost land on the span as parsed JSON payloads.
     const usage = JSON.parse(String(attrs['langfuse.observation.usage_details'] ?? '{}'));
     expect(usage).toMatchObject({ input: 12, output: 5, total: 17 });
     const cost = JSON.parse(String(attrs['langfuse.observation.cost_details'] ?? '{}'));
     expect(cost).toMatchObject({ total: 0.0042 });
-    // A string output lands verbatim (not JSON-encoded).
     expect(attrs['langfuse.observation.output']).toBe('hello there');
   });
 });

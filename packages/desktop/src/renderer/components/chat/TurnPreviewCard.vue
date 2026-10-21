@@ -86,13 +86,9 @@ const previewItems = computed(() => {
   return items;
 });
 
-/* The card duplicates the rail button's activation, so it needs a name of its
-   own. The title prop is currently never passed, so fall back to the rail
-   label rather than announcing a nameless "message preview". */
 const cardLabel = computed(() =>
   props.title ? t('a11y.turnPreviewCard', { role: props.title }) : t('chat.turnPreview.jump')
 );
-
 
 const cardStyle = computed(() => {
   if (!props.anchor) return {};

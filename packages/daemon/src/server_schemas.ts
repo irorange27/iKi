@@ -98,10 +98,6 @@ const ChatThreadCreatePayloadSchema = z
   .object({
     title: z.string().optional(),
     model: z.string().optional(),
-    // Declared so a headless client can bind a thread to a workspace at create
-    // time (dogfood §A step 4). The row write already accepted it through
-    // .passthrough(); naming it here makes it a contract and rejects a
-    // non-string value instead of silently dropping it to null.
     workspace_id: OptionalNullableTrimmedStringSchema,
   })
   .passthrough();

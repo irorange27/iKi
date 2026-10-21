@@ -1,12 +1,6 @@
 import type { SqliteDatabase } from '../sqlite';
 import type { Migration } from './runner';
 
-// Tool calls are no longer a chat-scoped concept (programmatic tool calling),
-// so the approval tables drop the chat_ prefix. Fresh databases already get
-// the new names from the 001 baseline; this migration only renames the tables
-// and indexes of databases created before the rename. ALTER TABLE keeps all
-// rows; SQLite rewrites the renamed indexes' table references automatically,
-// so the old-named indexes are recreated under their new names.
 const migration: Migration = {
   name: '002_rename_chat_tool_approvals',
   up: (db: SqliteDatabase) => {

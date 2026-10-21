@@ -1277,7 +1277,6 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.skills.error.openSkillFailed': ({ error }) => `打开技能目录失败：${asText(error)}`,
   'settings.skills.error.readFailed': ({ error }) => `读取技能内容失败：${asText(error)}`,
 
-  // --- Accessibility: names, labels and announcements added with the a11y pass.
   'a11y.skipToConversation': '跳到对话内容',
   'a11y.skipToComposer': '跳到输入框',
   'a11y.conversationLandmark': '对话内容',

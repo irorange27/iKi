@@ -342,7 +342,7 @@ import { useI18n } from '../../i18n';
 
 const props = defineProps<{
   approvalProcessing: boolean;
-  /** Rendered inside a ToolCallGroup row: detail body only, no card chrome. */
+  
   embedded?: boolean;
   mcpServerLabel: string;
   message: ChatUiMessage;
@@ -357,8 +357,6 @@ const { t } = useI18n();
 
 const isHiddenTodoTool = computed(() => isTranscriptHiddenToolPart(props.part));
 
-// Shell calls render as a terminal block ($ command + output) instead of the
-// generic key/value sections.
 const terminalView = computed(() => (props.embedded ? getToolTerminalView(props.part) : null));
 
 const emitApproval = (approved: boolean) => {

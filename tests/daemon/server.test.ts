@@ -729,10 +729,6 @@ describe('daemon server', () => {
   });
 
   it('exposes the thread workspace binding so a headless client can verify it', async () => {
-    // Dogfood §A step 4: the driver seeds a workspace and binds the thread,
-    // then must be able to READ that binding back over the API instead of
-    // opening SQLite by hand. The rows come from the thread DB fixture, which
-    // is what both thread GET handlers read.
     const started = await startTestDaemon();
     const issued = issueClient({ scopes: ['chat:read'] });
 
@@ -797,8 +793,6 @@ describe('daemon server', () => {
     });
 
     expect(result.status).toBe(200);
-    // Trimmed at the boundary, and the binding reaches the thread writer — this
-    // is what replaces the raw `UPDATE chat_threads SET workspace_id = …`.
     expect(chatServiceMock.createThread).toHaveBeenCalledWith({
       title: 'Dogfood',
       workspace_id: 'ws-dogfood',
@@ -809,8 +803,6 @@ describe('daemon server', () => {
       thread: expect.objectContaining({ workspace_id: 'ws-dogfood' }),
     });
 
-    // A non-string binding used to be dropped silently, producing an unbound
-    // thread whose file tools then refused with no explanation.
     const rejected = await requestJson(started, '/v1/chat/threads', {
       method: 'POST',
       headers: {
@@ -829,10 +821,6 @@ describe('daemon server', () => {
   });
 
   it('exposes the thread workspace binding so a headless client can verify it', async () => {
-    // Dogfood §A step 4: the driver seeds a workspace and binds the thread,
-    // then must be able to READ that binding back over the API instead of
-    // opening SQLite by hand. The rows come from the thread DB fixture, which
-    // is what both thread GET handlers read.
     const started = await startTestDaemon();
     const issued = issueClient({ scopes: ['chat:read'] });
 
@@ -897,8 +885,6 @@ describe('daemon server', () => {
     });
 
     expect(result.status).toBe(200);
-    // Trimmed at the boundary, and the binding reaches the thread writer — this
-    // is what replaces the raw `UPDATE chat_threads SET workspace_id = …`.
     expect(chatServiceMock.createThread).toHaveBeenCalledWith({
       title: 'Dogfood',
       workspace_id: 'ws-dogfood',
@@ -909,8 +895,6 @@ describe('daemon server', () => {
       thread: expect.objectContaining({ workspace_id: 'ws-dogfood' }),
     });
 
-    // A non-string binding used to be dropped silently, producing an unbound
-    // thread whose file tools then refused with no explanation.
     const rejected = await requestJson(started, '/v1/chat/threads', {
       method: 'POST',
       headers: {
@@ -1399,9 +1383,6 @@ describe('daemon server', () => {
   });
 
   it('survives an unwritable userData dir instead of crashing the process', async () => {
-    // A sandboxed/TCC-restricted launch cannot write into the real userData
-    // dir. The port/host files are a best-effort handshake whose reader already
-    // swallows errors, so the daemon must keep running without them.
     writeFileSyncMock.mockImplementation(() => {
       throw Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' });
     });
@@ -1409,9 +1390,7 @@ describe('daemon server', () => {
     const started = startDaemonServer({ host: '127.0.0.1', port: 16199 });
     startedDaemons.push(started);
 
-    // The listen callback resolved, so the daemon came up regardless.
     expect(started.port).toBe(16199);
-    // The failure was logged, not thrown.
     const skipped = daemonLoggerEventMock.mock.calls.filter(
       call => call[0]?.event === 'daemon.server.state_file'
     );
@@ -1459,14 +1438,12 @@ describe('daemon server', () => {
           },
         });
 
-      // First 30 requests should succeed (rate limit is 30/min for chat/send)
       for (let i = 0; i < 30; i++) {
         const result = await doSend();
         expect(result.status).toBe(200);
         expect(result.json.success).toBe(true);
       }
 
-      // 31st request should be rate limited
       const blocked = await doSend();
       expect(blocked.status).toBe(429);
       expect(blocked.json).toEqual({
@@ -1475,10 +1452,8 @@ describe('daemon server', () => {
       });
       expect(Number(blocked.headers.get('retry-after'))).toBe(60);
 
-      // Advance time past the window
       fakeNow += 60_001;
 
-      // Next request should succeed again
       const retry = await doSend();
       expect(retry.status).toBe(200);
       expect(retry.json.success).toBe(true);
@@ -1516,16 +1491,13 @@ describe('daemon server', () => {
           },
         });
 
-      // Exhaust client1's limit
       for (let i = 0; i < 30; i++) {
         await doSend(client1);
       }
 
-      // client1 should be blocked
       const blocked1 = await doSend(client1);
       expect(blocked1.status).toBe(429);
 
-      // client2 should still be allowed
       const allowed2 = await doSend(client2);
       expect(allowed2.status).toBe(200);
       expect(allowed2.json.success).toBe(true);
@@ -1535,13 +1507,11 @@ describe('daemon server', () => {
       const started = await startTestDaemon();
       const issued = issueClient({ scopes: ['chat:write'], allowedTools: [] });
 
-      // Health endpoint should always succeed regardless of chat rate limits
       for (let i = 0; i < 50; i++) {
         const result = await requestJson(started, '/v1/health');
         expect(result.status).toBe(200);
       }
 
-      // Exhaust chat send limit
       for (let i = 0; i < 30; i++) {
         await requestJson(started, '/v1/chat/send', {
           method: 'POST',
@@ -1557,7 +1527,6 @@ describe('daemon server', () => {
         });
       }
 
-      // Chat send blocked
       const blocked = await requestJson(started, '/v1/chat/send', {
         method: 'POST',
         headers: {
@@ -1572,7 +1541,6 @@ describe('daemon server', () => {
       });
       expect(blocked.status).toBe(429);
 
-      // Health still works
       const health = await requestJson(started, '/v1/health');
       expect(health.status).toBe(200);
       expect(health.json.status).toBe('ok');

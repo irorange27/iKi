@@ -335,9 +335,6 @@ const permissionOptions = computed<
   { value: string; icon: Component; name: string; description: string }[]
 >(() => [
   {
-    // "Default" IS Ask first. It carries the explicit policy value so the
-    // backend never has to guess: an empty policy used to reach the turn as
-    // "no policy given" and degraded to legacy auto-run behaviour.
     value: 'askRisky',
     icon: Settings,
     name: t('chat.input.permission.defaultName'),
@@ -373,8 +370,6 @@ const permissionChipLabel = computed(() => {
 });
 
 const selectApprovalPolicy = (value: string) => {
-  // Always store a concrete policy: an empty value is what made tool turns
-  // reach the backend with no policy at all.
   void threadSession.setApprovalPolicy(parseApprovalPolicy(value) ?? 'askRisky');
   permissionPanelOpen.value = false;
 };
@@ -388,8 +383,6 @@ const {
   selectedWorkspaceId: sessionSelectedWorkspaceId,
 } = storeToRefs(threadSession);
 
-// Plain chats have no workspace concept — the composer no longer renders a
-// picker, but work threads still need one, so the send-guard below remains.
 const isWorkThread = computed(() => resolveThreadWorkMode(currentThread.value) === 'work');
 const emit = defineEmits<{
   'new-chat-requested': [];
@@ -668,7 +661,6 @@ const contextRingToneClass = computed(() => {
 const contextCompositionRows = computed(() =>
   buildContextCompositionRows(props.latestTokenUsage ?? null)
 );
-// Session-cumulative weighted average (same aggregation as the stats bar).
 const contextCacheHitRate = computed(() => {
   const percent = props.sessionPerfStats?.cacheHitPercent ?? null;
   return percent === null ? null : Math.round(percent);

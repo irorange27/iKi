@@ -14,14 +14,11 @@ export interface ToolCallApprovalSession {
   max_input_tokens?: number | null;
   max_output_tokens?: number | null;
   max_iterations?: number | null;
-  enabled_tools: string; // JSON string
-  available_skill_ids: string; // JSON string
-  /** Turn-start workspace selection snapshot (JSON string | null) — approval
-   *  recovery rebinds this world instead of the thread's current selection. */
+  enabled_tools: string;
+  available_skill_ids: string;
+
   workspace_selection?: string | null;
-  /** Full ExecutionPlan snapshot (JSON string | null) — the authority a
-   *  restart-recovered resume runs under; the per-column fields above are the
-   *  legacy projection for rows written before this column existed. */
+
   plan_json?: string | null;
   created_at: string;
   updated_at: string;
@@ -32,7 +29,7 @@ export interface ToolCallApproval {
   session_id: string;
   tool_call_id?: string | null;
   tool_name?: string | null;
-  tool_args?: string | null; // JSON string
+  tool_args?: string | null;
   state: ToolCallApprovalState;
   decision?: ToolCallApprovalDecision | null;
   decision_reason?: string | null;

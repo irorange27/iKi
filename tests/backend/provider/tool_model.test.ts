@@ -170,11 +170,6 @@ describe('tool model provider', () => {
       model: 'deepseek-chat',
     });
 
-    // Regression: this probe used to build the model itself and call
-    // generateText directly. That made it exercise a DIFFERENT supply than the
-    // auxiliary calls it exists to validate — on a Pi-eligible provider the
-    // probe ran the AI SDK path while the real calls ran Pi, so a green "Test"
-    // said nothing about the route actually in use. One supply decision.
     expect(generateChatWithModelMessagesMock).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'deepseek',

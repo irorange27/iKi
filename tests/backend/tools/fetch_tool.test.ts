@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Avoid importing Electron-backed sqlite config in unit tests.
 vi.mock('@iki/backend/db/database', () => ({
   getConfig: vi.fn(() => null),
 }));

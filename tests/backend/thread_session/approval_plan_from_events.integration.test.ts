@@ -1,22 +1,5 @@
 // @vitest-environment node
 
-/**
- * ADR 008 unit F3: the frozen execution plan travels with the `turn_started`
- * fact, so a restart-recovered approval resume reads its plan from the session
- * log instead of `tool_call_approval_sessions.plan_json`.
- *
- * Why this is the F3 gate and not a formatting assertion: the plan column is
- * what the resume used to build the harness under. As long as the column was
- * the authority, the log could hold a complete turn and the resume would still
- * fail — the two stores disagreed about which one was load-bearing. The
- * discriminating shape is therefore "destroy the column, keep the log": if the
- * resume still rebuilds the turn, the log is the authority; if it degrades,
- * the column was.
- *
- * The control in the same file proves the assertion is not vacuous: a turn
- * whose `turn_started` fact predates the plan field (no `plan` in the payload)
- * MUST fall back, so the suite fails if the log path is silently bypassed.
- */
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -31,9 +14,6 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   callPiChat: callPiChatMock,
 }));
 
-// The preparer is scripted so the test controls `skillMode` — the field that
-// distinguishes a plan read from the log from a plan rebuilt by the legacy
-// fallback (see pauseOnWriteFile).
 vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
   createChatTurnPreparer: () => ({
     prepareChatTurn: prepareChatTurnMock,
@@ -121,7 +101,7 @@ describe('F3: the approval resume reads its plan from the session log', () => {
       getThreadTitle: () => 'F3',
     });
 
-  /** Pause a turn on a write_file approval and return the approval id. */
+  
   const pauseOnWriteFile = async (
     streaming: ReturnType<typeof createChatStreaming>,
     threadId: string,
@@ -130,12 +110,6 @@ describe('F3: the approval resume reads its plan from the session log', () => {
     fileName: string,
     skillMode: 'manual' | 'auto' = 'auto'
   ) => {
-    // `skillMode: 'auto'` is the DISCRIMINATOR, not decoration. The legacy
-    // fallback in approval.ts hardcodes `skillMode: 'manual'`, and the
-    // approval-session row has no column for it, so 'auto' is a value ONLY the
-    // recorded plan can carry. A test that used 'manual' would pass through the
-    // fallback and prove nothing about the log path (verified by mutation: with
-    // the replay lookup stubbed out, a 'manual' assertion still passed).
     prepareChatTurnMock.mockResolvedValue({ ...preparedTurn, skillMode });
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
@@ -218,11 +192,8 @@ describe('F3: the approval resume reads its plan from the session log', () => {
     const view = rebuildThreadViewFromEvents('thread_f3');
     const started = view.events.find(event => event.type === TURN_STARTED);
     expect(started).toBeDefined();
-    // The FACT carries the plan — this is the write half of F3.
     expect((started!.payload as { plan?: unknown }).plan).toBeDefined();
 
-    // And the replay surfaces it on the rebuilt turn, so a recovery consumer
-    // does not have to re-read the raw event.
     const turnWithPlan = view.turns.find(turn => turn.plan !== undefined);
     expect(turnWithPlan).toBeDefined();
     expect(turnWithPlan!.plan).toMatchObject({
@@ -243,18 +214,6 @@ describe('F3: the approval resume reads its plan from the session log', () => {
       'auto'
     );
 
-    // A restart, plus the aggressive half: destroy the plan column AND poison
-    // the per-column fallback with a sentinel. Only the session log still knows
-    // what this turn was.
-    //
-    // The sentinel is the discriminator. `tool_call_approval_sessions` carries
-    // `system_prompt` as a COLUMN, so the legacy fallback would happily rebuild
-    // the plan from it — that is exactly why the column-first read kept working
-    // and why "delete the column" alone proved nothing (verified: with the
-    // replay lookup stubbed out, a plain delete still resumed). Overwriting the
-    // column with a value the real turn never used makes the two sources
-    // observably different: if the resume reports the sentinel, it read the
-    // column; if it reports the turn's real prompt, it read the log.
     const SENTINEL = 'POISONED-COLUMN-SYSTEM-PROMPT';
     const approvalsB = buildApprovals();
     getDb().exec('UPDATE tool_call_approval_sessions SET plan_json = NULL');
@@ -263,7 +222,6 @@ describe('F3: the approval resume reads its plan from the session log', () => {
       .run(SENTINEL, 'thread_f3');
     getDb().exec('DELETE FROM agent_runs');
 
-    // Observe what the resumed turn runs under, at the model seam.
     let resumedSystemPrompt: string | undefined;
     let sawCall = false;
     callPiChatMock.mockImplementation(((
@@ -272,7 +230,6 @@ describe('F3: the approval resume reads its plan from the session log', () => {
       options: unknown
     ) => {
       sawCall = true;
-      // The seam's context carries the system prompt as a top-level field.
       const captured = context as { systemPrompt?: unknown };
       if (typeof captured.systemPrompt === 'string') resumedSystemPrompt = captured.systemPrompt;
       const scripted = createScriptedPiChat([
@@ -287,22 +244,15 @@ describe('F3: the approval resume reads its plan from the session log', () => {
     const result = await approvalsB.approveTool({ id: 203, send: vi.fn() }, approvalId, true);
     expect(result).toMatchObject({ success: true, awaitingApproval: false });
 
-    // THE F3 ASSERTION: the resumed turn ran under the prompt the LOG holds,
-    // not the sentinel the column was poisoned with.
     expect(sawCall).toBe(true);
     expect(resumedSystemPrompt).toBeDefined();
     expect(resumedSystemPrompt).not.toContain(SENTINEL);
 
-    // The approved call executed exactly once against the workspace.
     const written = await fs.readFile(path.join(workspaceDir, 'f3_b.txt'), 'utf8');
     expect(written).toContain('resumed');
   });
 
   it('falls back for a turn whose fact predates the plan field', async () => {
-    // Control: strip the plan from the recorded fact, simulating a pre-F3 row.
-    // The resume must still work (via plan_json / the run row), which proves
-    // the log path is additive rather than a hard dependency — and that this
-    // suite would notice if the log path were silently bypassed.
     const approvalsA = buildApprovals();
     const approvalId = await pauseOnWriteFile(
       buildStreaming(approvalsA),

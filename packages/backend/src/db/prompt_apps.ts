@@ -107,8 +107,8 @@ export const updatePromptApp = (id: string, app: Partial<PromptApp>) => {
   if (!fields) return null;
 
   const stmt = getDb().prepare(`
-        UPDATE prompt_apps 
-        SET ${fields}, updated_at = @updated_at 
+        UPDATE prompt_apps
+        SET ${fields}, updated_at = @updated_at
         WHERE id = @id
     `);
 

@@ -74,8 +74,6 @@ describe('message_parts', () => {
   });
 
   it('drops metadata parts whose subsystem is gone instead of resurrecting them', () => {
-    // Memory and affect are removed; a legacy blob that still carries their
-    // parts must normalize to null rather than inventing a part with no owner.
     expect(
       normalizeChatUiMetadataPart({
         type: 'memory-retrieval',

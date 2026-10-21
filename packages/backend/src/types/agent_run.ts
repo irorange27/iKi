@@ -14,7 +14,6 @@ export type AgentRunStatus =
   | 'failed'
   | 'cancelled';
 
-/** A finished background run (proactive task / awaiter wake) surfaced for review. */
 export type ReviewQueueItem = {
   runId: string;
   kind: AgentRunKind;
@@ -56,12 +55,7 @@ export type AgentRunOutput = {
   text?: string;
   finishReason?: string;
   usage?: Record<string, unknown>;
-  /**
-   * Calls the step budget left pending. They executed (their results are on
-   * the transcript) but no model call read them, so a `budget-exhausted` row
-   * must say what is missing instead of reading like a complete answer
-   * (2026-10 audit A-3: the remainder vanished at the harness seam).
-   */
+
   pendingToolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
 };
 

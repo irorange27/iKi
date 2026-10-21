@@ -20,7 +20,6 @@ import { closeDatabase, getDb, initializeDatabase } from '@iki/backend/db/databa
 import { rebuildThreadViewFromEvents } from '@iki/backend/thread_session/session_log';
 import { recoverStuckRunsOnStartup } from '@iki/backend/thread_session/run_tracker';
 
-
 let dataDir = '';
 let dbPath = '';
 let createModelCalls = 0;
@@ -36,28 +35,19 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   };
 });
 
-// The child process is the OTHER deployment (desktop + daemon share one
-// database). It acquires the thread lease and holds it until killed.
 const makeChildScript = (dbPath: string, flagPath: string): string => `
 const { DatabaseSync } = require('node:sqlite');
 const fs = require('node:fs');
 const db = new DatabaseSync(${JSON.stringify(dbPath)});
 const now = Date.now();
-// Acquire exactly like tryAcquireCrossProcessThreadRun does.
 db.prepare("INSERT OR IGNORE INTO thread_run_locks (thread_id, token, expires_at) VALUES (?, ?, ?)")
   .run('thread_cross', 'child-token', now + 120000);
 db.prepare('UPDATE thread_run_locks SET token = ?, expires_at = ? WHERE thread_id = ? AND expires_at <= ?')
   .run('child-token', now + 120000, 'thread_cross', now);
 fs.writeFileSync(${JSON.stringify(flagPath)}, '1');
-// Hold until the parent kills us; a heartbeat is irrelevant here because the
-// TTL (120s) outlasts the test.
 setTimeout(() => {}, 60000);
 `;
 
-// Acceptance item 10: the same session crosses restarts with its log intact;
-// recovery never touches an execution whose owner is still alive, and only
-// records the interruption once ownership is confirmed gone. Rebuilding
-// calls nothing (no model, no tools, no auto-resume).
 describe('cross-process recovery is owner-aware and recorded', () => {
   beforeAll(async () => {
     dataDir = await mkdtemp(path.join(os.tmpdir(), 'iki-cross-recovery-'));
@@ -116,7 +106,6 @@ describe('cross-process recovery is owner-aware and recorded', () => {
   };
 
   it('leaves the other process’s execution untouched while its lease is alive', async () => {
-    // The other process acquires the thread lease and holds it.
     const flagPath = path.join(dataDir, 'held.flag');
     const child = spawn(process.execPath, ['-e', makeChildScript(dbPath, flagPath)], {
       stdio: 'ignore',
@@ -134,7 +123,6 @@ describe('cross-process recovery is owner-aware and recorded', () => {
     expect(result).toMatchObject({ totalRuns: 0, failedRuns: 0, blockedRuns: 0 });
     expect(result.skippedLiveLease).toBe(1);
 
-    // The live owner's records are untouched: run, approval, empty log.
     const run = getDb().prepare('SELECT status FROM agent_runs WHERE id = ?').get('run_cross') as {
       status: string;
     };
@@ -145,15 +133,12 @@ describe('cross-process recovery is owner-aware and recorded', () => {
     expect(approval.state).toBe('pending');
     expect(rebuildThreadViewFromEvents('thread_cross').events).toEqual([]);
 
-    // Kill the child WITHOUT cleanup, then expire its lease — the process is
-    // gone, the ownership is confirmably gone.
     child.kill('SIGKILL');
     await new Promise(resolve => child.on('exit', resolve));
     getDb()
       .prepare('UPDATE thread_run_locks SET expires_at = ? WHERE thread_id = ?')
       .run(Date.now() - 1, 'thread_cross');
 
-    // Second recovery takes over and records the interruption.
     const takeover = recoverStuckRunsOnStartup();
     expect(takeover).toMatchObject({ totalRuns: 1, blockedRuns: 1 });
     expect(createModelCalls).toBe(0);
@@ -167,8 +152,6 @@ describe('cross-process recovery is owner-aware and recorded', () => {
       .get('appr_cross') as { state: string };
     expect(takenApproval.state).toBe('answered');
 
-    // The log carries the whole story: approval rejected by the system, the
-    // turn failed with the restart reason. Rebuild calls nothing.
     const callsBefore = createModelCalls;
     const view = rebuildThreadViewFromEvents('thread_cross');
     expect(createModelCalls).toBe(callsBefore);

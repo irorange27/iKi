@@ -1,11 +1,5 @@
 // @vitest-environment node
 
-/**
- * The request system prompt assembly contract (issue #112): one owner for
- * slot placement, emptiness selection and the join — the invariant whose
- * absence let switch item 2c's first draft drop the persona on one path
- * only (PR #111 review blocker B1).
- */
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -33,8 +27,6 @@ describe('request system prompt assembly', () => {
   });
 
   it('keeps input order among parts of the same slot (stable sort)', () => {
-    // The AI SDK path folds every in-history system message — history order
-    // must survive the assembly.
     const { slots, prompt } = assembleRequestSystemPrompt([
       part('persona', 'persona'),
       part('transcriptSystem', 'first system'),
@@ -54,7 +46,6 @@ describe('request system prompt assembly', () => {
       part('transcriptSystem', 'kept'),
     ]);
 
-    // Selection trims to test; rendering never rewrites the text.
     expect(slots).toEqual([
       { slot: 'persona', text: '  padded persona  ' },
       { slot: 'transcriptSystem', text: 'kept' },
@@ -73,7 +64,6 @@ describe('request system prompt assembly', () => {
   });
 
   it('exposes the slot table as the stable placement vocabulary', () => {
-    // Ascending and collision-free — the property the whole contract rests on.
     const orders = Object.values(REQUEST_SYSTEM_PROMPT_SLOTS);
     expect([...orders].sort((a, b) => a - b)).toEqual(orders);
     expect(new Set(orders).size).toBe(orders.length);

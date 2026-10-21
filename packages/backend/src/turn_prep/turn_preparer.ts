@@ -20,14 +20,13 @@ export type ChatTurnOptions = {
   providerType: string;
   providerId?: string;
   model: string;
-  /** Per-thread reasoning effort override ('low' | 'medium' | 'high'); empty/omitted = provider default. */
+
   reasoningEffort?: string;
-  /** Per-thread agent personality ('default' | 'concise' | 'friendly'). */
+
   personality?: string;
-  /** Session-level tool approval policy; validated downstream. */
+
   approvalPolicy?: string;
-  /** Explicit approval requirement. Rehydration paths set it to reproduce the
-   * approval contract the original turn ran under. */
+
   requireApproval?: boolean;
   modelCapability?: {
     contextWindow?: number | null;
@@ -35,12 +34,7 @@ export type ChatTurnOptions = {
     maxOutputTokens?: number | null;
   };
   messages: ChatTransportMessage[];
-  /**
-   * The turn-start workspace world (D30), resolved by the entry at admission.
-   * Context projection renders this world — matching the tools, which run
-   * under the same snapshot — instead of re-resolving the thread's current
-   * selection after preparation awaits. Undefined = resolve fresh (legacy).
-   */
+
   workspaceSelection?: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null;
   tools?: string[];
   mcpServerIds?: string[];
@@ -54,8 +48,7 @@ export type ChatTurnOptions = {
     parentRunId?: string;
     rootRunId?: string;
     metadata?: Record<string, unknown>;
-    /** Execute the turn inside this already-queued run id (queued resume /
-     * retry adoption) instead of creating a new run identity. */
+
     adoptRunId?: string;
   };
   autonomous?: {
@@ -74,18 +67,13 @@ export type PreparedChatTurn = {
   finalMessages: ChatInputMessage[];
   history: ChatInputMessage[];
   prompt: string;
-  /** Whether this turn's tools require explicit approval. Set by the explicit
-   * policy only — the affect-derived guard that used to compute it is gone. */
+
   requireApproval: boolean;
   autoApproveToolRequests: boolean;
   guardedTools: string[];
   enableTools: boolean;
 };
 
-/**
- * App-config slices this module consumes, resolved by the composition root
- * (thread_session) per turn — turn_prep never reads global config itself.
- */
 export type ChatTurnRuntimeConfig = {
   autoApproveToolRequests: boolean;
   contextBudget: AppConfig['context'] | null;
@@ -177,12 +165,7 @@ export const createChatTurnPreparer = (deps: {
       inputMessages: finalMessages,
       autoApproveToolRequests,
     });
-    // An explicit tools array is the caller's capability upper bound (the
-    // resolveToolNames contract: an explicit empty array disables tools).
-    // Never expand it — daemon grants, NapCat and proactive-task safe lists
-    // all arrive here pre-filtered. Only auto mode (no tools param) keeps the
-    // desktop default of an always-exposed shell; execution still requires
-    // per-command user approval.
+
     const explicitToolSelection = Array.isArray(options.tools);
     const skillRequiredTools = explicitToolSelection
       ? []
@@ -207,11 +190,6 @@ export const createChatTurnPreparer = (deps: {
       throw new Error('No messages provided for chat turn');
     }
 
-    // A turn whose input ends in a tool result is an effect-aware
-    // continuation (#143): the whole finalMessages is the history and no
-    // prompt is split off — slicing would strand the paired tool call
-    // without its result. Ordinary turns keep the split (history = input
-    // minus the prompt message).
     const lastMessage = finalMessages[finalMessages.length - 1];
     const continuationTail = lastMessage.role === 'tool';
     const history = continuationTail ? finalMessages : finalMessages.slice(0, -1);

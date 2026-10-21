@@ -118,7 +118,6 @@ export const registerWorkspacesIpc = (): void => {
         await fs.access(filePath);
         return { ok: false, error: `${AGENT_INSTRUCTIONS_FILE} already exists. Edit it directly to customize instructions.` };
       } catch {
-        // File doesn't exist — proceed to create
       }
 
       await fs.writeFile(filePath, AGENT_INSTRUCTIONS_TEMPLATE, 'utf8');

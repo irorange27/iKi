@@ -27,10 +27,6 @@ const awaiterTriggerInputSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
-// ---------------------------------------------------------------------------
-// Awaiters schemas
-// ---------------------------------------------------------------------------
-
 const listAwaitersInputShape = {
   query: z.string().trim().describe('Optional search text for matching awaiters').optional(),
   limit: z

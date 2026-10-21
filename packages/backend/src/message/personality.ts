@@ -1,8 +1,4 @@
-/**
- * User-selectable agent personalities (Codex-style /personality). A personality
- * is a communication-style block appended to the base system prompt; the base
- * persona and tool instructions stay untouched.
- */
+
 
 export type PersonalityId = 'default' | 'concise' | 'friendly';
 

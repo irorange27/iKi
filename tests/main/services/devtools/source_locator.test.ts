@@ -7,9 +7,6 @@ import {
   cleanComponentFile,
 } from '../../../../packages/desktop/src/main/services/devtools/source_locator';
 
-// The probe runs inside the renderer, so a syntax error is invisible until the
-// user clicks and gets no answer. Evaluating the expression here is the only
-// cheap way to prove it is valid JavaScript.
 const evaluate = (expression: string, scope: Record<string, unknown> = {}) => {
   const names = Object.keys(scope);
   // eslint-disable-next-line no-new-func
@@ -69,11 +66,6 @@ describe('devtools source locator', () => {
     expect(result).toEqual({ ok: false, reason: 'no-element-at-point' });
   });
 
-  // The regression this shape exists to catch: `__vueParentComponent` is Vue's
-  // *internal* instance, which carries no `$options`. A walk that read only
-  // `component.$options` found nothing on any node and returned an empty
-  // chain — which is why `element_source` answered with no components in the
-  // Vite dev runtime while hit-testing itself still worked.
   describe('component chain walk', () => {
     const scope = (element: Record<string, unknown>) => ({
       window: {
@@ -102,7 +94,6 @@ describe('devtools source locator', () => {
     });
 
     const internal = (file: string, name: string, parent: unknown) => ({
-      // internal instance: `.type` + `.proxy.$options`, and no `$options`
       type: { __file: file, __name: name },
       proxy: { $options: { __file: file, name } },
       parent,

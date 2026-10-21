@@ -137,7 +137,7 @@ const props = defineProps<{
   message: ChatUiMessage;
   messageIndex: number;
   activeAssistantMessageId: string | null;
-  /** Message ids of the turn currently hovered in the turn rail. */
+  
   turnHighlightIds?: Set<string> | null;
   approvalProcessing: (part: unknown) => boolean;
   getMcpServerLabel: (part: unknown) => string;
@@ -204,7 +204,6 @@ const closeMoreMenu = () => {
 const openMoreMenu = () => {
   showActions();
   isMoreMenuOpen.value = true;
-  // Menu-button pattern: activation lands focus on the first item.
   nextTick(() => {
     moreMenuEl.value?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
   });
@@ -218,7 +217,6 @@ const toggleMoreMenu = () => {
   openMoreMenu();
 };
 
-// Arrow keys cycle focus within the open menu (WAI-ARIA menu pattern).
 const handleMoreMenuKeydown = (event: KeyboardEvent) => {
   if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
   event.preventDefault();

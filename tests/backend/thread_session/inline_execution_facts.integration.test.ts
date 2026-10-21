@@ -1,13 +1,5 @@
 // @vitest-environment node
 
-/**
- * Issue #145: tools executed INLINE (policy-permitted, never entering the
- * five-state owner) journal a `tool_executed` fact — the effect-aware retry
- * (#143) otherwise never sees their effects. Proven at both recording sites:
- * the AI SDK runner through the real service retry, and the Pi harness
- * executor at the unit boundary. Denied/failed calls journal nothing (no
- * world effect); an unrepresentable inline fact refuses the recovery loudly.
- */
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,9 +11,6 @@ import type { AssistantMessage } from '@earendil-works/pi-ai';
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
 
-// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
-// these suites on the durable-layer behaviour they assert without reaching a
-// network endpoint.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -40,12 +29,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     maxInputTokens: 98000,
     maxOutputTokens: 2000,
   }),
-  // These suites verify DURABLE behaviour (effect-aware retry, cancel routing,
-  // handoff facts, inline journaling) using a scripted AI SDK model. They are
-  // not about supply routing, so they pin the AI SDK harness explicitly: Pi
-  // claims every provider type now, and a stubbed `createModel` would never be
-  // reached. Routing itself is covered by factory_pi_generation.test.ts and
-  // turn_supply_selection.test.ts.
   supportsPiTurnSupply: () => false,
 }));
 
@@ -82,11 +65,6 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
   const target = { id: 3, send: vi.fn() };
 
   beforeEach(async () => {
-    // These suites drive the DURABLE layer (streaming, approvals, session-log
-    // facts, retry, persistence) with a scripted AI SDK model. They are not about
-    // which supply serves the turn, so they opt into the legacy executor: the
-    // production default refuses a turn its projection cannot carry, and a
-    // scripted model has no endpoint to project to.
     setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-inline-facts-'));
     userDataMock.mockReturnValue(root);
@@ -136,9 +114,6 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
   });
 
   it('an inline execution on the AI SDK path journals and the retry continues from it', async () => {
-    // Step 1 executes the tool inline (policy 'never'); step 2's model call
-    // fails (the scripted queue is exhausted) — the turn dies AFTER the
-    // effect.
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
         [
@@ -152,9 +127,6 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
         ],
       ])
     );
-    // Step 2's model call exhausts the scripted queue — the designed turn
-    // failure AFTER the inline effect. The turn's own outcome (asserted below)
-    // is what proves it; a console-message match would only prove the wording.
     const failed = await service.stream(target, {
       providerType: 'openai',
       providerId: 'provider_primary',
@@ -172,7 +144,6 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
     const failedRunId = failedRun!.id;
     expect(executions).toEqual(['/inline.txt']);
 
-    // The inline fact is in the log, attributed to the failed run.
     const facts = getSessionEvents('thread_inline145', [TOOL_EXECUTED]);
     expect(facts).toHaveLength(1);
     expect(facts[0].payload).toMatchObject({
@@ -181,7 +152,6 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
       toolName: TOOL_NAME,
     });
 
-    // The retry continues from the journaled effect: the pair rides the wire.
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
         [
@@ -303,7 +273,6 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
           runId: 'run_malformed_145',
           toolCallId: 'call_malformed_145',
           toolName: TOOL_NAME,
-          // args missing — the fact cannot be represented on the wire.
         },
       },
     ]);

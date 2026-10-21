@@ -3,10 +3,6 @@ import { createLogger } from '@iki/backend/logger';
 
 const migrationLogger = createLogger({ module: 'db_migration_runner' });
 
-// The database handle flows down from initializeDatabase: migration modules
-// never import the getDb singleton (arch rule db-migration-above-database) —
-// importing it is the module-level cycle this file used to sit in.
-// Migration table to track executed migrations
 const initMigrationsTable = (db: SqliteDatabase) => {
   db.exec(`
         CREATE TABLE IF NOT EXISTS migrations (
@@ -46,7 +42,6 @@ const findExecutedMigrationName = (
   return null;
 };
 
-// Mark a migration as executed
 export const markMigrationExecuted = (db: SqliteDatabase, name: string) => {
   const now = new Date().toISOString();
   db.prepare('INSERT INTO migrations (name, executed_at) VALUES (?, ?)').run(name, now);
@@ -57,14 +52,12 @@ const renameExecutedMigration = (db: SqliteDatabase, fromName: string, toName: s
   db.prepare('UPDATE migrations SET name = ? WHERE name = ?').run(toName, fromName);
 };
 
-// Check if a migration has been executed
 export const isMigrationExecuted = (
   db: SqliteDatabase,
   name: string,
   aliases: string[] = []
 ): boolean => Boolean(findExecutedMigrationName(db, { name, aliases }));
 
-// Run a migration
 export const runMigration = (db: SqliteDatabase, migration: Migration) => {
   const executedName = findExecutedMigrationName(db, migration);
   if (executedName) {
@@ -129,11 +122,9 @@ export const runMigration = (db: SqliteDatabase, migration: Migration) => {
   }
 };
 
-// Run all migrations
 export const runMigrations = (db: SqliteDatabase, migrations: Migration[]) => {
   initMigrationsTable(db);
 
-  // Sort migrations by name to ensure consistent execution order
   const sortedMigrations = [...migrations].sort((a, b) => a.name.localeCompare(b.name));
 
   for (const migration of sortedMigrations) {
@@ -141,7 +132,6 @@ export const runMigrations = (db: SqliteDatabase, migrations: Migration[]) => {
   }
 };
 
-// Get all executed migrations
 export const getExecutedMigrations = (db: SqliteDatabase): string[] => {
   initMigrationsTable(db);
   const rows = db.prepare('SELECT name FROM migrations ORDER BY executed_at').all() as {

@@ -1,9 +1,5 @@
 import { z } from 'zod';
 
-// ---------------------------------------------------------------------------
-// Plan tool schemas
-// ---------------------------------------------------------------------------
-
 const planToolStepShape = {
   id: z.string().trim().min(1).describe('Short, stable identifier for this step (e.g. "analyze-files")'),
   description: z.string().min(1).describe('What this step does and why'),

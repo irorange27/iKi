@@ -87,10 +87,7 @@ const normalizeThreadInput = (
 };
 
 export const createChatPersistence = (deps: {
-  /**
-   * Retained so existing callers keep compiling; the continuity subsystem
-   * that consumed this hook is deleted. A caller may pass nothing.
-   */
+
   onContinuityMessagePersisted?: (params: {
     threadId: string;
     messageId: string;
@@ -137,8 +134,6 @@ export const createChatPersistence = (deps: {
     const currentWorkspaceId = normalizedString(existingThread?.workspace_id);
     const workspaceChanged = hasWorkspaceUpdate && nextWorkspaceId !== currentWorkspaceId;
 
-    // Assigning the thread's own sanctioned worktree must pass even mid-thread;
-    // the guard only protects arbitrary workspace switches after messages exist.
     const guardedWorkspaceChange =
       workspaceChanged && !isThreadWorktreeWorkspaceId(nextWorkspaceId);
 
@@ -173,16 +168,6 @@ export const createChatPersistence = (deps: {
   };
   const deleteThread = (id: string) => chatThreadDb.deleteChatThread(id);
 
-  /**
-   * Messages are DERIVED, not stored (ADR 011). The session log is the only
-   * record; this reads it back into the row shape the callers still expect.
-   *
-   * The shape is kept deliberately: every consumer above this seam reads
-   * `ChatMessage` (id, thread_id, message JSON, timestamp), and rewriting all
-   * of them at once would be a larger change than removing the table. The
-   * projection is a plain fold over the two event types that carry a message,
-   * so it cannot disagree with the log — there is nothing to disagree with.
-   */
   const projectRow = (threadId: string, event: { type: string; payload: unknown }): ChatMessage | null => {
     const payload = event.payload as { message?: unknown; messageId?: unknown };
     const message = payload?.message;
@@ -211,17 +196,14 @@ export const createChatPersistence = (deps: {
     const byId = new Map<string, ChatMessage>();
     for (const event of rows) {
       const row = projectRow(threadId, event);
-      // Later facts overwrite earlier ones for the same id — the same
-      // overwrite semantics the replay reducer uses.
+
       if (row) byId.set(row.id, row);
     }
     return [...byId.values()];
   };
 
   const getMessage = (id: string): ChatMessage | null => {
-    // No thread id is available from an id alone, so this cannot use the
-    // per-thread scan. It is the one lookup that still needs a scan; the
-    // callers that use it already hold the thread and should pass it.
+
     const row = getDb()
       .prepare(
         `SELECT thread_id, payload FROM session_events
@@ -257,20 +239,6 @@ export const createChatPersistence = (deps: {
         ? sanitizeUiMessageJsonForStorage(message.message)
         : JSON.stringify(message.message ?? {});
 
-    // ADR 011: this entry point NO LONGER WRITES.
-    //
-    // The turn path owns the fact: `message_send` records `input_accepted`
-    // (with the run id, the system config and the id-less send's
-    // `input_<runId>` id) for the input it admits, and `finalizeTurn` records
-    // `model_output_committed` for the answer. This function is called by the
-    // renderer's dual-write for the SAME message, so writing here produced a
-    // second fact for one message — two accepted inputs where the contract is
-    // one.
-    //
-    // Keeping it as a lookup rather than deleting the method keeps the
-    // callers compiling; a message that already exists returns itself, and a
-    // message the turn path has not recorded yet returns null. The log stays
-    // the single writer's record.
     void sanitizedMessageJson;
     chatThreadDb.touchChatThread(threadId);
 
@@ -283,11 +251,6 @@ export const createChatPersistence = (deps: {
     return getMessage(messageId);
   };
 
-  /**
-   * An append-only log has no in-place update. A changed message is a NEW
-   * fact carrying the same message id; the projection takes the latest one.
-   * The caller-visible result is unchanged; the storage shape is not.
-   */
   const updateMessage = (id: string, input: unknown) => {
     const sanitizedUpdate: Partial<ChatMessage> = isObjectRecord(input)
       ? {
@@ -327,16 +290,10 @@ export const createChatPersistence = (deps: {
     return { changes: 1 };
   };
 
-  /**
-   * An append-only log cannot forget. Deletion is a no-op here rather than a
-   * silent partial: history truncation is handled at the thread level (the
-   * stream is per thread), and a single-message delete would need a tombstone
-   * fact the reducer does not have yet.
-   */
   const deleteMessage = (_id: string) => ({ changes: 0 });
 
   return {
-    // Threads
+
     listThreads,
     getThread,
     getThreadTodoPlan,
@@ -344,17 +301,13 @@ export const createChatPersistence = (deps: {
     clearThread,
     updateThread,
     deleteThread,
-    // Messages
+
     listMessages,
     getMessage,
     createMessage,
     updateMessage,
     deleteMessage,
-    /**
-     * Turn-output write: create the row or update it in place when an earlier
-     * write (renderer dual-write, an approval-pending partial) already created
-     * it. Unlike createMessage this never silently keeps a stale partial.
-     */
+
     upsertTurnMessage: (input: unknown) => {
       const id =
         isObjectRecord(input) && typeof (input as { id?: unknown }).id === 'string'
@@ -362,8 +315,7 @@ export const createChatPersistence = (deps: {
           : '';
       const existing = id ? getMessage(id) : null;
       if (existing && id) {
-        // Normalize object message payloads to the sanitized JSON string the
-        // column stores, mirroring createMessage.
+
         const rawMessage = isObjectRecord(input)
           ? (input as { message?: unknown }).message
           : undefined;

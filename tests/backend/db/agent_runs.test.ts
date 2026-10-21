@@ -158,9 +158,6 @@ describe('agent_runs db', () => {
 
     const updateParams = updateRunMock.mock.calls[0][0] as Record<string, unknown>;
     expect(updateParams.status).toBe('blocked');
-    // The serialized shape carries live state ONLY: `modelMessages` was removed
-    // from `AgentRunWorkingState` (ADR 010 §3), so a writer that started copying
-    // history back into the row would fail here.
     expect(updateParams.working_json).toBe(
       '{"accumulatedText":"partial","pendingApprovalIds":["approval_1"],"lastStepIndex":2}'
     );
@@ -229,9 +226,6 @@ describe('agent_runs db', () => {
         available_skill_ids: '[]',
         input_json: '{"prompt":"investigate"}',
         working_json:
-          // Deliberately still carries the legacy `modelMessages` key: rows
-          // written before ADR 010 do, and the mapper must ignore it rather
-          // than fail — that is what makes the removal non-migrating.
           '{"modelMessages":[],"accumulatedText":"done","pendingApprovalIds":[],"lastStepIndex":2}',
         output_json: '{"text":"done","finishReason":"completed"}',
         error_json: null,

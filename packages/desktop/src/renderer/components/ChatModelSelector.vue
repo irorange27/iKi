@@ -317,8 +317,6 @@ const filteredProviderGroups = computed<ProviderModelGroup[]>(() => {
         models: group.models.filter(model => model.toLowerCase().includes(query)),
       };
     })
-    // Keep a provider that matches by name even with no matching model — the
-    // same rule the empty-model case above needs.
     .filter(
       group =>
         group.models.length > 0 || group.providerSearchText.includes(query)
@@ -358,11 +356,6 @@ const toggleModelSelector = () => {
   refreshPanelBounds();
 };
 
-// The card is right-anchored to the trigger, so its room is whatever sits
-// between the viewport's left edge and the trigger (DSH measures the same
-// way). Re-measured whenever the layout under it can move: pane switches,
-// the autonomous toggle growing an "Auto" pill into the toolbar, resizes.
-// Floored so the menu stays usable.
 const panelMaxWidth = ref<number | null>(null);
 const panelStyle = computed(() =>
   panelMaxWidth.value ? { maxWidth: `${panelMaxWidth.value}px` } : undefined

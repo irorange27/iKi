@@ -1,25 +1,6 @@
-/**
- * Convert the renderer's conversation messages into model-call messages.
- *
- * Replaces the AI SDK's `convertToModelMessages` (ADR 009). The mapping is
- * small and explicit because iKi owns both ends now:
- *
- * - `text` parts join into one text block (with blank-line separation, so a
- *   paragraph break the model saw is not silently collapsed).
- * - `file` parts become file parts carrying the media type and payload.
- * - `dynamic-tool` parts become tool exchanges: a call, and — when the part is
- *   terminal — its result. A part still waiting on approval becomes an
- *   assistant call with NO result, which is exactly what a paused turn needs:
- *   the decision is appended later by the approval owner.
- * - iKi's own data parts (`data-*`) are not model input and are dropped.
- *
- * Non-terminal tool parts are repaired upstream (`repairInterruptedToolPart`),
- * so by the time a call reaches here it either has an outcome or is a live
- * approval request.
- */
+
 import type { ModelContentPart, ModelMessage } from './model_history';
 
-/** The minimal part shapes this converter reads. */
 type UiPartLike = {
   type: string;
   text?: unknown;
@@ -35,13 +16,6 @@ type UiPartLike = {
   approval?: unknown;
 };
 
-/**
- * The approval id a pending part carries, falling back to the call id.
- *
- * The persisted part normally has `approval.id`; a snapshot written before the
- * decision existed may only have the call id, and an id the owner can still
- * match is better than dropping the pair.
- */
 const readApproval = (approval: unknown): { id?: string; approved?: boolean } => {
   if (typeof approval !== 'object' || approval === null) return {};
   const record = approval as { id?: unknown; approved?: unknown };
@@ -60,11 +34,9 @@ const isObjectPart = (value: unknown): value is UiPartLike =>
 const readString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.length > 0 ? value : undefined;
 
-/** A tool part that has an outcome the model should see. */
 const isSettledToolState = (state: string | undefined): boolean =>
   state === 'output-available' || state === 'output-error' || state === 'output-denied';
 
-/** Whole-message text, preserving paragraph breaks between text parts. */
 const joinTextParts = (parts: UiPartLike[]): string =>
   parts
     .filter(part => part.type === 'text' && typeof part.text === 'string')
@@ -87,16 +59,11 @@ const toUserContent = (parts: UiPartLike[]): string | ModelContentPart[] => {
       blocks.push({ type: 'file', mediaType, url });
     }
   }
-  // A single text block keeps the plain-string form so the projection does not
-  // have to unwrap a one-element array for the common case.
+
   if (blocks.length === 1 && blocks[0].type === 'text') return blocks[0].text as string;
   return blocks;
 };
 
-/**
- * One message's model projection, or null when it carries nothing the model
- * can use (a message with only data parts, or an empty draft).
- */
 const toModelMessage = (role: string, parts: UiPartLike[]): ModelMessage[] => {
   if (role === 'system') {
     const text = joinTextParts(parts);
@@ -140,14 +107,6 @@ const toModelMessage = (role: string, parts: UiPartLike[]): ModelMessage[] => {
 
     const state = readString(part.state);
 
-    // A call waiting on a decision is a LIVE pair: the assistant's tool-call
-    // plus the approval request that names it. The provider needs both to
-    // resume the turn; emitting only the call left the decision unpairable.
-    //
-    // `approval-responded` without an `approved` flag is the same live state —
-    // `stampLiveApprovalRequests` rewrites it that way so the part cannot be
-    // confused with an answered one, and only a part carrying a decision is
-    // answered.
     const answered = readApproval(part.approval).approved;
     if (state === 'approval-requested' || (state === 'approval-responded' && answered === undefined)) {
       const approvalId = readableApprovalId(part.approval, toolCallId);
@@ -161,8 +120,7 @@ const toModelMessage = (role: string, parts: UiPartLike[]): ModelMessage[] => {
     }
 
     if (!isSettledToolState(state)) continue;
-    // A settled call pairs with exactly one tool message entry; an unsettled
-    // one (pending approval) deliberately has none.
+
     toolResults.push({
       type: 'tool-result',
       toolCallId,
@@ -187,12 +145,6 @@ const toModelMessage = (role: string, parts: UiPartLike[]): ModelMessage[] => {
   return messages;
 };
 
-/**
- * Convert a normalized UI conversation into model messages.
- *
- * `carryReasoningOnAssistant` is always true here: a resumed turn replays the
- * assistant's own thinking so the provider sees the same prefix it produced.
- */
 export const convertUiMessagesToModel = (messages: unknown[]): ModelMessage[] => {
   const out: ModelMessage[] = [];
   for (const raw of messages) {

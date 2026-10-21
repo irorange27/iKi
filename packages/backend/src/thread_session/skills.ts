@@ -55,12 +55,11 @@ export const resolveSkillsSystemPrompt = async (params: {
   let availableSkills: SkillSummary[] = [];
 
   if (skillMode === 'manual') {
-    // Manual mode: use explicit skills if provided, otherwise fall back to pinned thread skills.
+
     if (normalizedSkillIds.length === 0 && !Array.isArray(params.skillIds)) {
       normalizedSkillIds = pinnedSkillIds;
     }
 
-    // Persist explicit selection (including empty array to clear pinned skills).
     if (normalizedThreadId && Array.isArray(params.skillIds)) {
       try {
         chatThreadDb.updateChatThread(normalizedThreadId, {
@@ -79,7 +78,7 @@ export const resolveSkillsSystemPrompt = async (params: {
       }
     }
   } else {
-    // Auto mode: pick relevant skills per message using tool model, plus pinned thread skills.
+
     availableSkills = await listSkills();
     const availableSkillCatalog = availableSkills.map(skill => ({
       id: skill.id,
@@ -89,10 +88,7 @@ export const resolveSkillsSystemPrompt = async (params: {
     }));
 
     const toolModel = getToolModel();
-    // Skills are an optional enrichment: `null` (selector unavailable or
-    // failed) means "no automatic pick this turn", which is a legitimate
-    // empty result here — unlike the tool set, nothing degrades to a broken
-    // state because a skill was not preloaded.
+
     const autoSelectedSkillIds =
       (toolModel && availableSkillCatalog.length > 0
         ? await selectSkillsWithAgent({

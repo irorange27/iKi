@@ -338,7 +338,6 @@ const downloadWhisperModelFromUrl = async (
     try {
       await fs.unlink(tempPath);
     } catch {
-      // ignore cleanup errors
     }
     throw error;
   }
@@ -481,7 +480,6 @@ export const downloadWhisperNodeModel = async (
       try {
         await fs.unlink(modelPath);
       } catch {
-        // ignore delete errors
       }
     } else {
       onProgress?.({ model: modelName, stage: 'done', message: 'Model ready' });
@@ -603,20 +601,17 @@ export const transcribeWithWhisperNode = async (
     try {
       await fs.unlink(inputPath);
     } catch {
-      // ignore
     }
     if (wavPath) {
       try {
         await fs.unlink(wavPath);
       } catch {
-        // ignore
       }
     }
     if (outputPath) {
       try {
         await fs.unlink(`${outputPath}.txt`);
       } catch {
-        // ignore
       }
     }
   }

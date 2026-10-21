@@ -11,11 +11,6 @@ const approvalLogger = createLogger({ module: 'tool_approval_controller' });
 
 export type ToolApprovalController = ReturnType<typeof createToolApprovalController>;
 
-/**
- * Renders the durable approval flow onto the SDK chat: record the decision in
- * the backend's SQLite approval session, mark the part `approval-responded`,
- * then resume the stream the backend pushes over the same IPC channel.
- */
 export const createToolApprovalController = (deps: {
   chat: IkiChat;
   transport: IpcChatTransport;
@@ -40,14 +35,10 @@ export const createToolApprovalController = (deps: {
   ): Promise<void> => {
     const approvalId = getApprovalId(part);
     if (!approvalId) return;
-    // Guard against double-clicks: Vue reactivity is async, so a rapid second
-    // click can arrive before the button re-renders as disabled.
     if (isProcessing(part)) return;
     setProcessing(approvalId, true);
 
     try {
-      // The backend pushes a resumed stream over the same IPC channel once
-      // the decision is recorded; arm the catch-all slot before approving.
       deps.transport.expectFollowUpStream();
       const result = await deps.electronAPI.chat.approveTool(approvalId, approved);
       if (!result?.success) {
@@ -55,19 +46,11 @@ export const createToolApprovalController = (deps: {
         throw new Error(result?.error || 'Tool approval failed');
       }
 
-      // No `reason`: authoring the user-level decision text is the backend's
-      // job (thread_session/approval.ts owns the persisted-decision wording and
-      // its fallback). A renderer copy would fork that fact.
       deps.chat.addToolApprovalResponse({
         id: approvalId,
         approved,
       });
 
-      // approveTool resolves only after the backend pushed the whole resumed
-      // segment, so consume it in both outcomes. When the turn blocked again
-      // (awaitingApproval) the segment carries the next tool part and approval
-      // card but no terminal chunk — close the slot so the read ends and the
-      // card renders; otherwise the turn stalls on an unconsumed stream.
       deps.transport.closeFollowUpStream();
       void deps.chat.resumeStream();
     } catch (error) {

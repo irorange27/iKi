@@ -9,9 +9,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const prepareChatTurnMock = vi.hoisted(() => vi.fn());
 
-// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
-// these suites on the durable-layer behaviour they assert without reaching a
-// network endpoint.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -38,8 +35,6 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 }));
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
-  // session_loop now consumes these three as named imports; the factory must
-  // provide them or module linking fails even when the preparer is mocked out.
   getAssistantProfileContextMessage: () => '',
   retrieveRelevantContinuity: () => null,
   onMessagePersisted: async () => undefined,
@@ -93,11 +88,6 @@ const preparedTurn = {
   enableTools: true,
 };
 
-// Stage C slice 3 (D22): streamed text is committed to the session log
-// BEFORE it is published to the subscriber — everything shown is already in
-// the log, so a crash can lose at most the unpublished buffer tail, never
-// shown content. The cut-point regression drives a real turn and kills it
-// mid-flight; the rebuild from events alone must match what was published.
 describe('streamed text commit gate', () => {
   let dataDir = '';
   let conversation: ReturnType<typeof createChatPersistence>;
@@ -121,8 +111,6 @@ describe('streamed text commit gate', () => {
     seedTurnProvider({ providerId: 'provider_primary', model: 'test-model' });
     conversation = createChatPersistence({
       memory: memory as never,
-      // platform is module-mocked above; the real continuity hook is not
-      // under test here, so the port gets a no-op double.
       onContinuityMessagePersisted: async () => undefined,
     });
     conversation.createThread({ id: 'thread_commit' });
@@ -146,25 +134,12 @@ describe('streamed text commit gate', () => {
   });
 
   beforeEach(() => {
-    // These suites drive the DURABLE layer (streaming, approvals, session-log
-    // facts, retry, persistence) with a scripted AI SDK model. They are not about
-    // which supply serves the turn, so they opt into the legacy executor: the
-    // production default refuses a turn its projection cannot carry, and a
-    // scripted model has no endpoint to project to.
     setTurnHarnessFallback(piTurnHarness);
-    // reset (not clear): leftover mockReturnValueOnce queues from a previous
-    // test would leak providers and preparer fixtures across tests.
     vi.resetAllMocks();
     prepareChatTurnMock.mockResolvedValue(preparedTurn);
   });
 
   it('commits every published text delta — the log covers the whole shown text', async () => {
-    // One model drives the whole conversation: the SDK's inner loop pops one
-    // response per step — tool call (with lead-in text), then the follow-up
-    // text. A tool boundary lands between the two committed segments.
-    // Two model calls: the tool request (with its lead-in text), then the
-    // follow-up text after the result. The tool boundary separates the two
-    // committed segments the test is about.
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
         [
@@ -203,14 +178,11 @@ describe('streamed text commit gate', () => {
     });
     expect(result).toMatchObject({ success: true });
 
-    // Invariant: shown text ⊆ committed text — the published deltas and the
-    // committed events carry exactly the same characters.
     const published = publishedTextChunks(target).join('');
     expect(published).toContain('first segment.');
     expect(published).toContain('second segment.');
     expect(committedTextConcat('thread_commit')).toBe(published);
 
-    // The rebuild from events alone reproduces the full shown text.
     const view = rebuildThreadViewFromEvents('thread_commit');
     const assistant = view.messages.at(-1)!;
     expect(JSON.stringify(assistant.parts)).toContain('first segment.');
@@ -218,11 +190,6 @@ describe('streamed text commit gate', () => {
   });
 
   it('withholds streamed text when the session-log WRITE fails — shown ⊆ committed survives write rejection', async () => {
-    // Rereview G1: the publish-failure path was covered; the WRITE-failure
-    // path was not. An independent SQLite trigger refuses
-    // model_text_committed inserts — the real driver must not publish text
-    // it could not commit, and must not count the cleared buffer as
-    // committed.
     const db = getDb();
     db.exec(
       `CREATE TRIGGER reject_text_commit
@@ -261,8 +228,6 @@ describe('streamed text commit gate', () => {
       });
       expect(result).toMatchObject({ success: false });
 
-      // The invariant is about what the subscriber SAW: nothing may be
-      // published that the log does not hold.
       const published = publishedTextChunks(target).join('');
       expect(published).not.toContain('UNCOMMITTED_REVIEW_TEXT');
       expect(committedTextConcat('thread_commit_writereject')).toBe(published);
@@ -280,7 +245,6 @@ describe('streamed text commit gate', () => {
         description: 'Probe (kills the turn)',
         paramSchema: z.object({}),
         handler: async () => {
-          // The crash: the user stops the turn while it is running.
           killStreaming?.stopStream(102);
           return 'observed';
         },
@@ -324,9 +288,6 @@ describe('streamed text commit gate', () => {
     });
     expect(result).toMatchObject({ success: true, stopped: true });
 
-    // Crash cut: the events alone rebuild exactly the published prefix. The
-    // kill settles through the normal cancelled path; the boundary flush had
-    // already committed the shown text before the tool ran.
     const view = rebuildThreadViewFromEvents('thread_commit_kill');
     expect(view.turns.at(-1)).toMatchObject({ status: 'cancelled' });
     expect(committedTextConcat('thread_commit_kill')).toBe('shown before the kill. ');

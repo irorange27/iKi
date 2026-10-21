@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Fake DB state. `tables` simulates pre-existing tables on a database created
-// before the migration squash; sqlite_master lookups only report tables that
-// this set contains (migrations query them by literal name).
 const dbState = {
   tables: new Set<string>(),
   executed: new Set<string>(),
@@ -12,19 +9,14 @@ const dbState = {
 import type { SqliteDatabase } from '@iki/backend/db/sqlite';
 import { initializeMigrations } from '@iki/backend/db/migration';
 
-// initializeMigrations takes the handle as a parameter (issue #91), so the
-// fake is passed in directly instead of mocking the database singleton module.
 const makeFakeDb = (): SqliteDatabase =>
   ({
     exec: (statement: string) => void dbState.executedStatements.push(statement),
     prepare: (sql: string) => ({
       get: (...params: string[]) => {
         if (sql.includes('sqlite_master')) {
-          // Parameterized table probe (migration 002): report only tables the
-          // pre-existing schema actually contains.
           const table = params[0];
           if (table) return dbState.tables.has(table) ? { name: table } : undefined;
-          // General schema probe: any user table at all?
           return dbState.tables.size > 0 ? { name: [...dbState.tables][0] } : undefined;
         }
         return undefined;
@@ -58,10 +50,6 @@ describe('initializeMigrations (post-squash baseline)', () => {
 
     expect(dbState.executed.has('001_baseline')).toBe(true);
     expect(dbState.executedStatements.some(s => s.includes(KEY_TABLE_DDL_MARKER))).toBe(false);
-    // Post-baseline migrations (e.g. 002 renaming the tool-call approval
-    // tables) legitimately run for pre-squash databases — only the squashed
-    // baseline DDL must stay dormant. (The migrations bookkeeping table
-    // statement re-runs every time and is ignored.)
     expect(
       dbState.executedStatements
         .filter(s => !s.includes('migrations'))
@@ -78,8 +66,6 @@ describe('initializeMigrations (post-squash baseline)', () => {
 
     initializeMigrations(makeFakeDb());
 
-    // no migration DDL appears on re-initialization (the migrations
-    // bookkeeping table statement re-runs every time and is ignored)
     const newDdl = dbState.executedStatements
       .slice()
       .filter(s => !s.includes('migrations'))

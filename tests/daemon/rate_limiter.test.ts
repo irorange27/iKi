@@ -37,20 +37,15 @@ describe('createRateLimiter', () => {
 
     const limiter = createRateLimiter({ windowMs: 60_000, maxRequests: 2 });
 
-    // client_a makes requests and fills up
     limiter.check('client_a');
     limiter.check('client_a');
 
-    // Advance past both the rate window AND the cleanup interval
     fakeNow += 120_001;
 
-    // A request from client_b triggers cleanup of client_a's stale bucket
     limiter.check('client_b');
 
-    // Now advance past client_b's window + cleanup interval too
     fakeNow += 120_001;
 
-    // Another request triggers cleanup again
     const result = limiter.check('client_c');
     expect(result.allowed).toBe(true);
 

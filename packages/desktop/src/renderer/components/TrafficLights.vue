@@ -51,7 +51,6 @@ import { useI18n } from '../i18n';
 
 const { t } = useI18n();
 
-// The slice only exists on darwin (preload), so this renders nothing elsewhere.
 const controls = getElectronApiSlice('windowControls');
 const closeWindow = getElectronApiMethod('closeWindow');
 const isFullscreen = ref(false);

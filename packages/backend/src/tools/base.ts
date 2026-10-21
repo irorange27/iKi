@@ -8,9 +8,6 @@ const toolLogger = createLogger({ module: 'base_tool' });
 
 type ApprovalPolicy = boolean | ToolApprovalFunction;
 
-/**
- * Base class for all tools with built-in validation
- */
 export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   abstract name: string;
   abstract type: string;
@@ -22,35 +19,16 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
   autoAllowed = true;
   outputSchema?: Record<string, unknown>;
 
-  /** Retry configuration. If undefined, no retry is applied. */
   retry?: ToolRetryConfig;
 
-  /**
-   * Whether this tool may be re-run after an interrupted execution.
-   *
-   * Leave it unset for anything that writes. Unset means `unsafe`, and that
-   * default IS the contract: a recovery must never read silence as permission.
-   * Only a pure read declares `'safe'`; see `AgentTool.replay` for what
-   * qualifies and why "looks idempotent" is not enough.
-   */
   replay?: 'safe' | 'unsafe';
 
-
-  /**
-   * Raw handler implementation
-   */
   protected abstract handler(args: z.infer<P>): Promise<unknown>;
 
-  /**
-   * Get parameters in JSON Schema format (derived from Zod)
-   */
   get parameters(): Record<string, unknown> {
     return zodSchemaToJsonSchema(this.paramSchema, { title: this.name });
   }
 
-  /**
-   * Execute the tool with validation and tracing.
-   */
   async execute(args: unknown): Promise<unknown> {
     getToolRuntimeContext().abortSignal?.throwIfAborted();
     const validatedArgs = this.paramSchema.parse(args);
@@ -72,9 +50,6 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
     );
   }
 
-  /**
-   * Convert to AgentTool interface
-   */
   toAgentTool(): AgentTool {
     return {
       name: this.name,
@@ -84,11 +59,7 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
       outputSchema: this.outputSchema,
       paramSchema: this.paramSchema,
       needsApproval: this.needsApproval ?? false,
-      // Record the declaration at the source. A tool that never passes through
-      // the turn resolver (a direct toAgentTool() in a test, a delegated
-      // child's toolsOverride) must still answer "do I need approval?"
-      // statically — otherwise consumers fall back to the live decision, which
-      // under an explicit policy is a per-call function for every tool.
+
       declaredNeedsApproval: this.needsApproval === true,
       ...(this.approvalMode ? { approvalMode: this.approvalMode } : {}),
       autoAllowed: this.autoAllowed === true,
@@ -96,17 +67,12 @@ export abstract class BaseTool<P extends z.ZodTypeAny = z.ZodTypeAny> {
       source: { kind: 'builtin' },
       handler: (args: unknown) => this.execute(args),
       ...(this.retry ? { retry: this.retry } : {}),
-      // Omitted when undeclared, NOT defaulted to 'unsafe' here: the recovery
-      // branch must be able to tell "declared unsafe" from "never declared",
-      // and the fail-closed default belongs at the read, not the write.
+
       ...(this.replay ? { replay: this.replay } : {}),
     };
   }
 }
 
-/**
- * Tool Registry for maintaining a collection of tools
- */
 export class ToolRegistry {
   private tools = new Map<string, AgentTool>();
 
@@ -186,9 +152,6 @@ export class ToolRegistry {
   }
 }
 
-/**
- * Helper to create an AgentTool with minimal boilerplate
- */
 export function createTool<P extends z.ZodTypeAny>(options: {
   name: string;
   type: string;
@@ -202,7 +165,7 @@ export function createTool<P extends z.ZodTypeAny>(options: {
   displayName?: string;
   source?: AgentTool['source'];
   retry?: ToolRetryConfig;
-  /** Absent means `unsafe`; see `BaseTool.replay`. */
+
   replay?: AgentTool['replay'];
   handler: (args: z.infer<P>) => Promise<unknown>;
 }): AgentTool {
@@ -225,7 +188,4 @@ export function createTool<P extends z.ZodTypeAny>(options: {
   };
 }
 
-/**
- * Export a default registry for simple use cases
- */
 export const defaultToolRegistry = new ToolRegistry();

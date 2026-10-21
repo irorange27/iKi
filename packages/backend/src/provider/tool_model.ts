@@ -105,8 +105,6 @@ const findConfiguredToolModel = (
   return resolveExplicitToolModel(enabledProviders, config ?? {});
 };
 
-// Resolves the first available model from enabled providers as a fallback for
-// lightweight tasks (title generation, etc.) when no explicit tool model is configured.
 const resolveFallbackToolModel = (providers: ReturnType<typeof getProviders>): ToolModelConfig | null => {
   for (const provider of providers) {
     if (!provider.enabled) continue;
@@ -131,11 +129,6 @@ export const getToolModel = (): ToolModelConfig | null => {
       return configuredToolModel;
     }
 
-    // No explicit tool model configured: fall back to the first enabled
-    // provider's first model. Announce it — this single implicit choice carries
-    // EVERY auxiliary call (tool routing, skill routing, titles, emotion), and
-    // the operator otherwise cannot tell which credential is being spent or why
-    // all of those stopped when that one provider ran out.
     const fallback = resolveFallbackToolModel(providers);
     if (fallback) {
       toolModelLogger.event({
@@ -174,14 +167,6 @@ export const testToolModelLatency = async (
     );
   }
 
-  // Probe through the factory entry, not a hand-rolled AI SDK call.
-  //
-  // This used to build the model itself and call generateText directly, which
-  // made it the one aux surface that exercised a DIFFERENT supply than the
-  // calls it is supposed to validate: on a Pi-eligible provider the probe ran
-  // the AI SDK path while the real auxiliary calls ran Pi, so "Test" could
-  // report a healthy latency for a route that was broken. One supply decision
-  // (ADR 007) means one place that decides it.
   const startTime = Date.now();
   await generateChatWithModelMessages({
     providerType: resolvedToolModel.providerType,

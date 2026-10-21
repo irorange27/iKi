@@ -21,7 +21,7 @@ export interface ContinuityMemoryPreview {
 export interface ChatServicePlatformDeps {
   companion?: ChatCompanionBridge;
   exportTrace?: (runId: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
-  /** Host save-dialog + write for the user-readable thread markdown export. */
+
   exportThreadMarkdown?: (params: { threadId: string; title: string; content: string }) => Promise<{
     success: boolean;
     filePath?: string;

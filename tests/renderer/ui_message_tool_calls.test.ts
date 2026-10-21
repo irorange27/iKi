@@ -153,16 +153,12 @@ describe('ui_message_tool_calls', () => {
         'Tool call was waiting for approval when the app restarted; it never executed.',
     };
 
-    // Always-visible meta-row text (the awaiting-forever / silent-failure fix).
     expect(getToolErrorText(interruptedPart)).toContain('never executed');
-    // The Output section falls back to the reason for embedded views.
     expect(getToolOutputForDisplay(interruptedPart)).toContain('never executed');
 
-    // Non-error parts never leak an errorText-styled meta entry.
     expect(
       getToolErrorText({ ...interruptedPart, state: 'output-available', output: 'ok' })
     ).toBe('');
-    // Error state without a recorded reason degrades to no text.
     expect(getToolErrorText({ ...interruptedPart, errorText: '   ' })).toBe('');
     expect(getToolOutputForDisplay({ ...interruptedPart, errorText: '   ' })).toBeUndefined();
   });

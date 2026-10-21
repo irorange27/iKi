@@ -45,9 +45,6 @@ export const createChatContextAssembler = (deps: {
     const recentHistory = selectRecentHistory(params.messages, params.modelCapability);
     blocks.push(recentHistory.block);
 
-    // The identity block must render the SAME world the turn executes in:
-    // when the caller holds a turn-start snapshot it wins (an explicit null
-    // means the turn started with no workspace); without one, resolve fresh.
     const workspaceSystemMessage =
       params.workspaceSelection !== undefined
         ? buildWorkspaceSystemMessageForSelection(params.workspaceSelection)
@@ -72,11 +69,6 @@ export const createChatContextAssembler = (deps: {
 
     blocks.push(buildDroppedBlock('thread-summary', 'managed at model step boundary'));
 
-    // Identity and skills are stable instruction blocks: both land in the
-    // system prefix so the cached history prefix stays reusable across turns.
-    // Conversation history is passed through untouched — token-level history
-    // compaction has one owner, the model-step budget in
-    // `agent/runners/pi_turn_budget.ts`, not this assembler.
     const withIdentity = insertSystemMessages(
       [...recentHistory.systemMessages, ...recentHistory.recentMessages],
       [identityContext.systemMessage]

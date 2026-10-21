@@ -11,8 +11,6 @@ const external = vi.hoisted(() => ({
 }));
 const callPiChatMock = vi.hoisted(() => vi.fn());
 
-// Pi is the only supply (ADR 009); script it here instead of the retired
-// `createModel`.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -26,8 +24,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   resolvePersonaPrompt: () => 'review system',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: external.capability,
-  // No database in this suite: answer the provider lookup directly so the Pi
-  // supply admits the turn (the address is never dialled — callPiChat is mocked).
   getProviderConfig: () => ({
     type: 'openai',
     apiKey: 'key-test',
@@ -81,13 +77,6 @@ const memory = {
 };
 const capacity = { contextWindow: 100000, maxInputTokens: 98000, maxOutputTokens: 2000 };
 
-// Review follow-ups (issue #72): the plan's admission-frozen world must bind
-// every consumer — the provider context projection (R1), not just tools and
-// approvals; a failing world resolution must release the admission instead of
-// stranding the thread (R2); and the run-row recovery path must restore the
-// execution configuration instead of silently dropping fields (R3). Real
-// preparer, SDK, SQLite, coordinator and file tools throughout — the stock
-// stream regression mocked the preparer and could not see R1.
 describe('execution plan admission boundaries', () => {
   let root: string;
   let conversation: ReturnType<typeof createChatPersistence>;
@@ -96,9 +85,6 @@ describe('execution plan admission boundaries', () => {
   let releases: Array<() => void>;
 
   beforeEach(async () => {
-    // Durable-layer suite: a scripted model drives the turn, so the executor is
-    // forced rather than routed (the production default refuses a turn whose
-    // provider row does not exist, which is not what this suite is about).
     setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-plan-boundaries-'));
     external.userData.mockReturnValue(root);
@@ -125,8 +111,6 @@ describe('execution plan admission boundaries', () => {
       metadata: '{"mode":"work"}',
     });
     defaultToolRegistry.register(new WriteFileTool().toAgentTool());
-    // The model writes through the real tool, then answers — both calls are
-    // scripted on the Pi seam.
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
         [
@@ -221,8 +205,6 @@ describe('execution plan admission boundaries', () => {
   });
 
   it('binds the provider context to the admission workspace, not the switched one (R1)', async () => {
-    // Hold the REAL preparer inside its model-capability await, switch the
-    // thread's workspace, then release — the classic preparation race.
     let releaseCapability!: () => void;
     const capabilityHeld = new Promise<void>(done => {
       releaseCapability = done;
@@ -242,17 +224,12 @@ describe('execution plan admission boundaries', () => {
 
     expect(await turn).toMatchObject({ success: true });
 
-    // Tools executed where the turn started (the admission-freeze contract).
     const a = path.join(root, 'a');
     const b = path.join(root, 'b');
     expect(await fs.readFile(path.join(a, 'effect.txt'), 'utf8')).toBe('bound');
     await expect(fs.stat(path.join(b, 'effect.txt'))).rejects.toThrow();
 
-    // The provider saw the SAME world: A's project instructions and workspace
-    // identity, never B's — the model must not reason under rules of a
-    // workspace its tools do not run in.
     expect(doStream).toHaveBeenCalled();
-    // `callPiChat(model, context, options)` — the request context is arg 1.
     const request = doStream.mock.calls[0]?.[1];
     const prompt = JSON.stringify(request);
     expect(prompt).toContain('SCOPE_MARKER_A');
@@ -266,16 +243,12 @@ describe('execution plan admission boundaries', () => {
     'releases the admission when world resolution fails in %s (R2)',
     async mode => {
       updateChatThread('thread_bound', { workspace_id: null });
-      // A plain file where the work-mode scratch directory would be created:
-      // the admission-time resolution throws ENOTDIR for real.
       await fs.writeFile(path.join(root, 'thread-workspaces'), 'not a directory');
 
       const attempt =
         mode === 'stream'
           ? streaming.stream({ id: 602, send: vi.fn() }, options())
           : streaming.send(options());
-      // The entry must settle (not leave an unhandled rejection) with a
-      // failure result.
       const settled = await attempt.then(
         value => ({ value }),
         reason => ({ unhandled: reason })
@@ -287,8 +260,6 @@ describe('execution plan admission boundaries', () => {
           : String((failure as { error?: string })?.error ?? failure);
       expect(failureText).toContain('ENOTDIR');
 
-      // The admission is re-acquirable and the SQLite lease is gone — the
-      // thread is not stranded for the life of the service instance.
       const recoveredAdmission = coordinator.tryAcquireThreadRun('thread_bound');
       if (recoveredAdmission) recoveredAdmission();
       expect(recoveredAdmission).not.toBeNull();
@@ -297,9 +268,6 @@ describe('execution plan admission boundaries', () => {
   );
 
   it('rebinds the original turn world when retrying from the run row (D30 follow-up)', async () => {
-    // A retry/queued-resume is the same turn re-executing: it must rebind the
-    // original turn's world persisted on the run row, not adopt the thread's
-    // current selection (the F1 split in retry form).
     const preparer = createChatTurnPreparer({
       memory: memory as never,
       getRuntimeConfig: () => ({
@@ -333,8 +301,6 @@ describe('execution plan admission boundaries', () => {
     const stored = getAgentRun(tracker.id);
     if (!stored) throw new Error('Missing recorded run');
 
-    // F3: the retry's recovery history comes from the session log — record
-    // the accepted input fact a real turn start persists.
     recordSessionEvents('thread_bound', [
       {
         type: INPUT_ACCEPTED,
@@ -350,7 +316,6 @@ describe('execution plan admission boundaries', () => {
       },
     ]);
 
-    // Simulate the world switching after the original turn was recorded.
     conversation.updateThread('thread_bound', { workspace_id: 'workspace_wt_bound_b' });
     const recovered = await rebuildResumeHistoryFromEvents('thread_bound', stored.id);
     const resumedOptions = deriveResumeStreamOptions(stored, {
@@ -361,8 +326,6 @@ describe('execution plan admission boundaries', () => {
     });
     expect(resumedOptions.workspaceSelection).toMatchObject({ workspaceId: 'workspace_bound_a' });
 
-    // The retry runs through the real stream entry under the restored world:
-    // the provider sees A and the file lands in A despite the switch to B.
     const doStream = callPiChatMock;
     const turn = streaming.stream(
       { id: 603, send: vi.fn() },
@@ -375,7 +338,6 @@ describe('execution plan admission boundaries', () => {
 
     expect(await fs.readFile(path.join(root, 'a', 'effect.txt'), 'utf8')).toBe('bound');
     await expect(fs.stat(path.join(root, 'b', 'effect.txt'))).rejects.toThrow();
-    // `callPiChat(model, context, options)` — the request context is arg 1.
     const request = doStream.mock.calls[0]?.[1];
     const prompt = JSON.stringify(request);
     expect(prompt).toContain(`Current workspace: A (${path.join(root, 'a')})`);
@@ -396,8 +358,6 @@ describe('execution plan admission boundaries', () => {
     });
     const prepared = await preparer.prepareChatTurn({
       ...options(),
-      // Explicit null: the caller froze "no workspace" at admission — the
-      // context must not silently re-resolve to the thread's current A.
       workspaceSelection: null,
     });
     const prompt = JSON.stringify(prepared.finalMessages);

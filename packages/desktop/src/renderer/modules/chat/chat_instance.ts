@@ -22,12 +22,6 @@ const hasRenderableContent = (message: ChatUiMessage | undefined): boolean => {
   });
 };
 
-/**
- * Reactive ChatState with in-place array mutations: the renderer message
- * store holds a reference to the same array, so the SDK's message swaps are
- * spliced rather than reassigned. Every mutation triggers Vue reactivity
- * through the shared ref.
- */
 export const createReactiveChatState = (
   onWrite: (message: ChatUiMessage) => void
 ): { state: ChatStateAdapter; messagesArray: ChatUiMessage[] } => {
@@ -63,10 +57,6 @@ export const createReactiveChatState = (
     },
     replaceMessage: (index, message) => {
       if (index < 0 || index >= messagesRef.value.length) return;
-      // Tripwire for the streaming-render regression class: writing the
-      // identical reference back keeps prop-driven children shallow-equal and
-      // their computeds stale (empty chat bubbles). Only a fresh clone per
-      // write re-renders; warn loudly if that invariant regresses.
       if (messagesRef.value[index] === message) {
         chatInstanceLogger.event({
           level: 'warn',
@@ -76,11 +66,6 @@ export const createReactiveChatState = (
             'Identical message reference written back; prop-driven message components will not re-render.',
         });
       }
-      // The SDK passes the same accumulating raw object every write and mutates
-      // its parts off-proxy, so splicing that reference back in leaves the
-      // child component's props identical and its segments computed stale.
-      // A fresh shallow clone per write gives Vue a new reactive proxy to
-      // invalidate on; the parts array itself is still the SDK's live state.
       messagesRef.value.splice(index, 1, { ...message });
       onWrite(message);
     },
@@ -92,11 +77,6 @@ export const createReactiveChatState = (
 
 export type ChatInstance = ReturnType<typeof createChatInstance>;
 
-/**
- * Composition root of the renderer chat runtime: the SDK chat instance over
- * the IPC transport, the message-store view, persistence hooks, and the
- * approval controller. One per window; created once by the chat view.
- */
 export const createChatInstance = (deps: {
   electronAPI: Pick<ElectronApi, 'chat'>;
   generateId: () => string;
@@ -107,8 +87,6 @@ export const createChatInstance = (deps: {
   }) => Promise<void> | void;
   onStreamActivity?: () => void;
 }) => {
-  // Turn output is durably persisted by the backend conversation seam
-  // (thread_session/turn_persistence.ts) — the renderer is a view.
   const transport: IpcChatTransport = createIpcChatTransport({
     electronAPI: deps.electronAPI,
   });
@@ -124,10 +102,6 @@ export const createChatInstance = (deps: {
     generateId: deps.generateId,
     transport,
     state,
-    // A stable handle, resolved lazily where it matters: the transport binds
-    // the real thread when it sends. Reading `getCurrentThreadId()` here would
-    // touch the store during module init — before `currentThread` exists — and
-    // the mount failed with a temporal-dead-zone ReferenceError.
     chatId: 'iki-chat',
     onError: error => {
       chatInstanceLogger.event({
@@ -136,8 +110,6 @@ export const createChatInstance = (deps: {
         outcome: 'failed',
         message: error.message,
         data: {
-          // Reducer failures are state-dependent: dump the fed chunk
-          // sequence and the current message part states alongside.
           chunk_traces: transport.getRecentTraces(),
           message_parts: messageStore.messages.map(message => ({
             id: message.id,
@@ -161,8 +133,6 @@ export const createChatInstance = (deps: {
         return;
       }
 
-      // Title generation hooks the stream settle (the durable record is the
-      // backend's concern and does not gate the sidebar title).
       if (isError || isAbort) return;
       const threadId = transport.getBoundThreadId() || deps.getCurrentThreadId();
       if (!threadId) return;

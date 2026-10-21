@@ -179,9 +179,7 @@ describe('server_shared', () => {
     const req = createBodyRequest();
     const body = parseJsonBody(req as never);
 
-    // Fill exactly to the limit
     req.emit('data', Buffer.alloc(2 * 1024 * 1024));
-    // One more byte should trigger rejection
     req.emit('data', Buffer.alloc(1));
 
     await expect(body).rejects.toThrow('Request body too large');
@@ -192,14 +190,11 @@ describe('server_shared', () => {
     const req = createBodyRequest();
     const body = parseJsonBody(req as never);
 
-    // Send an oversized chunk to trigger rejection + destroy
     req.emit('data', Buffer.alloc(2 * 1024 * 1024 + 1));
-    // These should be no-ops — the promise is already settled
     req.emit('data', Buffer.from('more data'));
     req.emit('end');
 
     await expect(body).rejects.toThrow('Request body too large');
-    // destroy should only be called once
     expect(req.destroy).toHaveBeenCalledTimes(1);
   });
 
@@ -208,7 +203,6 @@ describe('server_shared', () => {
     const body = parseJsonBody(req as never);
 
     req.emit('error', new Error('connection reset'));
-    // These should be no-ops
     req.emit('data', Buffer.from('late data'));
     req.emit('end');
 

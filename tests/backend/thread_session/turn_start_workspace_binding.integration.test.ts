@@ -7,9 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const prepareChatTurnMock = vi.hoisted(() => vi.fn());
 
-// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
-// these suites on the durable-layer behaviour they assert without reaching a
-// network endpoint.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -36,8 +33,6 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 }));
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
-  // session_loop now consumes these three as named imports; the factory must
-  // provide them or module linking fails even when the preparer is mocked out.
   getAssistantProfileContextMessage: () => '',
   retrieveRelevantContinuity: () => null,
   onMessagePersisted: async () => undefined,
@@ -71,11 +66,6 @@ const memory = {
   getAffectContextMessage: () => '',
 };
 
-// D30 boundary: the turn keeps the workspace it STARTED in. A workspace
-// switch that lands while the turn is still preparing must not redirect this
-// turn's tools — preparation awaits (memory retrieval, context assembly) are
-// exactly where a user switch races the binding. The binding must therefore
-// be snapshotted at admission, before the first preparation await.
 describe('stream binds the turn workspace at admission', () => {
   let root: string;
   let conversation: ReturnType<typeof createChatPersistence>;
@@ -97,11 +87,6 @@ describe('stream binds the turn workspace at admission', () => {
   };
 
   beforeEach(async () => {
-    // These suites drive the DURABLE layer (streaming, approvals, session-log
-    // facts, retry, persistence) with a scripted AI SDK model. They are not about
-    // which supply serves the turn, so they opt into the legacy executor: the
-    // production default refuses a turn its projection cannot carry, and a
-    // scripted model has no endpoint to project to.
     setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-turn-start-workspace-'));
     initializeDatabase({ dbPath: path.join(root, 'binding.db') });
@@ -114,8 +99,6 @@ describe('stream binds the turn workspace at admission', () => {
     addWorkspace({ id: 'workspace_wt_binding', path: b, name: 'b' });
     conversation = createChatPersistence({
       memory: memory as never,
-      // platform is module-mocked above; the real continuity hook is not
-      // under test here, so the port gets a no-op double.
       onContinuityMessagePersisted: async () => undefined,
     });
     conversation.createThread({
@@ -167,8 +150,6 @@ describe('stream binds the turn workspace at admission', () => {
     const a = path.join(root, 'a');
     const b = path.join(root, 'b');
 
-    // Hold preparation open so the workspace switch lands mid-turn, before
-    // the harness ever runs.
     let release!: () => void;
     const gate = new Promise<void>(resolve => {
       release = resolve;
@@ -198,8 +179,6 @@ describe('stream binds the turn workspace at admission', () => {
     release();
     expect(await turn).toMatchObject({ success: true });
 
-    // The write executed where the turn started — not where the thread points
-    // now. The next turn (and the UI) see the new selection; this turn does not.
     expect(await fs.readFile(path.join(a, 'binding.txt'), 'utf8')).toBe('binding');
     await expect(fs.stat(path.join(b, 'binding.txt'))).rejects.toThrow();
   });

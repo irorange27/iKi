@@ -1,4 +1,4 @@
-// Built-in providers registry with metadata
+
 export interface BuiltInProvider {
   id: string;
   name: string;

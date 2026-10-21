@@ -7,9 +7,6 @@ const prepareChatTurnMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
-  // `resolvePiTurnSupply` calls `getProviderConfig` INTERNALLY inside the
-  // factory module, so mocking that module cannot reach it. These suites have
-  // no provider table and do not test admission.
   pausedPlanRunsOnPiToolSupply: () => true,
 }));
 
@@ -19,9 +16,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
     ...actual,
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
     getModelGenerationSettings: vi.fn(() => ({})),
-    // No database in this suite: answer the provider lookup directly so the Pi
-    // supply admits the turn. The address is never dialled — `callPiChat` is
-    // mocked above.
     getProviderConfig: vi.fn(() => ({
       type: 'openai',
       apiKey: 'key-test',
@@ -30,8 +24,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   };
 });
 
-// The supply seam: Pi is the only executor (ADR 009), so the scripted model is
-// installed here rather than on the removed `createModel`.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -91,8 +83,6 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 }));
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
-  // session_loop now consumes these three as named imports; the factory must
-  // provide them or module linking fails even when the preparer is mocked out.
   getAssistantProfileContextMessage: () => '',
   retrieveRelevantContinuity: () => null,
   onMessagePersisted: async () => undefined,
@@ -126,11 +116,6 @@ const toolName = 'streaming_context_probe';
 
 describe('createChatStreaming integration', () => {
   beforeEach(() => {
-    // These suites drive the DURABLE layer (streaming, approvals, session-log
-    // facts, retry, persistence) with a scripted AI SDK model. They are not about
-    // which supply serves the turn, so they opt into the legacy executor: the
-    // production default refuses a turn its projection cannot carry, and a
-    // scripted model has no endpoint to project to.
     setTurnHarnessFallback(piTurnHarness);
     vi.clearAllMocks();
   });
@@ -161,8 +146,6 @@ describe('createChatStreaming integration', () => {
       })
     );
 
-    // Two model calls: the first asks for the tool (and must END with toolUse so
-    // the harness executes it), the second answers after the result.
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
         [
@@ -266,8 +249,6 @@ describe('createChatStreaming integration', () => {
       input: {},
     });
 
-    // Turn usage + perf metrics ride along as a data part before finish, so
-    // the renderer can aggregate session stats (and persist them per message).
     const usageChunks = chunks.filter(chunk => chunk.type === 'data-token-usage');
     expect(usageChunks).toHaveLength(1);
     const usageChunk = usageChunks[0]!;
@@ -284,18 +265,12 @@ describe('createChatStreaming integration', () => {
       chunks.indexOf(usageChunk)
     );
 
-    // ConversationStore: the user turn message is recorded (create-only), the
-    // assistant turn output is upserted with the reduced SDK message parts.
     expect(conversation.createMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'msg_user_probe',
         thread_id: 'thread_1',
       })
     );
-    // The turn settles within the 300ms trailing debounce, so the mid-turn
-    // progress write is superseded by the finalize upsert (the same profile
-    // the renderer's old debounced persist had). Both writes would be
-    // parented to the user row; the finalize one carries the done text.
     expect(conversation.upsertTurnMessage).toHaveBeenCalledTimes(1);
     const [turnRow] = conversation.upsertTurnMessage.mock.calls[0]! as [Record<string, unknown>];
     expect(turnRow).toMatchObject({
@@ -384,26 +359,11 @@ describe('createChatStreaming integration', () => {
     expect(blockedUpdate?.working).toMatchObject({
       pendingApprovalIds: [approvalId],
     });
-    // The conversation history is NOT persisted on the run row (ADR 010 §3):
-    // it lives in the session log and is replayed on recovery. What this
-    // assertion protects is the inverse — the blocked run's working state
-    // carries only live state, so a future change that starts copying history
-    // back into `working_json` fails here rather than silently doubling the
-    // write volume per batch.
     expect(blockedUpdate?.working).not.toHaveProperty('modelMessages');
   });
 
   it('propagates provider cache usage through the turn boundary', async () => {
-    // Acceptance gate for prompt-cache accounting (audit P2): a provider that
-    // reports cache read/write per inference must surface the summed values
-    // in both the persisted usage event and the renderer's data-token-usage
-    // chunk. Real SDK usage normalization — only the model is scripted.
-    // Pi reports cache accounting directly on `Usage` (input/output/cacheRead/
-    // cacheWrite), not the SDK's nested `inputTokenDetails` shape.
     const cacheUsage = (noCache: number, read: number, write: number) => ({
-      // Pi reports the UNCACHED prompt as `input` and the cached portion
-      // alongside it, so the billed total is `input + cacheRead + cacheWrite`
-      // (the same reading the harness applies when it sums a turn).
       input: noCache,
       output: 16,
       cacheRead: read,
@@ -477,7 +437,6 @@ describe('createChatStreaming integration', () => {
     });
     if (!result.success) throw new Error(result.error);
 
-    // Summed across the two inferences: cacheRead 400 + 128, cacheWrite 28.
     expect(usage.recordUsageEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         source: 'chat.stream',
@@ -497,8 +456,6 @@ describe('createChatStreaming integration', () => {
     expect(usageChunk).toBeDefined();
     expect(usageChunk!.data).toMatchObject({
       inputTokens: 900,
-      // The last inference's billed input (272 noCache + 128 cacheRead) — the
-      // renderer's context-occupancy signal, distinct from the turn total.
       lastStepInputTokens: 400,
       cacheReadTokens: 528,
       cacheWriteTokens: 28,
@@ -620,16 +577,11 @@ describe('createChatStreaming integration', () => {
     );
     release();
     await first;
-    // The step budget (maxIterations 1) bounds each batch; the turn driver may
-    // start another batch, so what matters here is that the budget was
-    // EXHAUSTED rather than that exactly one call happened.
     expect(callPiChatMock.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   it('preserves tool context across concurrent threads after asynchronous suspension', async () => {
     const { streaming } = setupLoop([], [toolName]);
-    // Two threads run concurrently, each with a tool step then an answer, so
-    // the script must cover four model calls (they are interleaved).
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
         [{ kind: 'toolCall', toolName, args: {} }, { kind: 'done', reason: 'toolUse' }],
@@ -688,9 +640,6 @@ describe('createChatStreaming integration', () => {
       [{ kind: 'text', text: 'must not run' }, { kind: 'done' }],
     ]);
     expect(await run()).toMatchObject({ success: true, text: 'done' });
-    // The step budget (maxIterations 1) bounds each batch; the turn driver may
-    // start another batch, so what matters here is that the budget was
-    // EXHAUSTED rather than that exactly one call happened.
     expect(callPiChatMock.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -717,8 +666,6 @@ describe('createChatStreaming integration', () => {
     try {
       expect(await run()).toMatchObject({ success: true });
       expect(call).toHaveBeenCalledTimes(2);
-      // Pi receives the context as its second argument (`{ systemPrompt,
-      // messages, tools }`), not the SDK's `{ prompt }`.
       const prompt = JSON.stringify(call.mock.calls[1][1]);
       expect(prompt).toContain('Found the defect');
       expect(prompt).toContain('Fix it');
@@ -752,9 +699,6 @@ describe('createChatStreaming integration', () => {
       [toolName]
     );
     expect(await run(1, 2)).toMatchObject({ success: true });
-    // The step budget (maxIterations 1) bounds each batch; the turn driver may
-    // start another batch, so what matters here is that the budget was
-    // EXHAUSTED rather than that exactly one call happened.
     expect(callPiChatMock.mock.calls.length).toBeGreaterThanOrEqual(1);
     const completedUpdate = vi
       .mocked(agentRunDb.appendAgentRunStepAndUpdateRun)
@@ -776,8 +720,6 @@ describe('createChatStreaming integration', () => {
         handler: async () => 'completed observation',
       })
     );
-    // Three calls: the tool step, the answer the turn was already producing,
-    // and the answer the steering input redirected it to.
     const { coordinator, run } = setupLoop(
       [
         [
@@ -789,8 +731,6 @@ describe('createChatStreaming integration', () => {
       ],
       [toolName]
     );
-    // Steering fires on the second MODEL call, which is the seam the old
-    // `doStream` spy sat on. `callPiChat(model, context, options)`.
     const original = callPiChatMock.getMockImplementation()!;
     const call = callPiChatMock;
     let calls = 0;
@@ -799,12 +739,7 @@ describe('createChatStreaming integration', () => {
         expect(coordinator.steerStream(42, 'thread_1', 'new direction').success).toBe(true);
       return (original as (m: unknown, c: unknown, o: unknown) => unknown)(model, context, options);
     });
-    // The turn settles with the text its last request produced. What steering
-    // must guarantee is that the human's direction REACHED the model — the
-    // request that carried it is asserted below.
     expect(await run()).toMatchObject({ success: true });
-    // The post-tool request keeps the observation, carries the original task
-    // exactly once, and ends with the human's steering input.
     const postTool = JSON.stringify(call.mock.calls[1][1]);
     expect(postTool).toContain('completed observation');
     expect(postTool.match(/original task/g)).toHaveLength(1);

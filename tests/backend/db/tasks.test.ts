@@ -95,14 +95,11 @@ describe('updateProactiveTask', () => {
       'malicious_column': 'value',
     });
 
-    // Unknown keys should be dropped; only known columns should be in the SET clause.
     const sql = prepareMock.mock.calls[0]?.[0] as string | undefined;
     expect(sql).toBeDefined();
 
-    // Known key 'name' should be present.
     expect(sql).toContain('name = @name');
 
-    // Malicious keys should NOT be present in the SQL string.
     expect(sql).not.toContain('DROP TABLE');
     expect(sql).not.toContain('malicious_column');
   });

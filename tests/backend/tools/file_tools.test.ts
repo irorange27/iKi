@@ -95,19 +95,6 @@ describe('file tools workspace boundaries', () => {
   });
 
   it('writes through the validated path, not a symlinked alias', async () => {
-    // Audit H5 regression, write side. WriteFileTool must write to the path
-    // the boundary check examined, not the caller's spelling. For a symlinked
-    // alias the two differ: resolveWritableWorkspacePath returns the LINK
-    // TARGET as `validated` and the alias as `display`, so writing to
-    // `display` would rename the temp file onto the alias path.
-    //
-    // Note what that does and does not prove. writeFileAtomically ends in
-    // fs.rename, and rename(2) REPLACES a symlink at the destination rather
-    // than following it — so the wrong-target write would not corrupt the link
-    // target; it would destroy the alias, replacing the symlink with a regular
-    // file. The first cut of the H5 fix left the write on `display` and this
-    // suite did not notice, so the assertions below pin both halves: the bytes
-    // land on the validated target, and the alias is left alone.
     const workspaceRoot = path.join(tempRoot, 'workspace');
     await fs.mkdir(workspaceRoot, { recursive: true });
     const realFile = path.join(workspaceRoot, 'real.txt');
@@ -123,12 +110,8 @@ describe('file tools workspace boundaries', () => {
       writer.execute({ path: 'alias.txt', content: 'via alias' })
     )) as { path: string; success: boolean };
 
-    // The bytes land on the validated target (the link target)...
     expect(await fs.readFile(realFile, 'utf8')).toBe('via alias');
-    // ...and the alias is left untouched, still a symlink: had the write used
-    // `display`, rename(2) would have replaced the alias with a regular file.
     expect((await fs.lstat(aliasFile)).isSymbolicLink()).toBe(true);
-    // ...and the result reports the caller's own spelling.
     expect(result.path).toBe(aliasFile);
   });
 
@@ -711,7 +694,6 @@ describe('concurrent same-path writes', () => {
     const workspaceRoot = await setupWorkspace();
     const writer = new WriteFileTool();
 
-    // Fake clock pins Date.now: pid+timestamp temp names would collide here.
     const results = await Promise.all(
       Array.from({ length: 8 }, (_, i) =>
         runInWorkspaceContext('thread_1', () =>
@@ -744,9 +726,6 @@ describe('concurrent same-path writes', () => {
     );
 
     const results = (await Promise.all(edits)) as Array<{ success?: boolean; message?: string }>;
-    // Without per-path serialization only the first edit could match; with it,
-    // each subsequent edit runs after the previous write (fuzzy anchor keeps
-    // matching), so all six apply.
     const succeeded = results.filter(result => result.success).length;
     expect(succeeded).toBe(6);
     const content = await fs.readFile(path.join(workspaceRoot, 'log.txt'), 'utf8');

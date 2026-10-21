@@ -1335,9 +1335,6 @@ export const en = defineCatalog({
   'settings.skills.error.readFailed': ({ error }) =>
     `Failed to read skill content: ${asText(error)}`,
 
-  // --- Accessibility: names, labels and announcements added with the a11y pass.
-  // Icon-only and landmark strings live here so the keyboard/screen-reader
-  // surface is translated like any other UI text.
   'a11y.skipToConversation': 'Skip to conversation',
   'a11y.skipToComposer': 'Skip to message composer',
   'a11y.conversationLandmark': 'Conversation',

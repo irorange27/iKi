@@ -44,11 +44,6 @@ const appLogger = createLogger({ module: 'app' });
 
 setBaseLogContext({ process: isDaemonMode ? 'daemon' : 'main' });
 
-// The desktop shell mirrors nothing to the terminal: the `electron-forge start`
-// console was drowning in window/daemon/settings chatter that is already in
-// logs/combined.log, and the terminal is where the developer actually works.
-// A standalone daemon (`--iki-daemon`, or `pnpm run daemon:start`) keeps its
-// console output so it can still be watched while it runs headless.
 if (!isDaemonMode) {
   setConsoleLoggingEnabled(false);
 }
@@ -61,7 +56,6 @@ const syncLoggingConfig = () => {
   try {
     applyAppLoggingConfig(getAppConfig());
   } catch {
-    // Fall back to env/default logger config until app config becomes available.
   }
 };
 
@@ -76,7 +70,6 @@ const updatePlatformDisplayScale = () => {
     const scale = screen.getPrimaryDisplay().scaleFactor;
     setPlatformInfo({ displayScale: scale });
   } catch {
-    // ignore
   }
 };
 
@@ -144,19 +137,12 @@ if (isDaemonMode) {
     updatePlatformTheme();
   });
 
-  // Register standard tools + IPC handlers on startup.
   registerStandardTools({
-    // The renderer probe lives here, not in backend: the daemon has no windows.
     elementSourceResolver: request => resolveElement(request),
     delegatedAgentRuntime: {
       createRunTracker: createAgentRunTracker,
       getConversationToolModel: getToolModel,
-      // Delegation runs on the same supply as a parent turn. The Pi tool
-      // harness honours `toolsOverride`, so the child inherits exactly the
-      // approval-free tool set the delegation selected.
       createHarness: startPiTurnHarness,
-      // The child finalizes through the SAME outcome authority a parent
-      // turn uses; the port keeps `tools/` below the session layer.
       finalize: {
         finalizeFailure: finalizeTurnFailure,
         finalizeSuccess: finalizeHarnessTurn,
@@ -166,14 +152,10 @@ if (isDaemonMode) {
   void getMcpManager().initialize();
   registerMainIpc();
 
-  // Handle creating/removing shortcuts on Windows when installing/uninstalling.
   if (started) {
     app.quit();
   }
 
-  // This method will be called when Electron has finished
-  // initialization and is ready to create browser windows.
-  // Some APIs can only be used after this event occurs.
   app.on('ready', () => {
     syncLoggingConfig();
     appLogger.event({
@@ -185,9 +167,6 @@ if (isDaemonMode) {
         platform: process.platform,
       },
     });
-    // Install before the first window so F12 / Cmd+Shift+I works from the
-    // first paint, in dev and packaged builds alike, and within settings and
-    // companion windows too.
     installApplicationMenu();
     startBackgroundRuntime();
     startAppUpdateService(getAppConfig());
@@ -209,9 +188,6 @@ if (isDaemonMode) {
     void shutdownLangfuseTracing();
   });
 
-  // Quit when all windows are closed, except on macOS. There, it's common
-  // for applications and their menu bar to stay active until the user quits
-  // explicitly with Cmd + Q.
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
       app.quit();
@@ -219,8 +195,6 @@ if (isDaemonMode) {
   });
 
   app.on('activate', () => {
-    // On OS X it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
       syncCompanionWindowToConfig(getAppConfig());

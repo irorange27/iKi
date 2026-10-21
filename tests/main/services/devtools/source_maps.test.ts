@@ -9,7 +9,6 @@ import {
 
 const ROOT = '/repo';
 
-/** A real Vite-shaped map: `src/App.vue` line 4 is bundled at line 9, column 2. */
 const buildMap = (source: string): string => {
   const generator = new SourceMapGenerator({ file: 'main_window.js' });
   generator.addMapping({

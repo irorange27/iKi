@@ -8,19 +8,6 @@ import {
 } from '@iki/backend/thread_session/execution_plan_codec';
 import type { ExecutionPlan } from '@iki/backend/thread_session/execution_plan';
 
-/**
- * F3's decode half. The plan now travels on the `turn_started` FACT, which is
- * a decoded object rather than a stored string, so the codec grew an object
- * entry point. It must hold a value recovered from the log to exactly the
- * standard a value recovered from a column is held to — a structurally invalid
- * plan has to yield null so the caller takes its declared fallback, because a
- * fabricated plan would run the resumed harness under a configuration the turn
- * never had.
- *
- * These are the discriminating cases: each one is a plan the string entry point
- * would accept or reject identically, so a divergence between the two paths
- * shows up here rather than in production.
- */
 const validPlan: ExecutionPlan = {
   providerType: 'openai',
   providerId: 'provider_primary',
@@ -49,9 +36,6 @@ describe('execution plan codec: the log path and the column path agree', () => {
   it('decodes a bare plan object — the shape a turn_started fact carries', () => {
     const decoded = parseExecutionPlanValue(validPlan);
     expect(decoded).not.toBeNull();
-    // Every field survives, including the ones no column stores. `skillMode`
-    // and `contextTokens` are the two the legacy fallback cannot reproduce, so
-    // they are what a recovery consumer actually gains from reading the log.
     expect(decoded).toEqual(validPlan);
     expect(decoded!.skillMode).toBe('auto');
     expect(decoded!.contextTokens).toBe(42);
@@ -60,8 +44,6 @@ describe('execution plan codec: the log path and the column path agree', () => {
   it('decodes the wrapped {version, plan} form identically', () => {
     const wrapped = JSON.parse(serializeExecutionPlan(validPlan)) as unknown;
     expect(parseExecutionPlanValue(wrapped)).toEqual(validPlan);
-    // And the string entry point agrees with the object entry point on the
-    // same bytes — one validation, two entry points, no drift.
     expect(parseExecutionPlan(serializeExecutionPlan(validPlan))).toEqual(validPlan);
   });
 
@@ -71,8 +53,6 @@ describe('execution plan codec: the log path and the column path agree', () => {
   });
 
   it('rejects a structurally invalid plan rather than coercing it', () => {
-    // Each of these is a plan the harness would crash on or silently run under
-    // a wrong configuration if it were adopted.
     expect(parseExecutionPlanValue({ ...validPlan, model: undefined })).toBeNull();
     expect(parseExecutionPlanValue({ ...validPlan, enabledTools: 'read_file' })).toBeNull();
     expect(parseExecutionPlanValue({ ...validPlan, budget: undefined })).toBeNull();

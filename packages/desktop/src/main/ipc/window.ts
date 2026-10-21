@@ -15,12 +15,9 @@ export const registerWindowIpc = (): void => {
         section: typeof section === 'string' ? section : undefined,
       });
     } catch {
-      // Prevent unhandled exceptions from crashing the main process.
     }
   });
 
-  // Focus the main window and have its chat view switch to the given thread
-  // (used by the settings window's automations review queue).
   ipcMain.on('chat:focus-thread', (_event, threadId?: string) => {
     try {
       const mainWindow = showMainWindow();
@@ -28,7 +25,6 @@ export const registerWindowIpc = (): void => {
         mainWindow.webContents.send('chat:thread-activate', threadId.trim());
       }
     } catch {
-      // Prevent unhandled exceptions from crashing the main process.
     }
   });
 
@@ -37,7 +33,6 @@ export const registerWindowIpc = (): void => {
       const win = BrowserWindow.fromWebContents(event.sender);
       win?.close();
     } catch {
-      // Prevent unhandled exceptions from crashing the main process.
     }
   });
 
@@ -45,7 +40,6 @@ export const registerWindowIpc = (): void => {
     try {
       BrowserWindow.fromWebContents(event.sender)?.minimize();
     } catch {
-      // Prevent unhandled exceptions from crashing the main process.
     }
   });
 
@@ -59,7 +53,6 @@ export const registerWindowIpc = (): void => {
         win.maximize();
       }
     } catch {
-      // Prevent unhandled exceptions from crashing the main process.
     }
   });
 
@@ -69,7 +62,6 @@ export const registerWindowIpc = (): void => {
       if (!win || typeof win.setHasShadow !== 'function') return;
       win.setHasShadow(Boolean(enabled));
     } catch {
-      // Prevent unhandled exceptions from crashing the main process.
     }
   });
 };

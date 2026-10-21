@@ -120,10 +120,7 @@ export const createChatStreaming = (deps: {
 
   const stream = async (target: ChatStreamTarget, options: ChatTurnOptions) => {
     const senderId = target.id;
-    // Lease-loss must reach this execution even though the stream also rides
-    // the thread-membership path; the hook is the uniform handle all three
-    // entries share. The controller is wired within this synchronous block,
-    // so a heartbeat callback cannot fire in the gap.
+
     const executionAbort: { current: (() => void) | null } = { current: null };
     const release = coordinator.tryAcquireThreadRun(options.threadId, {
       onExecutionAbort: () => executionAbort.current?.(),
@@ -164,9 +161,7 @@ export const createChatStreaming = (deps: {
     };
     const companionThinkingKey = `renderer:${senderId}:${Date.now().toString(36)}`;
     coordinator.registerStream(senderId, streamState);
-    // The stream registry answers "who is subscribed"; this registration
-    // answers "who executes run X" — the question a cancel asks. A stream is
-    // cancelled by run id even when the sender has already moved on.
+
     const execution = coordinator.registerExecution({
       runId: null,
       cancel: reason => {
@@ -176,11 +171,9 @@ export const createChatStreaming = (deps: {
     });
 
     let driver: TurnDriverHandle | null = null;
-    // The run tracker exists before the driver does; a failure in the
-    // pre-driver window must still record the turn's terminal fact.
+
     let sessionLogTracker: import('./run_tracker').AgentRunTracker | null = null;
-    // Set once the settle/abort persist runs: late progress writes must not
-    // follow it (the per-message chain serializes, this bounds the ordering).
+
     let turnPersistFinalized = false;
     const notifyRunStatus = () => {
       const run = driver?.getRunTracker().getRun();
@@ -194,16 +187,7 @@ export const createChatStreaming = (deps: {
     };
 
     try {
-      // Turn-start workspace binding (D30), resolved at admission — it stays
-      // synchronous and ahead of every await (preparation, workspace resolution),
-      // so a mid-turn switch cannot be observed. It sits inside the try so a
-      // failing resolution (broken workspace directory, profile error) flows
-      // through the cleanup path and releases the admission instead of
-      // stranding the thread's in-memory guard and SQLite lease. The plan,
-      // the executing harness world, the context projection and the approval
-      // recovery context all share this one snapshot. Resumed turns (retry,
-      // queued resume, blocked resume) carry their original world in the
-      // options and rebind it — they are the same turn, not a new one.
+
       const turnStartWorkspace =
         options.workspaceSelection !== undefined
           ? options.workspaceSelection
@@ -228,12 +212,7 @@ export const createChatStreaming = (deps: {
 
       const approvalPolicy = parseApprovalPolicy(options.approvalPolicy);
       if (preparedTurn.enableTools && !approvalPolicy && !preparedTurn.requireApproval) {
-        // A tool turn with no explicit policy. This used to ALSO auto-run
-        // workspace writes — exactly how a frontend wiring gap silently became
-        // "approvals never asked" once. The resolver no longer clears a tool's
-        // own declared approval (#166), so writes that ask for approval still
-        // get it; the warning stays because the missing policy is still a
-        // wiring gap worth surfacing.
+
         chatStreamingLogger.event({
           level: 'warn',
           event: 'chat.stream.approval_policy',
@@ -251,10 +230,7 @@ export const createChatStreaming = (deps: {
       let streamPrompt = preparedTurn.prompt;
 
       if (options.runConfig?.kind === 'handoff-resume' && options.runConfig?.parentRunId) {
-        // The parent's transcript comes from the session-log replay (ADR 010
-        // §3), not from the run row's removed `working.modelMessages` copy.
-        // The parent row is read only for its threadId — the replay is keyed
-        // by conversation, and a row without one has no log to rebuild from.
+
         const parentRun = agentRunDb.getAgentRun(options.runConfig.parentRunId);
         const handoffResume = await buildHandoffResumeContext({
           threadId: parentRun?.threadId ?? options.threadId,
@@ -267,9 +243,6 @@ export const createChatStreaming = (deps: {
         }
       }
 
-      // Turn-start workspace binding (D30): the plan is the single definition
-      // of this execution — harness config, run-row identity/metadata and the
-      // approval recovery context below are all derived from it.
       const plan = assembleExecutionPlan({
         options,
         preparedTurn,
@@ -295,10 +268,6 @@ export const createChatStreaming = (deps: {
       execution.setRunId(runTracker.id);
       sessionLogTracker = runTracker;
 
-      // Session log: the accepted input and the turn's frozen plan are
-      // business facts, recorded before execution begins. A write failure
-      // fails the turn before it runs (ADR 008 F1) — an unrecorded turn must
-      // not execute.
       const userTurnInput = pickUserTurnMessage(options);
       const acceptedInput =
         userTurnInput && asChatUiMessage(userTurnInput.message)
@@ -320,28 +289,16 @@ export const createChatStreaming = (deps: {
           })
         : undefined;
 
-      // Supply selection (switch items 2c/3a/3b/3c): one selector decides.
-      // Pi serves text-only turns and tool turns in every mode (autonomous
-      // chains included) under ANY approval policy (pause + five-state
-      // resume). A shape the selector cannot serve is refused, never
-      // re-routed to another executor.
       const harness = selectTurnHarness(plan, streamHistory);
 
-      // An effect-aware continuation (#143) re-enters with the dead chain's
-      // journaled exchange pairs as the history tail and NO user prompt —
-      // the model continues from what already happened. The guard stands
-      // down only for that shape; ordinary empty sends still refuse.
       if (!preparedTurn.prompt.trim() && options.runConfig?.metadata?.continuation !== true) {
         throw new Error('No user prompt provided for streaming');
       }
 
       getCompanion().beginThinking(companionThinkingKey);
 
-      // ponytail: clear stale todo plan from previous turn before starting fresh
       writeThreadTodoPlan({ threadId: options.threadId, items: [] });
 
-      // Trailing debounce mirrors the write profile the renderer's old
-      // mid-turn persist had; the settle write always supersedes the last one.
       let progressTimer: ReturnType<typeof setTimeout> | null = null;
       let progressPending = false;
       const persistTurnProgress = () => {
@@ -353,9 +310,7 @@ export const createChatStreaming = (deps: {
           if (!progressPending || turnPersistFinalized) return;
           progressPending = false;
           void uiChunkEmitter.buildPersistedMessage().then(persisted => {
-            // The reduce started before the check above; the settle may have
-            // finalized while it ran. Re-check before enqueueing so a late
-            // progress write cannot follow the settle upsert.
+
             if (!persisted || turnPersistFinalized) return;
             return persistAssistantTurnMessage(
               deps.conversation,
@@ -414,9 +369,6 @@ export const createChatStreaming = (deps: {
           },
         });
 
-        // Attach the turn's usage + perf metrics to the assistant message so
-        // the renderer can aggregate session stats (and persist them with the
-        // message). Must run before finish()/abort() terminates the emitter.
         uiChunkEmitter.emitTokenUsage({
           ...(streamResult.usage ?? {}),
           ...(typeof streamResult.lastStepInputTokens === 'number'
@@ -437,25 +389,14 @@ export const createChatStreaming = (deps: {
 
       const finalResponse = activeDriver.getAccumulatedResponse() || streamResult.response;
       const finalRunTracker = activeDriver.getRunTracker();
-      // The facts of the batch that ended the turn (a handoff chain finalized
-      // its parent segments itself, so the driver's return value describes
-      // only the last chained segment).
+
       const lastFacts = activeDriver.getLastFacts();
 
-      // Event-first (ADR 008 F1): the turn's facts reach the session log
-      // BEFORE the run row finalizes — a write failure fails the turn through
-      // the catch below while the row is still non-terminal, never leaving a
-      // terminal row whose outcome was never recorded. The record also
-      // precedes finish(): a terminated emitter drops error chunks, so the
-      // failure must be caught while the failure channel is still open.
       let settledMessageRef: Awaited<
         ReturnType<typeof uiChunkEmitter.buildPersistedMessage>
       > = undefined;
       if (options.threadId) {
-        // Durable assistant record — partial (approval-pending) or completed.
-        // Upsert converges with any late progress write on the same id.
-        // Parts close first (without terminating the channel) so the built
-        // message carries their final state.
+
         uiChunkEmitter.settleParts();
         const settledMessage = (await uiChunkEmitter.buildPersistedMessage()) ?? {
           id: uiChunkEmitter.messageId,
@@ -475,9 +416,7 @@ export const createChatStreaming = (deps: {
       if (streamResult.outcome !== 'awaiting-approval') {
         uiChunkEmitter.finish();
       }
-      // Session log + run row: ONE outcome row writes both projections — the
-      // committed output rides the same record as its terminal fact, and the
-      // row is finalized only after the facts landed (ADR 008 F1).
+
       finalizeTurn({
         tracker: finalRunTracker,
         outcome: streamResult.outcome,
@@ -525,11 +464,7 @@ export const createChatStreaming = (deps: {
           );
         }
         if (cancelledTracker) {
-          // A cancel while blocked records turn_cancelled while the run row
-          // stays blocked (the approval remains resumable): the cancellation
-          // is the event, the row is the resumable handle. Failure-path
-          // terminal, loud-guarded — the record must not mask the
-          // cancellation being reported (ADR 008 F1).
+
           const rowStatus = cancelledTracker.getRun().status;
           finalizeTurnCancelled({
             tracker: cancelledTracker,
@@ -559,12 +494,7 @@ export const createChatStreaming = (deps: {
           user_facing_error: message,
         },
       });
-      // The pre-execution window (run row created, driver not yet built) has
-      // no driver tracker — the stream's own tracker carries the failure.
-      // One call writes both projections, loud-guarded: a failed turn is a
-      // terminal fact even when no assistant row is persisted on this path,
-      // and losing the record must not mask the reported failure
-      // (ADR 008 F1).
+
       const failedTracker = driver?.getRunTracker() ?? sessionLogTracker;
       if (failedTracker) {
         const retry = runFailureFromError(error, message);
@@ -576,9 +506,7 @@ export const createChatStreaming = (deps: {
             ...(retry.code ? { code: retry.code } : {}),
             ...(typeof retry.retryable === 'boolean' ? { retryable: retry.retryable } : {}),
           },
-          // The text the commit gate WITHHELD: never published, never in
-          // history, but it is what the turn produced before failing, so the
-          // row keeps it distinguishable from a turn that produced nothing.
+
           ...(typeof retry.text === 'string' && retry.text.length > 0
             ? { text: retry.text }
             : {}),

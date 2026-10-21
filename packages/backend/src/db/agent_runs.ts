@@ -81,9 +81,7 @@ const normalizeInput = (value: unknown): AgentRunInput => {
 const normalizeWorking = (value: unknown): AgentRunWorkingState => {
   const parsed = parseJsonValue<Record<string, unknown>>(value, {});
   return {
-    // `modelMessages` is deliberately NOT read back: the field was removed from
-    // the shape (ADR 010 §3). Rows written before that change may still carry
-    // it; the reader ignores it, which is what makes the removal non-migrating.
+
     accumulatedText:
       typeof parsed.accumulatedText === 'string' ? parsed.accumulatedText : '',
     pendingApprovalIds: normalizeStringArray(parsed.pendingApprovalIds),
@@ -105,11 +103,7 @@ const normalizeOutput = (value: unknown): AgentRunOutput | null => {
     ...(parsed.usage && typeof parsed.usage === 'object'
       ? { usage: parsed.usage as Record<string, unknown> }
       : {}),
-    // The remainder a `budget-exhausted` turn could not consume. This rebuild
-    // is a WHITELIST — the write path persisted the field and this read dropped
-    // it, so the row read back as a complete answer (2026-10 audit A-3 found
-    // the seam; the second face was here). Anything added to `AgentRunOutput`
-    // must be listed in this projection and in `buildOutput`.
+
     ...(Array.isArray(parsed.pendingToolCalls)
       ? {
           pendingToolCalls: parsed.pendingToolCalls as NonNullable<
@@ -168,7 +162,6 @@ const mapAgentRunStepRow = (row: AgentRunStepRow): AgentRunStep => ({
   startedAt: row.started_at,
   finishedAt: row.finished_at ?? null,
 });
-
 
 const normalizeRunIds = (runIds: string[]): string[] => {
   const normalized: string[] = [];
@@ -469,12 +462,6 @@ export const appendAgentRunStep = (step: AgentRunStep): AgentRunStep => {
   return step;
 };
 
-/**
- * Conditionally claim a queued run for execution: only a row still in
- * `queued` transitions to `running`, and the same row (id) keeps being the
- * execution's identity. Returns null when another claim or a terminal state
- * won the race, so a repeat execute command cannot double-start the work.
- */
 export const claimQueuedAgentRun = (runId: string): AgentRun | null => {
   const normalized = normalizeWhitespace(runId);
   if (!normalized) return null;
@@ -506,13 +493,6 @@ export const appendAgentRunStepAndUpdateRun = (
   })();
 };
 
-/**
- * Atomic step+run write that first claims the run conditionally: when the
- * run's current status is not in `expectedStatuses`, nothing is written and
- * null is returned. Startup recovery uses this so a run that reached a
- * terminal state (or was reclaimed by another reclaimer) between listing and
- * reconciliation cannot be overwritten by a stale writer.
- */
 export const appendAgentRunStepAndUpdateRunIfStatus = (
   step: AgentRunStep,
   updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>,
@@ -571,9 +551,6 @@ const listAgentRunStepsByRunIds = (runIds: string[]): Map<string, AgentRunStep[]
 
   return stepsByRunId;
 };
-
-
-
 
 export const getAgentRunTrace = (runId: string): AgentRunTrace | null => {
   const normalizedRunId = normalizeWhitespace(runId);

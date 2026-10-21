@@ -19,8 +19,6 @@ export const useRunStatus = (deps: {
 
   let removeListener: () => void = () => undefined;
 
-  // Preload and renderer ship in the same asar, so the channel is a fixed
-  // contract: no feature-detection, and no try/catch around subscribing.
   onMounted(() => {
     removeListener = deps.electronAPI.chat.onRunStatus(handleRunStatus);
   });
@@ -29,7 +27,6 @@ export const useRunStatus = (deps: {
     try {
       removeListener();
     } catch {
-      // ignore
     }
   });
 

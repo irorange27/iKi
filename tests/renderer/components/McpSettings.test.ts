@@ -45,8 +45,6 @@ const findLabelByText = (wrapper: VueWrapper, text: string) => {
   return match;
 };
 
-// Boolean settings are switch rows now (copy left, switch right) — toggle by
-// row text instead of hunting a checkbox input inside a label.
 const toggleSettingsSwitch = async (
   scope: VueWrapper | DOMWrapper<Element>,
   text: string

@@ -6,9 +6,6 @@ import type { ChatUiMessage as UIMessage } from '@iki/backend/message/message_pa
 
 import ChatMessageParts from '../../../packages/desktop/src/renderer/components/chat/ChatMessageParts.vue';
 
-// The code-block plugin now takes its markdown-it types from the shared contract
-// instead of declaring its own. These cases pin the rendered output so the type
-// move cannot quietly change behaviour.
 const renderText = (text: string) =>
   mount(ChatMessageParts, {
     props: {

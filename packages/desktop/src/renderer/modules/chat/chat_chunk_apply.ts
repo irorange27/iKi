@@ -1,11 +1,4 @@
-/**
- * Apply one streamed chunk to the assistant message being built.
- *
- * The renderer-side counterpart of the backend's chunk-log reducer: same chunk
- * vocabulary, same rules, but applied incrementally as the UI receives them
- * instead of replayed from a log. Keeping one chunk protocol for both directions
- * is why this can be a pure function of `(message, chunk)`.
- */
+
 import type { ChatUiChunk, ChatUiMessage, UiDynamicToolPart } from '@iki/backend/message/ui_protocol';
 
 const findToolIndex = (parts: ChatUiMessage['parts'], toolCallId: string): number =>
@@ -30,7 +23,6 @@ const ensureToolPart = (
   return created;
 };
 
-/** Append `delta` to the last part of `type` that is still open, else open one. */
 const appendDelta = (
   parts: ChatUiMessage['parts'],
   partType: 'text' | 'reasoning',
@@ -60,8 +52,6 @@ export const applyChatUiChunk = (
   message: ChatUiMessage,
   chunk: ChatUiChunk
 ): ChatUiMessage => {
-  // Parts are mutated in place, so the message object identity is stable while
-  // the content grows; the store is told to re-read via replaceMessage.
   const parts = message.parts as ChatUiMessage['parts'];
 
   switch (chunk.type) {
@@ -141,7 +131,6 @@ export const applyChatUiChunk = (
       return message;
     }
     default: {
-      // `data-*` parts carry the kind in their own type name.
       if (typeof chunk.type === 'string' && chunk.type.startsWith('data-')) {
         parts.push({ type: chunk.type, data: (chunk as { data?: unknown }).data } as never);
       }

@@ -322,8 +322,8 @@ function resolveLogDirectory(): string | null {
       fs.mkdirSync(candidate, { recursive: true });
       return candidate;
     } catch {
-      // try the next fallback
-    }
+    // Intentionally ignored: the caller cannot act on it.
+  }
   }
 
   return null;
@@ -385,11 +385,7 @@ function ensureSinkTransports(): winston.Logger {
   const logger = getSinkLogger();
   logger.level = runtimeConfig.level;
   const logDirectory = resolveLogDirectory();
-  // The console mirror is for an interactive terminal only. Its output is
-  // duplicated into the file sinks, so switching it off loses nothing a
-  // developer cannot still read from combined.log. The file sinks themselves
-  // are the observable contract (logs/**/combined.log, the e2e gate reads it);
-  // only the console transport is gated.
+
   const transportsKey = `${logDirectory ?? ''}|${runtimeConfig.console ? 'console' : 'quiet'}`;
   if (sinkTransportsKey === transportsKey && logger.transports.length > 0) {
     return logger;
@@ -593,16 +589,6 @@ export function setLogLevel(level: string): void {
   winstonLogger.level = normalized;
 }
 
-/**
- * Mirror structured log lines to the terminal (stdout/stderr).
- *
- * Only the console transport is affected: file sinks keep receiving entries,
- * and `setLoggingEnabled(false)` still silences both. The desktop shell turns
- * the mirror off once app config is available, because the same lines are
- * already in combined.log and they otherwise flood the `electron-forge start`
- * terminal with startup/window/daemon noise. A headless daemon keeps it on so
- * an operator can still see what it is doing.
- */
 export function setConsoleLoggingEnabled(enabled: boolean): void {
   runtimeConfig.console = Boolean(enabled);
 }

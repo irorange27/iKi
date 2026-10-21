@@ -4,14 +4,8 @@ import { z } from 'zod';
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const writeThreadTodoPlanMock = vi.hoisted(() => vi.fn());
 
-// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
-// these suites on the durable-layer behaviour they assert without reaching a
-// network endpoint.
 vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
-  // `resolvePiTurnSupply` calls `getProviderConfig` INTERNALLY inside the
-  // factory module, so mocking that module cannot reach it. These suites have
-  // no provider table and do not test admission.
   pausedPlanRunsOnPiToolSupply: () => true,
 }));
 
@@ -25,9 +19,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   return {
     ...actual,
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
-    // No database in this suite: answer the provider lookup directly so the Pi
-    // supply admits the turn (the address is never dialled — callPiChat is
-    // mocked).
     getProviderConfig: vi.fn(() => ({
       type: 'openai',
       apiKey: 'key-test',
@@ -67,15 +58,8 @@ describe('createMessageSend integration', () => {
     if (!dbRoot) {
       dbRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-message-send-'));
     }
-    // A real database: these cases assert what the DURABLE layer records, so a
-    // fabricated `agent_runs` module would only prove the fabrication.
     initializeDatabase({ dbPath: path.join(dbRoot, 'send.db') });
     seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
-    // These suites drive the DURABLE layer (streaming, approvals, session-log
-    // facts, retry, persistence) with a scripted AI SDK model. They are not about
-    // which supply serves the turn, so they opt into the legacy executor: the
-    // production default refuses a turn its projection cannot carry, and a
-    // scripted model has no endpoint to project to.
     setTurnHarnessFallback(piTurnHarness);
     vi.clearAllMocks();
   });
@@ -176,17 +160,10 @@ describe('createMessageSend integration', () => {
     });
     expect((observedContext as { runId?: string }).runId).toMatch(/^run_/);
     expect(writeThreadTodoPlanMock).toHaveBeenCalledWith({ threadId: 'thread_1', items: [] });
-    // The supply seam is Pi now: assert the model the turn was built with
-    // rather than a constructor call that no longer exists.
     expect(callPiChatMock).toHaveBeenCalled();
-    // Pi's model descriptor names the model `id`.
     expect((callPiChatMock.mock.calls[0] as unknown[])[0]).toMatchObject({
       id: 'gpt-4o-mini',
     });
-    // Retro-review regressions: user message create-only, assistant output
-    // upserted under the run-derived id. The persisted projection is the same
-    // one streaming persists: the tool exchange plus the answer text (F4 —
-    // transport must not decide which execution facts survive).
     expect(conversation.createMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'msg_user_probe',
@@ -203,20 +180,12 @@ describe('createMessageSend integration', () => {
         expect.objectContaining({ type: 'text', text: 'done', state: 'done' }),
       ]),
     });
-    // The steps are read from the database the turn actually wrote to.
     const recordedSteps = agentRunDb
       .listAgentRunsByThread('thread_1')
       .flatMap(run => agentRunDb.listAgentRunSteps(run.id));
     expect(recordedSteps.some(step => step.type === 'tool-call' && !step.input?.toolCallId)).toBe(
       false
     );
-    // The inference record carries the assistant's CONTENT — reasoning, text and
-    // the tool calls the model asked for. It does not carry the tool OBSERVATION:
-    // that arrives one step later, and pinning it here encoded the retired AI
-    // SDK's shape (the 2026-10 audit caught this: the AI SDK executor this
-    // assertion was written against no longer exists, so the assertion could not
-    // fail for a real reason). The observation's own contract is covered by
-    // `tool_execution.integration.test.ts` and the session log.
     const inferenceContents = recordedSteps
       .filter(step => step.type === 'model' && step.output?.inference === true)
       .map(step => (step.output?.content ?? []) as Array<{ type?: string }>);
@@ -229,9 +198,6 @@ describe('createMessageSend integration', () => {
   });
 
   it('labels a send that exhausts its tool budget as budget-exhausted, not completed', async () => {
-    // The send path now finalizes through the same terminal-outcome mapping
-    // as streaming: a model that still wants tools when the iteration cap
-    // hits ends 'budget-exhausted' (the old inline loop stamped 'completed').
     defaultToolRegistry.register(
       createTool({
         name: toolName,
@@ -292,7 +258,6 @@ describe('createMessageSend integration', () => {
       })
     ).toMatchObject({ success: true });
 
-    // The completed run's recorded output, read from the database.
     const completedRun = agentRunDb
       .listAgentRunsByThread('thread_budget')
       .filter(run => run.status === 'completed')
@@ -301,11 +266,6 @@ describe('createMessageSend integration', () => {
   });
 
   it('finalizes a send that calls handoff with the handoff outcome and composed text', async () => {
-    // Declared stage-B change: send rides the shared driver, so a model that
-    // invokes the handoff tool ends with the driver's handoff outcome —
-    // finishReason 'handoff' and the '[Handoff] …' block in the reply — the
-    // same terminal contract the streaming path already had (the old inline
-    // loop stamped 'completed' and dropped the handoff framing).
     defaultToolRegistry.register(new HandoffTool());
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
@@ -358,9 +318,6 @@ describe('createMessageSend integration', () => {
       tools: ['handoff'],
     });
     expect(result).toMatchObject({ success: true });
-    // Reply text carries the in-turn handoff framing (same as streaming's
-    // accumulated response), and the run row records the handoff outcome
-    // with the composed next-steps block — not a plain 'completed'.
     expect(result.text).toContain('[Handoff #1] Found the leak');
 
     const completedRun = agentRunDb
@@ -397,8 +354,6 @@ describe('createMessageSend integration', () => {
     });
 
     expect(result.success).toBe(false);
-    // With a client id present, a persist that runs before admission would
-    // call createMessage — the assertion below is what pins the ordering.
     expect(conversation.createMessage).not.toHaveBeenCalled();
     expect(conversation.upsertTurnMessage).not.toHaveBeenCalled();
   });

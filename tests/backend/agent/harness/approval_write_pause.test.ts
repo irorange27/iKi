@@ -1,36 +1,5 @@
 // @vitest-environment node
 
-/**
- * Single-authority regression for the approval decision (task: 审批决策归一).
- *
- * THE INVARIANT: under `askRisky`, a `write_file` call from a REAL turn must
- * STOP and wait for a human. The tool declares `needsApproval = true`
- * (tools/file_tools.ts) and askRisky's own contract is "known READS are free,
- * everything else escalates" (ADR 005 decision 1/2). Before this task the
- * resolver replaced that declaration with `classifyActionRisk`, whose
- * `WORKSPACE_WRITE_TOOLS` name list marked `write_file` safe under
- * trustWorkspace — and whose default argument was `trustWorkspace = true` —
- * so a write ran straight through under the DESKTOP DEFAULT policy. That is
- * the implicit privilege channel #166 forbids: the session dial silently
- * lowered a tool's own floor.
- *
- * This test deliberately does NOT stop at the resolver's pure function
- * (`decideToolApproval`). An assertion on the resolver alone cannot see the
- * consumer: the harness projects `needsApproval` onto the Pi loop tools and
- * the loop evaluates it before any effect. So we drive a real
- * `PiToolTurnHarness` through a scripted Pi model call with a real
- * `write_file` from the real registry, and assert the observable outcomes:
- *
- *   - the turn reports `requiresApproval` and emits `approval_request`,
- *   - the file on disk is NOT written,
- *   - the loop stops after the undecided call (exactly one model request).
- *
- * Against the pre-change code the write_file cases fail on the FIRST
- * observable (the call executes, the file lands, no approval request). The
- * `always` cases fail for the other half of the same defect: a policy that
- * never read `approvalMode` could lower a tool that declared the strongest
- * mode, and `never` cleared it outright.
- */
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -104,13 +73,9 @@ const toolCall = (id: string, name: string, args: Record<string, unknown>): Tool
   arguments: args as ToolCall['arguments'],
 });
 
-/** One scripted Pi model call per loop request, in order. */
 const scriptedModelCall = (steps: AssistantMessage['content'][]) => {
   let attempt = 0;
   const state = { requests: 0 };
-  // The seam is a stream of Pi AssistantMessageEvents plus its settled
-  // message — the same contract `callPiChat` returns, so the loop consumes it
-  // exactly like a real provider stream.
   const call = ((_config: unknown) => {
     state.requests += 1;
     const content = steps[attempt];
@@ -205,7 +170,6 @@ describe('askRisky pauses a real write_file instead of executing it', () => {
 
     const events = await collect(harness, 'write the file');
 
-    // Observable 1: the turn paused for a human.
     const paused = approvalSteps(events) as Array<{
       requests: Array<{ toolCall?: { toolName?: string }; toolCallId?: string }>;
     }>;
@@ -216,28 +180,16 @@ describe('askRisky pauses a real write_file instead of executing it', () => {
       toolCall: { toolName: 'write_file' },
     });
 
-    // Observable 2: no effect happened behind the card.
     expect(stepsOf(events).filter(step => step.type === 'tool_execution_start')).toHaveLength(0);
     await expect(fs.readFile(target, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
 
-    // Observable 3: the terminal answer carries the pending decisions.
     const output = doneOutput(events);
     expect(output.requiresApproval).toBe(true);
     expect(output.toolApprovalRequests).toEqual(paused[0].requests);
-    // The loop stopped after the undecided call: one model request only.
     expect(scripted.spent()).toBe(1);
   });
 
   it('trustWorkspace: a workspace write runs (the dial is the user saying so)', async () => {
-    // ADR 005 decision 1: `trustWorkspace` "让已知工作区读写放行"; decision 2:
-    // it "还放行工作区写工具". The composer's own copy is "仅对判定为高风险的操作
-    // 询问". Requiring approval for every write here made that copy a lie — the
-    // earlier version of this case asserted the over-tight reading.
-    //
-    // The FLOOR that survives is `approvalMode: 'always'` (next case): the
-    // author states the EFFECT, the dial only states the user's TOLERANCE, and
-    // tolerance cannot shrink an effect. `write_file`'s own `needsApproval:
-    // true` is its DEFAULT (what applies with no dial), not a floor.
     const target = path.join(root, 'trust.txt');
     const scripted = scriptedModelCall([
       [toolCall('call_trust', 'write_file', { path: target, content: 'lands' })],
@@ -249,22 +201,12 @@ describe('askRisky pauses a real write_file instead of executing it', () => {
 
     const events = await collect(harness, 'write the file');
 
-    // The dial means "run it": no card, and the call REACHES execution.
-    //
-    // This asserts the DECISION, not the write. A filesystem assertion here
-    // would need a registered workspace (the path boundary refuses writes
-    // outside one — correctly), and the decision is already pinned at the pure
-    // authority in `tests/backend/utils/action_risk.test.ts`. Duplicating the
-    // workspace bootstrap would test the sandbox, not the approval rule.
     expect(approvalSteps(events)).toHaveLength(0);
     expect(stepsOf(events).filter(step => step.type === 'tool_execution_start')).toHaveLength(1);
     expect(doneOutput(events).requiresApproval).toBeFalsy();
   });
 
   it('always: a read-only tool asks too (the strictest dial is never weakened)', async () => {
-    // `read_file` declares needsApproval = false and sits in the askRisky name
-    // list. Under `always` it must still be gated, so the strictest setting is
-    // never silently bypassed by a whitelist.
     const harness = new PiToolTurnHarness(
       harnessConfig({ approvalPolicy: 'always', enabledToolNames: ['read_file'] }),
       {
@@ -290,10 +232,6 @@ describe('approvalMode: always is a floor no dial can lower', () => {
   });
 
   const runProbe = async (policy: HarnessConfig['approvalPolicy']) => {
-    // An approval-free tool that still claims the strongest mode. Before the
-    // single authority, `never` cleared it outright and askRisky /
-    // trustWorkspace answered from a NAME list that does not contain the
-    // probe — so `always` only "worked" by accident.
     defaultToolRegistry.register(
       createTool({
         name: probeName,
@@ -327,13 +265,6 @@ describe('approvalMode: always is a floor no dial can lower', () => {
   );
 
   it('never: the tool floor still wins (ADR 005 exception is the DIAL, not the tool) -- documented in IMPL-approval.md', async () => {
-    // ADR 005 decision 1 makes `never` a legitimate headless dial: "all tools
-    // resolved through ordinary approval need no approval". The single
-    // authority keeps that exception for the DIAL, but it can no longer be
-    // reached by an `always` tool being downgraded through *policy arithmetic*
-    // — the exception is one explicit branch in decideToolApproval, not the
-    // absence of a check. This case pins the documented headless behavior so
-    // changing it is a deliberate ADR edit, not a silent side effect.
     const events = await runProbe('never');
     expect(approvalSteps(events)).toHaveLength(0);
     expect(doneOutput(events).requiresApproval).toBe(false);

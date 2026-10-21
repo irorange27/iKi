@@ -50,35 +50,10 @@ type DelegatedAgentRunTracker = {
   id: string;
   recordModelStep: (record: ModelInferenceRecord) => void;
   recordAgentStep: (step: AgentStep) => void;
-  /**
-   * The child's terminal goes through the ONE finalize authority
-   * (`finalizeHarnessTurn`), so the tracker exposes exactly what that
-   * authority writes — read off the real run tracker rather than re-declared
-   * as a private `mark*` pair of its own.
-   */
+
   terminal: TerminalRunTracker;
 };
 
-/**
- * Backend pieces the delegated-agent tool needs at execution time, injected at
- * registration so tools/ stays below orchestration and persistence.
- */
-/**
- * The terminal surface a delegated child finalizes through.
- *
- * Declared STRUCTURALLY here instead of importing
- * `thread_session/turn_driver`: `tools/` sits below the session layer (arch
- * rule `tools-below-session`), and importing the driver to reuse its outcome
- * authority inverted that edge. The composition root injects the real
- * implementation through `DelegatedAgentRuntime.finalizeFailure`, so the child
- * still ends on the ONE outcome authority — the rule and the single-authority
- * goal are both honoured, instead of trading one for the other.
- */
-/**
- * The terminal-writing surface a run tracker must satisfy. Declared from the
- * LOW layer (`types/agent_run`) rather than re-exported from the session
- * layer, so `tools/` can name it without an upward import.
- */
 export type TerminalRunTracker = {
   id: string;
   getRun: () => AgentRun;
@@ -99,13 +74,13 @@ type DelegateRunFinalizeParams = {
 type DelegateRunFailureParams = { message: string; code?: string; retryable?: boolean; text?: string };
 
 export type DelegatedFinalizePort = {
-  /** A failed child turn (a throw, or an approval it cannot answer). */
+
   finalizeFailure: (params: {
     tracker: unknown;
     failure: { status: 'failed'; errorText: string; code?: string; retryable?: boolean };
     transport: string;
   }) => void;
-  /** A completed child turn, mapped from its harness output. */
+
   finalizeSuccess: (params: {
     tracker: unknown;
     output: { text: string; usage?: unknown; finishReason?: string };
@@ -114,8 +89,7 @@ export type DelegatedFinalizePort = {
 };
 
 export type DelegatedAgentRuntime = {
-  /** The real run tracker (thread_session's) — the tool narrows it to the
-   *  record + terminal surface it uses. */
+
   createRunTracker: (params: DelegatedAgentRunTrackerParams) => {
     id: string;
     getRun: TerminalRunTracker['getRun'];
@@ -127,15 +101,9 @@ export type DelegatedAgentRuntime = {
     markCancelled: TerminalRunTracker['markCancelled'];
   };
   getConversationToolModel: () => ToolModelConfig | null;
-  /**
-   * Builds the SUBAGENT's executor. Narrowed to `TurnDriverHarness` (turn +
-   * getHistory) so the tool does not care which supply serves the child — the
-   * composition root picks, exactly as it does for a parent turn. It used to
-   * name `AgentHarness`, which pinned delegation to the AI SDK.
-   */
+
   createHarness: (assembly: TurnHarnessAssembly) => TurnDriverHarness;
-  /** The session layer's one finalize, injected (see `DelegatedFinalizePort`
-   *  for why this is a port and not an import). */
+
   finalize: DelegatedFinalizePort;
 };
 
@@ -181,17 +149,6 @@ const normalizeToolNames = (input: unknown): string[] => {
   return normalized;
 };
 
-/**
- * May this tool run without a human deciding on each call?
- *
- * Reads the tool's OWN declaration, never the live `needsApproval` decision.
- * Under an explicit askRisky/trustWorkspace policy the resolver replaces
- * `needsApproval` with a per-call function on EVERY tool, so asking it here
- * made every candidate look approval-gated and emptied the delegable set —
- * which is why delegation was unusable in the product's default configuration.
- * Session policy still governs the child's own execution; this only decides
- * what a subagent may inherit.
- */
 const isApprovalFreeTool = (
   tool: Pick<AgentTool, 'declaredNeedsApproval' | 'approvalMode'>
 ): boolean => tool.approvalMode !== 'always' && tool.declaredNeedsApproval !== true;
@@ -325,8 +282,6 @@ const resolveDelegableTools = (
         );
       }
 
-      // Same reason as the auto path below: the child cannot answer an
-      // approval, and the declaration check above already admitted this tool.
       resolved.push({ ...tool, needsApproval: false });
     }
 
@@ -339,35 +294,13 @@ const resolveDelegableTools = (
       isApprovalFreeTool(tool) &&
       (!policy.allowedTools || policy.allowedTools.has(tool.name))
   );
-  // A turn that exposes NO tools is a legitimate tool-free delegation and is
-  // left alone. The surprise is the other shape: tools exist, yet none is
-  // delegable. Returning [] there built the child with `enabledTools: []`, so
-  // it ran, answered without tooling and reported nothing (issue #170).
-  //
-  // State the causes as the NEGATION of the filter below rather than as a
-  // census: an available tool is delegable only when it is approval-free
-  // (`needsApproval` explicitly false/undefined), its `approvalMode` is not
-  // 'always', it is not `agent` itself (recursion), and the subagent type
-  // permits it. So the set empties whenever, for every candidate, one of those
-  // fails — most often because the tool genuinely asks for approval, which
-  // covers a static `needsApproval: true` (write/edit/delete tools), an
-  // `approvalMode` of 'always' (shell, skill, proactive-task and awaiter
-  // tools; MCP servers under defaultApprovalMode 'always'), and a per-call
-  // `needsApproval` function installed by an explicit askRisky/trustWorkspace
-  // policy. The other two are an allow-list that covers no candidate, and a
-  // parent exposing only `agent`.
-  // Naming tools explicitly never reaches here: that path fails earlier, per
-  // tool, at the allow-list and approval checks.
 
   if (toolMap.size > 0 && delegable.length === 0) {
     throw new Error(
       "No tool is delegable to the subagent: none of this turn's available tools is approval-free for this subagent type. Either the tools themselves require an approval decision, or this subagent type may not use them. Narrow the task to one without tools, or pass tools: [] for a tool-free subagent."
     );
   }
-  // The child has no approval surface, so strip the parent's per-call decision
-  // from the tools it inherits. Selection above already proved every one of
-  // them declares itself approval-free; leaving the parent's function in place
-  // would let a policy the child cannot satisfy pause it mid-task.
+
   return delegable.map(tool => ({ ...tool, needsApproval: false }));
 };
 
@@ -399,8 +332,7 @@ export class DelegatedAgentTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
-  // Delegation runs a whole child turn with its own writes; replaying it
-  // duplicates that work (and any effect the child performed).
+
   override replay = 'unsafe' as const;
   override description =
     "Delegate a bounded investigation, review, or synthesis subtask to a fresh subagent scratchpad. Best for side work such as comparing sources, scanning directory structure, or producing focused findings. The delegated run inherits only the current turn's approval-free tools and cannot recursively spawn more agents. Pick subagent_type deliberately: explorer is a read-only research agent (safe for investigation), general carries the full approval-free tool set.";
@@ -421,7 +353,6 @@ export class DelegatedAgentTool extends BaseTool {
     const delegatedTools = resolveDelegableTools(args.tools, subagentType);
     const delegatedToolNames = delegatedTools.map(tool => tool.name);
 
-    // Create scratchpad directory for intermediate subagent findings
     const scratchpadBase = path.join(os.tmpdir(), 'iki-scratch');
     const scratchpadPath = path.join(
       scratchpadBase,
@@ -454,12 +385,7 @@ export class DelegatedAgentTool extends BaseTool {
       enableTools: delegatedTools.length > 0,
       enabledToolNames: [],
       availableSkillIds: runtimeContext.availableSkillIds ?? [],
-      // The child inherits ALREADY-SELECTED approval-free tools (see
-      // isApprovalFreeTool), and it has no UI to answer a card. Without an
-      // explicit policy it fell back to legacy flags, where a tool carrying a
-      // per-call `needsApproval` function could still pause the child on an
-      // approval nobody can grant. 'never' states what the selection already
-      // guarantees: every inherited call needs no human decision.
+
       approvalPolicy: 'never',
       maxIterations: resolvedMaxIterations,
       maxOutputTokens: resolvedMaxTokens,
@@ -491,8 +417,7 @@ export class DelegatedAgentTool extends BaseTool {
         lastStepIndex: 0,
       },
     });
-    // One identity, two surfaces: the record surface the tool drives and the
-    // terminal surface the shared finalize authority writes.
+
     const runTracker = {
       ...createdTracker,
       terminal: createdTracker as unknown as TerminalRunTracker,
@@ -512,10 +437,6 @@ export class DelegatedAgentTool extends BaseTool {
       },
     });
 
-    // The child runs inside this tool call — there is no second executing
-    // unit. Aliasing it onto the parent is what lets a cancel naming the
-    // child reach the execution that is actually running, instead of
-    // refusing a run that is executing right here.
     const disposeChildAlias = getToolRuntimeContext().registerChildRunAlias?.(
       runtimeContext.runId ?? '',
       runTracker.id
@@ -546,12 +467,9 @@ export class DelegatedAgentTool extends BaseTool {
         }
       );
       if (!turnOutput) throw new Error('Delegated agent produced no output');
-      // The child's model history is NOT copied into its run row: it lives in
-      // the session log and is replayed on recovery (ADR 010 §3).
+
     } catch (error) {
-      // A delegated turn's terminal is the SAME outcome vocabulary the parent
-      // uses (audit A-1's eleventh hand-written site): a throw is a failure,
-      // one row, one projection.
+
       requireDelegatedAgentRuntime().finalize.finalizeFailure({
         tracker: runTracker.terminal,
         failure: {
@@ -589,17 +507,12 @@ export class DelegatedAgentTool extends BaseTool {
       );
     }
 
-    // The child's terminal is derived from ITS OWN harness outcome through
-    // the shared table: a step budget that ran out with tool calls pending is
-    // `budget-exhausted`, not a silent success (the delegated turn used to
-    // report 'completed' for every non-throwing turn).
     requireDelegatedAgentRuntime().finalize.finalizeSuccess({
       tracker: runTracker.terminal,
       output: turnOutput,
       transport: 'delegated-agent',
     });
 
-    // Scan scratchpad for intermediate findings
     let scratchpadFiles: Array<{ name: string; size: number; content?: string }> = [];
     try {
       const entries = await fs.readdir(scratchpadPath, { withFileTypes: true });
@@ -614,8 +527,8 @@ export class DelegatedAgentTool extends BaseTool {
           const stat = await fs.stat(filePath);
           file.size = stat.size;
         } catch {
-          // ignore stat failure
-        }
+    // Intentionally ignored: the caller cannot act on it.
+  }
         try {
           const content = await fs.readFile(filePath, 'utf-8');
           file.content =
@@ -623,18 +536,18 @@ export class DelegatedAgentTool extends BaseTool {
               ? content.slice(0, SCRATCHPAD_MAX_CONTENT_BYTES) + '\n... [truncated]'
               : content;
         } catch {
-          // binary or unreadable — skip content
-        }
+    // Intentionally ignored: the caller cannot act on it.
+  }
       }
     } catch {
-      // scratchpad may not exist or be empty
-    }
+    // Intentionally ignored: the caller cannot act on it.
+  }
 
     const hasScratchpad = scratchpadFiles.length > 0;
 
     return {
       response: turnOutput.text,
-      iterations: 0, // ponytail: harness doesn't expose iterations; consumers only need response
+      iterations: 0,
       toolCallCount: turnOutput.toolCalls?.length ?? 0,
       usedTools: summarizeUsedTools(turnOutput.toolCalls),
       model: {

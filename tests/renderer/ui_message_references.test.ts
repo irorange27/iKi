@@ -590,7 +590,6 @@ describe('buildSessionPerfStats', () => {
           }),
         ],
       },
-      // Pre-instrumentation message without a usage part contributes nothing.
       { role: 'assistant', parts: [{ type: 'text', text: 'legacy' }] },
     ]);
 

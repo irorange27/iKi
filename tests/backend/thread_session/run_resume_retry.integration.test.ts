@@ -7,9 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
 
-// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
-// these suites on the durable-layer behaviour they assert without reaching a
-// network endpoint.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -28,8 +25,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     maxInputTokens: 98000,
     maxOutputTokens: 2000,
   }),
-  // No database in this suite: answer the provider lookup directly so the Pi
-  // supply admits the turn (the address is never dialled — callPiChat is mocked).
   getProviderConfig: () => ({
     type: 'openai',
     apiKey: 'key-test',
@@ -53,10 +48,6 @@ import {
 } from '@iki/backend/thread_session/session_log';
 import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 
-// F5 boundary: a retry or queued resume replays the ORIGINAL task — since
-// ADR 008 F3 the recovery source is the session log, so the fixture records
-// the accepted-input fact the real turn start persists. The run row's plan
-// fields stay the identity/plan source; its input copy is no longer read.
 describe('run retry and queued resume at the service boundary', () => {
   let root: string;
   let service: ReturnType<typeof createChatService>;
@@ -110,11 +101,6 @@ describe('run retry and queued resume at the service boundary', () => {
   };
 
   beforeEach(async () => {
-    // These suites drive the DURABLE layer (streaming, approvals, session-log
-    // facts, retry, persistence) with a scripted AI SDK model. They are not about
-    // which supply serves the turn, so they opt into the legacy executor: the
-    // production default refuses a turn its projection cannot carry, and a
-    // scripted model has no endpoint to project to.
     setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-run-resume-'));
     userDataMock.mockReturnValue(root);
@@ -155,7 +141,6 @@ describe('run retry and queued resume at the service boundary', () => {
     expect(runs.map(run => run.id).sort()).toEqual(['run_failed_1', result.newRunId].sort());
     expect(runs.find(run => run.id === result.newRunId)?.status).toBe('completed');
     expect(runs.find(run => run.id === result.newRunId)?.parentRunId).toBe('run_failed_1');
-    // No leftover repeatable queued record.
     expect(runs.find(run => run.status === 'queued')).toBeUndefined();
   });
 
@@ -174,7 +159,6 @@ describe('run retry and queued resume at the service boundary', () => {
     const first = await service.resumeRun(target, 'run_queued_1');
     expect(first).toMatchObject({ success: true });
     expect(JSON.stringify(providerCalls.mock.calls[0][1])).toContain('QUEUED_TASK_MARKER');
-    // Adopted: the queued id became the executing run — no third identity.
     const runs = agentRunDb.listAgentRunsByThread('thread_queued');
     expect(runs.map(run => run.id)).toEqual(['run_queued_1']);
     expect(runs[0].status).toBe('completed');

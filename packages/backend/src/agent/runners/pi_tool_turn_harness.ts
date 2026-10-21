@@ -58,83 +58,22 @@ import type { HarnessConfig, TurnEvent, TurnInput, TurnOutput } from '../harness
 
 const logger = createLogger({ module: 'pi_tool_turn_harness' });
 
-/**
- * The tool-enabled streaming turn harness over the Pi supply layer — switch
- * item 3a (issue #114), the production wiring of the candidate loop.
- *
- * Routing (thread_session/turn_supply_selection.ts): `plan.enableTools &&
- * supportsPiTurnSupply` — every mode (autonomous chains rebuild through the
- * same selector, 3c) and every approval policy served.
- * Approval semantics: the resolver's per-call decision rides the loop tool
- * (evaluated before any effect); the needing calls are reported as the
- * standard approval_request step + requiresApproval done — persistence stays
- * with the driver's registerApprovalBatch. Resume executes the decided calls
- * through the injected five-state owner port (admitted by the approval
- * module before the legacy consume), then continues the loop.
- *
- * Contract parity with the AI SDK runner for the tool subset:
- * - tools resolved by the same owner (`resolveTools`) with the same per-step
- *   policy snapshot (advanced after each step);
- * - tools executed inline: runtime context bound (thread, run, workspace
- *   snapshot, abort signal, available tools), structured-clone args, the
- *   tool's own retry config honored; results carried in the canonical
- *   ToolResultOutput vocabulary (text / json / error-text) — the same shape
- *   the driver projects to the UI and history keeps;
- * - the loop's events map 1:1 onto the TurnDriver protocol — live
- *   text/thinking deltas as message_update steps, tool_execution_start
- *   yielded BEFORE the effect and tool_execution_end AFTER it (generator
- *   suspension keeps "executing right now" visible);
- * - transient model-call failures retry with the runner's bounds (3 retries,
- *   shared isRetryableError classifier, exponential backoff) and the same
- *   two recovery notes, pushed onto the LIVE transcript so they persist
- *   across the turn — but only while the failed call streamed nothing;
- * - history stays ModelMessage-shaped end to end (thinking → reasoning
- *   parts, tool results as tool messages); getHistory returns a clone;
- * - the input budget runs the prepareStep cadence: once at turn start
- *   through the shared preparePiTurnHistory and again before EVERY model
- *   call through compactPiRequestStep — over the threshold the request view
- *   compacts (request-scoped; the stored mirror keeps the full text, the
- *   snapshot basis switches to what was actually sent) and a view that
- *   cannot fit even compacted refuses loudly;
- * - an empty response with no tool calls is a RefusalError; aborts throw
- *   DOMException('AbortError'); provider errors throw after the retry
- *   budget — the driver's cancel/steer/failure classification keys off the
- *   error name;
- * - terminal mapping: loop 'completed' → finishReason 'stop';
- *   'budget-exhausted' → finishReason 'tool-calls' (the driver reports
- *   budget-exhausted with the pending calls carried in toolCalls).
- *
- * Live deltas stream as they arrive — shown ⊆ committed stays downstream,
- * in the TurnDriver's buffer gate.
- */
-
-/** The narrow call surface this harness consumes: the harness hands the
- * harness config, the loop's LIVE transcript, the projected tools and the
- * signal; the production implementation resolves the provider row, builds
- * the Pi model, and streams one attempt with the runner's retry bounds.
- * Tests hand scripted doubles. */
 export type PiToolModelCall = (
   config: HarnessConfig,
   request: {
     systemPrompt: string;
-    /** The loop's live transcript — retry notes pushed here persist. */
+
     messages: PiMessage[];
     tools?: ReturnType<typeof projectToolsToPiTools>;
     signal?: AbortSignal;
     maxTokens?: number;
-    /** Retry recovery notes: the mirror must stay in step with what the
-     * transcript now carries (runner parity — notes persist in history on
-     * success and are flushed before the next assistant entry). */
+
     onRecoveryNote?: (noteText: string) => void;
-    /** Over-length rescue (#124): invoked by the retry wrapper when the
-     * provider rejects the request for context length — the harness force-
-     * compacts the shared view/transcript and the wrapper retries ONCE. */
+
     onContextOverflow?: () => Promise<void>;
   }
 ) => { events: AsyncIterable<PiLoopDelta>; final: Promise<AssistantMessage> };
 
-// The runner's retry bounds (simple_agent_runner): 3 retries, exponential
-// backoff capped at 30s, only while nothing has streamed in THIS call.
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 const RETRY_MAX_DELAY_MS = 30000;
@@ -143,8 +82,6 @@ const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, m
 
 const CONTENT_FILTER_PATTERN = /content_filter/i;
 
-/** Absorbs the projection's systemPrompt slot during a per-request compaction
- * rebuild — never reaches the wire (the rebuild keeps only `messages`). */
 const PER_REQUEST_COMPACT_PLACEHOLDER = '__iki_compaction_slot__';
 
 const recoveryNoteFor = (failure: Error): string =>
@@ -153,28 +90,11 @@ const recoveryNoteFor = (failure: Error): string =>
     : `Your last attempt encountered an error: ${getErrorMessage(failure)}. Please try a different approach or simplify your response to avoid this issue.`) +
   '\n\n---\nContinue with the original task.';
 
-/**
- * The runner's retry bounds wrapped around one attempt factory: transient
- * failures and refusals retry (3 retries, shared isRetryableError, exponential
- * backoff) but only while the failed call streamed nothing — shown text is
- * never re-shown. Recovery notes join the LIVE transcript (riding every later
- * step) AND reach `onRecoveryNote` so the caller's ModelMessage mirror stays
- * in step with what was sent. Terminal failures are CLASSIFIED here: a
- * content-filter finish reason throws the runner's RefusalError, an aborted
- * signal throws DOMException('AbortError') — the driver's cancel/steer/failure
- * classification keys off these. A queued-buffer decouples the attempt task
- * from the loop's consumption so a retry's deltas keep flowing after the
- * failed attempt's stream ended.
- */
 export const withPiRetry = (
   attempt: () => { stream: AsyncIterable<PiStreamEvent>; final: Promise<AssistantMessage> },
   request: { messages: PiMessage[]; signal?: AbortSignal },
   onRecoveryNote?: (noteText: string) => void,
-  /** Over-length rescue (#124): when the provider rejects the request for
-   * context length, the callback force-compacts the SHARED view/transcript
-   * and the wrapper retries ONCE with a reset transient budget. Absent, or
-   * on a second overflow, or once anything streamed, or when aborted: the
-   * failure is terminal exactly as before this parameter existed. */
+
   onContextOverflow?: () => Promise<void>
 ): { events: AsyncIterable<PiLoopDelta>; final: Promise<AssistantMessage> } => {
   const queue: PiLoopDelta[] = [];
@@ -214,12 +134,7 @@ export const withPiRetry = (
                 undefined
               )
             : new Error(final.errorMessage || 'Provider returned an error stop reason');
-          // Over-length is the one failure a REQUEST rebuild fixes: force-
-          // compact through the caller and retry once with a fresh transient
-          // budget. Second overflow / streamed / no callback → terminal.
-          // Checked BEFORE the transient classification so a hybrid message
-          // (a proxy wrapping the over-length text in a 429 envelope) rescues
-          // immediately instead of burning the transient budget.
+
           if (
             isContextOverflowError(final.errorMessage) &&
             onContextOverflow &&
@@ -251,8 +166,7 @@ export const withPiRetry = (
               Math.min(RETRY_BASE_DELAY_MS * 2 ** (attemptIndex - 1), RETRY_MAX_DELAY_MS)
             );
             const note = recoveryNoteFor(failure);
-            // The note joins the LIVE transcript and the caller's mirror
-            // signal — it rides every later step of this turn (runner parity).
+
             request.messages.push({ role: 'user', content: note, timestamp: Date.now() });
             onRecoveryNote?.(note);
             logger.event({
@@ -264,7 +178,7 @@ export const withPiRetry = (
             });
             continue;
           }
-          // Terminal: classify for the driver before handing the failure over.
+
           if (request.signal?.aborted) {
             throw new DOMException(final.errorMessage || 'Run cancelled', 'AbortError');
           }
@@ -300,7 +214,6 @@ export const withPiRetry = (
   return { events, final: finalPromise };
 };
 
-/** One live attempt's delta events (the slice of Pi's stream the loop needs). */
 export type PiStreamEvent = { type: 'text_delta' | 'thinking_delta'; delta: string };
 
 const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
@@ -314,7 +227,7 @@ const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
     id: config.model,
     providerType: config.providerType,
     baseUrl: provider.baseURL,
-    // Responses providers speak the Responses dialect (see buildPiModel).
+
     api: resolveProviderApi(config.providerType, provider),
     contextWindow: capability?.contextWindow ?? 128000,
     maxTokens: config.maxOutputTokens ?? capability?.maxTokens ?? 4096,
@@ -343,21 +256,13 @@ const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
   );
 };
 
-/** The raw tool invocation (handler + clone + retry + context binding) —
- * returns the handler's RAW value; the callers wrap it into their own result
- * vocabulary. Unknown tool names throw here; the wrappers convert. */
 const createRawToolRunner = (
   tools: AgentTool[],
   config: HarnessConfig,
   inheritedBox?: { selection: unknown }
 ) => {
   const byName = new Map(tools.map(tool => [tool.name, tool]));
-  // Snapshot the workspace selection ONCE, when the runner is built (i.e. at
-  // turn start). Every tool invocation shares this box by reference, so a
-  // mid-run workspace switch (a worktree assignment from the daemon or the
-  // renderer) cannot redirect the tools of the turn already in flight — the
-  // frozen-root guarantee the retired AgentHarness provided, which the Pi path
-  // silently lacked after the supply flip.
+
   const workspaceSelectionBox = inheritedBox ??
     getToolRuntimeContext().workspaceSelectionBox ?? {
       selection: config.threadId ? resolveThreadWorkspaceSelectionSnapshot(config.threadId) : null,
@@ -388,9 +293,6 @@ const createRawToolRunner = (
   };
 };
 
-/** Inline execution parity with the AI SDK adapter: results land in the
- * canonical ToolResultOutput vocabulary; unknown tool names become error
- * results, never throws. */
 const defaultPiToolExecutor = (
   tools: AgentTool[],
   config: HarnessConfig,
@@ -412,9 +314,6 @@ const defaultPiToolExecutor = (
   };
 };
 
-/** Structural mirror of the approval owner's outcome — thread_session owns
- * the shape; this module must not import it (agent-below-session). The
- * completed result is the canonical tool-result record. */
 export type ToolExecutionOutcome =
   | { kind: 'pending' | 'unknown' | 'busy' }
   | {
@@ -423,7 +322,6 @@ export type ToolExecutionOutcome =
       result: { type: 'tool-result'; toolCallId: string; toolName: string; output: unknown };
     };
 
-/** Tool result output in the canonical ToolResultOutput vocabulary. */
 type ToolResultOutput =
   | { type: 'text'; value: string }
   | { type: 'json'; value: unknown }
@@ -456,52 +354,28 @@ export class PiToolTurnHarness {
     };
   };
   private history: ModelMessage[] = [];
-  /**
-   * Workspace selection frozen at turn start, shared by reference with every
-   * tool invocation of this turn. A resumed segment (approval, handoff) REUSES
-   * it — re-resolving would pick up a switch that happened after the turn
-   * began, which is the frozen-root guarantee.
-   */
+
   private workspaceSelectionBox?: { selection: unknown };
-  /**
-   * The resolver's per-call approval predicates, keyed by tool name, captured
-   * at resolve time.
-   *
-   * `loopTools` is a local inside `turn()`, so a resumed segment (approval
-   * resume, handoff) builds its own — and its predicate would then close over a
-   * DIFFERENT policy box than the one `advanceApprovalPolicySnapshot` refreshes
-   * each step. The same tool could therefore be gated at resolve time and
-   * ungated at call time (or the reverse). Holding the resolver's predicates
-   * here keeps every segment asking the box it actually advances: one owner for
-   * the approval decision.
-   */
+
   private approvalPredicates = new Map<
     string,
     (input: unknown, options?: unknown) => boolean | Promise<boolean>
   >();
-  /** The per-turn policy snapshot every segment advances and every predicate reads. */
+
   private policyBox?: ApprovalPolicyBox;
 
   constructor(
     config: HarnessConfig,
     deps?: {
       modelCall?: PiToolModelCall;
-      /** Mid-turn nudge (the todo reminder). Injected from thread_session —
-       * agent must not import the session layer (arch rule
-       * agent-below-session-and-orchestration). Returns the text to append
-       * before the next model call, or undefined for no nudge. */
+
       stepReminder?: (steps: ReadonlyArray<{ toolCalls: ReadonlyArray<{ name: string }> }>) => string | undefined;
-      /** Intercepts MODEL-driven tool calls after the resume block. Owner-
-       * executed resume calls (the five-state port) run RAW and do NOT pass
-       * through this — record them at the owner port instead. */
+
       executeTool?: (
         call: { name: string; arguments: Record<string, unknown> },
         signal?: AbortSignal
       ) => Promise<unknown>;
-      /** Resume mode (switch item 3b): the decided calls of a paused turn,
-       * read back from the approval rows, and the five-state owner port.
-       * The thread_session construction site injects the owner — this module
-       * must not import it (agent-below-session). */
+
       resume?: {
         commands: Array<{
           approvalId: string;
@@ -532,24 +406,13 @@ export class PiToolTurnHarness {
   async *turn(input: TurnInput): AsyncGenerator<TurnEvent, void> {
     const signal = input.abortSignal;
     signal?.throwIfAborted();
-    // Inline-execution fact port (issue #145): loop-executed calls journal
-    // through it; owner-executed resume calls bypass the executor and stay
-    // on the owner's own journal.
+
     const recordInlineExecution = input.recordInlineExecution;
     const runId = input.runId;
 
-    // ONE box per turn, kept on the instance: a resumed segment must advance
-    // the same snapshot the resolvers' predicates read, not a fresh copy.
     this.policyBox = createApprovalPolicyBox(this.config.approvalPolicy);
     const policyBox = this.policyBox;
-    // A caller-supplied tool set is the capability upper bound (the same
-    // contract the AI SDK harness honours): delegation hands the subagent its
-    // pre-filtered tools here, and resolution is skipped entirely. This used to
-    // throw, which pinned delegated subagents to the AI SDK harness; the tools
-    // arrive already resolved — with `needsApproval: false`, because a
-    // subagent has no surface to answer a card — so the loop below treats them
-    // exactly like resolved ones.
-    // Freeze the workspace selection for the WHOLE turn, before any tool runs.
+
     const tools =
       input.toolsOverride ??
       resolveTools({
@@ -561,9 +424,7 @@ export class PiToolTurnHarness {
         ...(this.config.approvalPolicy ? { approvalPolicy: this.config.approvalPolicy } : {}),
         approvalPolicyBox: policyBox,
       });
-    // Freeze the workspace selection for the WHOLE turn, before any tool runs:
-    // resumed segments and every tool invocation share this box by reference, so
-    // a mid-run workspace switch cannot redirect the tools of an in-flight turn.
+
     this.workspaceSelectionBox = getToolRuntimeContext().workspaceSelectionBox ?? {
       selection: this.config.threadId
         ? resolveThreadWorkspaceSelectionSnapshot(this.config.threadId)
@@ -578,20 +439,9 @@ export class PiToolTurnHarness {
           }))
         )
       : undefined;
-    // Per-call approval decision: the resolver's function (policy box state
-    // in its closure) rides the loop tool; the loop evaluates it before any
-    // effect. Booleans pass through.
-    // Capture the resolver's per-call predicates for the cases where this
-    // segment skips resolution (a toolsOverride supplies its own, so nothing is
-    // captured and the override's own answer is honoured).
+
     if (!input.toolsOverride) {
-      // CLEAR first: this map is per-INSTANCE but the predicates close over a
-      // per-TURN policy box (a fresh one is created above on every `turn()`).
-      // Keeping an entry from an earlier segment made the resumed segment ask
-      // the PREVIOUS turn's policy — an approval-paused turn resolved under
-      // `always` kept prompting forever, because the captured closure still
-      // read the box that `advanceApprovalPolicySnapshot` no longer touches.
-      // Same lifetime as `policyBox`: replaced, never accumulated.
+
       this.approvalPredicates.clear();
       for (const tool of tools) {
         if (typeof tool.needsApproval === 'function') {
@@ -602,16 +452,11 @@ export class PiToolTurnHarness {
     const loopTools: PiLoopTool[] | undefined = piTools?.map(piTool => {
       const agentTool = tools.find(candidate => candidate.name === piTool.name);
       const predicate = this.approvalPredicates.get(piTool.name);
-      // Prefer the captured resolver decision. Without it a resumed segment
-      // would fall back to a boolean and lose the per-step policy snapshot.
+
       if (predicate) {
         return {
           ...piTool,
-          // The resolver's decision is ASYNC (it may await a function-valued
-          // tool declaration). `Boolean(promise)` is always true, so wrapping
-          // it that way made EVERY tool need approval — the effect vanished
-          // from the transcript because the loop paused instead of executing.
-          // Await it: the gate must see the resolved boolean.
+
           needsApproval: async (
             input: unknown,
             context: { toolCallId: string; messages: PiMessage[] }
@@ -639,8 +484,7 @@ export class PiToolTurnHarness {
     const firstTranscriptSystem = this.history.find(
       (message): message is Extract<ModelMessage, { role: 'system' }> => message.role === 'system'
     );
-    // The AI SDK overhead formula: system prompt + the tool schemas' JSON
-    // size (the schemas sit in the cached region ahead of every message).
+
     const toolSchemaOverheadTokens = piTools ? estimateTextTokens(JSON.stringify(piTools)) : 0;
     const transcriptSystemText =
       typeof firstTranscriptSystem?.content === 'string' ? firstTranscriptSystem.content : '';
@@ -668,22 +512,10 @@ export class PiToolTurnHarness {
       { slot: 'transcriptSystem', text: projected.systemPrompt },
     ]);
 
-    // The loop owns the Pi transcript (it appends assistant/toolResult
-    // entries); the harness mirrors every append in ModelMessage shape for
-    // getHistory/onInference — single writer per side, same order. The FULL
-    // mirror is the stored-history authority (getHistory); `requestView` is
-    // what the model actually sees — identical to the mirror until a
-    // compaction replaces it (prepareStep parity), after which the two share
-    // appends but the view stays compacted. Retry notes sit in pendingNotes
-    // until the next assistant entry flushes them (runner parity: notes
-    // persist in history on success, never on a turn that ultimately fails).
     const transcript: PiMessage[] = projected.messages;
     let requestView: ModelMessage[] = requestHistory;
     let summaryMessage = turnStartSummaryMessage;
-    // Mutable: after a compaction the summaries ride as MESSAGES, so the
-    // request system prompt reassembles with the original transcript system
-    // only — a turn-start summary that the projection funneled into the slot
-    // (no-transcript-system shape) must not linger on the wire stale.
+
     let requestSystemPrompt = systemPrompt;
     const overheadTokens = estimateTextTokens(systemPrompt) + toolSchemaOverheadTokens;
     const turnStartedAt = Date.now();
@@ -714,13 +546,7 @@ export class PiToolTurnHarness {
         )(call, execSignal)) as {
           type: string;
         };
-        // Journal the inline effect (issue #145): loop-executed calls are
-        // effects the effect-aware retry must see. Handler errors produced
-        // no world effect — they journal nothing. Fail-closed: a lost
-        // record would let the retry re-issue the call. The loop passes the
-        // model's call id alongside name/arguments. Terminal tools
-        // (handoff) skip, matching the AI SDK site — a retried turn must
-        // not continue past a handoff it did not issue.
+
         if (
           recordInlineExecution &&
           runId &&
@@ -739,13 +565,6 @@ export class PiToolTurnHarness {
         return output;
       });
 
-    // Resume mode (switch item 3b): execute the decided calls of the paused
-    // turn through the five-state owner FIRST — approved calls run exactly
-    // once (crash-safe, owner-adjudicated), rejections produce the canonical
-    // execution-denied result — then continue the loop with the empty
-    // prompt. The owner outcomes that cannot occur under full-batch
-    // decisions (pending) or signal cross-process conflicts (unknown, busy)
-    // fail loudly instead of inventing a result.
     if (this.resume && this.resume.commands.length > 0) {
       if (!this.config.threadId) {
         throw new Error('Resuming an approval requires the paused turn thread id.');
@@ -762,11 +581,9 @@ export class PiToolTurnHarness {
           },
         };
         this.resume.owner.prepare(address);
-        // The owner requires a signal — supply a fresh controller when the
-        // turn carries none.
+
         const ownerSignal = signal ?? new AbortController().signal;
-        // The owner's port contract expects the RAW handler value — the
-        // owner applies the canonical result wrapping itself.
+
         const runRaw = createRawToolRunner(tools, this.config, this.workspaceSelectionBox);
         const outcome = await this.resume.owner.executeApproved(address, {
           signal: ownerSignal,
@@ -796,7 +613,7 @@ export class PiToolTurnHarness {
             ...(isError ? { error: toolOutputText(output) } : {}),
           },
         };
-        // Mirror and transcript: same appends the loop would make.
+
         const resumeResultMessage: ModelMessage = {
           role: 'tool',
           content: [
@@ -821,14 +638,8 @@ export class PiToolTurnHarness {
       }
     }
 
-    // Pause-side reporting: the harness allocates approvalIds and records
-    // the needing calls; PERSISTENCE stays with the driver's
-    // registerApprovalBatch (done handling) — the harness only reports.
     const pendingApprovalRequests: ToolApprovalRequest[] = [];
 
-    // Shared by the per-request budget check and the over-length rescue:
-    // compact the request view (request-scoped), rebuild the transcript, and
-    // refuse loudly when the view cannot fit. Returns whether it compacted.
     const applyCompaction = async ({ force }: { force: boolean }): Promise<boolean> => {
       if (typeof this.config.maxInputTokens !== 'number') return false;
       const compactionStartedAt = Date.now();
@@ -842,8 +653,7 @@ export class PiToolTurnHarness {
         ...(summaryMessage && typeof summaryMessage.content === 'string'
           ? { existingSummary: summaryMessage.content }
           : {}),
-        // Identity of the view's CURRENT summary — the owner excludes it
-        // from the kept systems so the new summary replaces it.
+
         ...(summaryMessage ? { previousSummaryMessage: summaryMessage } : {}),
       });
       if (planned.viewTokens + overheadTokens > this.config.maxInputTokens) {
@@ -854,14 +664,7 @@ export class PiToolTurnHarness {
       if (!planned.compacted) return false;
       requestView = planned.requestView;
       summaryMessage = planned.summaryMessage;
-      // Full rebuild from the canonical view. A count-based in-place
-      // splice is UNSOUND here: protected-user relocation makes the
-      // omission non-contiguous, multi-part tool messages project 1:N,
-      // and a leading transcript system shifts every index. The
-      // placeholder system absorbs the projection's systemPrompt slot
-      // so every REAL system (prior summaries included) stays in the
-      // messages; the original transcript system is dropped from the
-      // rebuild — the loop's assembled systemPrompt already carries it.
+
       const rebuilt = projectHistoryToPiContext(
         [{ role: 'system', content: PER_REQUEST_COMPACT_PLACEHOLDER }, ...requestView],
         this.config.model,
@@ -894,12 +697,7 @@ export class PiToolTurnHarness {
       });
       return true;
     };
-    // Over-length rescue (#124): invoked by the retry wrapper between
-    // attempts. An extra snapshot push keeps the inference record on the
-    // compacted basis (the retry's request IS the rebuilt view), and the
-    // unflushed recovery notes re-join the rebuilt transcript — they were
-    // pushed onto it by the failed attempt and the snapshot records them as
-    // sent, so the wire must carry them.
+
     const onContextOverflow = async (): Promise<void> => {
       const compacted = await applyCompaction({ force: true });
       if (!compacted) {
@@ -924,8 +722,7 @@ export class PiToolTurnHarness {
       ...(loopTools ? { tools: loopTools } : {}),
       maxSteps: this.config.maxIterations,
       terminalToolNames: TERMINAL_TOOL_NAMES,
-      // One Langfuse generation per model call — the tool path is several
-      // calls per turn, and per-call cost is what the cost views compare.
+
       onModelCall: settled => {
         if (!isLangfuseEnabled()) return;
         void tracePiGeneration(
@@ -953,8 +750,7 @@ export class PiToolTurnHarness {
             });
             return Promise.resolve();
           }
-          // A lost span is the cheap failure — never an unhandled rejection
-          // that takes the turn down.
+
         ).catch(error => {
           logger.event({
             level: 'warn',
@@ -978,34 +774,19 @@ export class PiToolTurnHarness {
         tools?: unknown;
         steps?: ReadonlyArray<{ toolCalls: ReadonlyArray<{ name: string }> }>;
       }) => {
-        // prepareStep parity: EVERY request re-checks the input budget.
-        // Under the threshold this is one estimate pass; over it, the
-        // REQUEST view compacts (the stored mirror stays full) and the
-        // transcript rebuilds in place — the loop's messages alias sees the
-        // new contents. A view that cannot fit even after compaction
-        // refuses loudly (no silent truncation).
+
         if (typeof this.config.maxInputTokens === 'number') {
           await applyCompaction({ force: false });
         }
-        // The todo nudge rides the same request view as everything else, so
-        // it is persisted, compactible and visible to the next step. It is
-        // derived from settled steps, never appended twice for one step list.
+
         const reminder = this.stepReminder?.(context.steps ?? []);
-        // ONE nudge per turn. The rule keeps matching once its threshold is
-        // crossed, so appending on every later step would bury the transcript
-        // under reminders; the model gets told once and either updates the
-        // plan or keeps working.
+
         if (reminder && !reminderSent) {
           reminderSent = true;
-          // The transcript IS what the model receives (the loop appends its
-          // own assistant/toolResult entries there), so push there once.
-          // requestView is rebuilt from it by applyCompaction; recomputing it
-          // here would append the same nudge a second time.
+
           transcript.push({ role: 'user', content: reminder, timestamp: Date.now() });
         }
-        // Snapshot at call time = exactly what this step sends: the request
-        // view (compacted basis included) plus any recovery note that has
-        // not been flushed into it yet.
+
         sentSnapshots.push([...requestView, ...pendingNotes]);
         return this.modelCall(this.config, {
           systemPrompt: requestSystemPrompt,
@@ -1049,17 +830,16 @@ export class PiToolTurnHarness {
         };
       } else if (event.type === 'step_end') {
         const step = event.step;
-        // End of one step = start of the next policy snapshot (harness parity).
+
         advanceApprovalPolicySnapshot(policyBox, this.config.approvalPolicy);
-        // Flushed notes are now part of the stored trajectory (runner parity).
+
         if (pendingNotes.length > 0) {
           this.history = [...this.history, ...pendingNotes];
           requestView = [...requestView, ...pendingNotes];
           pendingNotes.length = 0;
         }
         lastStepUsage = mapBuckets(step.usage);
-        // The assistant message joins the mirror ONCE per step: thinking →
-        // reasoning parts, text, then tool-call parts (AI SDK vocabulary).
+
         const assistantParts: Array<
           | { type: 'text'; text: string }
           | { type: 'reasoning'; text: string }
@@ -1093,11 +873,7 @@ export class PiToolTurnHarness {
           usage: stepUsage,
         });
       } else if (event.type === 'tool_start') {
-        // Terminal tools (handoff) stay off the execution-event surface: the
-        // driver projects its own handoff event from the outcome (runner
-        // TERMINAL_TOOL_NAMES parity). NOTE: no `continue` — the loop's
-        // iterator advance is this while-body's last statement, and skipping
-        // it would re-process the same event forever.
+
         if (!TERMINAL_TOOL_NAMES.has(event.call.name)) {
           yield {
             event: 'step',
@@ -1128,8 +904,7 @@ export class PiToolTurnHarness {
             },
           };
         } else if (event.call.name === 'handoff') {
-          // The runner yields a handoff step for the terminal call — the
-          // driver projects its own handoff UI event from it (parity).
+
           const args = event.call.arguments as Record<string, unknown>;
           yield {
             event: 'step',
@@ -1194,8 +969,7 @@ export class PiToolTurnHarness {
       step: { type: 'turn_end', outcome: 'completed', text, usage },
     };
     if (awaitingApproval) {
-      // The driver's done branch persists the batch (registerApprovalBatch)
-      // and ends the turn awaiting-approval — the harness only reports.
+
       yield {
         event: 'step',
         step: { type: 'approval_request', requests: pendingApprovalRequests },
@@ -1204,18 +978,14 @@ export class PiToolTurnHarness {
     const output: TurnOutput = {
       text,
       usage,
-      // The LAST step's billed input — the real context size the model last
-      // saw (the renderer's occupancy signal), not the multi-step sum.
+
       ...(lastStepUsage && lastStepUsage.inputTokens > 0
         ? { lastStepInputTokens: lastStepUsage.inputTokens }
         : {}),
       perf,
       ...(toolSchemaTokens ? { toolSchemaTokens } : {}),
       requiresApproval: awaitingApproval,
-      // The remainder the loop could not consume — the exact list the loop
-      // reports (budget-exhausted: executed but unread; awaiting-approval: not
-      // run). It rides `outcome.pendingToolCalls` so a budget-exhausted turn
-      // is not reported as a whole answer (audit C-1/A-3).
+
       pendingToolCalls: outcome.pendingToolCalls,
       finishReason: awaitingApproval ? undefined : finishReason,
       ...(toolCallResults.length > 0 ? { toolCalls: toolCallResults } : {}),
@@ -1230,20 +1000,14 @@ export class PiToolTurnHarness {
 
   private buildTurnHistory(history: ModelMessage[] | undefined, prompt: string): ModelMessage[] {
     const base = cloneModelMessages(history);
-    // Same rule as the AI SDK runner: an empty prompt over existing history
-    // (resume shapes) must not append an empty user message.
+
     if (!prompt.trim() && base.length > 0) return base;
     return appendUserPromptToHistory(base, prompt);
   }
 }
 
-/** The linear bucket mapping (projectUsageToIki) over the loop's raw
- * buckets, plus the per-call cost Pi computed from the model's catalog
- * rates (0 when the model carries none — the pre-D35 behavior). */
 const mapBuckets = (buckets: PiUsageBuckets): AgentUsage => ({
-  // Pi's `input` counts ONLY the uncached prompt (`cacheRead`/`cacheWrite` are
-  // reported alongside it, the way `reasoning` is reported alongside `output`).
-  // The billed input a user compares across providers is the sum.
+
   inputTokens: buckets.input + buckets.cacheRead + buckets.cacheWrite,
   outputTokens: buckets.output,
   cacheReadTokens: buckets.cacheRead,

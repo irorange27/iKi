@@ -3,8 +3,6 @@ import { z } from 'zod';
 const summarize = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 
-// Pi is the only supply (ADR 009); script it here instead of the retired
-// `createModel`.
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
   resolvePersonaPrompt: () => 'test persona',
@@ -40,8 +38,6 @@ const initialHistory = [
   { role: 'user' as const, content: 'Earlier task' },
   { role: 'assistant' as const, content: oldText },
 ];
-// The supply is scripted through `callPiChat` (ADR 009); `harnessFor` only
-// assembles the harness.
 const harnessFor = () =>
   startPiTurnHarness({
     providerType: 'faux',
@@ -85,17 +81,13 @@ describe('model-step context budget', () => {
         }),
       ],
     })) {
-      /* drain */
+      
     }
     expect(summarize).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(summarize.mock.calls[0][0])).toContain(oldText);
-    // A scripted run bypasses factory-created models, so the summarizer gets no
-    // cache-prefix replay context and uses its standalone call.
     expect((summarize.mock.calls[0][0] as Record<string, unknown>).cachePrefix).toBeUndefined();
     expect(call).toHaveBeenCalledTimes(2);
-    // `callPiChat(model, context, options)` — the request context is the second arg.
     for (const [, request] of call.mock.calls) {
-      // Pi receives `{ systemPrompt, messages, tools }`, not the SDK's `prompt`.
       const rendered = JSON.stringify(request);
       expect(rendered).toContain('Keep all workspace instructions.');
       expect(rendered).toContain('preserve the API');
@@ -117,11 +109,10 @@ describe('model-step context budget', () => {
         history: initialHistory,
         toolsOverride: [],
       })) {
-        /* drain */
+        
       }
     };
     await expect(consume()).rejects.toThrow('Context compaction failed');
-    // No model call was made: compaction failed before inference.
     expect(callPiChatMock).not.toHaveBeenCalled();
     expect(JSON.stringify(harness.getHistory())).toContain(oldText);
   });

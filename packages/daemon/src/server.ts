@@ -45,12 +45,6 @@ const ensureUserDataDir = () => {
   return userDataPath;
 };
 
-// The port/host files are a best-effort handshake: the desktop process reads
-// them to discover an already-running daemon, and its reader swallows every
-// error. Writing them must never be able to take the process down — an
-// unwritable userData dir (a sandboxed/TCC-restricted launch, or a read-only
-// volume) used to throw here from inside the listen callback, which surfaced
-// as an uncaught exception and killed the app.
 const writeOptionalFile = (
   filePath: string,
   contents: string,
@@ -95,8 +89,6 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
         createRunTracker: createAgentRunTracker,
         getConversationToolModel: getToolModel,
         createHarness: startPiTurnHarness,
-        // The child finalizes through the SAME outcome authority a parent
-        // turn uses; the port keeps `tools/` below the session layer.
         finalize: {
           finalizeFailure: finalizeTurnFailure,
           finalizeSuccess: finalizeHarnessTurn,

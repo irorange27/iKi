@@ -24,8 +24,6 @@ const props = defineProps<{ stats: SessionPerfStats | null }>();
 
 const { t } = useI18n();
 
-// 557K / 12.3M style compact counts — the bar is a glanceable summary, exact
-// values stay available through per-message usage details.
 const formatCompactTokens = (tokens: number): string => {
   const value = Math.max(0, Math.round(tokens));
   const trim = (text: string) => text.replace(/\.0$/, '');

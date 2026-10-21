@@ -66,8 +66,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
       preferredModel: '',
     },
   },
-  // Only the two clipping caps with a consumer (turn_prep/context_blocks.ts).
-  // History token budgets are retired — see types/config.ts and audit §C-F1.
+
   context: {
     enabled: true,
     maxIdentityTokens: 320,
@@ -207,10 +206,7 @@ export const mergeAppConfigWithBase = (
         ...((rawConfig.chat ?? {}).composer ?? {}),
       },
     },
-    // Rebuilt field by field, not spread: a stored config file written by an
-    // older build can still carry retired keys (e.g. the C-F1 history budgets),
-    // and a blind spread would resurrect them as live-looking config that
-    // nothing reads. Only keys the current type declares survive the merge.
+
     context: {
       enabled: rawConfig.context?.enabled ?? base.context.enabled,
       maxIdentityTokens: rawConfig.context?.maxIdentityTokens ?? base.context.maxIdentityTokens,

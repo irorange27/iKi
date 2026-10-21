@@ -7,11 +7,6 @@ import { defineComponent } from 'vue';
 
 import { createReactiveChatState } from '../../../../packages/desktop/src/renderer/modules/chat/chat_instance';
 
-// Reproduces the AI SDK's write pattern: it accumulates one raw message object
-// off-proxy, mutates parts on that raw object, and calls replaceMessage with
-// the SAME reference for every chunk. A prop-driven child component must still
-// re-render per write; splicing the identical reference back in leaves the
-// child's props shallow-equal and its computeds stale (empty chat bubbles).
 describe('createReactiveChatState replaceMessage reactivity', () => {
   const SegmentChild = defineComponent({
     name: 'SegmentChild',

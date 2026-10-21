@@ -175,8 +175,6 @@ const { t } = useI18n();
 
 const SETTINGS_SECTION_KEYS = new Set(['general', 'models', 'intelligence', 'automation']);
 
-// Deep links (e.g. `#settings/tasks` from the sidebar automations entry) may
-// still use the pre-merge section names; each maps onto its merged section.
 const SETTINGS_SECTION_ALIASES: Record<string, string> = {
   provider: 'models',
   mcp: 'models',
@@ -209,8 +207,6 @@ const { config } = storeToRefs(configStore);
 
 const activeSection = ref(resolveSettingsSection(props.initialSection));
 const saved = ref(true);
-// Mirrors <ProvidersSettings />'s own dirty state. The footer/header used to
-// claim "All changes saved" while a provider draft was still unsaved.
 const providerDraftDirty = ref(false);
 const providers = ref<Provider[]>([]);
 let removeProviderUpdateListener: () => void = () => undefined;
@@ -229,7 +225,6 @@ type AvailableProvider = {
   models: string[];
 };
 
-// Load providers
 const loadProviders = async () => {
   try {
     providers.value = await electronAPI.providers.list();
@@ -243,7 +238,6 @@ const loadProviders = async () => {
   }
 };
 
-// Computed: Get available providers with their models
 const availableProvidersWithModels = computed<AvailableProvider[]>(() => {
   return providers.value
     .filter(provider => provider.enabled)
@@ -266,8 +260,6 @@ const menuItems = computed(() => [
   { key: 'automation', label: t('settings.menu.automation'), icon: AlarmClock },
 ]);
 
-// Tab ids are derived from the section key so the tab and its panel can point
-// at each other without threading a ref through the template.
 const settingsTabId = (key: string) => `settings-tab-${key}`;
 const settingsPanelId = (key: string) => `settings-panel-${key}`;
 
@@ -275,8 +267,6 @@ const selectSection = (key: string) => {
   activeSection.value = key;
 };
 
-// Roving tabindex: the tab list is one Tab stop and arrow keys move within it
-// (Home/End jump to the ends), which is what the tablist pattern expects.
 const handleTabKeydown = (event: KeyboardEvent, index: number) => {
   const items = menuItems.value;
   if (items.length === 0) return;
@@ -322,7 +312,6 @@ const activeSectionMeta = computed(() => {
 const activeSectionLabel = computed(() => activeSectionMeta.value.label);
 const activeSectionIcon = computed(() => activeSectionMeta.value.icon);
 
-// 自动保存防抖
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 const autoSave = () => {
   saved.value = false;
@@ -336,13 +325,6 @@ const autoSave = () => {
 const PROVIDER_DRAFT_FLUSH_EVENT = 'iki:providers:flush-draft';
 const PROVIDER_DRAFT_DIRTY_EVENT = 'iki:providers:draft-dirty';
 
-/**
- * Ask the mounted <ProvidersSettings /> to persist its dirty draft. Providers
- * are a separate store from AppConfig, so the footer Save cannot write them
- * directly. The event is answered with whether a save happened; if the section
- * is not mounted (or unmounted mid-flight) this resolves false and the footer
- * behaves exactly as before.
- */
 const flushProviderDraft = async (): Promise<boolean> => {
   if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') {
     return false;
@@ -387,9 +369,6 @@ const resetBridgeSection = async () => {
 
 const saveAndClose = async () => {
   clearTimeout(saveTimer);
-  // Providers live in their own store; flush a dirty provider draft before
-  // writing AppConfig, otherwise this button drops those edits while the
-  // header still reports "All changes saved".
   await flushProviderDraft();
   await configStore.saveConfig();
   saved.value = true;

@@ -1,8 +1,5 @@
-/**
- * Conversation-oriented agent runtime entry point.
- */
 
-// Export current public types
+
 export type {
   AgentConfig,
   AgentTool,
@@ -24,8 +21,6 @@ export type {
   TurnEndStep,
 } from './agent_step';
 
-
-// Export current public schemas
 export {
   AgentConfigSchema,
   AgentToolSchema,
@@ -35,12 +30,10 @@ export {
   addTurnPerf,
 } from './types';
 
-// Export model message utilities
 export {
   extractTextFromModelMessageContent,
   hasToolPartInModelMessageContent,
   sanitizeModelConversationMessages,
 } from './model_messages';
 
-// Export tools
 export * from '../tools';

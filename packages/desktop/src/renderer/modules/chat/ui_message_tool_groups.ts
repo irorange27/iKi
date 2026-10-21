@@ -14,13 +14,6 @@ import {
 } from './ui_message_tool_calls';
 import { translate } from '../../i18n';
 
-/**
- * Transcript segmentation for the ZCode-style quiet tool-call rows: a run of
- * consecutive tool parts collapses into one expandable group ("查阅 · 2 文件
- * ⌄") instead of one card per call. Text, reasoning and approval breaks start
- * a new group; approvals always render standalone.
- */
-
 export type ToolCallVerb =
   | 'read'
   | 'edit'
@@ -38,7 +31,6 @@ export type MessagePartSegment =
   | { kind: 'part'; part: unknown; index: number }
   | { kind: 'tool-call-group'; parts: unknown[]; startIndex: number; endIndex: number };
 
-/** The per-call action verb shown at the front of a child row. */
 const VERB_BY_TOOL_KEY: Record<string, ToolCallVerb> = {
   read_file: 'read',
   edit: 'edit',
@@ -66,13 +58,11 @@ export const getToolCallVerbLabel = (part: unknown): string => {
   return translate(`toolCall.group.verb.${verb}` as Parameters<typeof translate>[0]);
 };
 
-/** Count unit: file tools count files, everything else counts calls. */
 export const getToolCallGroupCountLabel = (verb: ToolCallVerb, count: number): string => {
   const unit = FILE_VERBS.has(verb) ? 'files' : 'calls';
   return translate(`toolCall.group.${unit}` as Parameters<typeof translate>[0], { count });
 };
 
-/** Short uppercase badge: path extension for file tools, category otherwise. */
 export const getToolCallTypeBadge = (part: unknown): string => {
   const verb = getToolCallVerb(part);
   const input = getToolInput(part);
@@ -96,7 +86,6 @@ export const getToolCallTypeBadge = (part: unknown): string => {
   return '';
 };
 
-/** Directory part of the tool's file path, shown as the muted row suffix. */
 export const getToolCallPathDirectory = (part: unknown): string => {
   const input = getToolInput(part);
   const path = isObjectRecord(input) && typeof input.path === 'string' ? input.path : '';
@@ -106,15 +95,15 @@ export const getToolCallPathDirectory = (part: unknown): string => {
 };
 
 export type ToolCallGroupMeta = {
-  /** Every call finished (success/error/denied) — safe to collapse. */
+  
   allSettled: boolean;
-  /** Any call is running or waiting for approval — group defaults to open. */
+  
   hasActive: boolean;
-  /** Any call failed or was denied — group defaults to open so failures show. */
+  
   hasFailed: boolean;
-  /** Sum of per-call durations (null when none reported). */
+  
   totalDurationMs: number | null;
-  /** Shared verb for the group, or 'call' when the burst mixes tools. */
+  
   verb: ToolCallVerb;
 };
 
@@ -154,13 +143,6 @@ export const getToolCallGroupTotalDurationLabel = (parts: unknown[]): string => 
   return total === null ? '' : formatDurationMs(total);
 };
 
-/**
- * Split renderable message parts into display segments: plain parts pass
- * through with their index (reasoning expand state keys off it), and runs of
- * consecutive tool parts collapse into groups. Hidden todo calls drop out
- * entirely; approval requests always stand alone so the approve/reject buttons
- * are never buried.
- */
 export const segmentMessageParts = (
   parts: ChatUiMessage['parts']
 ): MessagePartSegment[] => {

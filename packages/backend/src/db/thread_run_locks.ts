@@ -4,9 +4,6 @@ import { createPrefixedId } from '@iki/backend/utils/id';
 
 const lockLogger = createLogger({ module: 'thread_run_locks' });
 
-// A turn can outlive the TTL by hours (autonomous batches, approval waits), so
-// the holder refreshes the lease on a heartbeat; the TTL only bounds how long
-// a crashed process can block a thread.
 const LEASE_TTL_MS = 120_000;
 const LEASE_REFRESH_INTERVAL_MS = 30_000;
 
@@ -20,33 +17,12 @@ const withImmediateTransaction = <T>(run: () => T): T => {
     try {
       getDb().exec('ROLLBACK');
     } catch {
-      // Connection already rolled back (e.g. SQLITE_BUSY); nothing to undo.
-    }
+    // Intentionally ignored: the caller cannot act on it.
+  }
     throw error;
   }
 };
 
-
-/**
- * Cross-process admission lease for thread turns, persisted in the SQLite
- * database every shell (desktop, daemon) already shares. Extends the
- * in-memory coordinator lease: a thread with a live turn in another process
- * must return busy here too. Expired leases (crashed holder) are reclaimed.
- *
- * The returned release function is idempotent and only deletes the caller's
- * own lease row, so a stale release after TTL expiry cannot drop a lease
- * another process legitimately re-acquired.
- *
- * Loss detection: if a heartbeat refresh updates zero rows the lease was
- * reclaimed by another process (TTL expiry while this holder stalled), and
- * `onLeaseLost` fires exactly once so the holder can abort its run instead of
- * continuing beside the new owner.
- */
-/**
- * True while an unexpired lease exists for the thread — i.e. some process may
- * be actively executing a turn on it right now. Startup recovery must treat
- * such runs as live: only executions whose lease is gone are reclaimable.
- */
 export const hasLiveThreadRunLease = (threadId: string): boolean => {
   try {
     const row = getDb()
@@ -62,8 +38,7 @@ export const hasLiveThreadRunLease = (threadId: string): boolean => {
       entity: { thread_id: threadId },
       message: 'Live-lease probe failed; treating the thread as live.',
     });
-    // Fail closed: a probe error must not let recovery reclaim a possibly
-    // live execution.
+
     return true;
   }
 };
@@ -92,15 +67,11 @@ export const tryAcquireCrossProcessThreadRun = (
     });
   };
 
-  // Single synchronous attempt: BEGIN IMMEDIATE either wins the write lock or
-  // reports real contention from the process holding it, which is exactly the
-  // "thread busy" answer this lease exists to give.
   let acquired = false;
   try {
     acquired = attemptAcquire();
   } catch (error) {
-    // Never let lease bookkeeping break a turn: report contention so the
-    // caller surfaces its normal "thread busy" answer.
+
     lockLogger.event({
       level: 'warn',
       event: 'thread_run_lock.acquire',
@@ -123,8 +94,7 @@ export const tryAcquireCrossProcessThreadRun = (
         )
         .run(Date.now() + LEASE_TTL_MS, threadId, token);
       if (Number(refreshed.changes) === 0) {
-        // Another process reclaimed the expired lease: stop holding court and
-        // let the run abort rather than double-running the thread.
+
         leaseLost = true;
         clearInterval(heartbeat);
         lockLogger.event({
@@ -138,9 +108,7 @@ export const tryAcquireCrossProcessThreadRun = (
         return;
       }
     } catch (error) {
-      // Transient database errors keep the holder running: the lease may
-      // still be ours, and aborting on one failed refresh would kill healthy
-      // turns. Zero-row updates above are the definitive loss signal.
+
       lockLogger.event({
         level: 'warn',
         event: 'thread_run_lock.heartbeat',

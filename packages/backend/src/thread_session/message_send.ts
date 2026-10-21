@@ -53,7 +53,7 @@ export type MessageSendResult =
       success: false;
       error: string;
       runId?: string;
-      /** The turn paused on tool approvals that are durably registered. */
+
       awaitingApproval?: boolean;
     };
 
@@ -82,11 +82,7 @@ export type MessageSendDeps = {
     threadId?: string,
     options?: { onExecutionAbort?: () => void }
   ) => (() => void) | null;
-  /**
-   * Register this execution under the run it owns so a cancel naming that run
-   * reaches it (the send transport has no stream membership). Optional so
-   * unit doubles stay small; the composition root always wires it.
-   */
+
   registerExecution?: (execution: {
     cancel: (reason: string) => void;
     runId?: string | null;
@@ -94,15 +90,14 @@ export type MessageSendDeps = {
     setRunId: (runId: string | null) => void;
     dispose: () => void;
   };
-  /** Alias a delegated child run onto the execution running it. */
+
   registerChildRunAlias?: (parentRunId: string, childRunId: string) => () => void;
   checkThreadRunRate: (threadId: string) => { allowed: boolean; retryAfterMs?: number };
   conversation: {
     createMessage: (input: unknown) => unknown;
     upsertTurnMessage: (input: unknown) => unknown;
   };
-  /** Durable approval registration (service wiring). Without it, an
-   *  approval-required send stays the non-interactive error path. */
+
   approvals?: {
     ensurePendingApprovalSession: (
       approvalId: string,
@@ -118,12 +113,7 @@ export type MessageSendDeps = {
 
 export const createMessageSend = (deps: MessageSendDeps) => {
   const send = async (options: ChatTurnOptions): Promise<MessageSendResult> => {
-    // The execution's cancel source, set synchronously inside each abort
-    // closure BEFORE the controller is aborted. An AbortSignal latches only
-    // its FIRST reason, so a second abort (a lease loss arriving while a user
-    // cancel is unwinding) would otherwise silently reclassify the turn.
-    // Reading a recorded source rather than the signal's reason keeps the
-    // classification independent of abort ORDER.
+
     const cancelSource: { current: 'lease-lost' | 'user-cancel' | null } = { current: null };
     const executionAbort = new AbortController();
     const release = deps.tryAcquireThreadRun(options.threadId, {
@@ -134,11 +124,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
     });
     if (!release) return { success: false, error: 'A turn is already running on this thread.' };
 
-    // A cancel names a run; this transport registers no stream, so without
-    // this handle `cancelRun` could only rewrite the run row while the tool
-    // handler kept executing. Registered before the first await on purpose:
-    // the run id arrives with the tracker below, and a cancel landing in
-    // between must already find this execution.
     const execution = deps.registerExecution?.({
       runId: null,
       cancel: reason => {
@@ -148,17 +133,11 @@ export const createMessageSend = (deps: MessageSendDeps) => {
     });
 
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
-    // Set once the driver exists; the catch paths must consult the driver's
-    // CURRENT tracker (a handoff chain swaps it mid-turn).
+
     let driverHandle: ReturnType<typeof createTurnDriver> | null = null;
 
     try {
-      // Turn-start workspace binding (D30), resolved at admission like the
-      // streaming path — synchronous, ahead of every preparation await. It
-      // sits inside the try so a failing resolution (broken workspace
-      // directory, profile error) flows through the cleanup path and
-      // releases the admission instead of stranding the thread. Resumed
-      // turns carry their original world in the options and rebind it.
+
       const turnStartWorkspace =
         options.workspaceSelection !== undefined
           ? options.workspaceSelection
@@ -174,7 +153,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         }
       }
 
-      // After admission: a rejected request must not leave a durable row.
       persistUserTurnMessage(deps.conversation, options);
 
       const preparedTurn = await deps.turnPreparer.prepareChatTurn({
@@ -183,8 +161,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       });
       executionAbort.signal.throwIfAborted();
 
-      // The plan is the single definition of this execution (same assembly
-      // the streaming path uses).
       const plan = assembleExecutionPlan({
         options,
         preparedTurn,
@@ -206,17 +182,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         })
       );
       runTracker = activeRunTracker;
-      // The run identity exists: index this execution under it. A handoff
-      // chain re-keys through the driver's tracker callback below.
+
       execution?.setRunId(activeRunTracker.id);
 
-      // Session log: same facts as streaming, from the waiter transport.
-      // An id-less send (wake/task transports) records its accepted input as
-      // a fact too — deterministic per-turn id, the run id, and the caller's
-      // system config — so the recovery replay can reconstruct the task
-      // (issue #139); without it the resume gate must keep refusing. Gated
-      // on NO client id at all: an id-ful but non-UI-shaped message persists
-      // its row under the client id and must not grow a second id here.
       const sendUserInput = pickUserTurnMessage(options);
       const sendAcceptedInput =
         sendUserInput && asChatUiMessage(sendUserInput.message)
@@ -241,23 +209,14 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
-        // Same supply selection as streaming (switch item 3b): a send is a
-        // waiter on the same turn driver, so the same gate applies.
         const harness = selectTurnHarness(plan, preparedTurn.history);
 
-        // ponytail: clear stale todo plan from previous turn
         writeThreadTodoPlan({ threadId: options.threadId, items: [] });
 
-        // Send runs the same durable projection as streaming: every step fact
-        // is emitted into a UI chunk emitter so the persisted assistant row
-        // (and the next turn's rebuilt context) keeps the full tool exchanges.
         const wireTarget: ChatStreamTarget = { id: -1, send: () => undefined };
         const uiChunkEmitter = createUiChunkEmitter(wireTarget, `assistant_${activeRunTracker.id}`);
         const assistantMessageId = uiChunkEmitter.messageId;
 
-        // Send is a waiter on the same turn driver the streaming path runs —
-        // same lifecycle, same step projection, same approval registration —
-        // with a no-op subscriber and no steering/preview surface.
         const streamState: ActiveStreamState = {
           cancelled: false,
           stoppedByUser: false,
@@ -302,33 +261,22 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         const result = await driver.run();
         if (!result) throw new Error('Unreachable: send driver produced no result');
 
-        // The driver's CURRENT tracker/harness, not the setup's: a handoff
-        // chain finalizes the child segment, not the completed parent.
         const finalTracker = driver.getRunTracker();
 
         if (result.outcome === 'cancelled') {
-          // Two cancel sources reach this transport: a lost thread lease
-          // (aborted by the lease hook) and a user/API cancel naming the run
-          // (aborted through the live-execution registration). Both are
-          // terminal; only the lease loss is a retryable interruption, and
-          // only the lease loss is reported as a failure. The source is the
-          // one RECORDED when the abort was issued, not the signal's reason,
-          // which latches whichever abort happened to arrive first.
+
           const leaseLost = cancelSource.current === 'lease-lost';
           const message = leaseLost
             ? 'Thread run lease was lost; the send was interrupted.'
             : 'Run cancelled.';
-          // Failure-path projections, loud-guarded: the record must never mask
-          // the interruption being reported. One authority writes both.
+
           if (leaseLost) {
             finalizeTurnFailure({
               tracker: finalTracker,
               failure: {
                 status: 'failed',
                 errorText: message,
-                // A lease loss is a distinct, diagnosable outcome — not an
-                // anonymous failure. The code was dropped when this path moved
-                // to the one finalize authority.
+
                 code: 'THREAD_LEASE_LOST',
                 retryable: true,
               },
@@ -368,9 +316,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         const finalResponse = driver.getAccumulatedResponse() || result.response || '';
 
         if (result.outcome === 'awaiting-approval') {
-          // Durable decision handle: registered by the driver through
-          // deps.approvals, so this pause is resumable through approveTool
-          // (and recoverable after a restart) instead of name-only "blocked".
+
           const approvalError = describeApprovalRequiredTools(registeredApprovalRequests);
           if (!deps.approvals) {
             logger.event({
@@ -389,10 +335,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
               },
             });
           }
-          // Event-first: the pause's partial output is a fact before the row
-          // finalizes — a write failure fails the send with the row still
-          // running (the catch below marks it failed) instead of leaving a
-          // blocked row whose pause output was never recorded (ADR 008 F1).
+
           const persisted = await uiChunkEmitter.buildPersistedMessage();
           if (options.threadId && persisted) {
             await persistAssistantTurnMessage(
@@ -402,9 +345,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
               'send',
             );
           }
-          // The pause records its partial output with NO terminal fact (an
-          // approval pause is not terminal — its continuation through
-          // approveTool records its own facts); the row is finalized last.
+
           finalizeTurn({
             tracker: finalTracker,
             outcome: result.outcome,
@@ -424,17 +365,11 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         }
 
         uiChunkEmitter.finish();
-        // Event-first (ADR 008 F1): `finalizeTurn` writes the committed output
-        // and the terminal fact from ONE outcome row, then finalizes the run
-        // row — a write failure fails the send through the catch below while
-        // the row is still running, never leaving a terminal row whose outcome
-        // was never recorded.
+
         let settledMessage: Awaited<ReturnType<typeof uiChunkEmitter.buildPersistedMessage>> =
           undefined;
         if (options.threadId) {
-          // Deterministic per-run id: a duplicate persist of the same turn
-          // converges on one row and the message joins back to its run.
-          // Retries are separate runs and legitimately separate rows.
+
           const persisted = await uiChunkEmitter.buildPersistedMessage();
           settledMessage = persisted ?? {
             id: assistantMessageId,
@@ -463,8 +398,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         return {
           success: true,
           text: finalResponse,
-          // Same rule as the other branches: the identity that finished the
-          // turn (identical to the setup run unless a handoff chain ran).
+
           ...(options.runConfig?.kind ? { runId: finalTracker.id } : {}),
         };
       }
@@ -492,10 +426,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         },
       });
       if (options.threadId && llmResult.text.trim()) {
-        // Deterministic per-run id (see the tool path above). Event-first
-        // (ADR 008 F1): facts reach the session log before the run row
-        // finalizes — a write failure fails the send with the row still
-        // running instead of reporting success on an unrecorded completion.
+
         const settledMessage = {
           id: `assistant_${activeRunTracker.id}`,
           role: 'assistant' as const,
@@ -507,8 +438,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           settledMessage,
           'send',
         );
-        // Same outcome row as the tool path: a text-only reply completes the
-        // turn through the one authority, not a private `markCompleted`.
+
         finalizeTurn({
           tracker: activeRunTracker,
           outcome: 'completed',
@@ -534,12 +464,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         ...(options.runConfig?.kind ? { runId: runTracker.id } : {}),
       };
     } catch (error: unknown) {
-      // Both cancel sources end the turn here, whichever branch was running
-      // — the tool path finalizes from the driver's `cancelled` outcome, and
-      // this catch covers every path that throws instead. Classifying on the
-      // recorded source (not the signal's latched reason) keeps a user cancel
-      // from being reported as a provider failure when the abort surfaced as
-      // a plain AbortError from a non-tool provider call.
+
       const cancelSourceHit = cancelSource.current;
       if (cancelSourceHit) {
         const leaseLost = cancelSourceHit === 'lease-lost';
@@ -547,19 +472,14 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           ? 'Thread run lease was lost; the send was interrupted.'
           : 'Run cancelled.';
         if (leaseLost) {
-          // The thread was taken over while this send ran: stop cleanly at the
-          // barrier instead of reporting a provider error or persisting
-          // results from an execution that lost its run right. Failure-path
-          // projections are loud-guarded — never mask the interruption.
+
           if (runTracker) {
             finalizeTurnFailure({
               tracker: runTracker,
               failure: {
                 status: 'failed',
                 errorText: message,
-                // A lease loss is a distinct, diagnosable outcome — not an
-                // anonymous failure. The code was dropped when this path moved
-                // to the one finalize authority.
+
                 code: 'THREAD_LEASE_LOST',
                 retryable: true,
               },

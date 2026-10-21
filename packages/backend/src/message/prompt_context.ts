@@ -1,11 +1,4 @@
-/**
- * Assemble the request context for a model call: the system prompt and the
- * sanitized message list.
- *
- * Lived in `ai_sdk_runtime.ts` purely by accident of history — nothing here
- * touches the SDK: it composes iKi's own system-prompt slots and filters its own
- * history. It moved here when the AI SDK adapter was deleted (ADR 009).
- */
+
 import type { ModelMessage } from './model_history';
 
 import {

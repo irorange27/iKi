@@ -6,8 +6,6 @@ import type { ChatUiMessage as UIMessage } from '@iki/backend/message/message_pa
 
 import ChatMessageParts from '../../../packages/desktop/src/renderer/components/chat/ChatMessageParts.vue';
 
-// Math support is verified through the real renderer component: markdown-it
-// plugin wiring, KaTeX output, and the fallback path all live downstream of it.
 const renderText = (text: string, role: 'assistant' | 'user' = 'assistant') =>
   mount(ChatMessageParts, {
     props: {
@@ -32,7 +30,6 @@ describe('ChatMessageParts math rendering', () => {
 
     expect(body.find('.katex').exists()).toBe(true);
     expect(body.find('.md-math-block').exists()).toBe(false);
-    // The delimiters are consumed, not printed.
     expect(body.text()).not.toContain('$');
     expect(body.text()).toContain('Energy is');
     expect(body.text()).toContain('exactly.');
@@ -129,8 +126,6 @@ describe('ChatMessageParts math rendering', () => {
   it('keeps untrusted LaTeX commands inert', () => {
     const body = bodyOf('$\\href{javascript:alert(1)}{x}$');
 
-    // KaTeX runs with `trust: false`: the command is refused instead of
-    // becoming a link, and no URL reaches the DOM.
     expect(body.find('.katex').exists()).toBe(true);
     expect(body.html()).not.toContain('<a ');
     expect(body.html()).not.toContain('href=');

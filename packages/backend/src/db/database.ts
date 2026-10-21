@@ -72,9 +72,6 @@ const initCoreTables = (database: SqliteDatabase) => {
   `);
 };
 
-// node:sqlite rejects named-parameter objects carrying keys the statement never
-// uses (better-sqlite3 ignored them), so object params are filtered down to the
-// names actually present in the SQL text.
 const NAMED_PARAM_PATTERN = /[@:$][A-Za-z_][A-Za-z0-9_]*/g;
 
 const collectNamedParams = (sql: string): Set<string> | null => {
@@ -108,7 +105,7 @@ const wrapStatement = (
     all: (...params: unknown[]) => unknown[];
   }
 ): SqliteStatement => ({
-  // Default (non-bigint) read mode always returns numbers here.
+
   run: (...params: unknown[]) => statement.run(...normalizeBindParams(sql, params)) as SqliteRunResult,
   get: (...params: unknown[]) => statement.get(...normalizeBindParams(sql, params)),
   all: (...params: unknown[]) => statement.all(...normalizeBindParams(sql, params)),
@@ -120,12 +117,7 @@ const wrapDatabase = (raw: DatabaseSync): SqliteDatabase => ({
   transaction:
     <TArgs extends unknown[], TResult>(fn: (...args: TArgs) => TResult) =>
     (...args: TArgs): TResult => {
-      // IMMEDIATE, not deferred: a deferred transaction that reads first and
-      // writes later tries to upgrade its lock mid-transaction, and SQLite
-      // refuses that upgrade instantly WITHOUT invoking busy_timeout (its
-      // deadlock guard) — cross-process contention would fail every write.
-      // Taking the write lock up front is what makes busy_timeout queue
-      // writers instead (verified: BEGIN IMMEDIATE waited out a held lock).
+
       raw.exec('BEGIN IMMEDIATE');
       try {
         const result = fn(...args);
@@ -141,11 +133,7 @@ const wrapDatabase = (raw: DatabaseSync): SqliteDatabase => ({
 
 export const initializeDatabase = (options?: { dbPath?: string }) => {
   if (options?.dbPath) {
-    // An explicit path names a DIFFERENT database. Returning the handle that
-    // is already open would silently ignore the request and send later writes
-    // into the previous file — which, once that file is removed, surfaces as
-    // SQLite's `attempt to write a readonly database` (issue #152, second
-    // face). Close first so the named file is the one actually opened.
+
     if (dbPathOverride !== options.dbPath && db) {
       closeDatabase();
     }
@@ -157,10 +145,7 @@ export const initializeDatabase = (options?: { dbPath?: string }) => {
   initializing = true;
   const dbPath = resolveDbPath();
   const raw = new DatabaseSync(dbPath);
-  // Writers wait for a held lock instead of failing immediately: desktop and
-  // daemon share this database across processes, and short appends (session
-  // log facts) must queue behind another process's transaction rather than
-  // erroring. Session-log writes exposed the missing timeout (issue #48).
+
   raw.exec('PRAGMA busy_timeout = 5000');
   db = wrapDatabase(raw);
   initCoreTables(db);
@@ -187,11 +172,7 @@ export const closeDatabase = () => {
     db = null;
     initialized = false;
     initializing = false;
-    // Drop the per-open override too. A caller that passed an explicit path
-    // owns that decision for its own open; leaving it behind makes the next
-    // implicit getDb() resolve to the PREVIOUS open's database — which, with
-    // per-file temp databases in tests, makes a later file write into an
-    // earlier file's rows (duplicate provider ids, foreign-key churn).
+
     dbPathOverride = null;
   }
 };
@@ -221,7 +202,7 @@ export const migrateFromJson = (jsonPath: string, key: string) => {
     try {
       const data = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
       setConfig(key, data);
-      // Optional: Rename or delete the old file
+
       fs.renameSync(jsonPath, jsonPath + '.bak');
       databaseLogger.event({
         level: 'info',

@@ -202,9 +202,6 @@ describe('llm factory', () => {
   });
 
   it('resolvePiModelCapability: catalog modality/cost/window, and the stored-limit clamp', async () => {
-    // The D35 bridge, pinned at the factory boundary (the three Pi call sites
-    // consume this). A regression in any term here is invisible to the
-    // harnesses' own suites because they inject scripted models.
     resetModelsDevCatalogCacheForTests();
     fetchWithTimeoutMock.mockResolvedValue(
       new Response(
@@ -229,9 +226,6 @@ describe('llm factory', () => {
       { id: 'p_anthropic', type: 'anthropic', enabled: true, api_key: 'k', base_url: 'https://x/v1', models: '["claude-sonnet-4-5"]', model_options: '{}' },
     ]);
 
-    // Prime the cached snapshot explicitly. The read path itself is
-    // synchronous off the snapshot by design (a model call never waits on
-    // the network) — that is exactly what resolvePiModelCapability consumes.
     await refreshModelsDevCatalog();
 
     expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'claude-sonnet-4-5' })).toEqual({
@@ -241,9 +235,6 @@ describe('llm factory', () => {
       cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
     });
 
-    // A stored maxInputTokens TIGHTER than the catalog window wins: the
-    // budget uses the tighter number, so the Pi model must not advertise the
-    // larger one.
     getProvidersMock.mockReturnValue([
       {
         id: 'p_anthropic',
@@ -259,14 +250,8 @@ describe('llm factory', () => {
       contextWindow: 4096,
     });
 
-    // Unknown model: no catalog record and no stored options → null, and the
-    // callers fall back to their documented defaults (128000 / zero cost).
     expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'no-such-model' })).toBeNull();
 
-    // Cold cache (catalog unreachable / not yet fetched): the STORED options
-    // still produce a capability — only the catalog-derived terms
-    // (modalities, cost) drop out, so a Pi call degrades to
-    // text-only/zero-cost rather than to nothing.
     resetModelsDevCatalogCacheForTests();
     expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'claude-sonnet-4-5' })).toEqual({
       contextWindow: 4096,
@@ -475,7 +460,6 @@ describe('llm factory', () => {
       },
     });
 
-    // An explicit 'none' override keeps temperature and disables effort.
     expect(
       getModelGenerationSettings({
         providerType: 'openai',

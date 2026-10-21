@@ -2,9 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
-// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
-// these suites on the durable-layer behaviour they assert without reaching a
-// network endpoint.
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -21,8 +18,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     maxInputTokens: 98000,
     maxOutputTokens: 2000,
   }),
-  // No database in this suite: answer the provider lookup directly so the Pi
-  // supply admits the turn (the address is never dialled — callPiChat is mocked).
   getProviderConfig: () => ({
     type: 'openai',
     apiKey: 'key-test',
@@ -49,10 +44,6 @@ const memory = {
   getAffectContextMessage: () => '',
 };
 
-// F6 boundary: an explicit tools array is a caller capability upper bound.
-// The preparer must not expand it — `tools: []` disables tools entirely and a
-// non-empty explicit list may not gain shell — while auto mode (no tools
-// param) keeps the desktop default of an always-exposed shell.
 describe('turn preparer explicit tool upper bound', () => {
   let root: string;
 
@@ -136,14 +127,6 @@ describe('turn preparer explicit tool upper bound', () => {
   });
 
   it('keeps the explicit upper bound through the harness — control tools are not re-added', async () => {
-    // The preparer honours the caller's bound; the resolver must not expand it
-    // back. `todo` persists the thread's todo plan, `handoff` restarts the turn
-    // as a new run segment, and `plan` only renders in-memory — but injecting
-    // them behind an explicit `tools` list silently widens the caller's
-    // capability: a daemon grant, a NapCat allow-list or `tools: ['read_file']`
-    // can execute and persist planning turns it was never granted.
-    // Register the loop-control tools the resolver used to inject, so the
-    // expansion is observable on the wire exactly as it shipped.
     defaultToolRegistry.register(
       createTool({
         name: 'web_search',
@@ -174,7 +157,6 @@ describe('turn preparer explicit tool upper bound', () => {
     callPiChatMock.mockImplementation(
       createScriptedPiChat([[{ kind: 'text', text: 'done' }, { kind: 'done' }]])
     );
-    // `callPiChat(model, context, options)` — the sent tools live on `context`.
     const providerCalls = callPiChatMock;
 
     const harness = startPiTurnHarness({
@@ -185,7 +167,6 @@ describe('turn preparer explicit tool upper bound', () => {
       enabledToolNames: prepared.guardedTools,
       availableSkillIds: prepared.selectedSkillIds,
       guardActive: false,
-      // A disabled guard would normally broaden the resolved set.
       approvalPolicy: 'always',
       maxIterations: 5,
     });
@@ -208,10 +189,6 @@ describe('turn preparer explicit tool upper bound', () => {
   });
 
   it('does not inject the skill loader behind a narrow grant', async () => {
-    // `availableSkillIds` comes from the caller's `skillIds`, not from its
-    // `tools` bound — a daemon caller can filter tools while passing a raw
-    // skill id. Pushing `load_skill` whenever skills exist would widen that
-    // grant, and bypass the approval policy with it.
     defaultToolRegistry.register(
       createTool({
         name: 'web_search',
@@ -229,7 +206,6 @@ describe('turn preparer explicit tool upper bound', () => {
     callPiChatMock.mockImplementation(
       createScriptedPiChat([[{ kind: 'text', text: 'done' }, { kind: 'done' }]])
     );
-    // `callPiChat(model, context, options)` — the sent tools live on `context`.
     const providerCalls = callPiChatMock;
 
     const harness = startPiTurnHarness({
@@ -238,7 +214,6 @@ describe('turn preparer explicit tool upper bound', () => {
       systemPrompt: 'boundary system',
       enableTools: prepared.enableTools,
       enabledToolNames: prepared.guardedTools,
-      // Skills are available, but the caller did not grant the loader.
       availableSkillIds: ['skill_boundary'],
       guardActive: false,
       maxIterations: 5,
@@ -278,7 +253,6 @@ describe('turn preparer explicit tool upper bound', () => {
     callPiChatMock.mockImplementation(
       createScriptedPiChat([[{ kind: 'text', text: 'done' }, { kind: 'done' }]])
     );
-    // `callPiChat(model, context, options)` — the sent tools live on `context`.
     const providerCalls = callPiChatMock;
 
     const harness = startPiTurnHarness({
@@ -304,14 +278,10 @@ describe('turn preparer explicit tool upper bound', () => {
     const sentToolNames = Array.isArray(callOptions.tools)
       ? callOptions.tools.map(tool => tool.name)
       : Object.keys(callOptions.tools ?? {});
-    // Named and non-empty skills: the loader is granted by that name.
     expect(sentToolNames).toEqual(expect.arrayContaining(['web_search', 'load_skill']));
   });
 
   it('sends no tool schemas and runs no tools for an explicitly disabled send', async () => {
-    // A registry entry named "shell" makes the old force-add behavior visible
-    // at this boundary: with the old preparer the disabled turn still exposed
-    // a schema and could have executed it.
     let shellExecutions = 0;
     defaultToolRegistry.register(
       createTool({

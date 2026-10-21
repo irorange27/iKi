@@ -105,8 +105,6 @@ const createToggleableContents = (options: ToggleStubOptions = {}) => {
 
 describe('on-demand devtools toggle', () => {
   it('opens a closed pane', () => {
-    // Packaging plays no part: the same code path opens DevTools in a shipped
-    // app, which is the whole point of the menu accelerator.
     const webContents = createToggleableContents();
     expect(toggleDevTools(webContents as unknown as WebContents)).toBe(true);
     expect(webContents.openDevTools).toHaveBeenCalledTimes(1);
@@ -121,8 +119,6 @@ describe('on-demand devtools toggle', () => {
   });
 
   it('skips a window whose devTools were disabled at construction', () => {
-    // settings_window / companion_window used to pass devTools: !app.isPackaged,
-    // which made F12 in a packaged build throw instead of opening.
     const webContents = createToggleableContents({ devToolsEnabled: false });
     expect(toggleDevTools(webContents as unknown as WebContents)).toBe(false);
     expect(webContents.openDevTools).not.toHaveBeenCalled();

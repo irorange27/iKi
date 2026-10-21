@@ -11,30 +11,10 @@ import {
   type ToolPayloadRecord,
 } from '@iki/backend/message/tool_payload_contracts';
 
-/**
- * Renderer tool-payload seam — the only place the chat UI decodes a tool
- * part's input/output.
- *
- * It deliberately does NOT import `@iki/backend/message/tool_payloads`: that
- * module is the schema-coupled owner (zod + every tool schema, ~1.6 MB of
- * bundled source plus a Node-flavoured closure) and belongs to the backend.
- * Parsing here is decode-only: JSON-decode plus the shared kind registry from
- * `tool_payload_contracts`, no validation. Whether a payload is *valid* is the
- * executor's answer; a tool card only needs the kind it is rendering and the
- * fields it can read, and every reader here already guards field types.
- *
- * The contract lives in one place: `tool_payload_contracts` (kinds, aliases,
- * decode rules). Do not copy the registry, and do not add a schema-heavy import
- * to this file — R5 + R7 in `.dependency-cruiser.cjs` and
- * `tests/renderer/modules/chat/tool_payloads_boundary.test.ts` fail on it.
- */
-
-/** Decoded input of a tool part: the kind it resolves to plus its payload. */
 export type UiToolInputPayload =
   | { kind: ToolPayloadKind; input: ToolPayloadRecord }
   | { kind: 'unknown'; input: unknown };
 
-/** Decoded output of a tool part: the kind it resolves to plus its payload. */
 export type UiToolOutputPayload =
   | { kind: ToolPayloadKind; output: ToolPayloadRecord }
   | { kind: 'unknown'; output: unknown };
@@ -69,12 +49,6 @@ const UNKNOWN_PAIR: ToolPayloadPair = {
   toolName: 'tool',
 };
 
-/**
- * Tool cards re-render on every streamed chunk, so decoding per part is the hot
- * cost. Part objects are treated as immutable (new content arrives as a new
- * reference), so a reference-keyed cache stays fresh — invalidated by comparing
- * the raw input/output references, the same rule the diff caches use.
- */
 const payloadCache = new WeakMap<object, ToolPayloadPair>();
 
 const getPayloadPair = (part: unknown): ToolPayloadPair => {

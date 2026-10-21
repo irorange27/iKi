@@ -9,24 +9,14 @@ import {
 } from './devtools_policy';
 import { restartApp, shouldOfferRestart } from './app_restart';
 
-/**
- * Pick up main-process edits without leaving the app: relaunch the Electron
- * process. Renderer edits need only Cmd/Ctrl+R, which is why both live in View.
- */
 export const RESTART_ACCELERATOR = 'CommandOrControl+Alt+R';
 
 export const DEVTOOLS_MENU_ENV = 'IKI_DEVTOOLS_MENU';
 
-/**
- * The DevTools menu item ships in every build: on-demand DevTools is what makes
- * a packaged build debuggable at all, so it must not depend on `app.isPackaged`.
- * `IKI_DEVTOOLS_MENU=false` is the only supported way to take it away.
- */
 export const shouldInstallDevToolsMenu = (
   env: string | undefined = process.env[DEVTOOLS_MENU_ENV]
 ): boolean => parseBooleanEnv(env) ?? true;
 
-/** The window the toggle acts on: the frontmost one, else the first alive one. */
 export const resolveDevToolsTargetWindow = (): BrowserWindow | null => {
   const focused =
     typeof BrowserWindow.getFocusedWindow === 'function' ? BrowserWindow.getFocusedWindow() : null;
@@ -65,8 +55,6 @@ export const buildViewMenuTemplate = (options: {
       id: 'toggle-devtools',
       label: 'Toggle Developer Tools',
       accelerator: DEVTOOLS_TOGGLE_ACCELERATOR,
-      // Registered as a menu accelerator rather than a webContents key handler
-      // so it fires in any window and survives a renderer reload.
       acceleratorWorksWhenHidden: true,
       click: () => {
         devToolsToggle();
@@ -77,8 +65,6 @@ export const buildViewMenuTemplate = (options: {
       label: 'Toggle Developer Tools',
       accelerator: DEVTOOLS_TOGGLE_ACCELERATOR_ALT,
       acceleratorWorksWhenHidden: true,
-      // Hidden: this entry only exists to own the second accelerator so
-      // Cmd/Ctrl+Shift+I works too, without a duplicate menu row.
       visible: false,
       click: () => {
         devToolsToggle();
@@ -109,14 +95,8 @@ export const buildViewMenuTemplate = (options: {
   ];
 };
 
-/**
- * Replace the default application menu with one that owns the DevTools
- * accelerators. Call once, after `app.whenReady()`, before any window opens, so
- * the menu exists for every window in dev and in packaged builds alike.
- */
 export const installApplicationMenu = (): void => {
   if (!shouldInstallDevToolsMenu()) {
-    // Nothing is installed on purpose: no menu, no accelerators.
     return;
   }
 

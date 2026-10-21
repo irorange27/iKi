@@ -10,20 +10,6 @@ import type {
   MarkdownPlugin,
 } from './markdown_plugin_contract';
 
-/**
- * Markdown-it math support for rendered message content.
- *
- * Providers emit math in whichever dialect they were trained on, so the plugin
- * accepts both common families and typesets them with KaTeX:
- *   - `$...$` inline and `$$...$$` display (OpenAI-style)
- *   - `\(...\)` inline and `\[...\]` display (LaTeX-style)
- *
- * Delimiters are matched against the raw source before markdown escaping runs,
- * which keeps every LaTeX backslash intact while `\$` still escapes a literal
- * dollar. Malformed math never swallows content: it falls back to the raw
- * source in a `<code>` element.
- */
-
 type Delimiter = {
   open: string;
   close: string;
@@ -35,7 +21,6 @@ type DelimiterMatch = {
   end: number;
 };
 
-// Order matters: `$$` must be tried before `$`.
 const INLINE_DELIMITERS: Array<Delimiter & { tokenType: 'math_inline' | 'math_display' }> = [
   { open: '$$', close: '$$', currencyGuard: false, tokenType: 'math_display' },
   { open: '$', close: '$', currencyGuard: true, tokenType: 'math_inline' },
@@ -52,8 +37,6 @@ const isBlank = (value: string): boolean => value.trim().length === 0;
 
 const isDigit = (value: string | undefined): boolean => value !== undefined && /[0-9]/.test(value);
 
-// Find the closing delimiter, skipping escaped characters so `\$` and `\\)`
-// stay inside the formula, and refusing to span an inline code span.
 const findCloseIndex = (src: string, from: number, posMax: number, close: string): number => {
   let index = from;
   while (index < posMax) {
@@ -71,9 +54,7 @@ const isValidInlineContent = (
   charAfterClose: string | undefined
 ): boolean => {
   if (isBlank(content)) return false;
-  // Require the delimiters to hug the formula: "$ 5 $" is prose, not math.
   if (/\s/.test(content[0]) || /\s/.test(content[content.length - 1])) return false;
-  // Mirrors KaTeX auto-render's currency heuristic: "costs $5 and $6" is money.
   if (currencyGuard && isDigit(charAfterClose)) return false;
   return true;
 };
@@ -85,7 +66,6 @@ const renderKatex = (tex: string, displayMode: boolean): string | null => {
       throwOnError: true,
       strict: 'ignore',
       trust: false,
-      // MathML next to the HTML keeps formulas available to screen readers.
       output: 'htmlAndMathml',
     });
   } catch {
@@ -143,7 +123,6 @@ const inlineMath: MarkdownInlineRule = (state, silent) => {
     if (!match) continue;
 
     if (silent) {
-      // `skipToken` calls rules in validation mode and requires a cursor move.
       state.pos = match.end;
       return true;
     }
@@ -170,8 +149,6 @@ const blockMath: MarkdownBlockRule = (state, startLine, endLine, silent) => {
 
   const sameLineClose = findCloseIndex(firstLine, 0, firstLine.length, delimiter.close);
   if (sameLineClose >= 0) {
-    // Only a trailing-whitespace close is safe here: anything else on the line
-    // would be dropped, so leave the block unmatched and render it as text.
     if (!isBlank(firstLine.slice(sameLineClose + delimiter.close.length))) return false;
     bodyLines.push(firstLine.slice(0, sameLineClose));
     closeLine = startLine;
@@ -207,18 +184,13 @@ const blockMath: MarkdownBlockRule = (state, startLine, endLine, silent) => {
 };
 
 export const markdownMathPlugin: MarkdownPlugin<MarkdownCoreWithRulers> = md => {
-  // Registered before `escape` so `\(` / `\[` are read as math delimiters
-  // instead of being unescaped into literal brackets.
   md.inline.ruler.before('escape', 'math_inline', inlineMath);
   md.block.ruler.before('fence', 'math_block', blockMath, {
     alt: ['paragraph', 'reference', 'blockquote', 'list'],
   });
 
-  // Escape through the markdown-it instance, matching the code-block plugin.
   const escapeHtml = md.utils.escapeHtml;
 
-  // `content` is optional on the shared token type; the rules above always set
-  // it, so the fallback is unreachable but keeps the contract honest.
   md.renderer.rules.math_inline = (tokens, idx) =>
     inlineMathHtml(tokens[idx].content ?? '', getRawMathSource(tokens[idx]), escapeHtml);
 

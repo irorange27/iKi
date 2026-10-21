@@ -28,17 +28,13 @@ describe('thread_run_locks cross-process lease', () => {
     database.initializeDatabase({ dbPath: path.join(dataDir, 'test.db') });
   });
 
-
-
   it('blocks a second acquirer on the same thread and releases cleanly', () => {
     const release = tryAcquireCrossProcessThreadRun('thread_lock_1');
     expect(release).not.toBeNull();
 
-    // Simulates another process (or an un-released attempt): same thread, new token.
     const contender = tryAcquireCrossProcessThreadRun('thread_lock_1');
     expect(contender).toBeNull();
 
-    // Different threads are unaffected.
     const otherThread = tryAcquireCrossProcessThreadRun('thread_lock_2');
     expect(otherThread).not.toBeNull();
     otherThread();
@@ -55,7 +51,6 @@ describe('thread_run_locks cross-process lease', () => {
     const release = tryAcquireCrossProcessThreadRun('thread_lock_3');
     expect(release).not.toBeNull();
 
-    // Simulate a crashed holder: force the lease row past its TTL without release.
     getDb()
       .prepare('UPDATE thread_run_locks SET expires_at = ? WHERE thread_id = ?')
       .run(Date.now() - 1, 'thread_lock_3');
@@ -63,7 +58,6 @@ describe('thread_run_locks cross-process lease', () => {
     const reclaimed = tryAcquireCrossProcessThreadRun('thread_lock_3');
     expect(reclaimed).not.toBeNull();
 
-    // The stale release from the crashed holder must not drop the new lease.
     release!();
     const stillHeld = getDb()
       .prepare('SELECT token FROM thread_run_locks WHERE thread_id = ?')
@@ -90,7 +84,6 @@ describe('thread_run_locks loss detection and cross-process contention', () => {
     });
     expect(release).not.toBeNull();
 
-    // Crash the holder's timing: expire the row, let another process reclaim.
     getDb()
       .prepare('UPDATE thread_run_locks SET expires_at = ? WHERE thread_id = ?')
       .run(Date.now() - 1, 'thread_lock_5');
@@ -100,7 +93,6 @@ describe('thread_run_locks loss detection and cross-process contention', () => {
     await new Promise(resolve => setTimeout(resolve, 200));
     expect(lost).toHaveBeenCalledTimes(1);
 
-    // The stale holder's release must not drop the new holder's lease row.
     release!();
     const stillHeld = getDb()
       .prepare('SELECT token FROM thread_run_locks WHERE thread_id = ?')
@@ -123,7 +115,6 @@ describe('thread_run_locks loss detection and cross-process contention', () => {
       db.exec('COMMIT');`;
 
     await execFileAsync(process.execPath, ['-e', insertLease]);
-    // The other process holds the thread: this process must see busy.
     expect(tryAcquireCrossProcessThreadRun('thread_lock_6')).toBeNull();
 
     const dropLease = `const { DatabaseSync } = require('node:sqlite');

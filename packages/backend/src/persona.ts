@@ -10,20 +10,9 @@ export const getPersonaPrompt = () => {
   prompt += `SYSTEM INFO - You are running on ${osName}`;
 
   if (osName === 'macOS') {
-    // Identity-level fact only. The AppleScript date-handling recipe lives in
-    // the shell tool description: it is procedure knowledge needed only when
-    // osascript is actually invoked, and per-turn system-prefix real estate is
-    // paid by every request whether or not the model touches Calendar.
+
     prompt += ` (you can use osascript via the shell tool to interact with system apps such as Calendar, Reminders, Mail, and Notifications).`;
   }
-
-  // No working directory here. `process.cwd()` is the Electron/daemon process
-  // directory, not the conversation workspace — in a packaged app it is the
-  // app bundle, and in dev it was `packages/desktop`. Stating it told the model
-  // it could reach a directory the tools would refuse to touch (live check:
-  // model answered "packages/desktop" while the thread was bound to the repo
-  // root). The authoritative statement comes from the workspace system
-  // message, built per thread; this prompt has no thread to consult.
 
   return prompt;
 };

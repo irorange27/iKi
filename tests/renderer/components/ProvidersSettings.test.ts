@@ -104,8 +104,6 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
-          // Radix teleports dialog content to <body>, outside the VTU wrapper;
-          // render the portal in place so queries keep working.
           DialogPortal: { template: '<div><slot /></div>' },
         },
       },
@@ -185,8 +183,6 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
-          // Radix teleports dialog content to <body>, outside the VTU wrapper;
-          // render the portal in place so queries keep working.
           DialogPortal: { template: '<div><slot /></div>' },
         },
       },
@@ -239,8 +235,6 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
-          // Radix teleports dialog content to <body>, outside the VTU wrapper;
-          // render the portal in place so queries keep working.
           DialogPortal: { template: '<div><slot /></div>' },
         },
       },
@@ -327,8 +321,6 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
-          // Radix teleports dialog content to <body>, outside the VTU wrapper;
-          // render the portal in place so queries keep working.
           DialogPortal: { template: '<div><slot /></div>' },
         },
       },
@@ -379,8 +371,6 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
-          // Radix teleports dialog content to <body>, outside the VTU wrapper;
-          // render the portal in place so queries keep working.
           DialogPortal: { template: '<div><slot /></div>' },
         },
       },
@@ -391,9 +381,6 @@ describe('ProvidersSettings', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('API Format');
-    // A new custom gateway defaults to the Responses dialect: it is the
-    // preferred protocol, and a gateway that only speaks chat completions is
-    // one click away.
     expect(wrapper.text()).toContain('Responses (/responses)');
     expect(wrapper.text()).toContain(
       'Runtime adapter: Pi-AI (OpenAI Responses dialect) against your base URL.'
@@ -415,8 +402,6 @@ describe('ProvidersSettings', () => {
     await completionsOption.trigger('click');
     await flushPromises();
 
-    // Custom type: the generic chat-completions copy applies (the
-    // OpenAI-compatible variant is reserved for that type).
     expect(wrapper.text()).toContain(
       'This selection sends OpenAI-compatible Chat Completions requests to your configured base URL. Switch to Responses when your gateway exposes it.'
     );
@@ -462,8 +447,6 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
-          // Radix teleports dialog content to <body>, outside the VTU wrapper;
-          // render the portal in place so queries keep working.
           DialogPortal: { template: '<div><slot /></div>' },
         },
       },
@@ -515,8 +498,6 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
-          // Radix teleports dialog content to <body>, outside the VTU wrapper;
-          // render the portal in place so queries keep working.
           DialogPortal: { template: '<div><slot /></div>' },
         },
       },
@@ -594,8 +575,6 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
-          // Radix teleports dialog content to <body>, outside the VTU wrapper;
-          // render the portal in place so queries keep working.
           DialogPortal: { template: '<div><slot /></div>' },
         },
       },
@@ -644,8 +623,6 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
-          // Radix teleports dialog content to <body>, outside the VTU wrapper;
-          // render the portal in place so queries keep working.
           DialogPortal: { template: '<div><slot /></div>' },
         },
       },
@@ -717,8 +694,6 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
-          // Radix teleports dialog content to <body>, outside the VTU wrapper;
-          // render the portal in place so queries keep working.
           DialogPortal: { template: '<div><slot /></div>' },
         },
       },
@@ -774,8 +749,6 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
-          // Radix teleports dialog content to <body>, outside the VTU wrapper;
-          // render the portal in place so queries keep working.
           DialogPortal: { template: '<div><slot /></div>' },
         },
       },

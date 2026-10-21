@@ -6,7 +6,7 @@ import { toIsoNow } from '@iki/backend/utils/text';
 import { createLogger } from '@iki/backend/logger';
 
 export const MIN_INTERVAL_MINUTES = 1;
-export const MAX_INTERVAL_MINUTES = 60 * 24 * 7; // 7 days
+export const MAX_INTERVAL_MINUTES = 60 * 24 * 7;
 
 const taskScheduleLogger = createLogger({ module: 'task_schedule' });
 

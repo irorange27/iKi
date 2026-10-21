@@ -25,9 +25,6 @@ const validPlan: ExecutionPlan = {
   threadId: 'thread_1',
 };
 
-// Persisted plan snapshots are versioned data: the codec is the single
-// encode/decode pair, unknown versions and structurally invalid payloads
-// fail closed (null) so callers take their declared legacy fallback.
 describe('execution plan codec', () => {
   it('round-trips a plan through the versioned envelope', () => {
     const stored = serializeExecutionPlan(validPlan);
@@ -47,8 +44,6 @@ describe('execution plan codec', () => {
   it('fails closed on plans missing harness-consumed fields', () => {
     const broken = { ...validPlan, enableTools: undefined } as unknown as ExecutionPlan;
     expect(parseExecutionPlan(serializeExecutionPlan(broken))).toBeNull();
-    // The step budget is the field the harness cannot run without; a
-    // non-finite value must fail closed rather than default silently.
     const noBudget = { ...validPlan, budget: { step: Number.NaN } };
     expect(parseExecutionPlan(serializeExecutionPlan(noBudget))).toBeNull();
     const missingBudget = { ...validPlan, budget: undefined } as unknown as ExecutionPlan;

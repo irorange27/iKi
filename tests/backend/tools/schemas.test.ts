@@ -33,8 +33,6 @@ import {
 
 describe('tool input schemas', () => {
   it('keeps tool schemas browser-safe for renderer payload parsing', () => {
-    // The schema surface is split across the per-domain modules in schemas/;
-    // scan the shim and every domain module so a heavy dep cannot sneak in.
     const schemasDir = new URL('../../../packages/backend/src/tools/schemas/', import.meta.url);
     const files = [
       '../tools/schemas.ts',

@@ -15,72 +15,46 @@ import {
 } from './constants';
 import type { ChatTurnOptions, PreparedChatTurn } from '../turn_prep/turn_preparer';
 
-/**
- * The typed definition of one turn execution. Every public entry (stream,
- * send, approval resume, retry, queued resume) derives the same projections
- * from this one object — harness config, run-row identity/metadata, and the
- * approval recovery context — instead of re-assembling the same fields at
- * each call site. Resumed turns read the persisted version of the plan: the
- * run row (via run_rehydrator) and, for approval recovery, the approval
- * session row.
- */
 export type ExecutionPlan = {
-  // Supply
+
   providerType: string;
   providerId?: string;
   model: string;
-  // Tool & approval behavior (the guarded, post-preparation selection)
+
   enableTools: boolean;
   enabledTools: string[];
   availableSkillIds: string[];
   requireApproval: boolean;
   autoApproveToolRequests: boolean;
   approvalPolicy?: ApprovalPolicy;
-  /**
-   * The two budgets, named for what they bound (audit C-1). They used to share
-   * the name `maxIterations` while meaning different things: the step budget
-   * bounds model calls INSIDE one `harness.turn()`; the batch bound decides
-   * whether the driver opens another batch. Same word, two owners.
-   *  - `step`  — the harness's step budget (default 200). Running out on a
-   *              step that asked for tools ENDS the batch budget-exhausted.
-   *  - `batch` — autonomous batching (ADR 004): at most `max` batches, each
-   *              after the first continuing with `continuePrompt`. Absent = a
-   *              single batch.
-   */
+
   budget: {
     step: number;
     batch?: { max: number; continuePrompt?: string };
   };
-  // Budgets
+
   maxInputTokens?: number;
   maxOutputTokens?: number;
   reasoningEffort?: string;
-  // Turn-start world binding (D30): tools and later-approved actions run
-  // where the turn started, never where the thread points mid-turn.
+
   workspaceSelection?: ThreadWorkspaceSelection | null;
-  // Request shape
+
   systemPrompt: string;
   contextTokens?: number;
   skillMode: 'manual' | 'auto';
-  // Run identity
+
   threadId?: string;
   kind: AgentRunKind;
   parentRunId?: string;
   rootRunId?: string;
-  /** Execute inside this already-claimed run row (queued resume / retry). */
+
   adoptRunId?: string;
-  /** Extra metadata the caller carried in runConfig. */
+
   runMetadata: Record<string, unknown>;
-  /** Transport surface the execution rides (provenance, not behavior). */
+
   transport: 'stream' | 'send' | 'approval-resume';
 };
 
-/**
- * The single assembly point for fresh turns. The caller resolves the
- * turn-start workspace binding when the turn starts for it (for stream/send:
- * at admission, before preparation awaits) and hands it in — assembly never
- * re-resolves a world that a mid-prepare switch would change.
- */
 export const assembleExecutionPlan = (params: {
   options: ChatTurnOptions;
   preparedTurn: PreparedChatTurn;
@@ -138,7 +112,6 @@ export const assembleExecutionPlan = (params: {
   };
 };
 
-/** The harness reads its whole config from the plan. */
 export const planToHarnessConfig = (
   plan: ExecutionPlan,
   overrides?: Partial<Pick<HarnessConfig, 'requireApproval'>>
@@ -160,11 +133,6 @@ export const planToHarnessConfig = (
   ...(plan.threadId ? { threadId: plan.threadId } : {}),
 });
 
-/**
- * The run row is the persisted version of the plan: identity, supply, tool
- * selection and the metadata block are written from the plan (plus per-entry
- * extras), so resume paths can rebuild the same plan from the row alone.
- */
 export const planToRunTrackerParams = (
   plan: ExecutionPlan,
   params: {
@@ -191,9 +159,7 @@ export const planToRunTrackerParams = (
       transport: plan.transport,
       ...(plan.approvalPolicy ? { approvalPolicy: plan.approvalPolicy } : {}),
       requireApproval: plan.requireApproval,
-      // Persisted so the run-row recovery path (retry / queued resume) can
-      // restore them — the run row is those paths' only plan source, and a
-      // silently dropped field is neither full recovery nor a new decision.
+
       ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
       ...(plan.budget.batch
         ? {
@@ -205,9 +171,7 @@ export const planToRunTrackerParams = (
             },
           }
         : {}),
-      // The turn-start world rides with the run row so a retry or
-      // queued-resume — the same turn executing again — rebinds it instead of
-      // silently adopting the thread's current selection.
+
       ...(plan.workspaceSelection !== undefined
         ? { workspaceSelection: plan.workspaceSelection }
         : {}),

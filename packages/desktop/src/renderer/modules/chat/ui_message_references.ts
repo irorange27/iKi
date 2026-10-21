@@ -1,7 +1,4 @@
 import type { ChatUiMessage, SkillUsageEntry } from '@iki/backend/message/message_parts';
-// The composition summary types live in types/ (renderer-legal); turn_prep/
-// context_types only re-exports them and pulls the server-side context graph
-// into the renderer's module closure, so import the canonical source.
 import type {
   ContextCompositionCategory,
   ContextCompositionSummary,
@@ -61,21 +58,21 @@ export type TokenUsageSummary = {
   cacheWriteTokens: number | null;
   reasoningTokens: number | null;
   estimatedCostUsd: number | null;
-  /** Billed input of the final SDK step — the real context size the model last saw (null on legacy messages). */
+  
   lastStepInputTokens: number | null;
   maxInputTokens: number | null;
   maxOutputTokens: number | null;
   model: string;
   providerType: string;
   providerId: string;
-  /** Turn perf metrics — null on messages produced before instrumentation. */
+  
   llmMs: number | null;
   toolMs: number | null;
   firstTokenMs: number | null;
   firstTokenSamples: number | null;
   steps: number | null;
   toolCalls: number | null;
-  /** Estimated per-category context assembly breakdown — null on legacy messages. */
+  
   contextComposition: ContextCompositionSummary | null;
 };
 
@@ -85,10 +82,6 @@ export type ContextCompositionRow = {
   percent: number;
 };
 
-/**
- * Normalized category rows for the context-usage panel: shares of the locally
- * estimated assembled context, largest first, zero categories dropped.
- */
 export const buildContextCompositionRows = (
   summary: TokenUsageSummary | null
 ): ContextCompositionRow[] => {
@@ -119,7 +112,6 @@ export type ContextUsageIndicator = {
   tooltip: string;
 };
 
-/** Session-cumulative perf stats aggregated across a thread's assistant messages. */
 export type SessionPerfStats = {
   rounds: number;
   steps: number;
@@ -362,8 +354,6 @@ const buildTokenUsageSummary = (message: ChatUiMessage | unknown): TokenUsageSum
   };
 };
 
-// SDK writes mutate parts off-proxy. Cache against the relevant payload sources,
-// never just the message/parts identity; text deltas do not change these sources.
 type SummaryCache<T> = WeakMap<object, { sources: unknown[]; value: T }>;
 const reuseSummary = <T>(
   cache: SummaryCache<T>,
@@ -449,11 +439,6 @@ const hasUsageData = (summary: TokenUsageSummary): boolean =>
   summary.steps !== null ||
   summary.toolCalls !== null;
 
-/**
- * Aggregate a thread's assistant messages into session-cumulative perf stats.
- * Returns null when no message carries a token-usage part (e.g. a thread
- * created before per-turn usage emission existed).
- */
 export const buildSessionPerfStats = (
   messages: readonly unknown[]
 ): SessionPerfStats | null => {
@@ -520,8 +505,6 @@ export const buildTokenUsageIndicator = (
     return null;
   }
 
-  // Older multi-step records only have the sum of every request's input. That
-  // cannot describe context occupancy, so avoid presenting it as one request.
   if (
     summary.lastStepInputTokens === null &&
     summary.steps !== null &&
@@ -530,11 +513,6 @@ export const buildTokenUsageIndicator = (
     return null;
   }
 
-  // Occupancy is the final SDK step's billed input — the context size the
-  // model actually saw. The turn-level inputTokens sums every step's re-send
-  // (billing), which for multi-step turns is a multiple of the window and
-  // meaningless as occupancy. Legacy single-step messages can use the turn
-  // total because only one inference contributed to it.
   const occupancyTokens = summary.lastStepInputTokens ?? summary.inputTokens;
   const usedTokens = Math.max(0, Math.trunc(occupancyTokens));
   const budgetTokens = normalizeModelCapabilityLimits({

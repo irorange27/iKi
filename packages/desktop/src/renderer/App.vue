@@ -50,8 +50,6 @@ useAppLocale();
 const { t } = useI18n();
 const electronAPI = window.electronAPI;
 
-// Skip links move focus programmatically: a fragment href alone updates the URL
-// but leaves focus where it was, so the target is focused explicitly.
 const focusLandmark = (id: string) => {
   const target = document.getElementById(id);
   if (!target) return;
@@ -89,14 +87,10 @@ const settingsSection = computed(() => extractSettingsSection(currentHash.value)
 const shellKind = computed(() =>
   isCompanion.value ? 'companion' : isSettings.value ? 'settings' : 'main'
 );
-// Settings now live in the main window (hash `#settings`); closing returns to
-// the chat view instead of closing a dedicated window.
 const closeSettings = () => {
   window.location.hash = '';
 };
 
-// A task-review "focus thread" jump should land on the chat view, not behind
-// the settings page. Re-subscribed per settings visit; cleaned up on leave.
 let unsubscribeFocusThread: (() => void) | null = null;
 watch(isSettings, enabled => {
   unsubscribeFocusThread?.();

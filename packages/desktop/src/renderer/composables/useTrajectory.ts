@@ -29,8 +29,6 @@ export const useTrajectory = (
   const loading = ref(false);
   const error = ref('');
 
-  // This cache belongs to this mounted trajectory view. Completed traces are
-  // immutable for a given run signature; active traces must be reread.
   const traceCache = new Map<string, TraceCacheEntry>();
   let generation = 0;
   let mounted = false;
@@ -58,9 +56,6 @@ export const useTrajectory = (
 
   const schedulePoll = () => {
     if (!mounted || !active.value || currentCycle === null || pollTimer !== null) return;
-    // With the status bridge, run events restart refreshes on their own —
-    // keep the timer only while a run is in flight (or on older builds
-    // without the bridge, where polling is the only update channel).
     if (removeRunStatusListener !== null && !sawActiveRun) return;
     pollTimer = setTimeout(() => {
       pollTimer = null;
@@ -104,7 +99,6 @@ export const useTrajectory = (
 
       if (!isCurrent(cycle)) return;
 
-      // Replacing the map also forgets runs removed from the thread list.
       traceCache.clear();
       for (const [id, entry] of nextCache) traceCache.set(id, entry);
 
@@ -124,8 +118,6 @@ export const useTrajectory = (
     clearPollTimer();
 
     if (cycle.running) {
-      // A status event during a refresh must cause a trailing pass. Multiple
-      // events coalesce into one pass without losing the terminal update.
       cycle.queued = true;
       return cycle.promise ?? Promise.resolve();
     }
@@ -190,7 +182,6 @@ export const useTrajectory = (
         void refreshCycle(currentCycle);
       });
     } catch {
-      // Keep polling available in older builds without the status bridge.
       removeRunStatusListener = null;
     }
 

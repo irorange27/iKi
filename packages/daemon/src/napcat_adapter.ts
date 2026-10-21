@@ -119,8 +119,6 @@ type NapCatHeartbeatSnapshot = {
 
 const SAFE_NAPCAT_TOOLS = ['web', 'fetch'] as const;
 const SAFE_NAPCAT_TOOL_SET = new Set<string>(SAFE_NAPCAT_TOOLS);
-// Use NapCat's own advertised heartbeat interval, with one grace interval, to avoid
-// hard-coding transport timing assumptions into desktop settings.
 const HEARTBEAT_STALE_MULTIPLIER = 2;
 
 const DEFAULT_SYSTEM_PROMPT = [
@@ -1031,12 +1029,6 @@ export const createNapCatReverseBridge = (options: NapCatBridgeOptions) => {
       });
       return;
     }
-
-    // The assistant reply is durably persisted by the backend turn-output
-    // seam under a run-derived id (chat.send path) — persisting the
-    // QQ-normalized text here as well created a second row per reply and
-    // double-fired the memory pipeline. The normalized text is what the QQ
-    // side displays; the raw model reply is what the conversation keeps.
 
     try {
       await sendBridgeReply(ws, event, outboundText);

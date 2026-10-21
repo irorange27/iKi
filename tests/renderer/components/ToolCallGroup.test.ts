@@ -77,12 +77,10 @@ describe('ToolCallGroup', () => {
   });
 
   it('renders verb, badge, title, and path on a child row', async () => {
-    // A persisted open-override keeps the group open across re-renders.
     updateToolUiState('msg_1-tool-call-group-7', { collapsed: false });
     const wrapper = mountGroup([readCall('call_1')], 'msg_1-tool-call-group-7');
     await nextTick();
 
-    // Single-call groups still show the summary line (consistent affordance).
     expect(wrapper.find('.tool-call-group-summary').exists()).toBe(true);
     const row = wrapper.find('.tool-call-row-main');
     expect(row.exists()).toBe(true);
@@ -97,7 +95,6 @@ describe('ToolCallGroup', () => {
     const wrapper = mountGroup([readCall('call_1')], 'msg_1-tool-call-group-3');
     await nextTick();
 
-    // A settled call starts with its detail quiet...
     expect(wrapper.find('.tool-call-row-detail-body').exists()).toBe(false);
 
     const row = wrapper.find('.tool-call-row-main');
@@ -107,7 +104,6 @@ describe('ToolCallGroup', () => {
       true
     );
 
-    // ...and clicking again collapses it.
     await row.trigger('click');
     expect(wrapper.find('.tool-call-row-detail-body').exists()).toBe(false);
   });

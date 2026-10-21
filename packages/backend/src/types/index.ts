@@ -21,7 +21,6 @@ export * from './todos';
 export * from './update';
 export * from './workflow';
 
-// Explicit re-exports resolve star-star conflicts between the barrels above.
 export type {
   ToolCallApproval,
   ToolCallApprovalDecision,

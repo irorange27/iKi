@@ -163,17 +163,6 @@ export const updateAwaiter = (id: string, updates: Partial<Awaiter>) => {
     .run(params);
 };
 
-/**
- * Reclaim awaiters stuck in `waking` whose holder stopped heartbeating.
- *
- * The wake claim is `armed -> waking` (a conditional UPDATE, so two schedulers
- * cannot both win). A process that dies mid-wake leaves the row `waking` with
- * no recovery pass, and because the claim refuses `waking` those rows would
- * never wake again. This is that recovery: a `waking` row whose `updated_at`
- * is older than the cutoff belonged to a holder that stopped reporting, so it
- * goes back to `armed` with its slot restored, and the next tick claims it
- * normally.
- */
 export const reclaimStaleWakingAwaiters = (staleBefore: string): number => {
   const now = toIsoNow();
   const result = getDb()
