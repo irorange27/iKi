@@ -22,7 +22,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/platform', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/platform')>()),
@@ -54,8 +63,11 @@ import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { getSessionEvents } from '@iki/backend/db/session_events';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { rebuildThreadViewFromEvents } from '@iki/backend/thread_session/session_log';
 
@@ -67,12 +79,12 @@ describe('a handoff chain records the run segment swap in the session log', () =
   const target = { id: 41, send: vi.fn() };
 
   beforeEach(async () => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(piTurnHarness);
+    // These suites drive the DURABLE layer (streaming, approvals, session-log
+    // facts, retry, persistence) with a scripted AI SDK model. They are not about
+    // which supply serves the turn, so they opt into the legacy executor: the
+    // production default refuses a turn its projection cannot carry, and a
+    // scripted model has no endpoint to project to.
+    setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-handoff-facts-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'handoff.db') });
@@ -112,30 +124,39 @@ describe('a handoff chain records the run segment swap in the session log', () =
   });
 
   it('records the parent segment terminal and the child segment start', async () => {
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall(HANDOFF, {
-          summary: 'phase one done',
-          next_steps: 'finish phase two',
-          reason: 'context_limit',
-        }),
-        fauxText('phase two complete'),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: HANDOFF,
+            args: {
+              summary: 'phase one done',
+              next_steps: 'finish phase two',
+              reason: 'context_limit',
+            },
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'phase two complete' },
+          { kind: 'done', reason: 'stop' },
+        ],
       ])
     );
 
-    const result = await service.stream(
-      target,
-      {
-        providerType: 'openai',
-        providerId: 'provider_handoff',
-        model: 'handoff-model',
-        threadId: 'thread_handoff',
-        approvalPolicy: 'never',
-        autonomous: { maxIterations: 3, continuePrompt: 'continue' },
-        messages: [{ id: 'msg_handoff', role: 'user', parts: [{ type: 'text', text: 'pass the baton' }] }],
-        tools: [HANDOFF],
-      }
-    );
+    const result = await service.stream(target, {
+      providerType: 'openai',
+      providerId: 'provider_handoff',
+      model: 'handoff-model',
+      threadId: 'thread_handoff',
+      approvalPolicy: 'never',
+      autonomous: { maxIterations: 3, continuePrompt: 'continue' },
+      messages: [
+        { id: 'msg_handoff', role: 'user', parts: [{ type: 'text', text: 'pass the baton' }] },
+      ],
+      tools: [HANDOFF],
+    });
     expect(result).toMatchObject({ success: true });
 
     const rows = agentRunDb.listAgentRunsByThread('thread_handoff');
@@ -164,9 +185,7 @@ describe('a handoff chain records the run segment swap in the session log', () =
       'turn_failed',
       'turn_cancelled',
     ]);
-    const terminalRunIds = terminalEvents.map(
-      event => (event.payload as { runId?: string }).runId
-    );
+    const terminalRunIds = terminalEvents.map(event => (event.payload as { runId?: string }).runId);
     expect(terminalRunIds.filter(runId => runId === parent.id)).toHaveLength(1);
     expect(terminalRunIds.filter(runId => runId === child.id)).toHaveLength(1);
   });
@@ -177,14 +196,24 @@ describe('a handoff chain records the run segment swap in the session log', () =
     // residual tracked against the tracker's id contract — is the abandoned
     // child row with a `turn_failed` and no `turn_started`; this test pins the
     // reachable half (the parent) and asserts the residual's shape explicitly.
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall(HANDOFF, {
-          summary: 'phase one done',
-          next_steps: 'finish phase two',
-          reason: 'context_limit',
-        }),
-        fauxText('phase two complete'),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: HANDOFF,
+            args: {
+              summary: 'phase one done',
+              next_steps: 'finish phase two',
+              reason: 'context_limit',
+            },
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'phase two complete' },
+          { kind: 'done', reason: 'stop' },
+        ],
       ])
     );
 
@@ -193,19 +222,22 @@ describe('a handoff chain records the run segment swap in the session log', () =
       WHEN NEW.type = 'turn_started' AND json_extract(NEW.payload, '$.kind') = 'handoff-resume'
       BEGIN SELECT RAISE(ABORT, 'handoff swap: started write rejected'); END`);
     try {
-      await service.stream(
-        target,
-        {
-          providerType: 'openai',
-          providerId: 'provider_handoff',
-          model: 'handoff-model',
-          threadId: 'thread_handoff',
-          approvalPolicy: 'never',
-          autonomous: { maxIterations: 3, continuePrompt: 'continue' },
-          messages: [{ id: 'msg_handoff_fail', role: 'user', parts: [{ type: 'text', text: 'pass the baton' }] }],
-          tools: [HANDOFF],
-        }
-      );
+      await service.stream(target, {
+        providerType: 'openai',
+        providerId: 'provider_handoff',
+        model: 'handoff-model',
+        threadId: 'thread_handoff',
+        approvalPolicy: 'never',
+        autonomous: { maxIterations: 3, continuePrompt: 'continue' },
+        messages: [
+          {
+            id: 'msg_handoff_fail',
+            role: 'user',
+            parts: [{ type: 'text', text: 'pass the baton' }],
+          },
+        ],
+        tools: [HANDOFF],
+      });
     } finally {
       getDb().exec('DROP TRIGGER IF EXISTS handoff_swap_reject_started');
     }
@@ -218,9 +250,7 @@ describe('a handoff chain records the run segment swap in the session log', () =
     const parentTurn = replay.turns.find(turn => turn.runId === parentRow.id)!;
     expect(parentTurn).toBeDefined();
     const parentTerminal = parentTurn.status !== 'running';
-    expect(parentTerminal).toBe(
-      ['completed', 'failed', 'cancelled'].includes(parentRow.status)
-    );
+    expect(parentTerminal).toBe(['completed', 'failed', 'cancelled'].includes(parentRow.status));
 
     // The residual, stated not hidden: the abandoned child may carry a terminal
     // fact its start never preceded. That is the child-side half of S1 and is
@@ -228,7 +258,7 @@ describe('a handoff chain records the run segment swap in the session log', () =
     // alone cannot close it.
     const startedRunIds = new Set(
       getSessionEvents('thread_handoff', ['turn_started']).map(
-        event => (event.payload as { runId?: string }).runId,
+        event => (event.payload as { runId?: string }).runId
       )
     );
     const orphanTerminals = replay.turns.filter(

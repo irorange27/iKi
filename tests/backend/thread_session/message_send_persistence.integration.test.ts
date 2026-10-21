@@ -6,7 +6,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/platform', () => ({ getUserDataPath: userDataMock }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
@@ -20,9 +29,17 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     maxInputTokens: 98000,
     maxOutputTokens: 2000,
   }),
+  // No database in this suite: answer the provider lookup directly so the Pi
+  // supply admits the turn (the address is never dialled — callPiChat is mocked).
+  getProviderConfig: () => ({
+    type: 'openai',
+    apiKey: 'key-test',
+    baseURL: 'http://127.0.0.1:9/v1',
+  }),
 }));
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import * as approvalDb from '@iki/backend/db/tool_call_approval';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { getChatMessages } from '@iki/backend/db/chat_message';
@@ -30,7 +47,10 @@ import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createChatTurnPreparer } from '@iki/backend/turn_prep/turn_preparer';
 import { resolveSkillsSystemPrompt } from '@iki/backend/thread_session/skills';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import {
   getAssistantProfileContextMessage,
   onMessagePersisted,
@@ -41,7 +61,7 @@ import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { toModelInputMessages } from '@iki/backend/message/ui_messages';
 import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 
@@ -100,15 +120,22 @@ describe('message_send execution-fact persistence', () => {
   });
 
   beforeEach(async () => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(piTurnHarness);
+    // These suites drive the DURABLE layer (streaming, approvals, session-log
+    // facts, retry, persistence) with a scripted AI SDK model. They are not about
+    // which supply serves the turn, so they opt into the legacy executor: the
+    // production default refuses a turn its projection cannot carry, and a
+    // scripted model has no endpoint to project to.
+    setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-send-persistence-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'send.db') });
+    // A resumed turn resolves its plan through the provider table; seed the row
+    // it names so the Pi supply admits it (callPiChat is mocked).
+    seedTurnProvider({
+      providerId: 'provider_primary',
+      providerType: 'openai',
+      model: 'test-model',
+    });
     addWorkspace({ id: 'ws_send', path: root, name: 'send' });
     coordinator = createThreadStreamCoordinator();
     memory.injectMemoryIntoMessages.mockClear();
@@ -147,14 +174,22 @@ describe('message_send execution-fact persistence', () => {
         handler: async () => ({ evidence: 'observed' }),
       })
     );
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall('send_probe', {}, { id: 'read_1' }),
-        fauxText('done answer'),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName: 'send_probe', args: {}, id: 'read_1' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'done answer' },
+          { kind: 'done', reason: 'stop' },
+        ],
       ])
     );
 
-    const result = await makeSend()(sendOptions({ tools: ['send_probe'], approvalPolicy: 'never' }));
+    const result = await makeSend()(
+      sendOptions({ tools: ['send_probe'], approvalPolicy: 'never' })
+    );
 
     expect(result).toMatchObject({ success: true, text: 'done answer' });
     const rows = getChatMessages('thread_send');
@@ -193,14 +228,19 @@ describe('message_send execution-fact persistence', () => {
         handler: async () => 'approved effect ran',
       })
     );
-    createModelMock
-      .mockReturnValueOnce(
-        new FauxModelProvider([
-          fauxToolCall('send_approval_probe', {}, { id: 'call_send_1' }),
-          fauxText(''),
-        ])
-      )
-      .mockReturnValue(new FauxModelProvider([fauxText('approval resumed')]));
+    // First call asks for the gated tool; the resumed turn answers.
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName: 'send_approval_probe', args: {}, id: 'call_send_1' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'approval resumed' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
 
     const result = await makeSend()(
       sendOptions({ tools: ['send_approval_probe'], approvalPolicy: 'always' })
@@ -217,8 +257,12 @@ describe('message_send execution-fact persistence', () => {
     const target = { id: 77, send: vi.fn() };
     const resumed = await approvals.approveTool(target, approvalId!, true);
     expect(resumed).toMatchObject({ success: true });
-    const finalRow = getChatMessages('thread_send').find(row => row.id.startsWith('assistant_run_'));
-    const finalParts = (JSON.parse(finalRow!.message).parts ?? []) as Array<Record<string, unknown>>;
+    const finalRow = getChatMessages('thread_send').find(row =>
+      row.id.startsWith('assistant_run_')
+    );
+    const finalParts = (JSON.parse(finalRow!.message).parts ?? []) as Array<
+      Record<string, unknown>
+    >;
     expect(
       finalParts.some(
         part =>
@@ -256,12 +300,17 @@ describe('message_send execution-fact persistence', () => {
         },
       })
     );
-    createModelMock.mockImplementation(
-      () =>
-        new FauxModelProvider([
-          fauxToolCall('send_probe', {}, { id: 'call_park_1' }),
-          fauxText('never reached'),
-        ])
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName: 'send_probe', args: {}, id: 'call_park_1' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'never reached' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
     );
 
     const pending = makeSend({ tryAcquireThreadRun: leaseCoordinator.tryAcquireThreadRun })(

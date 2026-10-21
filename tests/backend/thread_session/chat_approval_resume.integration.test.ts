@@ -2,6 +2,15 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { z } from 'zod';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
@@ -35,28 +44,27 @@ vi.mock('@iki/backend/db/chat_message', () => ({
 
 vi.mock('@iki/backend/db/agent_runs', () => ({
   appendAgentRunStep: vi.fn(),
-  appendAgentRunStepAndUpdateRun: vi.fn((
-    step: { runId: string; stepIndex: number },
-    updates: Record<string, unknown>
-  ) => ({
-    id: step.runId,
-    kind: 'approval-resume',
-    status: updates.status ?? 'running',
-    threadId: 'thread_1',
-    parentRunId: 'run_blocked_1',
-    rootRunId: 'run_blocked_1',
-    createdAt: '2026-06-20T00:00:00.000Z',
-    updatedAt: '2026-06-20T00:00:00.000Z',
-    working: {
-      modelMessages: [],
-      accumulatedText: '',
-      pendingApprovalIds: [],
-      lastStepIndex: step.stepIndex,
-      ...((updates.working as Record<string, unknown> | undefined) ?? {}),
-    },
-    output: updates.output ?? null,
-    error: updates.error ?? null,
-  })),
+  appendAgentRunStepAndUpdateRun: vi.fn(
+    (step: { runId: string; stepIndex: number }, updates: Record<string, unknown>) => ({
+      id: step.runId,
+      kind: 'approval-resume',
+      status: updates.status ?? 'running',
+      threadId: 'thread_1',
+      parentRunId: 'run_blocked_1',
+      rootRunId: 'run_blocked_1',
+      createdAt: '2026-06-20T00:00:00.000Z',
+      updatedAt: '2026-06-20T00:00:00.000Z',
+      working: {
+        modelMessages: [],
+        accumulatedText: '',
+        pendingApprovalIds: [],
+        lastStepIndex: step.stepIndex,
+        ...((updates.working as Record<string, unknown> | undefined) ?? {}),
+      },
+      output: updates.output ?? null,
+      error: updates.error ?? null,
+    })
+  ),
   createAgentRun: vi.fn((run: Record<string, unknown>) => ({
     ...run,
     createdAt: '2026-06-20T00:00:00.000Z',
@@ -92,14 +100,18 @@ import * as approvalDb from '@iki/backend/db/tool_call_approval';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
-import { AgentHarness } from '@iki/backend/agent/harness';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
-import { getToolRuntimeContext, runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
+import {
+  getToolRuntimeContext,
+  runWithToolRuntimeContext,
+} from '@iki/backend/utils/runtime_context';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import {
   APPROVAL_REQUESTED,
   INPUT_ACCEPTED,
@@ -197,6 +209,7 @@ describe('createChatApproval resume integration', () => {
     // F2: recovery reads the session log — the seeds need a real events DB.
     dbRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-approval-resume-'));
     initializeDatabase({ dbPath: path.join(dbRoot, 'resume.db') });
+    seedTurnProvider({ providerId: 'provider_primary', model: 'test-model' });
   });
 
   afterAll(async () => {
@@ -216,99 +229,121 @@ describe('createChatApproval resume integration', () => {
     { approved: true, repeat: false },
     { approved: false, repeat: false },
     { approved: true, repeat: true },
-  ])('resumes approval decisions $approved with another approval $repeat', async ({ approved, repeat }) => {
-    let executions = 0;
-    let observedContext: unknown;
-    const tool = createTool({
-      name: toolName,
-      type: 'function',
-      description: 'Probe approval resume context',
-      paramSchema: z.object({}),
-      needsApproval: false,
-      handler: async () => {
-        executions++;
-        const ctx = getToolRuntimeContext();
-        observedContext = {
-          threadId: ctx.threadId,
-          runId: ctx.runId,
-          hasRunTracker: !!ctx.runTracker,
-          conversationModel: ctx.conversationModel,
-        };
-        return observedContext;
-      },
-    });
-    defaultToolRegistry.register(tool);
-
-    const blockedModel = new FauxModelProvider([
-      fauxToolCall(toolName, {}, { id: 'call_1' }),
-    ]);
-    const blockedHarness = new AgentHarness({
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'gpt-4o-mini',
-      systemPrompt: 'system prompt',
-      enableTools: true,
-      enabledToolNames: [toolName],
-      availableSkillIds: [],
-      guardActive: false,
-      approvalPolicy: 'always',
-      maxIterations: 10,
-      modelFactory: () => blockedModel,
-    });
-
-    const blockedEvents = [];
-    await runWithToolRuntimeContext(
-      {
-        threadId: 'thread_1',
-        runId: 'run_blocked_1',
-        conversationModel: {
-          providerType: 'openai',
-          providerId: 'provider_primary',
-          model: 'gpt-4o-mini',
+  ])(
+    'resumes approval decisions $approved with another approval $repeat',
+    async ({ approved, repeat }) => {
+      let executions = 0;
+      let observedContext: unknown;
+      const tool = createTool({
+        name: toolName,
+        type: 'function',
+        description: 'Probe approval resume context',
+        paramSchema: z.object({}),
+        needsApproval: false,
+        handler: async () => {
+          executions++;
+          const ctx = getToolRuntimeContext();
+          observedContext = {
+            threadId: ctx.threadId,
+            runId: ctx.runId,
+            hasRunTracker: !!ctx.runTracker,
+            conversationModel: ctx.conversationModel,
+          };
+          return observedContext;
         },
-      },
-      async () => {
-        for await (const event of blockedHarness.turn({ prompt: 'run approval probe' })) {
-          blockedEvents.push(event);
+      });
+      defaultToolRegistry.register(tool);
+
+      // The model asks for the gated tool; the harness pauses for approval.
+      callPiChatMock.mockImplementation(
+        createScriptedPiChat([
+          [
+            { kind: 'toolCall', toolName, args: {}, id: 'call_1' },
+            { kind: 'done', reason: 'toolUse' },
+          ],
+        ])
+      );
+      const blockedHarness = startPiTurnHarness({
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'gpt-4o-mini',
+        systemPrompt: 'system prompt',
+        enableTools: true,
+        enabledToolNames: [toolName],
+        availableSkillIds: [],
+        guardActive: false,
+        approvalPolicy: 'always',
+        maxIterations: 10,
+      });
+
+      const blockedEvents = [];
+      await runWithToolRuntimeContext(
+        {
+          threadId: 'thread_1',
+          runId: 'run_blocked_1',
+          conversationModel: {
+            providerType: 'openai',
+            providerId: 'provider_primary',
+            model: 'gpt-4o-mini',
+          },
+        },
+        async () => {
+          for await (const event of blockedHarness.turn({ prompt: 'run approval probe' })) {
+            blockedEvents.push(event);
+          }
         }
-      }
-    );
+      );
 
-    const approvalRequest = blockedEvents.find(
-      event => event.event === 'step' && event.step.type === 'approval_request'
-    );
-    expect(approvalRequest).toBeDefined();
-    const approvedId = approvalRequest!.step.requests[0].approvalId;
-    const approvedRecord = {
-      ...baseApprovalRecord,
-      approval_id: approvedId,
-    };
-    expect(blockedHarness.getHistory().at(-1)).toMatchObject({ role: 'assistant' });
+      const approvalRequest = blockedEvents.find(
+        event => event.event === 'step' && event.step.type === 'approval_request'
+      );
+      expect(approvalRequest).toBeDefined();
+      const approvedId = approvalRequest!.step.requests[0].approvalId;
+      const approvedRecord = {
+        ...baseApprovalRecord,
+        approval_id: approvedId,
+      };
+      expect(blockedHarness.getHistory().at(-1)).toMatchObject({ role: 'assistant' });
 
-    createModelMock.mockReturnValue(new FauxModelProvider([
-      ...(repeat ? [fauxToolCall(toolName, {}, { id: 'call_2' })] : []),
-      fauxText('approval resumed'),
-    ], 'gpt-4o-mini'));
-    vi.mocked(approvalDb.getToolCallApproval).mockReturnValue(approvedRecord as never);
-    vi.mocked(approvalDb.getToolCallApprovalSession).mockReturnValue({
-      session_id: 'assistant_1',
-      thread_id: 'thread_1',
-      assistant_message_id: 'assistant_1',
-      run_id: 'run_blocked_1',
-      provider_type: 'openai',
-      provider_id: 'provider_primary',
-      model: 'gpt-4o-mini',
-      system_prompt: 'system prompt',
-      max_input_tokens: null,
-      max_output_tokens: null,
-      max_iterations: 10,
-      enabled_tools: JSON.stringify([toolName]),
-      available_skill_ids: '[]',
-      created_at: '2026-06-20T00:00:00.000Z',
-      updated_at: '2026-06-20T00:00:00.000Z',
-    } as never);
-    vi.mocked(approvalDb.getActiveToolCallApprovalsBySession).mockReturnValue([approvedRecord] as never);
-    vi.mocked(agentRunDb.getAgentRun).mockReturnValue({
+      // After the decision, the model either asks for a SECOND gated call (the
+      // repeat case) or answers. Each is its own model call.
+      const resumedCalls = [
+        ...(repeat
+          ? [
+              [
+                { kind: 'toolCall' as const, toolName, args: {}, id: 'call_2' },
+                { kind: 'done' as const, reason: 'toolUse' as const },
+              ],
+            ]
+          : []),
+        [
+          { kind: 'text' as const, text: 'approval resumed' },
+          { kind: 'done' as const, reason: 'stop' as const },
+        ],
+      ];
+      callPiChatMock.mockImplementation(createScriptedPiChat(resumedCalls));
+      vi.mocked(approvalDb.getToolCallApproval).mockReturnValue(approvedRecord as never);
+      vi.mocked(approvalDb.getToolCallApprovalSession).mockReturnValue({
+        session_id: 'assistant_1',
+        thread_id: 'thread_1',
+        assistant_message_id: 'assistant_1',
+        run_id: 'run_blocked_1',
+        provider_type: 'openai',
+        provider_id: 'provider_primary',
+        model: 'gpt-4o-mini',
+        system_prompt: 'system prompt',
+        max_input_tokens: null,
+        max_output_tokens: null,
+        max_iterations: 10,
+        enabled_tools: JSON.stringify([toolName]),
+        available_skill_ids: '[]',
+        created_at: '2026-06-20T00:00:00.000Z',
+        updated_at: '2026-06-20T00:00:00.000Z',
+      } as never);
+      vi.mocked(approvalDb.getActiveToolCallApprovalsBySession).mockReturnValue([
+        approvedRecord,
+      ] as never);
+      vi.mocked(agentRunDb.getAgentRun).mockReturnValue({
         id: 'run_blocked_1',
         kind: 'chat-turn',
         status: 'blocked',
@@ -321,7 +356,9 @@ describe('createChatApproval resume integration', () => {
         systemPrompt: 'system prompt',
         enabledTools: [toolName],
         availableSkillIds: [],
-        input: { metadata: { maxIterations: 10, approvalPolicy: 'always', requireApproval: false } },
+        input: {
+          metadata: { maxIterations: 10, approvalPolicy: 'always', requireApproval: false },
+        },
         working: {
           modelMessages: blockedHarness.getHistory(),
           accumulatedText: '',
@@ -332,133 +369,144 @@ describe('createChatApproval resume integration', () => {
         error: null,
         createdAt: '2026-06-20T00:00:00.000Z',
         updatedAt: '2026-06-20T00:00:00.000Z',
-    } as never);
-    seedResumeFacts(approvedId, 'call_1');
+      } as never);
+      seedResumeFacts(approvedId, 'call_1');
 
-    const streamCoordinator = createThreadStreamCoordinator();
-    const usage = { recordUsageEvent: vi.fn() };
-    const target = { id: 7, send: vi.fn() };
-    const conversationMocks = {
-      createMessage: vi.fn(),
-      upsertTurnMessage: vi.fn(),
-    };
-    const approvals = createChatApproval({
-      streams: { tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun,
-        peek: streamCoordinator.peekStream,
-        attach: streamCoordinator.attachStream,
-        detach: streamCoordinator.detachStream,
-      },
-      memory: { injectMemoryIntoMessages: vi.fn(messages => messages) } as never,
-      conversation: conversationMocks,
-      usage,
-    });
+      const streamCoordinator = createThreadStreamCoordinator();
+      const usage = { recordUsageEvent: vi.fn() };
+      const target = { id: 7, send: vi.fn() };
+      const conversationMocks = {
+        createMessage: vi.fn(),
+        upsertTurnMessage: vi.fn(),
+      };
+      const approvals = createChatApproval({
+        streams: {
+          tryAcquireThreadRun: createThreadStreamCoordinator().tryAcquireThreadRun,
+          peek: streamCoordinator.peekStream,
+          attach: streamCoordinator.attachStream,
+          detach: streamCoordinator.detachStream,
+        },
+        memory: { injectMemoryIntoMessages: vi.fn(messages => messages) } as never,
+        conversation: conversationMocks,
+        usage,
+      });
 
-    const result = await approvals.approveTool(target, approvedId, approved);
+      const result = await approvals.approveTool(target, approvedId, approved);
 
-    // The approval completes the parent segment in the run row AND in the
-    // session log. Without the fact the replay reads the parent's
-    // `turn_started` as still running while the run row says completed.
-    if (approved) {
-      const parentTurn = rebuildThreadViewFromEvents('thread_1')
-        .turns
-        .find(turn => turn.runId === 'run_blocked_1');
-      expect(parentTurn?.status).toBe('completed');
-      expect(parentTurn?.finishReason).toBe('approval-resumed');
-    }
+      // The approval completes the parent segment in the run row AND in the
+      // session log. Without the fact the replay reads the parent's
+      // `turn_started` as still running while the run row says completed.
+      if (approved) {
+        const parentTurn = rebuildThreadViewFromEvents('thread_1').turns.find(
+          turn => turn.runId === 'run_blocked_1'
+        );
+        expect(parentTurn?.status).toBe('completed');
+        expect(parentTurn?.finishReason).toBe('approval-resumed');
+      }
 
-    // The completion result exposes the continuation thread + reply so hosts
-    // that own conversation persistence (daemon WS) can record it.
-    expect(result).toMatchObject({
-      success: true,
-      awaitingApproval: repeat,
-      stopped: false,
-      threadId: 'thread_1',
-    });
-    expect(executions).toBe(approved ? 1 : 0);
-    expect(
-      vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
-        .map(([step]) => step)
-        .some(step =>
-          step.type === 'approval-response' &&
-          step.input?.approvalId === approvedId &&
-          step.input?.approved === approved
-      )
-    ).toBe(true);
-    const resumedSegments = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
-      .filter(([step, updates]) =>
-        step.type === 'finalize' &&
-        typeof step.input?.childRunId === 'string' &&
-        updates.status === 'completed'
+      // The completion result exposes the continuation thread + reply so hosts
+      // that own conversation persistence (daemon WS) can record it.
+      expect(result).toMatchObject({
+        success: true,
+        awaitingApproval: repeat,
+        stopped: false,
+        threadId: 'thread_1',
+      });
+      expect(executions).toBe(approved ? 1 : 0);
+      expect(
+        vi
+          .mocked(agentRunDb.appendAgentRunStepAndUpdateRun)
+          .mock.calls.map(([step]) => step)
+          .some(
+            step =>
+              step.type === 'approval-response' &&
+              step.input?.approvalId === approvedId &&
+              step.input?.approved === approved
+          )
+      ).toBe(true);
+      const resumedSegments = vi
+        .mocked(agentRunDb.appendAgentRunStepAndUpdateRun)
+        .mock.calls.filter(
+          ([step, updates]) =>
+            step.type === 'finalize' &&
+            typeof step.input?.childRunId === 'string' &&
+            updates.status === 'completed'
+        );
+      expect(resumedSegments.length).toBeGreaterThan(0);
+      if (repeat) {
+        const saved = vi.mocked(approvalDb.upsertToolCallApprovals).mock.calls.at(-1)?.[0];
+        expect(saved).toHaveLength(1);
+        const nextId = saved![0].approval_id;
+        expect(nextId).not.toBe(approvedId);
+        const resumed = await approvals.approveTool(target, nextId, true);
+        expect(resumed).toMatchObject({ success: true, awaitingApproval: false });
+        expect(executions).toBe(2);
+      }
+      expect(approvalDb.answerToolCallApproval).toHaveBeenCalledWith(
+        approvedId,
+        approved ? 'approved' : 'rejected',
+        approved ? 'User approved tool execution.' : 'User rejected tool execution.'
       );
-    expect(resumedSegments.length).toBeGreaterThan(0);
-    if (repeat) {
-      const saved = vi.mocked(approvalDb.upsertToolCallApprovals).mock.calls.at(-1)?.[0];
-      expect(saved).toHaveLength(1);
-      const nextId = saved![0].approval_id;
-      expect(nextId).not.toBe(approvedId);
-      const resumed = await approvals.approveTool(target, nextId, true);
-      expect(resumed).toMatchObject({ success: true, awaitingApproval: false });
-      expect(executions).toBe(2);
-    }
-    expect(approvalDb.answerToolCallApproval).toHaveBeenCalledWith(
-      approvedId,
-      approved ? 'approved' : 'rejected',
-      approved ? 'User approved tool execution.' : 'User rejected tool execution.'
-    );
-    expect(approvalDb.consumeToolCallApprovalSession).toHaveBeenCalledWith('assistant_1');
-    // Retro-review regression: the backend must durably persist the seeded,
-    // completed continuation under the resumed message id. The resumed loop
-    // also writes immediate mid-turn progress after each executed tool (no
-    // debounce on this path), so expect at least two writes.
-    expect(conversationMocks.upsertTurnMessage.mock.calls.length).toBeGreaterThanOrEqual(2);
-    const [progressCall] = conversationMocks.upsertTurnMessage.mock.calls as Array<
-      [Record<string, unknown>]
-    >;
-    expect(progressCall[0].message).toMatchObject({
-      role: 'assistant',
-      parts: expect.arrayContaining([
-        expect.objectContaining({ text: 'before pause' }),
-        expect.objectContaining({ type: 'dynamic-tool' }),
-      ]),
-    });
-    expect(conversationMocks.upsertTurnMessage).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'assistant_1',
-      thread_id: 'thread_1',
-      message: expect.objectContaining({
+      expect(approvalDb.consumeToolCallApprovalSession).toHaveBeenCalledWith('assistant_1');
+      // Retro-review regression: the backend must durably persist the seeded,
+      // completed continuation under the resumed message id. The resumed loop
+      // also writes immediate mid-turn progress after each executed tool (no
+      // debounce on this path), so expect at least two writes.
+      expect(conversationMocks.upsertTurnMessage.mock.calls.length).toBeGreaterThanOrEqual(2);
+      const [progressCall] = conversationMocks.upsertTurnMessage.mock.calls as Array<
+        [Record<string, unknown>]
+      >;
+      expect(progressCall[0].message).toMatchObject({
         role: 'assistant',
         parts: expect.arrayContaining([
           expect.objectContaining({ text: 'before pause' }),
-          expect.objectContaining({ text: 'approval resumed' }),
+          expect.objectContaining({ type: 'dynamic-tool' }),
         ]),
-      }),
-    }));
-    expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini', 'provider_primary');
-    if (approved) {
-    expect(observedContext).toMatchObject({
-      threadId: 'thread_1',
-      hasRunTracker: true,
-      conversationModel: {
-        providerType: 'openai',
-        providerId: 'provider_primary',
-        model: 'gpt-4o-mini',
-      },
-    });
-    expect((observedContext as { runId?: string }).runId).toMatch(/^run_/);
-    }
-    expect(usage.recordUsageEvent).toHaveBeenCalledWith(expect.objectContaining({
-      source: 'chat.approval-stream',
-      threadId: 'thread_1',
-      providerType: 'openai',
-      model: 'gpt-4o-mini',
-    }));
-    expect(streamCoordinator.peekStream(7)).toBeUndefined();
+      });
+      expect(conversationMocks.upsertTurnMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'assistant_1',
+          thread_id: 'thread_1',
+          message: expect.objectContaining({
+            role: 'assistant',
+            parts: expect.arrayContaining([
+              expect.objectContaining({ text: 'before pause' }),
+              expect.objectContaining({ text: 'approval resumed' }),
+            ]),
+          }),
+        })
+      );
+      // The supply seam is Pi; assert the model the turn was built with.
+      expect(callPiChatMock).toHaveBeenCalled();
+      expect((callPiChatMock.mock.calls[0] as unknown[])[0]).toMatchObject({ id: 'gpt-4o-mini' });
+      if (approved) {
+        expect(observedContext).toMatchObject({
+          threadId: 'thread_1',
+          hasRunTracker: true,
+          conversationModel: {
+            providerType: 'openai',
+            providerId: 'provider_primary',
+            model: 'gpt-4o-mini',
+          },
+        });
+        expect((observedContext as { runId?: string }).runId).toMatch(/^run_/);
+      }
+      expect(usage.recordUsageEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: 'chat.approval-stream',
+          threadId: 'thread_1',
+          providerType: 'openai',
+          model: 'gpt-4o-mini',
+        })
+      );
+      expect(streamCoordinator.peekStream(7)).toBeUndefined();
 
-    const chunks = target.send.mock.calls
-      .filter(call => call[0] === 'chat:ui-chunk')
-      .map(call => call[1]);
-    expect(chunks.map(chunk => chunk.type)).toEqual(expect.arrayContaining([
-      'text-delta',
-      'finish',
-    ]));
-  });
+      const chunks = target.send.mock.calls
+        .filter(call => call[0] === 'chat:ui-chunk')
+        .map(call => call[1]);
+      expect(chunks.map(chunk => chunk.type)).toEqual(
+        expect.arrayContaining(['text-delta', 'finish'])
+      );
+    }
+  );
 });

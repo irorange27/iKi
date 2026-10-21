@@ -16,7 +16,16 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/platform', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/platform')>()),
@@ -47,7 +56,10 @@ import { addProvider } from '@iki/backend/db/providers';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import {
   APPROVAL_DECIDED,
   APPROVAL_REQUESTED,
@@ -58,7 +70,7 @@ import {
   SESSION_EVENT_VERSION,
 } from '@iki/backend/thread_session/session_log';
 import { TOOL_EXECUTION_FINISHED } from '@iki/backend/thread_session/tool_execution';
-import { FauxModelProvider, fauxText } from '@iki/backend/agent/testing/faux_model';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 
 const TASK_TEXT = 'E2E_EFFECT_143 write the report';
 const EXECUTED_OUTPUT = 'file written by the dead attempt';
@@ -166,13 +178,13 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
   let service: ReturnType<typeof createChatService>;
   const target = { id: 3, send: vi.fn() };
 
-  beforeEach(async () => {
   // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(piTurnHarness);
+  // facts, retry, persistence) with a scripted model. They are not about which
+  // supply serves the turn, so they force the Pi harness explicitly: the script
+  // is installed on `callPiChat`, and no endpoint is ever dialled.
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-effect-retry-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'effect.db') });
@@ -206,17 +218,28 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
       {
         type: MODEL_TEXT_COMMITTED,
         version: SESSION_EVENT_VERSION,
-        payload: { runId: 'run_effect143_a', messageId: 'assistant_dead', seq: 0, text: 'DEAD_TEXT_143' },
+        payload: {
+          runId: 'run_effect143_a',
+          messageId: 'assistant_dead',
+          seq: 0,
+          text: 'DEAD_TEXT_143',
+        },
       },
     ]);
-    const model = new FauxModelProvider([fauxText('continued from the executed call')]);
-    const providerCalls = vi.spyOn(model, 'doStream');
-    createModelMock.mockReturnValue(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'continued from the executed call' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const providerCalls = callPiChatMock;
 
     const result = await service.retryAndExecute(target, 'run_effect143_a');
 
     if (!result.success) throw new Error(`retry failed: ${JSON.stringify(result)}`);
-    const wire = JSON.stringify(providerCalls.mock.calls[0][0]);
+    const wire = JSON.stringify(providerCalls.mock.calls[0][1]);
     // The task input AND the executed effect both ride; the dead text does not.
     expect(wire).toContain(TASK_TEXT);
     expect(wire).toContain('call_effect143');
@@ -234,15 +257,24 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
     // the model does not re-ask a user who already said no.
     seedRun('run_effect143_a', 'failed');
     recordInputFact();
-    recordExecutedCall({ approved: false, output: { type: 'text', value: 'execution denied by policy' } });
-    const model = new FauxModelProvider([fauxText('acknowledged the denial')]);
-    const providerCalls = vi.spyOn(model, 'doStream');
-    createModelMock.mockReturnValue(model);
+    recordExecutedCall({
+      approved: false,
+      output: { type: 'text', value: 'execution denied by policy' },
+    });
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'acknowledged the denial' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const providerCalls = callPiChatMock;
 
     const result = await service.retryAndExecute(target, 'run_effect143_a');
 
     if (!result.success) throw new Error(`retry failed: ${JSON.stringify(result)}`);
-    const wire = JSON.stringify(providerCalls.mock.calls[0][0]);
+    const wire = JSON.stringify(providerCalls.mock.calls[0][1]);
     expect(wire).toContain('execution denied by policy');
   });
 
@@ -250,14 +282,20 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
     seedRun('run_effect143_a', 'failed');
     recordInputFact();
     recordExecutedCall({ executed: false });
-    const model = new FauxModelProvider([fauxText('re-ran the task')]);
-    const providerCalls = vi.spyOn(model, 'doStream');
-    createModelMock.mockReturnValue(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 're-ran the task' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const providerCalls = callPiChatMock;
 
     const result = await service.retryAndExecute(target, 'run_effect143_a');
 
     if (!result.success) throw new Error(`retry failed: ${JSON.stringify(result)}`);
-    const wire = JSON.stringify(providerCalls.mock.calls[0][0]);
+    const wire = JSON.stringify(providerCalls.mock.calls[0][1]);
     // Plain re-run shape: the task input ends the history, no fabricated pair.
     expect(wire).toContain(TASK_TEXT);
     expect(wire).not.toContain('call_effect143');
@@ -300,7 +338,14 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
         },
       },
     ]);
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('must not run')]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'must not run' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
 
     const result = await service.retryAndExecute(target, 'run_effect143_a');
 
@@ -313,17 +358,21 @@ describe('effect-aware retry continues from the dead chain journaled effects', (
     seedRun('run_effect143_a', 'failed');
     recordInputFact();
     recordExecutedCall();
-    const model = new FauxModelProvider([fauxText('continued')]);
-    createModelMock.mockReturnValue(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'continued' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
 
     await service.retryAndExecute(target, 'run_effect143_a');
 
     const view = rebuildThreadViewFromEvents('thread_effect143');
     // Facts stay in the log: the journaled execution and the continuation
     // are both part of the thread's story.
-    expect(
-      view.events.filter(event => event.type === TOOL_EXECUTION_FINISHED)
-    ).toHaveLength(1);
+    expect(view.events.filter(event => event.type === TOOL_EXECUTION_FINISHED)).toHaveLength(1);
     expect(view.turns.filter(turn => turn.status === 'completed').length).toBeGreaterThanOrEqual(1);
   });
 });

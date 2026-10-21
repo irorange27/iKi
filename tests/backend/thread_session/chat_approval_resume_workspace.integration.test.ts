@@ -5,7 +5,16 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/platform', () => ({ getUserDataPath: userDataMock }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
@@ -19,9 +28,17 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     maxInputTokens: 98000,
     maxOutputTokens: 2000,
   }),
+  // No database in this suite: answer the provider lookup directly so the Pi
+  // supply admits the turn (the address is never dialled — callPiChat is mocked).
+  getProviderConfig: () => ({
+    type: 'openai',
+    apiKey: 'key-test',
+    baseURL: 'http://127.0.0.1:9/v1',
+  }),
 }));
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { getChatThread } from '@iki/backend/db/chat_thread';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
@@ -29,8 +46,8 @@ import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { onMessagePersisted } from '@iki/backend/thread_session/platform';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
-import { startTurnHarness } from '@iki/backend/agent/harness';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
@@ -42,31 +59,27 @@ import { defaultToolRegistry } from '@iki/backend/tools';
 // regression that fails on the pre-F4 code, where only the tail recorded.
 const sessionLogThrows = vi.hoisted(() => ({ failNextTerminal: false }));
 vi.mock('@iki/backend/thread_session/session_log', async importOriginal => {
-  const actual = await importOriginal<
-    typeof import('@iki/backend/thread_session/session_log')
-  >();
+  const actual = await importOriginal<typeof import('@iki/backend/thread_session/session_log')>();
   const TERMINALS = new Set(['turn_completed', 'turn_failed', 'turn_cancelled']);
   return {
     ...actual,
-    recordSessionEvents: vi.fn(
-      (threadId: string, events: ReadonlyArray<{ type: string }>) => {
-        // The failure targets the CANCEL TAIL — the terminal that lands when
-        // the resumed turn unwinds. The resume's own start/parent-terminal
-        // write also carries a terminal (the parent segment ends there), so
-        // matching any terminal would hit that write first and change what
-        // this case exercises.
-        const startsATurn = events.some(event => event.type === 'turn_started');
-        if (
-          sessionLogThrows.failNextTerminal &&
-          !startsATurn &&
-          events.some(event => TERMINALS.has(event.type))
-        ) {
-          sessionLogThrows.failNextTerminal = false;
-          throw new actual.SessionLogWriteError(threadId);
-        }
-        return actual.recordSessionEvents(threadId, events as never);
+    recordSessionEvents: vi.fn((threadId: string, events: ReadonlyArray<{ type: string }>) => {
+      // The failure targets the CANCEL TAIL — the terminal that lands when
+      // the resumed turn unwinds. The resume's own start/parent-terminal
+      // write also carries a terminal (the parent segment ends there), so
+      // matching any terminal would hit that write first and change what
+      // this case exercises.
+      const startsATurn = events.some(event => event.type === 'turn_started');
+      if (
+        sessionLogThrows.failNextTerminal &&
+        !startsATurn &&
+        events.some(event => TERMINALS.has(event.type))
+      ) {
+        sessionLogThrows.failNextTerminal = false;
+        throw new actual.SessionLogWriteError(threadId);
       }
-    ),
+      return actual.recordSessionEvents(threadId, events as never);
+    }),
   };
 });
 import { resolveThreadWorkspaceSelectionSnapshot } from '@iki/backend/workspaces/thread_workspace';
@@ -112,11 +125,25 @@ describe('approval resume keeps the turn-start workspace', () => {
    *  turn-start binding into the recovery context. */
   const pauseOnApproval = async (approvals: ReturnType<typeof createChatApproval>) => {
     const a = path.join(root, 'a');
+    // The model asks for the gated write; the harness executes it on resume.
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: 'write_file',
+            args: { path: 'approved.txt', content: 'audit' },
+            id: 'call_probe',
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+      ])
+    );
     defaultToolRegistry.register(new WriteFileTool().toAgentTool());
     const tracker = {
       id: 'run_pause_probe',
     };
-    const harness = startTurnHarness({
+    const harness = startPiTurnHarness({
       providerType: 'openai',
       model: 'audit',
       systemPrompt: `Current workspace: ${a}`,
@@ -127,10 +154,6 @@ describe('approval resume keeps the turn-start workspace', () => {
       approvalPolicy: 'always',
       maxIterations: 5,
       threadId: 'thread_probe',
-      modelFactory: () =>
-        new FauxModelProvider([
-          fauxToolCall('write_file', { path: 'approved.txt', content: 'audit' }, { id: 'call_probe' }),
-        ]),
     });
     let approvalId = '';
     const target = { id: 91, send: vi.fn() };
@@ -236,6 +259,10 @@ describe('approval resume keeps the turn-start workspace', () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-approval-workspace-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'audit.db') });
+    // The resumed segment resolves its plan through the provider table; seed the
+    // row the plan names so the Pi supply admits it (callPiChat is mocked, so
+    // the address is never dialled).
+    seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'audit' });
     const a = path.join(root, 'a');
     const b = path.join(root, 'b');
     await fs.mkdir(a);
@@ -274,7 +301,14 @@ describe('approval resume keeps the turn-start workspace', () => {
     conversation.updateThread('thread_probe', { workspace_id: 'workspace_wt_probe' });
     expect(getChatThread('thread_probe')?.workspace_id).toBe('workspace_wt_probe');
 
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('done')]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     expect(await approvals.approveTool(target, approvalId, true)).toMatchObject({
       success: true,
     });
@@ -296,7 +330,14 @@ describe('approval resume keeps the turn-start workspace', () => {
 
     // Simulate the restart: a fresh approvals registry with no in-memory state.
     const recoveredApprovals = buildApprovals();
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('done')]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     const resumeTarget = { id: 92, send: vi.fn() };
     expect(await recoveredApprovals.approveTool(resumeTarget, approvalId, true)).toMatchObject({
       success: true,
@@ -340,9 +381,20 @@ describe('approval resume keeps the turn-start workspace', () => {
     // Fresh registry, as after a restart: the resume must run the recovery
     // lookups (through the delayed memory injection).
     const recoveredApprovals = buildApprovals(leaseCoordinator, delayedMemory);
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('done')]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
 
-    const pendingResume = recoveredApprovals.approveTool({ id: 93, send: vi.fn() }, approvalId, true);
+    const pendingResume = recoveredApprovals.approveTool(
+      { id: 93, send: vi.fn() },
+      approvalId,
+      true
+    );
     await new Promise(resolve => setTimeout(resolve, 20));
     notifyLeaseLost!();
     expect(await pendingResume).toMatchObject({ success: true });
@@ -380,7 +432,14 @@ describe('approval resume keeps the turn-start workspace', () => {
 
     // Fresh registry, as after a restart.
     const recoveredApprovals = buildApprovals(leaseCoordinator, delayedMemory);
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('never reaches the wire')]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'never reaches the wire' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     sessionLogThrows.failNextTerminal = true;
 
     const pendingResume = recoveredApprovals.approveTool(
@@ -403,4 +462,3 @@ describe('approval resume keeps the turn-start workspace', () => {
     ).toBeDefined();
   });
 });
-

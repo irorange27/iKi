@@ -16,8 +16,17 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const generateSingleShotMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/platform', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/platform')>()),
@@ -52,7 +61,10 @@ import { addProvider } from '@iki/backend/db/providers';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import {
   INPUT_ACCEPTED,
   TURN_STARTED,
@@ -60,7 +72,7 @@ import {
   recordSessionEvents,
   SESSION_EVENT_VERSION,
 } from '@iki/backend/thread_session/session_log';
-import { FauxModelProvider, fauxText } from '@iki/backend/agent/testing/faux_model';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 
 const TASK_SYSTEM = 'WAKE_TASK_AGENT_SYSTEM_PROMPT_139';
 const TASK_TEXT = 'E2E_TASK_139 run the weekly report';
@@ -83,7 +95,11 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
       runConfig: { kind, metadata: { source: kind, taskId: 'task_139' } },
     });
 
-  const seedRun = (runId: string, threadId: string, kind: 'proactive-task' | 'delegated-agent' | 'handoff-resume') => {
+  const seedRun = (
+    runId: string,
+    threadId: string,
+    kind: 'proactive-task' | 'delegated-agent' | 'handoff-resume'
+  ) => {
     agentRunDb.createAgentRun({
       id: runId,
       kind,
@@ -138,12 +154,12 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
   });
 
   beforeEach(async () => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(piTurnHarness);
+    // These suites drive the DURABLE layer (streaming, approvals, session-log
+    // facts, retry, persistence) with a scripted AI SDK model. They are not about
+    // which supply serves the turn, so they opt into the legacy executor: the
+    // production default refuses a turn its projection cannot carry, and a
+    // scripted model has no endpoint to project to.
+    setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-task-input-facts-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'task-facts.db') });
@@ -221,9 +237,15 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
       kind: 'proactive-task',
     });
 
-    const model = new FauxModelProvider([fauxText('task retried ok')]);
-    const providerCalls = vi.spyOn(model, 'doStream');
-    createModelMock.mockReturnValue(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'task retried ok' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const providerCalls = callPiChatMock;
 
     const retry = (await service.retryAndExecute(target, failedRunId)) as { newRunId?: string };
     expect(retry).toMatchObject({ success: true, newRunId: expect.any(String) });
@@ -235,7 +257,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     });
 
     // The re-run IS the recorded task: prompt and system config both ride.
-    const wire = JSON.stringify(providerCalls.mock.calls[0][0]);
+    const wire = JSON.stringify(providerCalls.mock.calls[0][1]);
     expect(wire).toContain(TASK_TEXT);
     expect(wire).toContain(TASK_SYSTEM);
 
@@ -285,7 +307,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
 
     const retryA = await service.retryAndExecute(target, runAId);
     expect(retryA).toMatchObject({ success: false });
-    expect(retryA.error).toContain('the replay\'s tail input was recorded for run');
+    expect(retryA.error).toContain("the replay's tail input was recorded for run");
   });
 
   it('a retried successor passes the attribution join through its ancestry', async () => {
@@ -306,8 +328,14 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     expect(firstRetry).toMatchObject({ success: false, newRunId: expect.any(String) });
     const successorId = firstRetry.newRunId!;
 
-    const model = new FauxModelProvider([fauxText('recovered')]);
-    createModelMock.mockReturnValue(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'recovered' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     const secondRetry = await service.retryAndExecute(target, successorId);
     expect(secondRetry).toMatchObject({ success: true, newRunId: expect.any(String) });
     expect(agentRunDb.getAgentRun(secondRetry.newRunId!)).toMatchObject({ kind: 'proactive-task' });
@@ -323,7 +351,11 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
         version: SESSION_EVENT_VERSION,
         payload: {
           messageId: 'input_task',
-          message: { id: 'input_task', role: 'user', parts: [{ type: 'text', text: 'task' }] } as never,
+          message: {
+            id: 'input_task',
+            role: 'user',
+            parts: [{ type: 'text', text: 'task' }],
+          } as never,
           runId: 'run_task',
           system: ['task persona'],
         },
@@ -333,7 +365,11 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
         version: SESSION_EVENT_VERSION,
         payload: {
           messageId: 'input_chat',
-          message: { id: 'input_chat', role: 'user', parts: [{ type: 'text', text: 'chat' }] } as never,
+          message: {
+            id: 'input_chat',
+            role: 'user',
+            parts: [{ type: 'text', text: 'chat' }],
+          } as never,
         },
       },
     ]);

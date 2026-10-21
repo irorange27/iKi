@@ -7,6 +7,15 @@ import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
@@ -30,10 +39,14 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
 });
 
 import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { onMessagePersisted } from '@iki/backend/thread_session/platform';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
@@ -43,7 +56,7 @@ import {
   APPROVAL_DECIDED,
 } from '@iki/backend/thread_session/session_log';
 import { createMessageSend } from '@iki/backend/thread_session/message_send';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
 
@@ -80,6 +93,7 @@ describe('session log approval facts across entries', () => {
   beforeAll(async () => {
     dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-session-facts-'));
     initializeDatabase({ dbPath: path.join(dataDir, 'facts.db') });
+    seedTurnProvider({ providerId: 'provider_primary', model: 'test-model' });
     const a = path.join(dataDir, 'a');
     await fs.mkdir(a, { recursive: true });
     addWorkspace({ id: 'workspace_facts', path: a, name: 'facts' });
@@ -102,12 +116,12 @@ describe('session log approval facts across entries', () => {
   });
 
   beforeEach(() => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(piTurnHarness);
+    // These suites drive the DURABLE layer (streaming, approvals, session-log
+    // facts, retry, persistence) with a scripted AI SDK model. They are not about
+    // which supply serves the turn, so they opt into the legacy executor: the
+    // production default refuses a turn its projection cannot carry, and a
+    // scripted model has no endpoint to project to.
+    setTurnHarnessFallback(piTurnHarness);
     vi.clearAllMocks();
     coordinator = createThreadStreamCoordinator();
     memory.injectMemoryIntoMessages.mockClear();
@@ -130,21 +144,34 @@ describe('session log approval facts across entries', () => {
       getThreadTitle: () => 'Facts',
     });
 
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall('write_file', { path: 'facts.txt', content: 'facts' }, { id: 'call_facts' }),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: 'write_file',
+            args: { path: 'facts.txt', content: 'facts' },
+            id: 'call_facts',
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
       ])
     );
 
-    const turn = streaming.stream({ id: 91, send: vi.fn() }, {
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'test-model',
-      threadId: 'thread_facts',
-      approvalPolicy: 'always',
-      messages: [{ id: 'msg_facts_1', role: 'user', parts: [{ type: 'text', text: 'write it' }] }],
-      tools: ['write_file'],
-    });
+    const turn = streaming.stream(
+      { id: 91, send: vi.fn() },
+      {
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'test-model',
+        threadId: 'thread_facts',
+        approvalPolicy: 'always',
+        messages: [
+          { id: 'msg_facts_1', role: 'user', parts: [{ type: 'text', text: 'write it' }] },
+        ],
+        tools: ['write_file'],
+      }
+    );
     const pauseResult = await turn;
     expect(pauseResult).toMatchObject({ success: true, awaitingApproval: true });
 
@@ -157,13 +184,23 @@ describe('session log approval facts across entries', () => {
     expect(pausedView.approvals[0]).toMatchObject({ status: 'pending', toolName: 'write_file' });
     const pausedTurn = pausedView.turns.at(-1);
     expect(pausedTurn).toBeDefined();
-    expect(pausedView.events.some(event =>
-      ['turn_completed', 'turn_failed', 'turn_cancelled'].includes(event.type) &&
-      (event.payload as { runId?: string }).runId === pausedTurn!.runId
-    )).toBe(false);
+    expect(
+      pausedView.events.some(
+        event =>
+          ['turn_completed', 'turn_failed', 'turn_cancelled'].includes(event.type) &&
+          (event.payload as { runId?: string }).runId === pausedTurn!.runId
+      )
+    ).toBe(false);
 
     // Approve through the real entry; the continuation completes.
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('written and done')]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'written and done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     const approvalId = pausedView.approvals[0]!.approvalId;
     const approveResult = await approvals.approveTool({ id: 92, send: vi.fn() }, approvalId, true);
     expect(approveResult).toMatchObject({ success: true, awaitingApproval: false });
@@ -186,10 +223,7 @@ describe('session log approval facts across entries', () => {
     // log must agree on both.
     const completed = view.turns.filter(turn => turn.status === 'completed');
     expect(completed).toHaveLength(2);
-    expect(completed.map(turn => turn.kind).sort()).toEqual([
-      'approval-resume',
-      'chat-turn',
-    ]);
+    expect(completed.map(turn => turn.kind).sort()).toEqual(['approval-resume', 'chat-turn']);
 
     // The rebuilt conversation carries the final assistant message.
     const last = view.messages.at(-1)!;
@@ -231,7 +265,9 @@ describe('session log approval facts across entries', () => {
       model: 'test-model',
       threadId: 'thread_facts',
       approvalPolicy: 'never',
-      messages: [{ id: 'msg_facts_2', role: 'user', parts: [{ type: 'text', text: 'send probe' }] }],
+      messages: [
+        { id: 'msg_facts_2', role: 'user', parts: [{ type: 'text', text: 'send probe' }] },
+      ],
     });
     expect(result).toMatchObject({ success: true, text: 'send answer' });
 
@@ -260,22 +296,37 @@ describe('session log approval facts across entries', () => {
       getThreadTitle: () => 'Facts',
     });
 
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall('write_file', { path: 'retry.txt', content: 'retry' }, { id: 'call_retry' }),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: 'write_file',
+            args: { path: 'retry.txt', content: 'retry' },
+            id: 'call_retry',
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
       ])
     );
-    const pauseResult = await streaming.stream({ id: 96, send: vi.fn() }, {
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'test-model',
-      threadId: 'thread_facts',
-      approvalPolicy: 'always',
-      messages: [
-        { id: 'msg_facts_retry', role: 'user', parts: [{ type: 'text', text: 'write it again' }] },
-      ],
-      tools: ['write_file'],
-    });
+    const pauseResult = await streaming.stream(
+      { id: 96, send: vi.fn() },
+      {
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'test-model',
+        threadId: 'thread_facts',
+        approvalPolicy: 'always',
+        messages: [
+          {
+            id: 'msg_facts_retry',
+            role: 'user',
+            parts: [{ type: 'text', text: 'write it again' }],
+          },
+        ],
+        tools: ['write_file'],
+      }
+    );
     expect(pauseResult).toMatchObject({ success: true, awaitingApproval: true });
     const approvalId = rebuildThreadViewFromEvents('thread_facts').approvals.find(
       approval => approval.toolCallId === 'call_retry'
@@ -284,7 +335,14 @@ describe('session log approval facts across entries', () => {
     getDb().exec(`CREATE TRIGGER facts_reject_decided BEFORE INSERT ON session_events
       WHEN NEW.type = 'approval_decided'
       BEGIN SELECT RAISE(ABORT, 'facts: decided write rejected'); END`);
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('written on retry')]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'written on retry' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     try {
       await expect(
         approvals.approveTool({ id: 97, send: vi.fn() }, approvalId, true)

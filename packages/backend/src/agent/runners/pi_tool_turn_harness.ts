@@ -3,7 +3,12 @@ import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-
 
 import { createLogger } from '@iki/backend/logger';
 import { isLangfuseEnabled, tracePiGeneration } from '@iki/backend/observability/langfuse';
-import { RefusalError, getErrorMessage, isContextOverflowError, isRetryableError } from '@iki/backend/utils/errors';
+import {
+  RefusalError,
+  getErrorMessage,
+  isContextOverflowError,
+  isRetryableError,
+} from '@iki/backend/utils/errors';
 import type { ToolApprovalRequest } from '../types';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { withRetry } from '@iki/backend/utils/retry';
@@ -42,8 +47,13 @@ import {
   advanceApprovalPolicySnapshot,
   resolveTools,
 } from '../harness/tool_resolver';
-import { estimateMessageTokens, estimateTextTokens, estimateToolSchemaTokens } from '../context_budget';
+import {
+  estimateMessageTokens,
+  estimateTextTokens,
+  estimateToolSchemaTokens,
+} from '../context_budget';
 import { getToolRuntimeContext, runWithToolRuntimeContext } from '../../utils/runtime_context';
+import { resolveThreadWorkspaceSelectionSnapshot } from '../../workspaces/thread_workspace';
 import type { AgentTool, AgentTurnPerf, AgentUsage } from '../types';
 import type { HarnessConfig, TurnEvent, TurnInput, TurnOutput } from '../harness/harness_types';
 
@@ -176,7 +186,10 @@ export const withPiRetry = (
     queue.push(delta);
     notify?.();
   };
-  const waitDelta = () => new Promise<void>(resolve => { notify = resolve; });
+  const waitDelta = () =>
+    new Promise<void>(resolve => {
+      notify = resolve;
+    });
 
   const finalPromise = (async () => {
     try {
@@ -221,7 +234,8 @@ export const withPiRetry = (
               level: 'warn',
               event: 'llm.turn.retry',
               outcome: 'started',
-              message: 'Provider rejected the request for context length; compacted and retrying once.',
+              message:
+                'Provider rejected the request for context length; compacted and retrying once.',
               data: {},
             });
             await onContextOverflow();
@@ -234,7 +248,9 @@ export const withPiRetry = (
             isRetryableError(failure)
           ) {
             attemptIndex += 1;
-            await sleep(Math.min(RETRY_BASE_DELAY_MS * 2 ** (attemptIndex - 1), RETRY_MAX_DELAY_MS));
+            await sleep(
+              Math.min(RETRY_BASE_DELAY_MS * 2 ** (attemptIndex - 1), RETRY_MAX_DELAY_MS)
+            );
             const note = recoveryNoteFor(failure);
             // The note joins the LIVE transcript and the caller's mirror
             // signal — it rides every later step of this turn (runner parity).
@@ -331,9 +347,27 @@ const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
 /** The raw tool invocation (handler + clone + retry + context binding) —
  * returns the handler's RAW value; the callers wrap it into their own result
  * vocabulary. Unknown tool names throw here; the wrappers convert. */
-const createRawToolRunner = (tools: AgentTool[], config: HarnessConfig) => {
+const createRawToolRunner = (
+  tools: AgentTool[],
+  config: HarnessConfig,
+  inheritedBox?: { selection: unknown }
+) => {
   const byName = new Map(tools.map(tool => [tool.name, tool]));
-  return async (toolName: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> => {
+  // Snapshot the workspace selection ONCE, when the runner is built (i.e. at
+  // turn start). Every tool invocation shares this box by reference, so a
+  // mid-run workspace switch (a worktree assignment from the daemon or the
+  // renderer) cannot redirect the tools of the turn already in flight — the
+  // frozen-root guarantee the retired AgentHarness provided, which the Pi path
+  // silently lacked after the supply flip.
+  const workspaceSelectionBox = inheritedBox ??
+    getToolRuntimeContext().workspaceSelectionBox ?? {
+      selection: config.threadId ? resolveThreadWorkspaceSelectionSnapshot(config.threadId) : null,
+    };
+  return async (
+    toolName: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<unknown> => {
     const tool = byName.get(toolName);
     if (!tool) {
       throw new Error(`Unknown tool "${toolName}".`);
@@ -345,6 +379,7 @@ const createRawToolRunner = (tools: AgentTool[], config: HarnessConfig) => {
         abortSignal: signal,
         availableTools: tools,
         availableSkillIds: config.availableSkillIds,
+        workspaceSelectionBox,
       },
       async () => {
         const invoke = () => tool.handler(structuredClone(args));
@@ -357,9 +392,16 @@ const createRawToolRunner = (tools: AgentTool[], config: HarnessConfig) => {
 /** Inline execution parity with the AI SDK adapter: results land in the
  * canonical ToolResultOutput vocabulary; unknown tool names become error
  * results, never throws. */
-const defaultPiToolExecutor = (tools: AgentTool[], config: HarnessConfig) => {
-  const runRaw = createRawToolRunner(tools, config);
-  return async (call: { name: string; arguments: Record<string, unknown> }, signal?: AbortSignal): Promise<ToolResultOutput> => {
+const defaultPiToolExecutor = (
+  tools: AgentTool[],
+  config: HarnessConfig,
+  inheritedBox?: { selection: unknown }
+) => {
+  const runRaw = createRawToolRunner(tools, config, inheritedBox);
+  return async (
+    call: { name: string; arguments: Record<string, unknown> },
+    signal?: AbortSignal
+  ): Promise<ToolResultOutput> => {
     try {
       const value = await runRaw(call.name, call.arguments, signal);
       return typeof value === 'string'
@@ -391,18 +433,36 @@ type ToolResultOutput =
 export class PiToolTurnHarness {
   private readonly config: HarnessConfig;
   private readonly modelCall: PiToolModelCall;
-  private readonly executorOverride?: (call: { name: string; arguments: Record<string, unknown> }, signal?: AbortSignal) => Promise<unknown>;
+  private readonly executorOverride?: (
+    call: { name: string; arguments: Record<string, unknown> },
+    signal?: AbortSignal
+  ) => Promise<unknown>;
   private readonly resume?: {
-    commands: Array<{ approvalId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }>;
+    commands: Array<{
+      approvalId: string;
+      toolCallId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+    }>;
     owner: {
       prepare: (address: { threadId: string; approvalId: string }) => void;
       executeApproved: (
         address: { threadId: string; approvalId: string },
-        port: { signal?: AbortSignal; execute: (toolName: string, args: unknown) => Promise<unknown> }
+        port: {
+          signal?: AbortSignal;
+          execute: (toolName: string, args: unknown) => Promise<unknown>;
+        }
       ) => Promise<ToolExecutionOutcome>;
     };
   };
   private history: ModelMessage[] = [];
+  /**
+   * Workspace selection frozen at turn start, shared by reference with every
+   * tool invocation of this turn. A resumed segment (approval, handoff) REUSES
+   * it — re-resolving would pick up a switch that happened after the turn
+   * began, which is the frozen-root guarantee.
+   */
+  private workspaceSelectionBox?: { selection: unknown };
 
   constructor(
     config: HarnessConfig,
@@ -411,18 +471,29 @@ export class PiToolTurnHarness {
       /** Intercepts MODEL-driven tool calls after the resume block. Owner-
        * executed resume calls (the five-state port) run RAW and do NOT pass
        * through this — record them at the owner port instead. */
-      executeTool?: (call: { name: string; arguments: Record<string, unknown> }, signal?: AbortSignal) => Promise<unknown>;
+      executeTool?: (
+        call: { name: string; arguments: Record<string, unknown> },
+        signal?: AbortSignal
+      ) => Promise<unknown>;
       /** Resume mode (switch item 3b): the decided calls of a paused turn,
        * read back from the approval rows, and the five-state owner port.
        * The thread_session construction site injects the owner — this module
        * must not import it (agent-below-session). */
       resume?: {
-        commands: Array<{ approvalId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }>;
+        commands: Array<{
+          approvalId: string;
+          toolCallId: string;
+          toolName: string;
+          args: Record<string, unknown>;
+        }>;
         owner: {
           prepare: (address: { threadId: string; approvalId: string }) => void;
           executeApproved: (
             address: { threadId: string; approvalId: string },
-            port: { signal?: AbortSignal; execute: (toolName: string, args: unknown) => Promise<unknown> }
+            port: {
+              signal?: AbortSignal;
+              execute: (toolName: string, args: unknown) => Promise<unknown>;
+            }
           ) => Promise<ToolExecutionOutcome>;
         };
       };
@@ -451,18 +522,34 @@ export class PiToolTurnHarness {
     // arrive already resolved — with `needsApproval: false`, because a
     // subagent has no surface to answer a card — so the loop below treats them
     // exactly like resolved ones.
-    const tools = input.toolsOverride ?? resolveTools({
-      enableTools: this.config.enableTools,
-      enabledToolNames: this.config.enabledToolNames,
-      availableSkillIds: this.config.availableSkillIds,
-      guardActive: this.config.guardActive,
-      requireApproval: this.config.requireApproval,
-      autoApproveToolRequests: this.config.autoApproveToolRequests ?? false,
-      ...(this.config.approvalPolicy ? { approvalPolicy: this.config.approvalPolicy } : {}),
-      approvalPolicyBox: policyBox,
-    });
+    // Freeze the workspace selection for the WHOLE turn, before any tool runs.
+    const tools =
+      input.toolsOverride ??
+      resolveTools({
+        enableTools: this.config.enableTools,
+        enabledToolNames: this.config.enabledToolNames,
+        availableSkillIds: this.config.availableSkillIds,
+        requireApproval: this.config.requireApproval,
+        autoApproveToolRequests: this.config.autoApproveToolRequests ?? false,
+        ...(this.config.approvalPolicy ? { approvalPolicy: this.config.approvalPolicy } : {}),
+        approvalPolicyBox: policyBox,
+      });
+    // Freeze the workspace selection for the WHOLE turn, before any tool runs:
+    // resumed segments and every tool invocation share this box by reference, so
+    // a mid-run workspace switch cannot redirect the tools of an in-flight turn.
+    this.workspaceSelectionBox = getToolRuntimeContext().workspaceSelectionBox ?? {
+      selection: this.config.threadId
+        ? resolveThreadWorkspaceSelectionSnapshot(this.config.threadId)
+        : null,
+    };
     const piTools = tools.length
-      ? projectToolsToPiTools(tools.map(tool => ({ name: tool.name, description: tool.description, parameters: tool.parameters })))
+      ? projectToolsToPiTools(
+          tools.map(tool => ({
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters,
+          }))
+        )
       : undefined;
     // Per-call approval decision: the resolver's function (policy box state
     // in its closure) rides the loop tool; the loop evaluates it before any
@@ -501,12 +588,18 @@ export class PiToolTurnHarness {
       planPrompt: this.config.systemPrompt,
       transcriptSystemText,
       toolSchemaTokens: toolSchemaOverheadTokens,
-      ...(typeof this.config.maxInputTokens === 'number' ? { maxInputTokens: this.config.maxInputTokens } : {}),
+      ...(typeof this.config.maxInputTokens === 'number'
+        ? { maxInputTokens: this.config.maxInputTokens }
+        : {}),
       ...(this.config.threadId ? { threadId: this.config.threadId } : {}),
       ...(signal ? { signal } : {}),
     });
 
-    const projected = projectHistoryToPiContext(requestHistory, this.config.model, this.config.providerType);
+    const projected = projectHistoryToPiContext(
+      requestHistory,
+      this.config.model,
+      this.config.providerType
+    );
     const { prompt: systemPrompt } = assembleRequestSystemPrompt([
       { slot: 'persona', text: personaPrompt },
       { slot: 'planPrompt', text: this.config.systemPrompt },
@@ -539,13 +632,24 @@ export class PiToolTurnHarness {
     let toolCallsCount = 0;
     let lastStepUsage: AgentUsage | undefined;
     const pendingNotes: ModelMessage[] = [];
-    const toolCallResults: Array<{ toolName: string; args: Record<string, unknown>; result?: unknown }> = [];
+    const toolCallResults: Array<{
+      toolName: string;
+      args: Record<string, unknown>;
+      result?: unknown;
+    }> = [];
     const sentSnapshots: ModelMessage[][] = [];
 
     const executor =
       this.executorOverride ??
-      (async (call: { id?: string; name: string; arguments: Record<string, unknown> }, execSignal?: AbortSignal) => {
-        const output = (await defaultPiToolExecutor(tools, this.config)(call, execSignal)) as {
+      (async (
+        call: { id?: string; name: string; arguments: Record<string, unknown> },
+        execSignal?: AbortSignal
+      ) => {
+        const output = (await defaultPiToolExecutor(
+          tools,
+          this.config,
+          this.workspaceSelectionBox
+        )(call, execSignal)) as {
           type: string;
         };
         // Journal the inline effect (issue #145): loop-executed calls are
@@ -582,7 +686,7 @@ export class PiToolTurnHarness {
     // fail loudly instead of inventing a result.
     if (this.resume && this.resume.commands.length > 0) {
       if (!this.config.threadId) {
-        throw new Error("Resuming an approval requires the paused turn thread id.");
+        throw new Error('Resuming an approval requires the paused turn thread id.');
       }
       for (const command of this.resume.commands) {
         const address = { threadId: this.config.threadId, approvalId: command.approvalId };
@@ -601,7 +705,7 @@ export class PiToolTurnHarness {
         const ownerSignal = signal ?? new AbortController().signal;
         // The owner's port contract expects the RAW handler value — the
         // owner applies the canonical result wrapping itself.
-        const runRaw = createRawToolRunner(tools, this.config);
+        const runRaw = createRawToolRunner(tools, this.config, this.workspaceSelectionBox);
         const outcome = await this.resume.owner.executeApproved(address, {
           signal: ownerSignal,
           execute: (toolName, args) =>
@@ -633,7 +737,14 @@ export class PiToolTurnHarness {
         // Mirror and transcript: same appends the loop would make.
         const resumeResultMessage: ModelMessage = {
           role: 'tool',
-          content: [{ type: 'tool-result', toolCallId: outcome.result.toolCallId, toolName: outcome.result.toolName, output }],
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: outcome.result.toolCallId,
+              toolName: outcome.result.toolName,
+              output,
+            },
+          ],
         };
         this.history = [...this.history, resumeResultMessage];
         requestView = [...requestView, resumeResultMessage];
@@ -690,10 +801,7 @@ export class PiToolTurnHarness {
       // messages; the original transcript system is dropped from the
       // rebuild — the loop's assembled systemPrompt already carries it.
       const rebuilt = projectHistoryToPiContext(
-        [
-          { role: 'system', content: PER_REQUEST_COMPACT_PLACEHOLDER },
-          ...requestView,
-        ],
+        [{ role: 'system', content: PER_REQUEST_COMPACT_PLACEHOLDER }, ...requestView],
         this.config.model,
         this.config.providerType
       );
@@ -733,7 +841,9 @@ export class PiToolTurnHarness {
     const onContextOverflow = async (): Promise<void> => {
       const compacted = await applyCompaction({ force: true });
       if (!compacted) {
-        throw new Error('Context over length and compaction could not shrink it; history has been preserved.');
+        throw new Error(
+          'Context over length and compaction could not shrink it; history has been preserved.'
+        );
       }
       for (const note of pendingNotes) {
         transcript.push({
@@ -799,7 +909,11 @@ export class PiToolTurnHarness {
           toolCall: { toolName: call.name, args: call.arguments },
         });
       },
-      callModel: async (context: { systemPrompt: string; messages: PiMessage[]; tools?: unknown }) => {
+      callModel: async (context: {
+        systemPrompt: string;
+        messages: PiMessage[];
+        tools?: unknown;
+      }) => {
         // prepareStep parity: EVERY request re-checks the input budget.
         // Under the threshold this is one estimate pass; over it, the
         // REQUEST view compacts (the stored mirror stays full) and the
@@ -869,7 +983,12 @@ export class PiToolTurnHarness {
         const assistantParts: Array<
           | { type: 'text'; text: string }
           | { type: 'reasoning'; text: string }
-          | { type: 'tool-call'; toolCallId: string; toolName: string; input: Record<string, unknown> }
+          | {
+              type: 'tool-call';
+              toolCallId: string;
+              toolName: string;
+              input: Record<string, unknown>;
+            }
         > = [];
         if (step.thinking) assistantParts.push({ type: 'reasoning', text: step.thinking });
         if (step.text) assistantParts.push({ type: 'text', text: step.text });
@@ -981,7 +1100,11 @@ export class PiToolTurnHarness {
       !outcome.finalText.trim() &&
       !streamedText.trim()
     ) {
-      throw new RefusalError('Model returned an empty response with no tool calls', 'stop', undefined);
+      throw new RefusalError(
+        'Model returned an empty response with no tool calls',
+        'stop',
+        undefined
+      );
     }
 
     const text = streamedText || outcome.finalText;
@@ -1033,6 +1156,9 @@ export class PiToolTurnHarness {
  * buckets, plus the per-call cost Pi computed from the model's catalog
  * rates (0 when the model carries none — the pre-D35 behavior). */
 const mapBuckets = (buckets: PiUsageBuckets): AgentUsage => ({
+  // Pi's `input` counts ONLY the uncached prompt (`cacheRead`/`cacheWrite` are
+  // reported alongside it, the way `reasoning` is reported alongside `output`).
+  // The billed input a user compares across providers is the sum.
   inputTokens: buckets.input + buckets.cacheRead + buckets.cacheWrite,
   outputTokens: buckets.output,
   cacheReadTokens: buckets.cacheRead,

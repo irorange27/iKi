@@ -16,6 +16,15 @@ import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
@@ -31,10 +40,14 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
 }));
 
 import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { onMessagePersisted } from '@iki/backend/thread_session/platform';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
@@ -42,7 +55,7 @@ import {
   rebuildThreadViewFromEvents,
   APPROVAL_DECIDED,
 } from '@iki/backend/thread_session/session_log';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
@@ -90,30 +103,37 @@ describe('approval resume reads the session log alone', () => {
     streaming: ReturnType<typeof createChatStreaming>,
     targetId: number
   ) => {
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall(
-          'write_file',
-          { path: 'resume_events.txt', content: 'resumed' },
-          { id: 'call_events' }
-        ),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: 'write_file',
+            args: { path: 'resume_events.txt', content: 'resumed' },
+            id: 'call_events',
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
       ])
     );
-    const pauseResult = await streaming.stream({ id: targetId, send: vi.fn() }, {
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'test-model',
-      threadId: 'thread_events',
-      approvalPolicy: 'always',
-      messages: [
-        {
-          id: `msg_events_${targetId}`,
-          role: 'user',
-          parts: [{ type: 'text', text: 'write it' }],
-        },
-      ],
-      tools: ['write_file'],
-    });
+    const pauseResult = await streaming.stream(
+      { id: targetId, send: vi.fn() },
+      {
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'test-model',
+        threadId: 'thread_events',
+        approvalPolicy: 'always',
+        messages: [
+          {
+            id: `msg_events_${targetId}`,
+            role: 'user',
+            parts: [{ type: 'text', text: 'write it' }],
+          },
+        ],
+        tools: ['write_file'],
+      }
+    );
     expect(pauseResult).toMatchObject({ success: true, awaitingApproval: true });
     const pausedView = rebuildThreadViewFromEvents('thread_events');
     return pausedView.approvals.at(-1)!.approvalId;
@@ -124,6 +144,7 @@ describe('approval resume reads the session log alone', () => {
     workspaceDir = path.join(dataDir, 'ws');
     await fs.mkdir(workspaceDir, { recursive: true });
     initializeDatabase({ dbPath: path.join(dataDir, 'resume.db') });
+    seedTurnProvider({ providerId: 'provider_primary', model: 'test-model' });
     addWorkspace({ id: 'workspace_events', path: workspaceDir, name: 'events' });
     conversation = createChatPersistence({
       memory: memory as never,
@@ -144,12 +165,12 @@ describe('approval resume reads the session log alone', () => {
   });
 
   beforeEach(() => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(piTurnHarness);
+    // These suites drive the DURABLE layer (streaming, approvals, session-log
+    // facts, retry, persistence) with a scripted AI SDK model. They are not about
+    // which supply serves the turn, so they opt into the legacy executor: the
+    // production default refuses a turn its projection cannot carry, and a
+    // scripted model has no endpoint to project to.
+    setTurnHarnessFallback(piTurnHarness);
     vi.clearAllMocks();
     memory.injectMemoryIntoMessages.mockClear();
     memory.injectMemoryIntoMessages.mockImplementation((messages: unknown[]) => messages);
@@ -165,7 +186,14 @@ describe('approval resume reads the session log alone', () => {
     getDb().exec('DELETE FROM agent_runs');
     getDb().exec('DELETE FROM chat_messages');
 
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('resumed from events')]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'resumed from events' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     const chunks: string[] = [];
     const result = await approvalsB.approveTool(
       {
@@ -207,8 +235,19 @@ describe('approval resume reads the session log alone', () => {
     // the user would be approving — the resume refuses loudly instead of
     // silently degrading to another authority.
     const approvals = buildApprovals();
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('should not run')]));
-    const result = await approvals.approveTool({ id: 131, send: vi.fn() }, 'approval_unknown', true);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'should not run' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const result = await approvals.approveTool(
+      { id: 131, send: vi.fn() },
+      'approval_unknown',
+      true
+    );
     expect(result.success).toBe(false);
     expect(createModelMock).not.toHaveBeenCalled();
   });
@@ -221,7 +260,14 @@ describe('approval resume reads the session log alone', () => {
     getDb().exec(`CREATE TRIGGER resume_events_reject_started BEFORE INSERT ON session_events
       WHEN NEW.type = 'turn_started'
       BEGIN SELECT RAISE(ABORT, 'resume events: started write rejected'); END`);
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('written on retry')]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'written on retry' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     try {
       await expect(
         approvalsB.approveTool({ id: 142, send: vi.fn() }, approvalId, true)

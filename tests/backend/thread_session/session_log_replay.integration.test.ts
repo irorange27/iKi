@@ -7,7 +7,16 @@ import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const prepareChatTurnMock = vi.hoisted(() => vi.fn());
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
@@ -36,8 +45,6 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   retrieveRelevantContinuity: () => null,
   onMessagePersisted: async () => undefined,
   getCompanion: () => ({
-    setChatPolicy: vi.fn(),
-    setAffect: vi.fn(),
     beginThinking: vi.fn(),
     endThinking: vi.fn(),
     clearConversationPreview: vi.fn(),
@@ -51,7 +58,10 @@ import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { getChatMessages } from '@iki/backend/db/chat_message';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import {
   rebuildThreadViewFromEvents,
@@ -63,7 +73,7 @@ import {
   STEERING_INPUT_ACCEPTED,
   TURN_COMPLETED,
 } from '@iki/backend/thread_session/session_log';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { z } from 'zod';
 
@@ -144,18 +154,24 @@ describe('session log turn facts and pure replay', () => {
   });
 
   beforeEach(() => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(piTurnHarness);
+    // These suites drive the DURABLE layer (streaming, approvals, session-log
+    // facts, retry, persistence) with a scripted AI SDK model. They are not about
+    // which supply serves the turn, so they opt into the legacy executor: the
+    // production default refuses a turn its projection cannot carry, and a
+    // scripted model has no endpoint to project to.
+    setTurnHarnessFallback(piTurnHarness);
     vi.clearAllMocks();
     prepareChatTurnMock.mockResolvedValue(preparedTurn);
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall('replay_probe', {}, { id: 'call_log_1' }),
-        fauxText('probe done'),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName: 'replay_probe', args: {}, id: 'call_log_1' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'probe done' },
+          { kind: 'done', reason: 'stop' },
+        ],
       ])
     );
   });
@@ -180,12 +196,22 @@ describe('session log turn facts and pure replay', () => {
       getThreadTitle: () => 'Replay',
     });
 
-    const faux = new FauxModelProvider([
-      fauxToolCall('replay_probe', {}, { id: 'call_steer_1' }),
-      fauxText('interrupted'),
-      fauxText('steered response'),
-    ]);
-    createModelMock.mockReturnValue(faux);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName: 'replay_probe', args: {}, id: 'call_steer_1' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'interrupted' },
+          { kind: 'done', reason: 'stop' },
+        ],
+        [
+          { kind: 'text', text: 'steered response' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     const original = faux.doStream.bind(faux);
     let calls = 0;
     const spy = vi.spyOn(faux, 'doStream').mockImplementation(options => {
@@ -194,16 +220,21 @@ describe('session log turn facts and pure replay', () => {
       return original(options);
     });
 
-    const result = await stream.stream({ id: 83, send: vi.fn() }, {
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'test-model',
-      threadId: 'thread_steer',
-      approvalPolicy: 'never',
-      messages: [{ id: 'msg_steer_1', role: 'user', parts: [{ type: 'text', text: 'run the probe' }] }],
-      tools: ['replay_probe'],
-      autonomous: { maxIterations: 3 },
-    });
+    const result = await stream.stream(
+      { id: 83, send: vi.fn() },
+      {
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'test-model',
+        threadId: 'thread_steer',
+        approvalPolicy: 'never',
+        messages: [
+          { id: 'msg_steer_1', role: 'user', parts: [{ type: 'text', text: 'run the probe' }] },
+        ],
+        tools: ['replay_probe'],
+        autonomous: { maxIterations: 3 },
+      }
+    );
     const lastPrompt = JSON.stringify(spy.mock.calls.at(-1)?.[0]?.prompt ?? []);
     spy.mockRestore();
 
@@ -229,15 +260,20 @@ describe('session log turn facts and pure replay', () => {
 
   it('records the turn facts and rebuilds the view from events alone', async () => {
     const streaming = buildStreaming();
-    const result = await streaming.stream({ id: 81, send: vi.fn() }, {
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'test-model',
-      threadId: 'thread_log',
-      approvalPolicy: 'never',
-      messages: [{ id: 'msg_log_1', role: 'user', parts: [{ type: 'text', text: 'run the probe' }] }],
-      tools: ['replay_probe'],
-    });
+    const result = await streaming.stream(
+      { id: 81, send: vi.fn() },
+      {
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'test-model',
+        threadId: 'thread_log',
+        approvalPolicy: 'never',
+        messages: [
+          { id: 'msg_log_1', role: 'user', parts: [{ type: 'text', text: 'run the probe' }] },
+        ],
+        tools: ['replay_probe'],
+      }
+    );
     expect(result).toMatchObject({ success: true, text: 'probe done' });
 
     // The live serving row exists (legacy authority, unchanged).
@@ -266,12 +302,19 @@ describe('session log turn facts and pure replay', () => {
     ]);
 
     // The conversation view: the user input and the final assistant message.
-    expect(view.messages.map(message => message.id)).toEqual(['msg_log_1', expect.stringMatching(/^assistant_/)]);
+    expect(view.messages.map(message => message.id)).toEqual([
+      'msg_log_1',
+      expect.stringMatching(/^assistant_/),
+    ]);
     const [user, assistant] = view.messages;
     expect(user!.role).toBe('user');
     expect(assistant!.parts).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'dynamic-tool', toolCallId: 'call_log_1', state: 'output-available' }),
+        expect.objectContaining({
+          type: 'dynamic-tool',
+          toolCallId: 'call_log_1',
+          state: 'output-available',
+        }),
         expect.objectContaining({ type: 'text' }),
       ])
     );
@@ -279,8 +322,9 @@ describe('session log turn facts and pure replay', () => {
     // The turn record: identity, plan facts, terminal status.
     expect(view.turns).toHaveLength(1);
     expect(view.turns[0]).toMatchObject({ status: 'completed', kind: 'chat-turn' });
-    const startedPayload = view.events.find(event => event.type === TURN_STARTED)!
-      .payload as { plan: { model: string; enabledTools: string[] } };
+    const startedPayload = view.events.find(event => event.type === TURN_STARTED)!.payload as {
+      plan: { model: string; enabledTools: string[] };
+    };
     expect(startedPayload.plan).toMatchObject({
       model: 'test-model',
       enabledTools: ['replay_probe'],
@@ -292,15 +336,20 @@ describe('session log turn facts and pure replay', () => {
       throw new Error('provider exploded');
     });
     const streaming = buildStreaming();
-    const result = await streaming.stream({ id: 83, send: vi.fn() }, {
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'test-model',
-      threadId: 'thread_log',
-      approvalPolicy: 'never',
-      messages: [{ id: 'msg_log_fail', role: 'user', parts: [{ type: 'text', text: 'explode' }] }],
-      tools: ['replay_probe'],
-    });
+    const result = await streaming.stream(
+      { id: 83, send: vi.fn() },
+      {
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'test-model',
+        threadId: 'thread_log',
+        approvalPolicy: 'never',
+        messages: [
+          { id: 'msg_log_fail', role: 'user', parts: [{ type: 'text', text: 'explode' }] },
+        ],
+        tools: ['replay_probe'],
+      }
+    );
     expect(result).toMatchObject({ success: false });
 
     const view = rebuildThreadViewFromEvents('thread_log');
@@ -320,15 +369,18 @@ describe('session log turn facts and pure replay', () => {
 
   it('continues the same stream across a follow-up turn', async () => {
     const streaming = buildStreaming();
-    const result = await streaming.stream({ id: 82, send: vi.fn() }, {
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'test-model',
-      threadId: 'thread_log',
-      approvalPolicy: 'never',
-      messages: [{ id: 'msg_log_2', role: 'user', parts: [{ type: 'text', text: 'again' }] }],
-      tools: ['replay_probe'],
-    });
+    const result = await streaming.stream(
+      { id: 82, send: vi.fn() },
+      {
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'test-model',
+        threadId: 'thread_log',
+        approvalPolicy: 'never',
+        messages: [{ id: 'msg_log_2', role: 'user', parts: [{ type: 'text', text: 'again' }] }],
+        tools: ['replay_probe'],
+      }
+    );
     expect(result).toMatchObject({ success: true });
 
     const view = rebuildThreadViewFromEvents('thread_log');

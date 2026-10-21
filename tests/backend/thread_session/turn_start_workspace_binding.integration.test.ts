@@ -5,7 +5,16 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const prepareChatTurnMock = vi.hoisted(() => vi.fn());
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
@@ -34,8 +43,6 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   retrieveRelevantContinuity: () => null,
   onMessagePersisted: async () => undefined,
   getCompanion: () => ({
-    setChatPolicy: vi.fn(),
-    setAffect: vi.fn(),
     beginThinking: vi.fn(),
     endThinking: vi.fn(),
     clearConversationPreview: vi.fn(),
@@ -45,13 +52,17 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
 }));
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { getChatThread } from '@iki/backend/db/chat_thread';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
 
@@ -87,14 +98,15 @@ describe('stream binds the turn workspace at admission', () => {
   };
 
   beforeEach(async () => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(piTurnHarness);
+    // These suites drive the DURABLE layer (streaming, approvals, session-log
+    // facts, retry, persistence) with a scripted AI SDK model. They are not about
+    // which supply serves the turn, so they opt into the legacy executor: the
+    // production default refuses a turn its projection cannot carry, and a
+    // scripted model has no endpoint to project to.
+    setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-turn-start-workspace-'));
     initializeDatabase({ dbPath: path.join(root, 'binding.db') });
+    seedTurnProvider({ providerId: 'provider_primary', model: 'test-model' });
     const a = path.join(root, 'a');
     const b = path.join(root, 'b');
     await fs.mkdir(a);
@@ -113,10 +125,21 @@ describe('stream binds the turn workspace at admission', () => {
       metadata: '{"mode":"work"}',
     });
     defaultToolRegistry.register(new WriteFileTool().toAgentTool());
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall('write_file', { path: 'binding.txt', content: 'binding' }, { id: 'call_binding' }),
-        fauxText('done'),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: 'write_file',
+            args: { path: 'binding.txt', content: 'binding' },
+            id: 'call_binding',
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'done' },
+          { kind: 'done', reason: 'stop' },
+        ],
       ])
     );
     prepareChatTurnMock.mockResolvedValue(preparedTurn);
@@ -156,15 +179,18 @@ describe('stream binds the turn workspace at admission', () => {
       return preparedTurn;
     });
 
-    const turn = streaming.stream({ id: 71, send: vi.fn() }, {
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'test-model',
-      threadId: 'thread_binding',
-      approvalPolicy: 'never',
-      messages: [{ id: 'msg_binding', role: 'user', content: 'write the file' }],
-      tools: ['write_file'],
-    });
+    const turn = streaming.stream(
+      { id: 71, send: vi.fn() },
+      {
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'test-model',
+        threadId: 'thread_binding',
+        approvalPolicy: 'never',
+        messages: [{ id: 'msg_binding', role: 'user', content: 'write the file' }],
+        tools: ['write_file'],
+      }
+    );
     await vi.waitFor(() => expect(prepareChatTurnMock).toHaveBeenCalled());
 
     conversation.updateThread('thread_binding', { workspace_id: 'workspace_wt_binding' });

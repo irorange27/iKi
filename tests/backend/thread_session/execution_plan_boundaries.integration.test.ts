@@ -9,6 +9,23 @@ const external = vi.hoisted(() => ({
   model: vi.fn(),
   capability: vi.fn(),
 }));
+const callPiChatMock = vi.hoisted(() => vi.fn());
+
+// Pi is the only supply (ADR 009); script it here instead of the retired
+// `createModel`.
+vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
+  // `resolvePiTurnSupply` calls `getProviderConfig` INTERNALLY inside the
+  // factory module, so mocking that module cannot reach it. These suites have
+  // no provider table and do not test admission.
+  pausedPlanRunsOnPiToolSupply: () => true,
+}));
+
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
+
 vi.mock('@iki/backend/platform', () => ({ getUserDataPath: external.userData }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
@@ -17,10 +34,20 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   resolvePersonaPrompt: () => 'review system',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: external.capability,
+  // No database in this suite: answer the provider lookup directly so the Pi
+  // supply admits the turn (the address is never dialled — callPiChat is mocked).
+  getProviderConfig: () => ({
+    type: 'openai',
+    apiKey: 'key-test',
+    baseURL: 'http://127.0.0.1:9/v1',
+  }),
 }));
 
 import { closeDatabase, getDb, initializeDatabase } from '@iki/backend/db/database';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { updateChatThread } from '@iki/backend/db/chat_thread';
 import { tryAcquireCrossProcessThreadRun } from '@iki/backend/db/thread_run_locks';
@@ -77,10 +104,10 @@ describe('execution plan admission boundaries', () => {
   let releases: Array<() => void>;
 
   beforeEach(async () => {
-  // Durable-layer suite: a scripted model drives the turn, so the executor is
-  // forced rather than routed (the production default refuses a turn whose
-  // provider row does not exist, which is not what this suite is about).
-  setTurnHarnessFallback(piTurnHarness);
+    // Durable-layer suite: a scripted model drives the turn, so the executor is
+    // forced rather than routed (the production default refuses a turn whose
+    // provider row does not exist, which is not what this suite is about).
+    setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-plan-boundaries-'));
     external.userData.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'boundaries.db') });
@@ -208,7 +235,7 @@ describe('execution plan admission boundaries', () => {
       return capacity;
     });
 
-    const doStream = vi.spyOn(model, 'doStream');
+    const doStream = callPiChatMock;
     const turn = streaming.stream({ id: 601, send: vi.fn() }, options());
     await vi.waitFor(() => expect(capabilityEntered).toBe(true));
     conversation.updateThread('thread_bound', { workspace_id: 'workspace_wt_bound_b' });
@@ -227,7 +254,7 @@ describe('execution plan admission boundaries', () => {
     // workspace its tools do not run in.
     expect(doStream).toHaveBeenCalled();
     const request = doStream.mock.calls[0]?.[0] as { prompt?: unknown } | undefined;
-    const prompt = JSON.stringify(request?.prompt);
+    const prompt = JSON.stringify(request);
     expect(prompt).toContain('SCOPE_MARKER_A');
     expect(prompt).toContain(`Current workspace: A (${path.join(root, 'a')})`);
     expect(prompt).not.toContain('SCOPE_MARKER_B');
@@ -268,7 +295,6 @@ describe('execution plan admission boundaries', () => {
       expect(getDb().prepare('SELECT * FROM thread_run_locks').all()).toHaveLength(0);
     }
   );
-
 
   it('rebinds the original turn world when retrying from the run row (D30 follow-up)', async () => {
     // A retry/queued-resume is the same turn re-executing: it must rebind the
@@ -337,17 +363,20 @@ describe('execution plan admission boundaries', () => {
 
     // The retry runs through the real stream entry under the restored world:
     // the provider sees A and the file lands in A despite the switch to B.
-    const doStream = vi.spyOn(model, 'doStream');
-    const turn = streaming.stream({ id: 603, send: vi.fn() }, {
-      ...resumedOptions,
-      approvalPolicy: 'never',
-    });
+    const doStream = callPiChatMock;
+    const turn = streaming.stream(
+      { id: 603, send: vi.fn() },
+      {
+        ...resumedOptions,
+        approvalPolicy: 'never',
+      }
+    );
     expect(await turn).toMatchObject({ success: true });
 
     expect(await fs.readFile(path.join(root, 'a', 'effect.txt'), 'utf8')).toBe('bound');
     await expect(fs.stat(path.join(root, 'b', 'effect.txt'))).rejects.toThrow();
     const request = doStream.mock.calls[0]?.[0] as { prompt?: unknown } | undefined;
-    const prompt = JSON.stringify(request?.prompt);
+    const prompt = JSON.stringify(request);
     expect(prompt).toContain(`Current workspace: A (${path.join(root, 'a')})`);
     expect(prompt).not.toContain('Current workspace: B');
   });

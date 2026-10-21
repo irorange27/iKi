@@ -15,6 +15,14 @@ import path from 'node:path';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 
 const external = vi.hoisted(() => ({ userData: vi.fn(() => ''), model: vi.fn() }));
+vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
+  // `resolvePiTurnSupply` calls `getProviderConfig` INTERNALLY inside the
+  // factory module, so mocking that module cannot reach it. These suites have
+  // no provider table and do not test admission.
+  pausedPlanRunsOnPiToolSupply: () => true,
+}));
+
 vi.mock('@iki/backend/platform', () => ({ getUserDataPath: external.userData }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
@@ -33,9 +41,19 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     text: 'SEND_ANSWER',
     usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
   })),
+  // No database in this suite: answer the provider lookup directly so the Pi
+  // supply admits the turn (the address is never dialled — callPiChat is mocked).
+  getProviderConfig: () => ({
+    type: 'openai',
+    apiKey: 'key-test',
+    baseURL: 'http://127.0.0.1:9/v1',
+  }),
 }));
 import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/database';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import { listAgentRunsByThread } from '@iki/backend/db/agent_runs';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createMessageSend } from '@iki/backend/thread_session/message_send';

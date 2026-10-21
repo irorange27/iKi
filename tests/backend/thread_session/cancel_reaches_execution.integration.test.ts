@@ -24,7 +24,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/platform', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/platform')>()),
@@ -55,8 +64,11 @@ import { addProvider } from '@iki/backend/db/providers';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 
@@ -69,12 +81,12 @@ describe('cancelling a run reaches the execution that owns it', () => {
   const target = { id: 11, send: vi.fn() };
 
   beforeEach(async () => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(piTurnHarness);
+    // These suites drive the DURABLE layer (streaming, approvals, session-log
+    // facts, retry, persistence) with a scripted AI SDK model. They are not about
+    // which supply serves the turn, so they opt into the legacy executor: the
+    // production default refuses a turn its projection cannot carry, and a
+    // scripted model has no endpoint to project to.
+    setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-cancel-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'cancel.db') });
@@ -126,10 +138,21 @@ describe('cancelling a run reaches the execution that owns it', () => {
       })
     );
 
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall(TOOL_NAME, { path: '/probe.txt' }, { id: 'call_cancel_1' }),
-        fauxText('finished after the tool'),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: TOOL_NAME,
+            args: { path: '/probe.txt' },
+            id: 'call_cancel_1',
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'finished after the tool' },
+          { kind: 'done', reason: 'stop' },
+        ],
       ])
     );
 
@@ -172,9 +195,7 @@ describe('cancelling a run reaches the execution that owns it', () => {
     expect('error' in outcome ? String(outcome.error) : '').not.toContain('UNIQUE constraint');
     expect(agentRunDb.getAgentRun(run!.id)?.status).toBe('cancelled');
 
-    const stepIndexes = agentRunDb
-      .listAgentRunSteps(run!.id)
-      .map(step => step.stepIndex);
+    const stepIndexes = agentRunDb.listAgentRunSteps(run!.id).map(step => step.stepIndex);
     expect(new Set(stepIndexes).size).toBe(stepIndexes.length);
   });
 });

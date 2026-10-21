@@ -17,7 +17,16 @@ import { z } from 'zod';
 import type { AssistantMessage } from '@earendil-works/pi-ai';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/platform', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/platform')>()),
@@ -48,17 +57,18 @@ import { addProvider } from '@iki/backend/db/providers';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import {
-  getSessionEvents,
-} from '@iki/backend/db/session_events';
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
+import { getSessionEvents } from '@iki/backend/db/session_events';
 import {
   INPUT_ACCEPTED,
   SESSION_EVENT_VERSION,
   TOOL_EXECUTED,
   recordSessionEvents,
 } from '@iki/backend/thread_session/session_log';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { expectConsoleErrorMatching } from '../../setup/error_log_guard';
 import { PiToolTurnHarness } from '@iki/backend/agent/runners/pi_tool_turn_harness';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
@@ -75,12 +85,12 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
   const target = { id: 3, send: vi.fn() };
 
   beforeEach(async () => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(piTurnHarness);
+    // These suites drive the DURABLE layer (streaming, approvals, session-log
+    // facts, retry, persistence) with a scripted AI SDK model. They are not about
+    // which supply serves the turn, so they opt into the legacy executor: the
+    // production default refuses a turn its projection cannot carry, and a
+    // scripted model has no endpoint to project to.
+    setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-inline-facts-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'inline.db') });
@@ -132,11 +142,26 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
     // Step 1 executes the tool inline (policy 'never'); step 2's model call
     // fails (the scripted queue is exhausted) — the turn dies AFTER the
     // effect.
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxToolCall(TOOL_NAME, { path: '/inline.txt' }, { id: 'call_inline145' })]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: TOOL_NAME,
+            args: { path: '/inline.txt' },
+            id: 'call_inline145',
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+      ])
+    );
     // Step 2's model call exhausts the scripted queue — the expected
     // (designed) turn failure after the inline effect.
     expectConsoleErrorMatching(
-      args => args.some(arg => arg instanceof Error && arg.message.includes('no more responses in queue')),
+      args =>
+        args.some(
+          arg => arg instanceof Error && arg.message.includes('no more responses in queue')
+        ),
       'FauxModelProvider queue exhaustion ends the turn after the inline effect'
     );
     const failed = await service.stream(target, {
@@ -166,12 +191,18 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
     });
 
     // The retry continues from the journaled effect: the pair rides the wire.
-    const model = new FauxModelProvider([fauxText('continued from the inline effect')]);
-    const providerCalls = vi.spyOn(model, 'doStream');
-    createModelMock.mockReturnValue(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'continued from the inline effect' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const providerCalls = callPiChatMock;
     const retry = (await service.retryAndExecute(target, failedRunId!)) as { newRunId?: string };
     expect(retry).toMatchObject({ success: true, newRunId: expect.any(String) });
-    const wire = JSON.stringify(providerCalls.mock.calls[0][0]);
+    const wire = JSON.stringify(providerCalls.mock.calls[0][1]);
     expect(wire).toContain(TASK_TEXT);
     expect(wire).toContain('call_inline145');
     expect(wire).toContain(TOOL_OUTPUT);
@@ -189,10 +220,21 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
         },
       })
     );
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall('inline_failing_145', { path: '/x' }, { id: 'call_fail145' }),
-        fauxText('the error result rode back to the model'),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: 'inline_failing_145',
+            args: { path: '/x' },
+            id: 'call_fail145',
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'the error result rode back to the model' },
+          { kind: 'done', reason: 'stop' },
+        ],
       ])
     );
     await service.stream(target, {
@@ -201,7 +243,9 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
       model: 'resume-model',
       threadId: 'thread_inline145',
       approvalPolicy: 'never',
-      messages: [{ id: 'msg_fail145', role: 'user', parts: [{ type: 'text', text: 'fail the probe' }] }],
+      messages: [
+        { id: 'msg_fail145', role: 'user', parts: [{ type: 'text', text: 'fail the probe' }] },
+      ],
       tools: ['inline_failing_145'],
     });
     expect(getSessionEvents('thread_inline145', [TOOL_EXECUTED])).toHaveLength(0);
@@ -209,7 +253,14 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
 
   it('an unrepresentable inline fact refuses the recovery loudly', async () => {
     seedFailedRunWithMalformedInlineFact();
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('must not run')]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'must not run' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     const result = await service.retryAndExecute(target, 'run_malformed_145');
     expect(result).toMatchObject({ success: false });
     expect(result.error).toContain('cannot be represented from the log');
@@ -371,7 +422,12 @@ describe('the Pi tool harness journals inline executions at its executor', () =>
     piScript = [
       {
         content: [
-          { type: 'toolCall', id: 'call_pi_inline', name: TOOL_NAME, arguments: { path: '/pi.txt' } },
+          {
+            type: 'toolCall',
+            id: 'call_pi_inline',
+            name: TOOL_NAME,
+            arguments: { path: '/pi.txt' },
+          },
         ],
         stopReason: 'toolUse',
       },
@@ -408,7 +464,12 @@ describe('the Pi tool harness journals inline executions at its executor', () =>
     piScript = [
       {
         content: [
-          { type: 'toolCall', id: 'call_pi_fail', name: 'pi_failing_145', arguments: { path: '/x' } },
+          {
+            type: 'toolCall',
+            id: 'call_pi_fail',
+            name: 'pi_failing_145',
+            arguments: { path: '/x' },
+          },
         ],
         stopReason: 'toolUse',
       },

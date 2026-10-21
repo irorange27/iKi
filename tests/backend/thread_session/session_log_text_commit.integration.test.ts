@@ -7,7 +7,16 @@ import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const prepareChatTurnMock = vi.hoisted(() => vi.fn());
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
@@ -36,8 +45,6 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   retrieveRelevantContinuity: () => null,
   onMessagePersisted: async () => undefined,
   getCompanion: () => ({
-    setChatPolicy: vi.fn(),
-    setAffect: vi.fn(),
     beginThinking: vi.fn(),
     endThinking: vi.fn(),
     clearConversationPreview: vi.fn(),
@@ -47,16 +54,20 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
 }));
 
 import { closeDatabase, getDb, initializeDatabase } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import {
   rebuildThreadViewFromEvents,
   MODEL_TEXT_COMMITTED,
   MODEL_OUTPUT_COMMITTED,
 } from '@iki/backend/thread_session/session_log';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
-import { piTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { z } from 'zod';
 
@@ -108,6 +119,7 @@ describe('streamed text commit gate', () => {
   beforeAll(async () => {
     dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-text-commit-'));
     initializeDatabase({ dbPath: path.join(dataDir, 'commit.db') });
+    seedTurnProvider({ providerId: 'provider_primary', model: 'test-model' });
     conversation = createChatPersistence({
       memory: memory as never,
       // platform is module-mocked above; the real continuity hook is not
@@ -135,12 +147,12 @@ describe('streamed text commit gate', () => {
   });
 
   beforeEach(() => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(piTurnHarness);
+    // These suites drive the DURABLE layer (streaming, approvals, session-log
+    // facts, retry, persistence) with a scripted AI SDK model. They are not about
+    // which supply serves the turn, so they opt into the legacy executor: the
+    // production default refuses a turn its projection cannot carry, and a
+    // scripted model has no endpoint to project to.
+    setTurnHarnessFallback(piTurnHarness);
     // reset (not clear): leftover mockReturnValueOnce queues from a previous
     // test would leak providers and preparer fixtures across tests.
     vi.resetAllMocks();
@@ -151,10 +163,20 @@ describe('streamed text commit gate', () => {
     // One model drives the whole conversation: the SDK's inner loop pops one
     // response per step — tool call (with lead-in text), then the follow-up
     // text. A tool boundary lands between the two committed segments.
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall('text_commit_probe', {}, { id: 'call_commit', textBefore: 'first segment. ' }),
-        fauxText('second segment.'),
+    // Two model calls: the tool request (with its lead-in text), then the
+    // follow-up text after the result. The tool boundary separates the two
+    // committed segments the test is about.
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'first segment. ' },
+          { kind: 'toolCall', toolName: 'text_commit_probe', args: {}, id: 'call_commit' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'second segment.' },
+          { kind: 'done', reason: 'stop' },
+        ],
       ])
     );
     const target = { id: 101, send: vi.fn() };
@@ -210,7 +232,11 @@ describe('streamed text commit gate', () => {
        BEGIN SELECT RAISE(ABORT, 'write rejected'); END;`
     );
     try {
-      createModelMock.mockReturnValue(new FauxModelProvider([fauxText('UNCOMMITTED_REVIEW_TEXT')]));
+      callPiChatMock.mockImplementation(
+        createScriptedPiChat([
+          [{ kind: 'text', text: 'UNCOMMITTED_REVIEW_TEXT' }, { kind: 'done' }],
+        ])
+      );
       const target = { id: 103, send: vi.fn() };
       const streaming = createChatStreaming({
         streamCoordinator: createThreadStreamCoordinator(),
@@ -265,9 +291,13 @@ describe('streamed text commit gate', () => {
       ...preparedTurn,
       guardedTools: ['text_commit_kill'],
     });
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall('text_commit_kill', {}, { id: 'call_kill', textBefore: 'shown before the kill. ' }),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'shown before the kill. ' },
+          { kind: 'toolCall', toolName: 'text_commit_kill', args: {}, id: 'call_kill' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
       ])
     );
     killStreaming = createChatStreaming({
@@ -303,7 +333,9 @@ describe('streamed text commit gate', () => {
     expect(committedTextConcat('thread_commit_kill')).toBe('shown before the kill. ');
     const committedRow = view.events
       .filter(event => event.type === MODEL_OUTPUT_COMMITTED)
-      .map(event => JSON.stringify((event.payload as { message: { parts: unknown[] } }).message.parts))
+      .map(event =>
+        JSON.stringify((event.payload as { message: { parts: unknown[] } }).message.parts)
+      )
       .join('');
     expect(committedRow).not.toContain('never shown');
     const killedMessage = view.messages.find(message =>

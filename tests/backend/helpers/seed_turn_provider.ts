@@ -18,13 +18,20 @@ export const seedTurnProvider = (options: {
   model: string;
   baseUrl?: string;
 }): void => {
-  addProvider({
-    id: options.providerId,
-    name: options.providerId,
-    type: options.providerType ?? 'openai',
-    api_key: `key-${options.providerId}`,
-    models: JSON.stringify([options.model]),
-    base_url: options.baseUrl ?? 'http://127.0.0.1:9/v1',
-    enabled: true,
-  } as never);
+  // Idempotent per DATABASE, not per process: a suite that rebuilds its
+  // database in `beforeEach` must be able to seed again, while a suite that
+  // seeds twice in one database must not trip the primary key.
+  try {
+    addProvider({
+      id: options.providerId,
+      name: options.providerId,
+      type: options.providerType ?? 'openai',
+      api_key: `key-${options.providerId}`,
+      models: JSON.stringify([options.model]),
+      base_url: options.baseUrl ?? 'http://127.0.0.1:9/v1',
+      enabled: true,
+    } as never);
+  } catch (error) {
+    if (!String(error).includes('UNIQUE constraint failed')) throw error;
+  }
 };

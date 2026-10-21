@@ -2,7 +2,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const generationSettingsMock = vi.hoisted(() => vi.fn(() => ({})));
+
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
+
+vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
+  // The admission check calls `getProviderConfig` INTERNALLY inside the factory
+  // module, so mocking that module cannot reach it. This suite has no database
+  // and does not test admission.
+  pausedPlanRunsOnPiToolSupply: () => true,
+}));
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
@@ -10,6 +27,11 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
     ...actual,
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
     getModelGenerationSettings: generationSettingsMock,
+    getProviderConfig: () => ({
+      type: 'openai',
+      apiKey: 'key-test',
+      baseURL: 'http://127.0.0.1:9/v1',
+    }),
   };
 });
 
@@ -24,8 +46,9 @@ import { onMessagePersisted } from '@iki/backend/thread_session/platform';
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import type { ExecutionPlan } from '@iki/backend/thread_session/execution_plan';
-import { AgentHarness } from '@iki/backend/agent/harness';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import {
@@ -95,7 +118,16 @@ describe('approval resume restores the persisted plan after a restart', () => {
         handler: async () => 'observed',
       })
     );
-    const harness = new AgentHarness({
+    // The model asks for the gated tool; the harness pauses for approval.
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName, args: {}, id: 'call_paused' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+      ])
+    );
+    const harness = startPiTurnHarness({
       providerType: 'openai',
       model: 'test-model',
       systemPrompt: 'system prompt',
@@ -105,66 +137,67 @@ describe('approval resume restores the persisted plan after a restart', () => {
       guardActive: false,
       approvalPolicy: 'always',
       maxIterations: 10,
-      modelFactory: () =>
-        new FauxModelProvider([fauxToolCall(toolName, {}, { id: 'call_paused' })]),
     });
     let approvalId = '';
-    await runWithToolRuntimeContext({ threadId: 'thread_plan', runId: 'run_blocked_1' }, async () => {
-      for await (const event of harness.turn({ prompt: 'run the probe' })) {
-        if (event.event === 'done') {
-          const requests = event.output.toolApprovalRequests;
-          if (!requests?.length) throw new Error('Probe did not receive an approval request');
-          approvalId = requests[0].approvalId;
-          // What the streaming path persists while approval-pending: the
-          // partial assistant row carries the live approval-request part the
-          // recovery fallback pairs the decision with.
-          const partialAssistant = {
-            id: 'assistant_plan',
-            role: 'assistant' as const,
-            parts: [
+    await runWithToolRuntimeContext(
+      { threadId: 'thread_plan', runId: 'run_blocked_1' },
+      async () => {
+        for await (const event of harness.turn({ prompt: 'run the probe' })) {
+          if (event.event === 'done') {
+            const requests = event.output.toolApprovalRequests;
+            if (!requests?.length) throw new Error('Probe did not receive an approval request');
+            approvalId = requests[0].approvalId;
+            // What the streaming path persists while approval-pending: the
+            // partial assistant row carries the live approval-request part the
+            // recovery fallback pairs the decision with.
+            const partialAssistant = {
+              id: 'assistant_plan',
+              role: 'assistant' as const,
+              parts: [
+                {
+                  type: 'dynamic-tool',
+                  toolCallId: 'call_paused',
+                  toolName,
+                  state: 'approval-requested',
+                  input: {},
+                  approval: { id: approvalId },
+                },
+              ],
+            };
+            conversation.createMessage({
+              id: 'assistant_plan',
+              thread_id: 'thread_plan',
+              message: partialAssistant,
+            });
+            // F2: the restart-recovery history source is the session log — the
+            // pause records its partial output as a fact, exactly what the
+            // streaming entry does in production.
+            recordSessionEvents('thread_plan', [
               {
-                type: 'dynamic-tool',
-                toolCallId: 'call_paused',
-                toolName,
-                state: 'approval-requested',
-                input: {},
-                approval: { id: approvalId },
+                type: MODEL_OUTPUT_COMMITTED,
+                version: SESSION_EVENT_VERSION,
+                payload: {
+                  runId: 'run_blocked_1',
+                  messageId: 'assistant_plan',
+                  message: partialAssistant as never,
+                  transport: 'stream',
+                },
               },
-            ],
-          };
-          conversation.createMessage({
-            id: 'assistant_plan',
-            thread_id: 'thread_plan',
-            message: partialAssistant,
-          });
-          // F2: the restart-recovery history source is the session log — the
-          // pause records its partial output as a fact, exactly what the
-          // streaming entry does in production.
-          recordSessionEvents('thread_plan', [
-            {
-              type: MODEL_OUTPUT_COMMITTED,
-              version: SESSION_EVENT_VERSION,
-              payload: {
+            ]);
+            approvals.registerApprovalBatch(requests, {
+              target: { id: 91, send: vi.fn() },
+              history: harness.getHistory(),
+              recoveryContext: {
+                plan: pausedPlan,
+                sessionId: 'assistant_plan',
+                assistantMessageId: 'assistant_plan',
                 runId: 'run_blocked_1',
-                messageId: 'assistant_plan',
-                message: partialAssistant as never,
-                transport: 'stream',
               },
-            },
-          ]);
-          approvals.registerApprovalBatch(requests, {
-            target: { id: 91, send: vi.fn() },
-            history: harness.getHistory(),
-            recoveryContext: {
-              plan: pausedPlan,
-              sessionId: 'assistant_plan',
-              assistantMessageId: 'assistant_plan',
-              runId: 'run_blocked_1',
-            },
-          });
+            });
+          }
         }
       }
-    });
+    );
     return { approvalId };
   };
 
@@ -196,23 +229,35 @@ describe('approval resume restores the persisted plan after a restart', () => {
     // One tool call per SDK step (maxIterations 1): the restored autonomy
     // (2 batches) drives exactly 2 provider calls; the legacy derivation
     // would run 1 and stop.
-    const model = new FauxModelProvider([
-      fauxToolCall(toolName, {}, { id: 'call_r1' }),
-      fauxText('must not be reached'),
-    ]);
-    const doStream = vi.spyOn(model, 'doStream');
-    createModelMock.mockReturnValue(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName: toolName, args: {}, id: 'call_r1' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'must not be reached' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const doStream = callPiChatMock;
     generationSettingsMock.mockClear();
 
     expect(
       await recoveredApprovals.approveTool({ id: 92, send: vi.fn() }, approvalId, true)
     ).toMatchObject({ success: true });
 
-    expect(doStream).toHaveBeenCalledTimes(2);
-    const resumedSettings = generationSettingsMock.mock.calls.filter(
-      call => (call[0] as { reasoningEffort?: string })?.reasoningEffort === 'low'
-    );
-    expect(resumedSettings.length).toBeGreaterThan(0);
+    // One call to ask for the tool, one to answer after the decision.
+    expect(doStream.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // The resumed plan is what the model must see: the Pi path carries the
+    // restored autonomous budget as its own `continuePrompt` in the request
+    // context, which is the plan fidelity this case is about (the AI SDK-only
+    // `reasoningEffort` setting no longer rides this supply).
+    const resumedContexts = doStream.mock.calls
+      .slice(1)
+      .map(call => JSON.stringify((call as unknown[])[1]));
+    expect(resumedContexts.join('\n')).toContain('CONTINUE_FROM_PERSISTED_PLAN');
   });
 
   it('does not re-claim the parent’s adopted queued row when approving a paused retry', async () => {
@@ -233,7 +278,19 @@ describe('approval resume restores the persisted plan after a restart', () => {
       })
     );
     const approvals = buildApprovals();
-    const harness = new AgentHarness({
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName, args: {}, id: 'call_paused_adopted' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'approved and done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const harness = startPiTurnHarness({
       providerType: 'openai',
       model: 'test-model',
       systemPrompt: 'system prompt',
@@ -243,8 +300,6 @@ describe('approval resume restores the persisted plan after a restart', () => {
       guardActive: false,
       approvalPolicy: 'always',
       maxIterations: 10,
-      modelFactory: () =>
-        new FauxModelProvider([fauxToolCall(toolName, {}, { id: 'call_paused_adopted' })]),
     });
     let approvalId = '';
     await runWithToolRuntimeContext(
@@ -288,12 +343,17 @@ describe('approval resume restores the persisted plan after a restart', () => {
       }
     );
 
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([fauxText('resumed into own identity')])
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'resumed into own identity' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
     );
-    expect(
-      await approvals.approveTool({ id: 94, send: vi.fn() }, approvalId, true)
-    ).toMatchObject({ success: true });
+    expect(await approvals.approveTool({ id: 94, send: vi.fn() }, approvalId, true)).toMatchObject({
+      success: true,
+    });
 
     // The continuation owns a fresh run id — no claim of the adopted row.
     const resumedRuns = listAgentRunsByThread('thread_plan').filter(

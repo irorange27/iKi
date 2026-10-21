@@ -1,11 +1,37 @@
-import { expectConsoleErrorMatching } from '../../../setup/error_log_guard';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 const summarize = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
+
+// Pi is the only supply (ADR 009); script it here instead of the retired
+// `createModel`.
+vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
+  resolvePersonaPrompt: () => 'test persona',
+  getProviderConfig: () => ({
+    type: 'openai',
+    apiKey: 'key-test',
+    baseURL: 'http://127.0.0.1:9/v1',
+  }),
+}));
+
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
+
 vi.mock('@iki/backend/runtimes/thread_summary', () => ({ generateThreadSummary: summarize }));
-vi.mock('@iki/backend/logger', () => ({ createLogger: () => ({ event: vi.fn(), warn: vi.fn(), debug: vi.fn(), info: vi.fn(), error: vi.fn() }) }));
-import { startTurnHarness } from '@iki/backend/agent/harness';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+vi.mock('@iki/backend/logger', () => ({
+  createLogger: () => ({
+    event: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { createTool } from '@iki/backend/tools';
 
 const oldText = 'historical observation '.repeat(500);
@@ -14,48 +40,89 @@ const initialHistory = [
   { role: 'user' as const, content: 'Earlier task' },
   { role: 'assistant' as const, content: oldText },
 ];
-const harnessFor = (model: FauxModelProvider) => startTurnHarness({
-  providerType: 'faux', model: 'test', modelFactory: () => model,
-  systemPrompt: 'You are a coding agent.', enableTools: true,
-  enabledToolNames: [], availableSkillIds: [], guardActive: false,
-  maxIterations: 4, maxInputTokens: 300,
-});
+// The supply is scripted through `callPiChat` (ADR 009); `harnessFor` only
+// assembles the harness.
+const harnessFor = () =>
+  startPiTurnHarness({
+    providerType: 'faux',
+    model: 'test',
+    systemPrompt: 'You are a coding agent.',
+    enableTools: true,
+    enabledToolNames: [],
+    availableSkillIds: [],
+    guardActive: false,
+    maxIterations: 4,
+    maxInputTokens: 300,
+  });
 
 describe('model-step context budget', () => {
   it('summarizes before inference, keeps instructions and raw history, and reuses the projection across SDK steps', async () => {
     summarize.mockReset().mockResolvedValue({ summary: 'Earlier decision: preserve the API.' });
-    const model = new FauxModelProvider([fauxToolCall('probe', {}), fauxText('done')]);
-    const call = vi.spyOn(model, 'doStream');
-    const harness = harnessFor(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName: 'probe', args: {} },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const call = callPiChatMock;
+    const harness = harnessFor();
     for await (const _event of harness.turn({
-      prompt: 'Current task', history: initialHistory,
-      toolsOverride: [createTool({ name: 'probe', type: 'function', description: 'Probe', paramSchema: z.object({}), handler: async () => 'result' })],
-    })) { /* drain */ }
+      prompt: 'Current task',
+      history: initialHistory,
+      toolsOverride: [
+        createTool({
+          name: 'probe',
+          type: 'function',
+          description: 'Probe',
+          paramSchema: z.object({}),
+          handler: async () => 'result',
+        }),
+      ],
+    })) {
+      /* drain */
+    }
     expect(summarize).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(summarize.mock.calls[0][0])).toContain(oldText);
     // Custom-model runs (FauxModelProvider) bypass factory-created models, so the
     // summarizer gets no cache-prefix replay context and uses its standalone call.
     expect((summarize.mock.calls[0][0] as Record<string, unknown>).cachePrefix).toBeUndefined();
     expect(call).toHaveBeenCalledTimes(2);
-    for (const [options] of call.mock.calls) {
-      expect(JSON.stringify(options.prompt)).toContain('Keep all workspace instructions.');
-      expect(JSON.stringify(options.prompt)).toContain('preserve the API');
-      expect(JSON.stringify(options.prompt)).toContain('Current task');
-      expect(JSON.stringify(options.prompt)).not.toContain(oldText);
+    // `callPiChat(model, context, options)` — the request context is the second arg.
+    for (const [, request] of call.mock.calls) {
+      // Pi receives `{ systemPrompt, messages, tools }`, not the SDK's `prompt`.
+      const rendered = JSON.stringify(request);
+      expect(rendered).toContain('Keep all workspace instructions.');
+      expect(rendered).toContain('preserve the API');
+      expect(rendered).toContain('Current task');
+      expect(rendered).not.toContain(oldText);
     }
     expect(JSON.stringify(harness.getHistory())).toContain(oldText);
   });
 
   it('does not invoke the model or lose history if summarization fails', async () => {
     summarize.mockReset().mockResolvedValue(null);
-    const model = new FauxModelProvider([fauxText('must not run')]);
-    const harness = harnessFor(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([[{ kind: 'text', text: 'must not run' }, { kind: 'done' }]])
+    );
+    const harness = harnessFor();
     const consume = async () => {
-      for await (const _event of harness.turn({ prompt: 'Current task', history: initialHistory, toolsOverride: [] })) { /* drain */ }
+      for await (const _event of harness.turn({
+        prompt: 'Current task',
+        history: initialHistory,
+        toolsOverride: [],
+      })) {
+        /* drain */
+      }
     };
-    expectConsoleErrorMatching(args => args.some(arg => arg instanceof Error && arg.message.includes('Context compaction failed')), 'context compaction failure');
     await expect(consume()).rejects.toThrow('Context compaction failed');
-    expect(model.remaining).toBe(1);
+    // No model call was made: compaction failed before inference.
+    expect(callPiChatMock).not.toHaveBeenCalled();
     expect(JSON.stringify(harness.getHistory())).toContain(oldText);
   });
 });

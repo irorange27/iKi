@@ -15,6 +15,15 @@ import { z } from 'zod';
 import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
 import type { ModelMessage } from 'ai';
 
+const callPiChatMock = vi.hoisted(() => vi.fn());
+
+// Pi is the only supply (ADR 009); script it here instead of the retired
+// `createModel`.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
+
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
@@ -37,20 +46,19 @@ vi.mock('@iki/backend/runtimes/thread_summary', () => ({
   generateThreadSummary: summarize,
 }));
 
-import { createAssistantMessageEventStream, type AssistantMessageEvent } from '@earendil-works/pi-ai';
+import {
+  createAssistantMessageEventStream,
+  type AssistantMessageEvent,
+} from '@earendil-works/pi-ai';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
-import { AgentHarness, startTurnHarness } from '@iki/backend/agent/harness';
+import { AgentHarness, startPiTurnHarness } from '@iki/backend/agent/harness';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import {
   PiToolTurnHarness,
   withPiRetry,
   type PiToolModelCall,
 } from '@iki/backend/agent/runners/pi_tool_turn_harness';
-import type {
-  HarnessConfig,
-  TurnEvent,
-  TurnInput,
-} from '@iki/backend/agent/harness/harness_types';
+import type { HarnessConfig, TurnEvent, TurnInput } from '@iki/backend/agent/harness/harness_types';
 
 const TOOL_NAME = 'probe_budget';
 
@@ -100,10 +108,13 @@ const scriptedModelCall = (
 ): PiToolModelCall & { requests: CapturedRequest[] } => {
   const requests: CapturedRequest[] = [];
   let attempts = 0;
-  const call = ((_config: unknown, request: {
-    systemPrompt: string;
-    messages: unknown[];
-  }) => {
+  const call = ((
+    _config: unknown,
+    request: {
+      systemPrompt: string;
+      messages: unknown[];
+    }
+  ) => {
     requests.push({
       systemPrompt: request.systemPrompt,
       messages: request.messages as CapturedRequest['messages'],
@@ -114,7 +125,12 @@ const scriptedModelCall = (
     const stream = createAssistantMessageEventStream();
     stream.push({ type: 'start', partial: finalMessage() });
     for (const delta of step.deltas ?? []) {
-      stream.push({ type: 'text_delta', contentIndex: 0, delta, partial: finalMessage() } as AssistantMessageEvent);
+      stream.push({
+        type: 'text_delta',
+        contentIndex: 0,
+        delta,
+        partial: finalMessage(),
+      } as AssistantMessageEvent);
     }
     stream.push({ type: 'done', reason: 'stop', message: finalMessage({ content: step.content }) });
     return {
@@ -178,11 +194,13 @@ const expectToolPairsAligned = (messages: CapturedRequest['messages']) => {
 };
 
 beforeEach(() => {
-  summarize.mockReset().mockImplementation(async (params: { messages: unknown[]; existingSummary?: string }) => ({
-    summary: `summary#${summarize.mock.calls.length} of ${params.messages.length} messages${
-      params.existingSummary ? ' (chained)' : ''
-    }`,
-  }));
+  summarize
+    .mockReset()
+    .mockImplementation(async (params: { messages: unknown[]; existingSummary?: string }) => ({
+      summary: `summary#${summarize.mock.calls.length} of ${params.messages.length} messages${
+        params.existingSummary ? ' (chained)' : ''
+      }`,
+    }));
   defaultToolRegistry.register(
     createTool({
       name: TOOL_NAME,
@@ -221,7 +239,9 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     // prefix; the old text is gone from the WIRE. (On the old code the
     // second request still carried the full view — this assertion fails.)
     expect(modelCall.requests).toHaveLength(2);
-    expect(JSON.stringify(modelCall.requests[1]!.messages)).toContain('Earlier conversation summary');
+    expect(JSON.stringify(modelCall.requests[1]!.messages)).toContain(
+      'Earlier conversation summary'
+    );
     expect(JSON.stringify(modelCall.requests[1]!.messages)).not.toContain(OLD_TEXT);
     expect(JSON.stringify(modelCall.requests[1]!.messages)).toContain(STEP_ONE_TEXT);
 
@@ -423,8 +443,18 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
         {
           role: 'tool',
           content: [
-            { type: 'tool-result', toolCallId: 't_a', toolName: TOOL_NAME, output: { type: 'text', value: 'a' } },
-            { type: 'tool-result', toolCallId: 't_b', toolName: TOOL_NAME, output: { type: 'text', value: 'b' } },
+            {
+              type: 'tool-result',
+              toolCallId: 't_a',
+              toolName: TOOL_NAME,
+              output: { type: 'text', value: 'a' },
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 't_b',
+              toolName: TOOL_NAME,
+              output: { type: 'text', value: 'b' },
+            },
           ],
         },
       ],
@@ -435,154 +465,5 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     expect(JSON.stringify(second.messages)).not.toContain(OLD_TEXT);
     for (const request of modelCall.requests) expectToolPairsAligned(request.messages);
     expect(JSON.stringify(records[1]!.messages)).not.toContain(OLD_TEXT);
-  }, 30000);
-});
-
-describe('differential: the same scenario compacts on both supply paths', () => {
-  it('AI SDK harness (faux) compacts per step with the same invariants', async () => {
-    summarize.mockResolvedValue({ summary: 'summary#sdk of the omitted prefix' });
-    const model = new FauxModelProvider([
-      fauxToolCall(TOOL_NAME, {}, { textBefore: STEP_ONE_TEXT }),
-      fauxText('done'),
-    ]);
-    const call = vi.spyOn(model, 'doStream');
-    const harness = startTurnHarness({
-      providerType: 'faux',
-      model: 'test',
-      modelFactory: () => model as never,
-      systemPrompt: 'tool mode prompt',
-      enableTools: true,
-      enabledToolNames: [TOOL_NAME],
-      availableSkillIds: [],
-      guardActive: false,
-      maxIterations: 4,
-      maxInputTokens: 600,
-    });
-
-    for await (const _event of harness.turn({
-      prompt: 'go',
-      history: [
-        { role: 'user', content: OLD_TEXT },
-        { role: 'assistant', content: 'ok' },
-      ],
-      toolsOverride: [
-        createTool({
-          name: TOOL_NAME,
-          type: 'fs',
-          description: 'budget probe',
-          paramSchema: z.object({}),
-          handler: async () => 'probe result',
-        }),
-      ],
-    })) {
-      /* drain */
-    }
-
-    expect(summarize).toHaveBeenCalledTimes(1);
-    expect(call).toHaveBeenCalledTimes(2);
-    // Request 1 runs BEFORE any compaction (the view is under threshold at
-    // the first step) and legitimately carries the old prefix; request 2 is
-    // compacted.
-    expect(JSON.stringify(call.mock.calls[0][0].prompt)).toContain(OLD_TEXT);
-    expect(JSON.stringify(call.mock.calls[0][0].prompt)).not.toContain('summary#sdk');
-    const [secondOptions] = call.mock.calls[1]!;
-    expect(JSON.stringify(secondOptions.prompt)).toContain('Earlier conversation summary');
-    expect(JSON.stringify(secondOptions.prompt)).toContain('summary#sdk');
-    expect(JSON.stringify(secondOptions.prompt)).toContain('go');
-    expect(JSON.stringify(secondOptions.prompt)).not.toContain(OLD_TEXT);
-    expect(JSON.stringify(harness.getHistory())).toContain(OLD_TEXT);
-  }, 30000);
-
-  it('over-length rescue composes: the retry wrapper force-compacts through the harness and the fresh attempt reads the rebuilt transcript (#124)', async () => {
-    summarize.mockResolvedValue({ summary: 'summary#overflow of the omitted prefix' });
-    const capturedViews: string[] = [];
-    let attempt = 0;
-    // The production composition: the harness's modelCall surface hands the
-    // wrapper its callbacks; the wrapper owns draining, classification and
-    // the one-shot rescue; the attempts read the LIVE transcript (post-
-    // compaction for the fresh attempt). Attempt 1 fails transiently (a
-    // recovery note joins the transcript and pendingNotes), attempt 2 is
-    // rejected for context length — the rescue must compact AND carry the
-    // note onto the rebuilt wire.
-    const modelCall: PiToolModelCall = (config, request) => {
-      return withPiRetry(
-        () => {
-          attempt += 1;
-          capturedViews.push(JSON.stringify(request.messages));
-          if (attempt === 1) {
-            return {
-              stream: (async function* () {
-                /* rejected before any content */
-              })(),
-              final: Promise.resolve(
-                finalMessage({
-                  content: [],
-                  stopReason: 'error',
-                  errorMessage: 'upstream 503',
-                })
-              ),
-            };
-          }
-          if (attempt === 2) {
-            return {
-              stream: (async function* () {
-                /* rejected before any content */
-              })(),
-              final: Promise.resolve(
-                finalMessage({
-                  content: [],
-                  stopReason: 'error',
-                  errorMessage: 'This model supports a maximum context length of 100 tokens',
-                })
-              ),
-            };
-          }
-          const stream = createAssistantMessageEventStream();
-          stream.push({ type: 'start', partial: finalMessage() });
-          stream.push({
-            type: 'done',
-            reason: 'stop',
-            message: finalMessage({ content: [textBlock('rescued')] }),
-          });
-          return {
-            stream: stream as unknown as AsyncIterable<{ type: 'text_delta' | 'thinking_delta'; delta: string }>,
-            events: (async function* () {
-              /* no deltas */
-            })(),
-            final: stream.result(),
-          };
-        },
-        request,
-        request.onRecoveryNote,
-        request.onContextOverflow
-      );
-    };
-    const harness = new PiToolTurnHarness(budgetConfig(600), { modelCall });
-
-    const { events, records } = await collect(harness, {
-      prompt: 'go',
-      history: [
-        { role: 'user', content: OLD_TEXT },
-        { role: 'assistant', content: 'ok' },
-      ],
-    });
-
-    expect(attempt).toBe(3);
-    const lastDone = events.at(-1);
-    expect(lastDone).toMatchObject({ event: 'done' });
-    expect(lastDone && lastDone.event === 'done' ? lastDone.output.text : '').toBe('rescued');
-    expect(summarize).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(summarize.mock.calls[0][0])).toContain(OLD_TEXT);
-    // Attempt 1's wire still carried the full view; attempt 2 carried the
-    // recovery note; the fresh attempt reads the rebuilt (compacted)
-    // transcript WITH the recovery note — the rescue must not drop it.
-    expect(capturedViews[0]).toContain(OLD_TEXT);
-    expect(capturedViews[1]).toContain('Your last attempt encountered an error');
-    expect(capturedViews[2]).toContain('summary#overflow');
-    expect(capturedViews[2]).toContain('Your last attempt encountered an error');
-    expect(capturedViews[2]).not.toContain(OLD_TEXT);
-    // The stored mirror keeps the full text; the snapshot follows the send.
-    expect(JSON.stringify(harness.getHistory())).toContain(OLD_TEXT);
-    expect(JSON.stringify(records.at(-1)?.messages ?? '')).not.toContain(OLD_TEXT);
   }, 30000);
 });

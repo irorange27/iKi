@@ -18,7 +18,12 @@ export type PiScriptStep =
   /** Stream a tool call the harness is expected to execute. */
   | { kind: 'toolCall'; toolName: string; args: Record<string, unknown>; id?: string }
   /** End the turn. `reason` defaults to `stop`. */
-  | { kind: 'done'; reason?: 'stop' | 'length' | 'toolUse' };
+  | {
+      kind: 'done';
+      reason?: 'stop' | 'length' | 'toolUse';
+      /** Token accounting this call reports (drives cache-usage assertions). */
+      usage?: Partial<Usage>;
+    };
 
 export type PiScript = PiScriptStep[];
 
@@ -35,7 +40,8 @@ const EMPTY_USAGE: Usage = {
 
 const createMessage = (
   content: AssistantMessage['content'],
-  stopReason: AssistantMessage['stopReason'] = 'stop'
+  stopReason: AssistantMessage['stopReason'] = 'stop',
+  usage?: Partial<Usage>
 ): AssistantMessage =>
   ({
     role: 'assistant',
@@ -43,11 +49,10 @@ const createMessage = (
     api: 'openai-completions',
     provider: 'openai',
     model: 'scripted',
-    usage: EMPTY_USAGE,
+    usage: { ...EMPTY_USAGE, ...(usage ?? {}) },
     stopReason,
   }) as AssistantMessage;
 
-let callCounter = 0;
 
 /** Build the events for one scripted assistant turn. */
 export const piEventsForScript = (script: PiScript): AssistantMessageEvent[] => {
@@ -59,7 +64,11 @@ export const piEventsForScript = (script: PiScript): AssistantMessageEvent[] => 
 
   for (const step of script) {
     if (step.kind === 'text') {
-      events.push({ type: 'text_start', contentIndex: index, partial: createMessage([...content]) } as AssistantMessageEvent);
+      events.push({
+        type: 'text_start',
+        contentIndex: index,
+        partial: createMessage([...content]),
+      } as AssistantMessageEvent);
       content.push({ type: 'text', text: step.text });
       events.push({
         type: 'text_delta',
@@ -77,14 +86,18 @@ export const piEventsForScript = (script: PiScript): AssistantMessageEvent[] => 
       continue;
     }
     if (step.kind === 'toolCall') {
-      const id = step.id ?? `call_scripted_${(callCounter += 1)}`;
+      const id = step.id ?? `call_scripted_${index}`;
       const toolCall = {
         type: 'toolCall' as const,
         id,
         name: step.toolName,
         arguments: step.args,
       };
-      events.push({ type: 'toolcall_start', contentIndex: index, partial: createMessage([...content]) } as AssistantMessageEvent);
+      events.push({
+        type: 'toolcall_start',
+        contentIndex: index,
+        partial: createMessage([...content]),
+      } as AssistantMessageEvent);
       content.push(toolCall);
       events.push({
         type: 'toolcall_end',
@@ -101,10 +114,11 @@ export const piEventsForScript = (script: PiScript): AssistantMessageEvent[] => 
   // it the model asked for tools rather than finished.
   const doneStep = script.find(step => step.kind === 'done');
   const reason = doneStep && doneStep.kind === 'done' ? (doneStep.reason ?? 'stop') : 'stop';
+  const usage = doneStep && doneStep.kind === 'done' ? doneStep.usage : undefined;
   events.push({
     type: 'done',
     reason,
-    message: createMessage(content, reason as AssistantMessage['stopReason']),
+    message: createMessage(content, reason as AssistantMessage['stopReason'], usage),
   } as AssistantMessageEvent);
 
   return events;
@@ -122,7 +136,7 @@ export const piEventsForScript = (script: PiScript): AssistantMessageEvent[] => 
  */
 export const createScriptedPiChat = (scripts: PiScript[]) => {
   let calls = 0;
-  return (() => {
+  return ((_model: unknown, _context: unknown, options?: { signal?: AbortSignal }) => {
     const script = calls < scripts.length ? scripts[calls] : [{ kind: 'done' } as PiScriptStep];
     calls += 1;
     // Built per invocation, never shared: two concurrent turns each iterate
@@ -130,14 +144,24 @@ export const createScriptedPiChat = (scripts: PiScript[]) => {
     // let the second stream consume the first's `done` and settle with an
     // undefined usage.
     const events = piEventsForScript(script);
-    const doneEvent = events[events.length - 1] as Extract<
-      AssistantMessageEvent,
-      { type: 'done' }
-    >;
+    const doneEvent = events[events.length - 1] as Extract<AssistantMessageEvent, { type: 'done' }>;
 
     const stream = {
       async *[Symbol.asyncIterator]() {
-        for (const event of events) yield event;
+        let yielded = 0;
+        for (const event of events) {
+          // A real provider stream stops when the caller aborts DURING the
+          // stream (steering, cancellation). Checking only after at least one
+          // event is what keeps an already-settled turn from being treated as
+          // aborted — a stale signal must not fail a call that never started.
+          if (yielded > 0 && options?.signal?.aborted) {
+            const abort = new Error('aborted');
+            abort.name = 'AbortError';
+            throw abort;
+          }
+          yielded += 1;
+          yield event;
+        }
       },
       result: async () => doneEvent.message,
     };

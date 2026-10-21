@@ -38,8 +38,27 @@ vi.mock('@iki/backend/db/chat_thread', () => ({
   updateChatThread: updateChatThreadMock,
 }));
 
-import { AgentHarness } from '@iki/backend/agent/harness';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
+const callPiChatMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
+  // No database here: answer the provider lookup so the Pi supply admits the
+  // turn. The address is never dialled — callPiChat is mocked.
+  resolvePersonaPrompt: () => 'test persona',
+  getProviderConfig: () => ({
+    type: 'openai',
+    apiKey: 'key-test',
+    baseURL: 'http://127.0.0.1:9/v1',
+  }),
+}));
+
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
+
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
@@ -116,7 +135,26 @@ describe('workspace freeze across the harness tool adapter', () => {
     });
     defaultToolRegistry.register(probe);
 
-    const harness = new AgentHarness({
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        // One tool call per model turn: the harness executes the calls of a
+        // single response, so both must arrive as separate steps for the
+        // workspace to be re-read between them.
+        [
+          { kind: 'toolCall', toolName, args: { content: 'first' }, id: 'call_freeze_1' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'toolCall', toolName, args: { content: 'second' }, id: 'call_freeze_2' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const harness = startPiTurnHarness({
       providerType: 'openai',
       providerId: 'provider_primary',
       model: 'gpt-4o-mini',
@@ -127,12 +165,6 @@ describe('workspace freeze across the harness tool adapter', () => {
       guardActive: false,
       maxIterations: 5,
       threadId: 'thread_freeze',
-      modelFactory: () =>
-        new FauxModelProvider([
-          fauxToolCall(toolName, { content: 'first' }, { id: 'call_freeze_1' }),
-          fauxToolCall(toolName, { content: 'second' }, { id: 'call_freeze_2' }),
-          fauxText('done'),
-        ]),
     });
 
     await runWithToolRuntimeContext({ threadId: 'thread_freeze' }, async () => {
@@ -150,7 +182,19 @@ describe('workspace freeze across the harness tool adapter', () => {
     // A later turn resolves the switched workspace from scratch.
     getChatThreadMock.mockReturnValue({ id: 'thread_freeze', workspace_id: 'workspace_b' });
     executions = 0;
-    const nextHarness = new AgentHarness({
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName, args: { content: 'next-turn' }, id: 'call_freeze_3' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const nextHarness = startPiTurnHarness({
       providerType: 'openai',
       providerId: 'provider_primary',
       model: 'gpt-4o-mini',
