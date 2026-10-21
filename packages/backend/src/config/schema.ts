@@ -141,15 +141,6 @@ const ContextSchema = z
   })
   .catch(DEFAULT_APP_CONFIG.context);
 
-const ContinuitySchema = z
-  .object({
-    enabled: booleanField(DEFAULT_APP_CONFIG.continuity.enabled),
-    autoCaptureExplicitFacts: booleanField(DEFAULT_APP_CONFIG.continuity.autoCaptureExplicitFacts),
-    injectToSystemPrompt: booleanField(DEFAULT_APP_CONFIG.continuity.injectToSystemPrompt),
-    maxRetrievedItems: intField(DEFAULT_APP_CONFIG.continuity.maxRetrievedItems),
-  })
-  .catch(DEFAULT_APP_CONFIG.continuity);
-
 const SpeechSchema = z
   .object({
     enabled: booleanField(DEFAULT_APP_CONFIG.speech.enabled),
@@ -238,7 +229,6 @@ export const AppConfigSchema = z
     keybindings: KeybindingsSchema,
     chat: ChatSchema,
     context: ContextSchema,
-    continuity: ContinuitySchema,
     speech: SpeechSchema,
     toolModel: ToolModelSchema,
     toolExecution: ToolExecutionSchema,

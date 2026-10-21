@@ -188,12 +188,6 @@ export interface AppConfig {
     maxIdentityTokens: number;
     maxSkillTokens: number;
   };
-  continuity: {
-    enabled: boolean;
-    autoCaptureExplicitFacts: boolean;
-    injectToSystemPrompt: boolean;
-    maxRetrievedItems: number;
-  };
   speech: {
     enabled: boolean;
     providerType: 'openai' | 'whisper-node' | '';

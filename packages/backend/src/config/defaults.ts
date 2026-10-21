@@ -72,12 +72,6 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     maxIdentityTokens: 320,
     maxSkillTokens: 1200,
   },
-  continuity: {
-    enabled: true,
-    autoCaptureExplicitFacts: true,
-    injectToSystemPrompt: true,
-    maxRetrievedItems: 6,
-  },
   speech: {
     enabled: false,
     providerType: 'openai',
@@ -211,10 +205,6 @@ export const mergeAppConfigWithBase = (
       enabled: rawConfig.context?.enabled ?? base.context.enabled,
       maxIdentityTokens: rawConfig.context?.maxIdentityTokens ?? base.context.maxIdentityTokens,
       maxSkillTokens: rawConfig.context?.maxSkillTokens ?? base.context.maxSkillTokens,
-    },
-    continuity: {
-      ...base.continuity,
-      ...(rawConfig.continuity ?? {}),
     },
     speech: {
       ...base.speech,
