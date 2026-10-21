@@ -11,7 +11,6 @@ const baseConfig = {
   summaryTriggerMessages: 14,
   summaryRecentMessages: 6,
   maxSummaryTokens: 500,
-  maxMemoryTokens: 500,
   maxSkillTokens: 1200,
 } as const;
 
@@ -51,7 +50,6 @@ describe('chat_context_budget', () => {
       result.maxRecentTokens +
       result.maxIdentityTokens +
       result.maxSummaryTokens +
-      result.maxMemoryTokens +
       result.maxSkillTokens;
     expect(totalBudget).toBeLessThanOrEqual(result.availableContextTokens || 0);
   });

@@ -57,31 +57,19 @@ describe('createCompanionService', () => {
     expect(send).toHaveBeenCalled();
   });
 
-  it('prioritizes thinking over policy and lets policy decay back to idle', () => {
+  it('prioritizes thinking over the idle phase and returns to idle afterwards', () => {
     const service = createCompanionService({
       getConfig: () => ({ general: { language: 'en' } }) as Partial<AppConfig>,
       listProviders: () => [createProvider({ models: '["gpt-4o-mini"]' })],
       listWindows: () => [],
     });
 
-    service.setChatPolicy({
-      interventionState: 'clarify',
-      escalate: 0,
-      confidence: 0.82,
-      rationale: 'Clarify before acting.',
-      reasonCodes: ['missing_decision_or_info'],
-      affectUsed: false,
-      applied: false,
-    });
-    expect(service.getSnapshot().phase).toBe('clarify');
+    expect(service.getSnapshot().phase).toBe('idle');
 
     service.beginThinking('renderer:1');
     expect(service.getSnapshot().phase).toBe('thinking');
 
     service.endThinking('renderer:1');
-    expect(service.getSnapshot().phase).toBe('clarify');
-
-    vi.advanceTimersByTime(90_000);
     expect(service.getSnapshot().phase).toBe('idle');
   });
 

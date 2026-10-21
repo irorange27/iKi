@@ -2,14 +2,16 @@ import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import started from 'electron-squirrel-startup';
 import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
-import { applyAppLoggingConfig, createLogger, setBaseLogContext } from '@iki/backend/logger';
+import {
+  applyAppLoggingConfig,
+  createLogger,
+  setBaseLogContext,
+  setConsoleLoggingEnabled,
+} from '@iki/backend/logger';
 import { registerStandardTools } from '@iki/backend/tools';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getMcpManager } from '@iki/backend/mcp';
-import {
-  initLangfuseTracing,
-  shutdownLangfuseTracing,
-} from '@iki/backend/observability/langfuse';
+import { initLangfuseTracing, shutdownLangfuseTracing } from '@iki/backend/observability/langfuse';
 import { setHostFetch, setPlatformInfo } from '@iki/backend/platform';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import { getToolModel } from '@iki/backend/provider/tool_model';
@@ -37,6 +39,15 @@ const isDaemonMode = process.argv.includes(DAEMON_MODE_ARG);
 const appLogger = createLogger({ module: 'app' });
 
 setBaseLogContext({ process: isDaemonMode ? 'daemon' : 'main' });
+
+// The desktop shell mirrors nothing to the terminal: the `electron-forge start`
+// console was drowning in window/daemon/settings chatter that is already in
+// logs/combined.log, and the terminal is where the developer actually works.
+// A standalone daemon (`--iki-daemon`, or `pnpm run daemon:start`) keeps its
+// console output so it can still be watched while it runs headless.
+if (!isDaemonMode) {
+  setConsoleLoggingEnabled(false);
+}
 
 wirePlatformContext();
 setHostFetch(electronFetchWithTimeout);

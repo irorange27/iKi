@@ -1,8 +1,7 @@
 import { ref, watch, type Ref } from 'vue';
 import type { UiFilePart as FileUIPart } from '@iki/backend/message/ui_protocol';
 
-import type { ChatUiMessage, ComposerInvocationPartData } from '@iki/backend/message/message_parts';
-import type { AudioEmotionResult } from '@iki/backend/types/speech';
+import type { ComposerInvocationPartData } from '@iki/backend/message/message_parts';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import type { ModelCapabilitySnapshot, Provider } from '@iki/backend/types/provider';
 import { getErrorMessage } from '@iki/backend/utils/errors';
@@ -68,7 +67,6 @@ export const useChatComposerSend = (deps: {
   ensureWorkspaceForWork?: () => string | null;
   stopVoiceInput: () => void;
   attachedImages?: Ref<FileUIPart[]>;
-  audioEmotion?: Ref<AudioEmotionResult | null>;
 }) => {
   const composerFeedback = ref('');
   const isPreparingSend = ref(false);
@@ -210,10 +208,7 @@ export const useChatComposerSend = (deps: {
           providerId: providerReady.provider.id,
           promptAppId: resolvedSendRequest.promptAppId,
           composerInvocations: resolvedSendRequest.composerInvocations,
-          files: deps.attachedImages?.value?.length
-            ? [...deps.attachedImages.value]
-            : undefined,
-          audioEmotion: deps.audioEmotion?.value ?? undefined,
+          files: deps.attachedImages?.value?.length ? [...deps.attachedImages.value] : undefined,
         });
       }
     } catch (error) {
@@ -235,7 +230,6 @@ export const useChatComposerSend = (deps: {
     const previousMessage = deps.message.value;
     deps.message.value = '';
     deps.attachedImages?.value && (deps.attachedImages.value = []);
-    deps.audioEmotion?.value && (deps.audioEmotion.value = null);
     resolvedSendRequest.onCommitted?.();
     isLoading.value = true;
     isStopping.value = false;

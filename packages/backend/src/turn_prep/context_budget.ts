@@ -1,14 +1,13 @@
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
 
-type ContextConfig = typeof DEFAULT_APP_CONFIG.memory.context;
+type ContextConfig = typeof DEFAULT_APP_CONFIG.context;
 
 type ScaledBudgetItem = {
   key:
     | 'maxRecentTokens'
     | 'maxIdentityTokens'
     | 'maxSummaryTokens'
-    | 'maxMemoryTokens'
     | 'maxSkillTokens';
   value: number;
   minValue: number;
@@ -27,7 +26,6 @@ const CONTEXT_BUDGET_FLOORS: Record<ScaledBudgetItem['key'], number> = {
   maxRecentTokens: 256,
   maxIdentityTokens: 48,
   maxSummaryTokens: 96,
-  maxMemoryTokens: 96,
   maxSkillTokens: 160,
 };
 
@@ -49,11 +47,6 @@ const toScaledBudgetItems = (config: ContextConfig): ScaledBudgetItem[] => [
     key: 'maxSummaryTokens',
     value: config.maxSummaryTokens,
     minValue: CONTEXT_BUDGET_FLOORS.maxSummaryTokens,
-  },
-  {
-    key: 'maxMemoryTokens',
-    value: config.maxMemoryTokens,
-    minValue: CONTEXT_BUDGET_FLOORS.maxMemoryTokens,
   },
   {
     key: 'maxSkillTokens',
@@ -110,7 +103,6 @@ const buildRequestedContextTokens = (config: ContextConfig): number =>
   config.maxRecentTokens +
   config.maxIdentityTokens +
   config.maxSummaryTokens +
-  config.maxMemoryTokens +
   config.maxSkillTokens;
 
 const resolveMaxOutputTokens = (
@@ -211,7 +203,6 @@ export const deriveModelAwareContextConfig = (
     maxMessageTokens: scaleMessageClipBudget(config, scale, itemMap.maxRecentTokens),
     maxIdentityTokens: itemMap.maxIdentityTokens,
     maxSummaryTokens: itemMap.maxSummaryTokens,
-    maxMemoryTokens: itemMap.maxMemoryTokens,
     maxSkillTokens: itemMap.maxSkillTokens,
     budgetScale: scale,
     availableContextTokens,

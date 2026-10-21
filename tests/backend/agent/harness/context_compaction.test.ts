@@ -89,8 +89,8 @@ describe('model-step context budget', () => {
     }
     expect(summarize).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(summarize.mock.calls[0][0])).toContain(oldText);
-    // Custom-model runs (FauxModelProvider) bypass factory-created models, so the
-    // summarizer gets no cache-prefix replay context and uses its standalone call.
+    // A scripted run bypasses factory-created models, so the summarizer gets no
+    // cache-prefix replay context and uses its standalone call.
     expect((summarize.mock.calls[0][0] as Record<string, unknown>).cachePrefix).toBeUndefined();
     expect(call).toHaveBeenCalledTimes(2);
     // `callPiChat(model, context, options)` — the request context is the second arg.

@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
+// The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
+// these suites on the durable-layer behaviour they assert without reaching a
+// network endpoint.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
+
 vi.mock('@iki/backend/platform', () => ({ getUserDataPath: userDataMock }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
-  createModel: createModelMock,
   disposeLanguageModel: vi.fn(),
   resolvePersonaPrompt: () => 'boundary system',
   getModelGenerationSettings: () => ({}),
@@ -13,6 +20,13 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     contextWindow: 100000,
     maxInputTokens: 98000,
     maxOutputTokens: 2000,
+  }),
+  // No database in this suite: answer the provider lookup directly so the Pi
+  // supply admits the turn (the address is never dialled — callPiChat is mocked).
+  getProviderConfig: () => ({
+    type: 'openai',
+    apiKey: 'key-test',
+    baseURL: 'http://127.0.0.1:9/v1',
   }),
 }));
 
@@ -23,8 +37,8 @@ import path from 'node:path';
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { LoadSkillTool } from '@iki/backend/tools/skill_tools';
 import { createChatTurnPreparer } from '@iki/backend/turn_prep/turn_preparer';
-import { startTurnHarness } from '@iki/backend/agent/harness';
-import { FauxModelProvider, fauxText } from '@iki/backend/agent/testing/faux_model';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { z } from 'zod';
@@ -109,7 +123,14 @@ describe('turn preparer explicit tool upper bound', () => {
   });
 
   it('keeps the auto-mode shell default when no tools param is provided', async () => {
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('shell')]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'shell' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     const prepared = await prepare({});
     expect(prepared.guardedTools).toContain('shell');
   });
@@ -150,11 +171,13 @@ describe('turn preparer explicit tool upper bound', () => {
     });
     expect(prepared.guardedTools).toEqual(['web_search']);
 
-    const model = new FauxModelProvider([fauxText('done')]);
-    const providerCalls = vi.spyOn(model, 'doStream');
-    createModelMock.mockReturnValue(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([[{ kind: 'text', text: 'done' }, { kind: 'done' }]])
+    );
+    // `callPiChat(model, context, options)` — the sent tools live on `context`.
+    const providerCalls = callPiChatMock;
 
-    const harness = startTurnHarness({
+    const harness = startPiTurnHarness({
       providerType: 'openai',
       model: 'boundary-model',
       systemPrompt: 'boundary system',
@@ -167,12 +190,15 @@ describe('turn preparer explicit tool upper bound', () => {
       maxIterations: 5,
     });
     let text = '';
-    for await (const event of harness.turn({ prompt: prepared.prompt, history: prepared.history })) {
+    for await (const event of harness.turn({
+      prompt: prepared.prompt,
+      history: prepared.history,
+    })) {
       if (event.event === 'done') text = event.output.text;
     }
     expect(text).toBe('done');
 
-    const callOptions = providerCalls.mock.calls[0][0] as {
+    const callOptions = providerCalls.mock.calls[0][1] as {
       tools?: Record<string, { name?: string }> | Array<{ name?: string }>;
     };
     const sentToolNames = Array.isArray(callOptions.tools)
@@ -200,11 +226,13 @@ describe('turn preparer explicit tool upper bound', () => {
       threadId: 'thread_boundary',
       approvalPolicy: 'never',
     });
-    const model = new FauxModelProvider([fauxText('done')]);
-    const providerCalls = vi.spyOn(model, 'doStream');
-    createModelMock.mockReturnValue(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([[{ kind: 'text', text: 'done' }, { kind: 'done' }]])
+    );
+    // `callPiChat(model, context, options)` — the sent tools live on `context`.
+    const providerCalls = callPiChatMock;
 
-    const harness = startTurnHarness({
+    const harness = startPiTurnHarness({
       providerType: 'openai',
       model: 'boundary-model',
       systemPrompt: 'boundary system',
@@ -215,11 +243,14 @@ describe('turn preparer explicit tool upper bound', () => {
       guardActive: false,
       maxIterations: 5,
     });
-    for await (const event of harness.turn({ prompt: prepared.prompt, history: prepared.history })) {
+    for await (const event of harness.turn({
+      prompt: prepared.prompt,
+      history: prepared.history,
+    })) {
       if (event.event === 'done') expect(event.output.text).toBe('done');
     }
 
-    const callOptions = providerCalls.mock.calls[0][0] as {
+    const callOptions = providerCalls.mock.calls[0][1] as {
       tools?: Record<string, { name?: string }> | Array<{ name?: string }>;
     };
     const sentToolNames = Array.isArray(callOptions.tools)
@@ -244,11 +275,13 @@ describe('turn preparer explicit tool upper bound', () => {
       threadId: 'thread_boundary',
       approvalPolicy: 'never',
     });
-    const model = new FauxModelProvider([fauxText('done')]);
-    const providerCalls = vi.spyOn(model, 'doStream');
-    createModelMock.mockReturnValue(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([[{ kind: 'text', text: 'done' }, { kind: 'done' }]])
+    );
+    // `callPiChat(model, context, options)` — the sent tools live on `context`.
+    const providerCalls = callPiChatMock;
 
-    const harness = startTurnHarness({
+    const harness = startPiTurnHarness({
       providerType: 'openai',
       model: 'boundary-model',
       systemPrompt: 'boundary system',
@@ -258,11 +291,14 @@ describe('turn preparer explicit tool upper bound', () => {
       guardActive: false,
       maxIterations: 5,
     });
-    for await (const event of harness.turn({ prompt: prepared.prompt, history: prepared.history })) {
+    for await (const event of harness.turn({
+      prompt: prepared.prompt,
+      history: prepared.history,
+    })) {
       if (event.event === 'done') expect(event.output.text).toBe('done');
     }
 
-    const callOptions = providerCalls.mock.calls[0][0] as {
+    const callOptions = providerCalls.mock.calls[0][1] as {
       tools?: Record<string, { name?: string }> | Array<{ name?: string }>;
     };
     const sentToolNames = Array.isArray(callOptions.tools)
@@ -290,11 +326,17 @@ describe('turn preparer explicit tool upper bound', () => {
       })
     );
     const prepared = await prepare({ tools: [] });
-    const model = new FauxModelProvider([fauxText('plain done')]);
-    const providerCalls = vi.spyOn(model, 'doStream');
-    createModelMock.mockReturnValue(model);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'text', text: 'plain done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const providerCalls = callPiChatMock;
 
-    const harness = startTurnHarness({
+    const harness = startPiTurnHarness({
       providerType: 'openai',
       model: 'boundary-model',
       systemPrompt: 'boundary system',
@@ -305,13 +347,16 @@ describe('turn preparer explicit tool upper bound', () => {
       maxIterations: 5,
     });
     let text = '';
-    for await (const event of harness.turn({ prompt: prepared.prompt, history: prepared.history })) {
+    for await (const event of harness.turn({
+      prompt: prepared.prompt,
+      history: prepared.history,
+    })) {
       if (event.event === 'done') text = event.output.text;
     }
     expect(text).toBe('plain done');
     expect(shellExecutions).toBe(0);
     expect(providerCalls).toHaveBeenCalledTimes(1);
-    const callOptions = providerCalls.mock.calls[0][0] as { tools?: unknown[] };
+    const callOptions = providerCalls.mock.calls[0][1] as { tools?: unknown[] };
     expect(callOptions.tools === undefined || callOptions.tools.length === 0).toBe(true);
   });
 });

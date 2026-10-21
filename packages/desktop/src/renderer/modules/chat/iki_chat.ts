@@ -166,15 +166,49 @@ export class IkiChat {
     state.error = undefined;
     state.status = 'streaming';
 
+    // The resumed segment continues the PAUSED message: the backend re-seeds
+    // its pre-pause parts under the same id. Appending a fresh message instead
+    // split one assistant turn in two and lost the tool card that asked for the
+    // approval at all.
     const assistantId = this.options.generateId();
     let assistant: ChatUiMessage = EMPTY_ASSISTANT(assistantId);
+    let assistantIndex = state.messages.length;
     state.pushMessage(assistant);
-    const assistantIndex = state.messages.length - 1;
 
     this.abortController = new AbortController();
     let isError = false;
     try {
       for await (const chunk of readChunks(stream)) {
+        if (chunk.type === 'start' && chunk.messageId) {
+          const existing = state.messages.findIndex(entry => entry.id === chunk.messageId);
+          if (existing >= 0 && existing !== assistantIndex) {
+            // Re-target the continuation at the message that is already there,
+            // keeping BOTH the pre-pause parts and the one this call appended.
+            const carried = assistant.parts;
+            state.popMessage();
+            assistantIndex = existing;
+            const target = state.messages[existing] as ChatUiMessage;
+            assistant = {
+              ...target,
+              parts: [
+                ...structuredClone(target.parts ?? []),
+                ...carried.filter(
+                  part =>
+                    !(target.parts ?? []).some(
+                      prior =>
+                        prior.type === 'dynamic-tool' &&
+                        part.type === 'dynamic-tool' &&
+                        (prior as { toolCallId?: string }).toolCallId ===
+                          (part as { toolCallId?: string }).toolCallId
+                    )
+                ),
+              ],
+            };
+          } else if (existing < 0) {
+            assistant = { ...assistant, id: chunk.messageId };
+          }
+          continue;
+        }
         assistant = applyChatUiChunk(assistant, chunk);
         state.replaceMessage(assistantIndex, { ...assistant, parts: [...assistant.parts] });
         if (chunk.type === 'error') {

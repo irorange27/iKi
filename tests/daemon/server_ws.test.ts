@@ -399,7 +399,6 @@ describe('configureDaemonWebSockets', () => {
           skillIds: ['skill_1'],
           skillMode: 'manual',
           experimental_context: {
-            affect_mode: 'tone_only',
             context_mode: 'benchmark_clean',
           },
         },
@@ -427,7 +426,6 @@ describe('configureDaemonWebSockets', () => {
         threadId: 'thread_owned',
         maxIterations: 12,
         experimentalContext: {
-          affectMode: 'tone_only',
           contextMode: 'benchmark_clean',
         },
       }

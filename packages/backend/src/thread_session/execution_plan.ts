@@ -1,4 +1,8 @@
-import type { AgentRunInput, AgentRunKind, AgentRunWorkingState } from '@iki/backend/types/agent_run';
+import type {
+  AgentRunInput,
+  AgentRunKind,
+  AgentRunWorkingState,
+} from '@iki/backend/types/agent_run';
 import type { ApprovalPolicy } from '../agent/harness/tool_resolver';
 import type { HarnessConfig } from '../agent/harness/harness_types';
 import type { ThreadWorkspaceSelection } from '../workspaces/thread_workspace';
@@ -29,7 +33,6 @@ export type ExecutionPlan = {
   enableTools: boolean;
   enabledTools: string[];
   availableSkillIds: string[];
-  guardActive: boolean;
   requireApproval: boolean;
   autoApproveToolRequests: boolean;
   approvalPolicy?: ApprovalPolicy;
@@ -81,7 +84,6 @@ export const assembleExecutionPlan = (params: {
     enableTools: preparedTurn.enableTools,
     enabledTools: [...preparedTurn.guardedTools],
     availableSkillIds: [...preparedTurn.selectedSkillIds],
-    guardActive: preparedTurn.guardActive,
     requireApproval: preparedTurn.requireApproval,
     autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
     ...(approvalPolicy ? { approvalPolicy } : {}),
@@ -116,7 +118,7 @@ export const assembleExecutionPlan = (params: {
 /** The harness reads its whole config from the plan. */
 export const planToHarnessConfig = (
   plan: ExecutionPlan,
-  overrides?: Partial<Pick<HarnessConfig, 'guardActive'>>
+  overrides?: Partial<Pick<HarnessConfig, 'requireApproval'>>
 ): HarnessConfig => ({
   providerType: plan.providerType,
   ...(plan.providerId ? { providerId: plan.providerId } : {}),
@@ -125,7 +127,6 @@ export const planToHarnessConfig = (
   enableTools: plan.enableTools,
   enabledToolNames: plan.enabledTools,
   availableSkillIds: plan.availableSkillIds,
-  guardActive: overrides?.guardActive ?? plan.guardActive,
   requireApproval: plan.requireApproval,
   autoApproveToolRequests: plan.autoApproveToolRequests,
   ...(plan.approvalPolicy ? { approvalPolicy: plan.approvalPolicy } : {}),

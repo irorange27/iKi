@@ -44,11 +44,6 @@ export const DEEP_THINKING_SPRITE = spriteSrc(14);
 export const HOVER_SPRITE = spriteSrc(11);
 export const CLICK_SPRITE = spriteSrc(13);
 
-/** Emotion-driven idle variants: shown when affect is present but below intervention threshold. */
-export const AFFECT_SAD_SPRITE = spriteSrc(16); // sad, frustrated
-export const AFFECT_EXCITED_SPRITE = spriteSrc(13); // very excited
-export const AFFECT_TIRED_SPRITE = spriteSrc(2); // tired, yawning
-
 /** Voice clip per phase (sprite index N → voice index N-1). */
 export const PHASE_VOICE: Record<string, string> = {
   dormant: voiceSrc(14),

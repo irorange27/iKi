@@ -213,9 +213,7 @@ export const useChatStreaming = (deps: {
                 composerInvocations
               ),
             ],
-            metadata: payload.audioEmotion
-              ? Object.assign({}, currentUserMessage.metadata ?? {}, { audioEmotion: payload.audioEmotion })
-              : currentUserMessage.metadata,
+            metadata: currentUserMessage.metadata,
           };
 
           deps.messageStore.replaceAt(messageIndex, updatedUserMessage);
@@ -251,9 +249,6 @@ export const useChatStreaming = (deps: {
           composerInvocations
         ),
       ],
-      ...(payload.audioEmotion
-        ? { metadata: { audioEmotion: payload.audioEmotion } }
-        : {}),
     };
 
     const threadId = deps.currentThread.value.id;

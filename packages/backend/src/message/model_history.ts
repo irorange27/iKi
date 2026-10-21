@@ -74,7 +74,6 @@ export type ModelMessage =
   | { role: 'tool'; content: ModelContentPart[] };
 
 import { createLogger } from '@iki/backend/logger';
-import { withRetry } from '@iki/backend/utils/retry';
 import type { ToolApprovalRequest } from '@iki/backend/agent/types';
 
 const logger = createLogger({ module: 'model_history' });

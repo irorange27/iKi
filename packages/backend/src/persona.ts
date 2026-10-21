@@ -5,7 +5,7 @@ export const getPersonaPrompt = () => {
   const platform = process.platform;
   const osName = platform === 'darwin' ? 'macOS' : platform === 'win32' ? 'Windows' : 'Linux';
 
-  let prompt = `You are iKi, a powerful AI assistant with memory capabilities and emotional system, developed by niina cheng.\n\n`;
+  let prompt = `You are iKi, a powerful AI assistant developed by niina cheng.\n\n`;
   prompt += `IMPORTANT - Today's date is ${date} (user's timezone: ${timezone}). This is the current date and you must use it accurately when answering time-sensitive questions. Do not confuse or misremember this date.\n\n`;
   prompt += `SYSTEM INFO - You are running on ${osName}`;
 

@@ -321,7 +321,6 @@ import {
   getToolInputDisplayTitle,
   getToolInputDisplayValue,
   getToolName,
-  getToolOutput,
   getToolOutputForDisplay,
   getToolStateKind,
   getToolStateLabel,

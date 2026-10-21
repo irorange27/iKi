@@ -12,7 +12,6 @@ import {
 } from './approval_types';
 import {
   assembleExecutionPlan,
-  planToHarnessConfig,
   planToRunTrackerParams,
 } from './execution_plan';
 import {

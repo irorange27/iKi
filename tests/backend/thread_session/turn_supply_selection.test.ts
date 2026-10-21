@@ -18,7 +18,6 @@ import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { toModelInputMessages } from '@iki/backend/message/ui_messages';
 import { projectHistoryToPiContext } from '@iki/backend/provider/llm/pi_adapter';
 import { addProvider } from '@iki/backend/db/providers';
-import { AgentHarness } from '@iki/backend/agent/harness';
 import { PiTextTurnHarness } from '@iki/backend/agent/runners/pi_text_turn_harness';
 import { PiToolTurnHarness } from '@iki/backend/agent/runners/pi_tool_turn_harness';
 import {
@@ -118,7 +117,9 @@ describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
       }),
       history
     );
-    expect(harness).not.toBeInstanceOf(AgentHarness);
+    // The retired AI SDK harness no longer exists; what matters is that the
+    // provider is served by the Pi harness rather than refused.
+    expect(harness).toBeInstanceOf(PiToolTurnHarness);
   });
 
   it('REFUSES out-of-domain history instead of silently re-routing (the projection domain gate)', () => {

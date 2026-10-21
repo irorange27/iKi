@@ -19,7 +19,6 @@ import path from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
@@ -32,27 +31,29 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
 
 vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
   createChatTurnPreparer: () => ({
-    prepareChatTurn: vi.fn(async (options: { messages: Array<{ parts: Array<{ text: string }> }> }) => {
-      const prompt = options.messages[0]?.parts[0]?.text ?? 'probe';
-      return {
-        report: { totalEstimatedTokens: 1, blocks: [] },
-        usedSkills: [],
-        selectedSkillIds: [],
-        skillMode: 'manual' as const,
-        finalMessages: [{ role: 'user' as const, content: prompt }],
-        history: [] as unknown[],
-        prompt,
-        guardActive: false,
-        requireApproval: false,
-        autoApproveToolRequests: false,
-        affectSignal: null,
-        interventionPolicy: null,
-        guardedTools: [],
-        enableTools: false,
-        maxInputTokens: 98000,
-        maxOutputTokens: 2000,
-      };
-    }),
+    prepareChatTurn: vi.fn(
+      async (options: { messages: Array<{ parts: Array<{ text: string }> }> }) => {
+        const prompt = options.messages[0]?.parts[0]?.text ?? 'probe';
+        return {
+          report: { totalEstimatedTokens: 1, blocks: [] },
+          usedSkills: [],
+          selectedSkillIds: [],
+          skillMode: 'manual' as const,
+          finalMessages: [{ role: 'user' as const, content: prompt }],
+          history: [] as unknown[],
+          prompt,
+          guardActive: false,
+          requireApproval: false,
+          autoApproveToolRequests: false,
+          affectSignal: null,
+          interventionPolicy: null,
+          guardedTools: [],
+          enableTools: false,
+          maxInputTokens: 98000,
+          maxOutputTokens: 2000,
+        };
+      }
+    ),
   }),
 }));
 
@@ -61,8 +62,6 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   retrieveRelevantContinuity: (): null => null,
   onMessagePersisted: async (): Promise<void> => undefined,
   getCompanion: () => ({
-    setChatPolicy: vi.fn(),
-    setAffect: vi.fn(),
     beginThinking: vi.fn(),
     endThinking: vi.fn(),
     clearConversationPreview: vi.fn(),
@@ -80,13 +79,19 @@ import {
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
-import { FauxModelProvider, fauxText } from '@iki/backend/agent/testing/faux_model';
-import { createScriptedPiServer, sse, type ScriptedPiServer } from '../pi_candidate/helpers/scripted_pi_server';
+import {
+  createScriptedPiServer,
+  sse,
+  type ScriptedPiServer,
+} from '../pi_candidate/helpers/scripted_pi_server';
 
 let root: string;
 let server: ScriptedPiServer;
 let conversation: ReturnType<typeof createChatPersistence>;
-const usageEvents: Array<{ source?: string; usage?: { inputTokens?: number; cacheReadTokens?: number } }> = [];
+const usageEvents: Array<{
+  source?: string;
+  usage?: { inputTokens?: number; cacheReadTokens?: number };
+}> = [];
 
 const buildStreaming = () =>
   createChatStreaming({
@@ -107,7 +112,9 @@ const buildStreaming = () =>
   });
 
 const publishedText = (target: { send: (channel: string, payload: unknown) => void }): string => {
-  const calls = (target.send as ReturnType<typeof vi.fn>).mock.calls as Array<[string, { type: string; delta?: string }]>;
+  const calls = (target.send as ReturnType<typeof vi.fn>).mock.calls as Array<
+    [string, { type: string; delta?: string }]
+  >;
   return calls
     .filter(call => call[0] === 'chat:ui-chunk' && call[1]?.type === 'text-delta')
     .map(call => call[1].delta ?? '')
@@ -120,7 +127,9 @@ const committedText = (threadId: string): string =>
     .map(e => (e.payload as { text: string }).text)
     .join('');
 
-const lastRunStatus = (target: { send: (channel: string, payload: unknown) => void }): string | undefined => {
+const lastRunStatus = (target: {
+  send: (channel: string, payload: unknown) => void;
+}): string | undefined => {
   const calls = (target.send as ReturnType<typeof vi.fn>).mock.calls as Array<
     [string, { status?: string }]
   >;
@@ -210,24 +219,26 @@ describe('switch item 2c: text-only streaming turns on the Pi supply layer', () 
     expect(lastRunStatus(target)).toBe('completed');
     const replay = rebuildThreadViewFromEvents('thread_pi_stream').messages.at(-1);
     expect(replay?.role).toBe('assistant');
-    expect(
-      replay!.parts.map(p => (p as { text?: string }).text ?? '').join('')
-    ).toBe(shown);
+    expect(replay!.parts.map(p => (p as { text?: string }).text ?? '').join('')).toBe(shown);
 
     // Usage rides the total-prompt convention (100 = 40 + 60 cached).
     const usage = usageEvents.find(event => event.source === 'chat.stream');
     expect(usage?.usage).toMatchObject({ inputTokens: 100, cacheReadTokens: 60 });
 
     // Routing proof: the request never touched the AI SDK.
-    expect(createModelMock).not.toHaveBeenCalled();
+    // Nothing fell back to the retired SDK constructor: this turn reached Pi
+    // over the real HTTP boundary (the scripted server records the request).
+    expect(server.totalRequests()).toBeGreaterThan(0);
     expect(server.countRequests('pi stream probe')).toBe(1);
     expect(server.getWire('pi stream probe').stream).toBe(true);
     // The persona system prompt (identity, date/timezone, OS, cwd) leads the
     // request — the same join the factory's Pi branch uses.
-    const wireSystem = (server.getWire('pi stream probe').messages as Array<{
-      role: string;
-      content: unknown;
-    }>)[0];
+    const wireSystem = (
+      server.getWire('pi stream probe').messages as Array<{
+        role: string;
+        content: unknown;
+      }>
+    )[0];
     expect(wireSystem.role).toBe('system');
     expect(JSON.stringify(wireSystem.content)).toContain('persona prompt');
   }, 20000);
@@ -300,7 +311,9 @@ describe('switch item 2c: text-only streaming turns on the Pi supply layer', () 
     expect(publishedText(target)).toBe('pi answer');
     expect(lastRunStatus(target)).toBe('completed');
     // The discriminator: Pi served it.
-    expect(createModelMock).not.toHaveBeenCalled();
+    // Nothing fell back to the retired SDK constructor: this turn reached Pi
+    // over the real HTTP boundary (the scripted server records the request).
+    expect(server.totalRequests()).toBeGreaterThan(0);
     expect(server.totalRequests()).toBe(requestsBefore + 1);
   }, 20000);
 });

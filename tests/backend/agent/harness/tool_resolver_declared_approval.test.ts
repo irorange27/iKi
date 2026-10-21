@@ -16,7 +16,7 @@ import { z } from 'zod';
 
 import { createTool, defaultToolRegistry, registerStandardTools } from '@iki/backend/tools';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { startTurnHarness } from '@iki/backend/agent/harness';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { resolveTools } from '@iki/backend/agent/harness/tool_resolver';
 
@@ -24,7 +24,7 @@ registerStandardTools({
   delegatedAgentRuntime: {
     createRunTracker: createAgentRunTracker,
     getConversationToolModel: getToolModel,
-    createHarness: startTurnHarness,
+    createHarness: startPiTurnHarness,
   },
 });
 
@@ -40,7 +40,7 @@ const needsApprovalFor = (guardActive: boolean, requireApproval: boolean, name: 
   return tools.find(t => t.name === name)?.needsApproval;
 };
 
-describe('resolveTools honours a tool\'s declared approval requirement', () => {
+describe("resolveTools honours a tool's declared approval requirement", () => {
   it('does not auto-approve file writes merely because the guard is inactive', () => {
     // Identical user configuration; only the affect-derived guard differs.
     // write_file/delete_file declare needsApproval = true, so an inactive

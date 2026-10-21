@@ -1,6 +1,5 @@
 import type { UiFilePart as FileUIPart } from '@iki/backend/message/ui_protocol';
 import type { ChatUiMessage, ComposerInvocationPartData } from '@iki/backend/message/message_parts';
-import type { AudioEmotionResult } from '@iki/backend/types/speech';
 
 export type PrepareMessageSendPayload = {
   content: string;
@@ -9,7 +8,6 @@ export type PrepareMessageSendPayload = {
   promptAppId?: string;
   composerInvocations?: ComposerInvocationPartData;
   files?: FileUIPart[];
-  audioEmotion?: AudioEmotionResult;
 };
 
 export type PreparedMessageSend = {

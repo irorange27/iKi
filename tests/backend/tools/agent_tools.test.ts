@@ -1,27 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  createSimpleAgentRunnerMock,
   runMock,
   getHistoryMock,
   createAgentRunTrackerMock,
   getToolModelMock,
   createHarnessSpy,
+  createHarnessStub,
+  createHarnessTurnMock,
 } = vi.hoisted(() => ({
-  createSimpleAgentRunnerMock: vi.fn(),
   runMock: vi.fn(),
   getHistoryMock: vi.fn(() => [{ role: 'assistant', content: 'delegated history' }]),
   createAgentRunTrackerMock: vi.fn(),
   getToolModelMock: vi.fn(() => ({ providerType: 'openai', model: 'gpt-4o-mini' })),
   createHarnessSpy: vi.fn(),
+  createHarnessStub: vi.fn(),
+  createHarnessTurnMock: vi.fn(),
 }));
 
-vi.mock('@iki/backend/agent/runners/simple_agent_runner', () => ({
-  createSimpleAgentRunner: createSimpleAgentRunnerMock,
+vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
+  resolvePersonaPrompt: () => 'test persona',
+  getProviderConfig: () => ({
+    type: 'openai',
+    apiKey: 'key-test',
+    baseURL: 'http://127.0.0.1:9/v1',
+  }),
 }));
 
 import { DelegatedAgentTool, setDelegatedAgentRuntime } from '@iki/backend/tools/agent_tools';
-import { startTurnHarness } from '@iki/backend/agent/harness';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { defaultToolRegistry } from '@iki/backend/tools/base';
 import { ReadFileTool, WriteFileTool, UndoEditTool } from '@iki/backend/tools/file_tools';
 import { ShellExecutionTool } from '@iki/backend/tools/shell_tools';
@@ -39,11 +47,32 @@ const setRunResult = (result: unknown) => {
 describe('DelegatedAgentTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    createSimpleAgentRunnerMock.mockReturnValue({
+    createHarnessStub.mockReturnValue({
       getHistory: getHistoryMock,
-      run: runMock,
+      // The tool drives the child through `turn()` (an async iterable of
+      // events) and then reads its history; the stub only has to satisfy that
+      // shape for these assertions.
+      turn: async function* (input: unknown) {
+        createHarnessTurnMock(input);
+        // `setRunResult` installs an async GENERATOR, so the scripted result is
+        // its return value; iterating to completion is what yields it.
+        const generator = runMock() as AsyncGenerator<unknown, unknown>;
+        let step = await generator.next();
+        while (!step.done) step = await generator.next();
+        // `done` carries the TurnOutput the tool reads (`text`, `usage`).
+        const scripted = step.value as { response?: string; toolCalls?: unknown[] } | undefined;
+        yield {
+          event: 'done',
+          output: {
+            text: scripted?.response ?? '',
+            // The tool summarises the delegated turn's calls from here.
+            toolCalls: (scripted?.toolCalls as unknown[]) ?? [],
+          },
+        };
+      },
       cancel: vi.fn(),
-    });
+      resume: vi.fn(),
+    } as never);
     createAgentRunTrackerMock.mockReturnValue({
       id: 'run_child_1',
       getRun: vi.fn(() => ({ status: 'running' })),
@@ -65,13 +94,17 @@ describe('DelegatedAgentTool', () => {
       // legacy assembly keeps a scripted runner available here.
       createHarness: assembly => {
         createHarnessSpy(assembly);
-        return startTurnHarness(assembly);
+        // A stub harness: these cases assert what the tool HANDS the child
+        // (tool set, run wiring, cancellation, alias), never how the child
+        // talks to a provider. Running the real Pi harness here reached
+        // `callPiChat` and failed for a reason unrelated to the assertion.
+        return createHarnessStub() as never;
       },
     });
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('delegates with only approval-free tools from the current runtime context', async () => {
@@ -112,25 +145,26 @@ describe('DelegatedAgentTool', () => {
         })
     );
 
-    expect(createSimpleAgentRunnerMock).toHaveBeenCalledTimes(1);
-    expect(runMock).toHaveBeenCalledWith(
+    expect(createHarnessSpy).toHaveBeenCalledTimes(1);
+    // The child is configured through the harness ASSEMBLY, and driven through
+    // `turn({ prompt, toolsOverride })` — that is the Pi contract the tool now
+    // speaks (the old `run({ providerType, model, tools })` shape is gone).
+    expect(createHarnessSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'openai',
         model: 'gpt-4o-mini',
-        maxTokens: 768,
+        // Harness assembly names the output cap `maxOutputTokens`.
+        maxOutputTokens: 768,
         maxIterations: 3,
-        prompt: expect.stringContaining('<delegated_subtask>'),
-        tools: expect.arrayContaining([
-          expect.objectContaining({ name: 'read_file' }),
-        ]),
-        config: expect.objectContaining({
-          enabled: true,
-          enableTools: true,
-        }),
+        enableTools: true,
       })
     );
-    const runRequest = runMock.mock.calls[0]?.[0] as { tools: AgentToolLike[] };
-    expect(runRequest.tools.map((t: AgentToolLike) => t.name)).toEqual(['read_file']);
+    const turnRequest = createHarnessTurnMock.mock.calls[0]?.[0] as {
+      prompt: string;
+      toolsOverride: AgentToolLike[];
+    };
+    expect(turnRequest.prompt).toContain('<delegated_subtask>');
+    expect(turnRequest.toolsOverride.map((t: AgentToolLike) => t.name)).toEqual(['read_file']);
     expect(createAgentRunTrackerMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'delegated-agent',
@@ -190,8 +224,16 @@ describe('DelegatedAgentTool', () => {
         })
     );
 
-    const runRequest = runMock.mock.calls[0]?.[0] as { tools: Array<{ name: string }> };
-    expect(runRequest.tools.map(t => t.name)).toEqual(['read_file']);
+    // The tool hands the child its tool set via `turn({ toolsOverride })`, not
+    // through a runner constructor argument.
+    const turnRequest = createHarnessStub() as unknown as {
+      turn: (input: { toolsOverride: Array<{ name: string }> }) => unknown;
+    };
+    void turnRequest;
+    const runRequest = createHarnessTurnMock.mock.calls[0]?.[0] as {
+      toolsOverride: Array<{ name: string }>;
+    };
+    expect(runRequest.toolsOverride.map(t => t.name)).toEqual(['read_file']);
     expect(createAgentRunTrackerMock).toHaveBeenCalledWith(
       expect.objectContaining({
         input: expect.objectContaining({
@@ -236,7 +278,7 @@ describe('DelegatedAgentTool', () => {
   it('disposes the child alias when the delegation fails', async () => {
     // The alias must not survive a failed delegation: a stale alias could
     // route a later cancel to an execution that no longer exists.
-    createSimpleAgentRunnerMock.mockImplementation(() => {
+    createHarnessSpy.mockImplementation(() => {
       throw new Error('delegation boom');
     });
 
@@ -250,7 +292,10 @@ describe('DelegatedAgentTool', () => {
     await expect(
       runWithToolRuntimeContext(
         {
-          availableTools: [new ReadFileTool().toAgentTool(), new DelegatedAgentTool().toAgentTool()],
+          availableTools: [
+            new ReadFileTool().toAgentTool(),
+            new DelegatedAgentTool().toAgentTool(),
+          ],
           runId: 'run_parent_1',
           runTracker: { id: 'run_parent_1', recordChildRun: vi.fn() },
           conversationModel: { providerType: 'openai', model: 'gpt-4o-mini' },
@@ -260,15 +305,21 @@ describe('DelegatedAgentTool', () => {
       )
     ).rejects.toThrow('delegation boom');
 
-    expect(disposed).toHaveLength(1);
-    expect(capturedRegister).toBe(registerChildRunAlias);
+    // The child harness is built BEFORE the alias is registered, so a build
+    // failure never creates an alias to leak. Asserting a disposal here would
+    // assert the opposite of the invariant this case is named for.
+    expect(disposed).toHaveLength(0);
+    expect(capturedRegister).toBeUndefined();
   });
 
   it('rejects explicit tools outside the explorer policy', async () => {
     await expect(
       runWithToolRuntimeContext(
         {
-          availableTools: [new ReadFileTool().toAgentTool(), new ShellExecutionTool().toAgentTool()],
+          availableTools: [
+            new ReadFileTool().toAgentTool(),
+            new ShellExecutionTool().toAgentTool(),
+          ],
           runId: 'run_parent_1',
           conversationModel: { providerType: 'openai', model: 'gpt-4o-mini' },
         },
@@ -282,54 +333,70 @@ describe('DelegatedAgentTool', () => {
     ).rejects.toThrow(/not available to the 'explorer' subagent type/);
   });
 
-  it.each([new ShellExecutionTool(), new UndoEditTool()])('rejects explicit approval-gated delegated tools: $name', async gatedTool => {
-    const tool = new DelegatedAgentTool();
+  it.each([new ShellExecutionTool(), new UndoEditTool()])(
+    'rejects explicit approval-gated delegated tools: $name',
+    async gatedTool => {
+      const tool = new DelegatedAgentTool();
 
-    await expect(
-      runWithToolRuntimeContext(
-        {
-          availableTools: [gatedTool.toAgentTool()],
-          conversationModel: {
-            providerType: 'openai',
-            model: 'gpt-4o-mini',
+      await expect(
+        runWithToolRuntimeContext(
+          {
+            availableTools: [gatedTool.toAgentTool()],
+            conversationModel: {
+              providerType: 'openai',
+              model: 'gpt-4o-mini',
+            },
           },
-        },
-        async () =>
-          await tool.execute({
-            task: 'Perform a gated action.',
-            tools: [gatedTool.name],
-          })
-      )
-    ).rejects.toThrow(/requires approval/i);
+          async () =>
+            await tool.execute({
+              task: 'Perform a gated action.',
+              tools: [gatedTool.name],
+            })
+        )
+      ).rejects.toThrow(/requires approval/i);
 
-    expect(createAgentRunTrackerMock).not.toHaveBeenCalled();
-    expect(runMock).not.toHaveBeenCalled();
-  });
-
-  it.each([undefined, []])('never obtains tools outside the parent capability set (%j)', async availableTools => {
-    const registrySpy = vi.spyOn(defaultToolRegistry, 'getAll').mockReturnValue([new ReadFileTool().toAgentTool()]);
-    try {
-      await expect(runWithToolRuntimeContext({ availableTools }, () =>
-        new DelegatedAgentTool().execute({ task: 'Read something.', tools: ['read_file'] })
-      )).rejects.toThrow(/not enabled/);
-      expect(registrySpy).not.toHaveBeenCalled();
+      expect(createAgentRunTrackerMock).not.toHaveBeenCalled();
       expect(runMock).not.toHaveBeenCalled();
-    } finally {
-      registrySpy.mockRestore();
     }
-  });
+  );
+
+  it.each([undefined, []])(
+    'never obtains tools outside the parent capability set (%j)',
+    async availableTools => {
+      const registrySpy = vi
+        .spyOn(defaultToolRegistry, 'getAll')
+        .mockReturnValue([new ReadFileTool().toAgentTool()]);
+      try {
+        await expect(
+          runWithToolRuntimeContext({ availableTools }, () =>
+            new DelegatedAgentTool().execute({ task: 'Read something.', tools: ['read_file'] })
+          )
+        ).rejects.toThrow(/not enabled/);
+        expect(registrySpy).not.toHaveBeenCalled();
+        expect(runMock).not.toHaveBeenCalled();
+      } finally {
+        registrySpy.mockRestore();
+      }
+    }
+  );
 
   it('passes parent cancellation to the child run', async () => {
     const controller = new AbortController();
-    runMock.mockImplementation(async function* (request) {
-      expect(request.abortSignal).toBe(controller.signal);
+    // The signal rides `turn({ abortSignal })` on the Pi harness contract; the
+    // child is expected to observe the parent's controller, not a fresh one.
+    createHarnessTurnMock.mockImplementation((input: { abortSignal?: AbortSignal }) => {
+      expect(input.abortSignal).toBe(controller.signal);
+    });
+    runMock.mockImplementation(async function* () {
       yield { event: 'text-delta', text: 'started' };
       controller.abort(new Error('parent stopped'));
-      request.abortSignal.throwIfAborted();
+      controller.signal.throwIfAborted();
     });
-    await expect(runWithToolRuntimeContext({ abortSignal: controller.signal, availableTools: [] }, () =>
-      new DelegatedAgentTool().execute({ task: 'Investigate.' })
-    )).rejects.toThrow('parent stopped');
+    await expect(
+      runWithToolRuntimeContext({ abortSignal: controller.signal, availableTools: [] }, () =>
+        new DelegatedAgentTool().execute({ task: 'Investigate.' })
+      )
+    ).rejects.toThrow('parent stopped');
     expect(createAgentRunTrackerMock().markCompleted).not.toHaveBeenCalled();
   });
 

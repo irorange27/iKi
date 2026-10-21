@@ -11,14 +11,6 @@ const userDataMock = vi.hoisted(() => vi.fn(() => ''));
 // The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
 // these suites on the durable-layer behaviour they assert without reaching a
 // network endpoint.
-vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
-  // `resolvePiTurnSupply` calls `getProviderConfig` INTERNALLY inside the
-  // factory module, so mocking that module cannot reach it. These suites have
-  // no provider table and do not test admission.
-  pausedPlanRunsOnPiToolSupply: () => true,
-}));
-
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -49,6 +41,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
 }));
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
@@ -129,6 +122,7 @@ describe('run retry and queued resume at the service boundary', () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-run-resume-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'resume.db') });
+    seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
     addWorkspace({ id: 'ws_resume', path: root, name: 'resume' });
     const conversation = (service = createChatService()) as unknown as {
       createThread: (input: Record<string, unknown>) => unknown;

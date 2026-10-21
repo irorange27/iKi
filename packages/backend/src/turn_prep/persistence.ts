@@ -11,7 +11,6 @@ import { createPrefixedId } from '@iki/backend/utils/id';
 import { ensureThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/git_worktree';
 import { getErrorMessage } from '@iki/backend/utils/errors';
-import type { ChatMemory } from '../thread_session/memory';
 import { sanitizeUiMessageJsonForStorage } from '@iki/backend/message/ui_message_codec';
 
 const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
@@ -66,7 +65,8 @@ const normalizeThreadInput = (
       (typeof thread.title === 'string' && thread.title.trim() ? thread.title : 'New Chat'),
     model: normalizedString(thread.model) ?? undefined,
     reasoning_effort: normalizedString(thread.reasoning_effort) || 'medium',
-    metadata: typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
+    metadata:
+      typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
     is_generating: false,
     client_id: normalizedString(thread.client_id) ?? undefined,
     prompt_app_id: normalizedString(thread.prompt_app_id) ?? undefined,
@@ -81,7 +81,6 @@ const normalizeThreadInput = (
 };
 
 export const createChatPersistence = (deps: {
-  memory: ChatMemory;
   onContinuityMessagePersisted: (params: {
     threadId: string;
     messageId: string;
@@ -130,7 +129,8 @@ export const createChatPersistence = (deps: {
 
     // Assigning the thread's own sanctioned worktree must pass even mid-thread;
     // the guard only protects arbitrary workspace switches after messages exist.
-    const guardedWorkspaceChange = workspaceChanged && !isThreadWorktreeWorkspaceId(nextWorkspaceId);
+    const guardedWorkspaceChange =
+      workspaceChanged && !isThreadWorktreeWorkspaceId(nextWorkspaceId);
 
     if (guardedWorkspaceChange) {
       const messageCount = chatMessageDb.countChatMessagesByThread(id);
@@ -238,11 +238,6 @@ export const createChatPersistence = (deps: {
       throw error;
     }
 
-    deps.memory.onMessagePersisted({
-      threadId: message.thread_id,
-      messageId,
-      messageJson: sanitizedMessageJson,
-    });
     void deps.onContinuityMessagePersisted({
       threadId: message.thread_id,
       messageId,
@@ -250,27 +245,6 @@ export const createChatPersistence = (deps: {
     });
 
     const created = chatMessageDb.getChatMessage(messageId);
-    return created;
-  };
-
-  const createMessageWithProcessing = async (
-    input: unknown,
-    options?: { waitForEmotionAnalysis?: boolean }
-  ) => {
-    const created = createMessage(input);
-    if (
-      options?.waitForEmotionAnalysis &&
-      created &&
-      typeof created.thread_id === 'string' &&
-      typeof created.id === 'string' &&
-      typeof created.message === 'string'
-    ) {
-      await deps.memory.waitForEmotionAnalysis?.({
-        threadId: created.thread_id,
-        messageId: created.id,
-        messageJson: created.message,
-      });
-    }
     return created;
   };
 
@@ -291,16 +265,6 @@ export const createChatPersistence = (deps: {
     try {
       const existing = chatMessageDb.getChatMessage(id);
       const threadId = sanitizedUpdate.thread_id || existing?.thread_id;
-      const messageJson =
-        typeof sanitizedUpdate.message === 'string' ? sanitizedUpdate.message : existing?.message;
-
-      if (threadId && messageJson) {
-        deps.memory.onMessagePersisted({
-          threadId,
-          messageId: id,
-          messageJson,
-        });
-      }
 
       if (threadId) {
         chatThreadDb.touchChatThread(threadId);
@@ -338,7 +302,6 @@ export const createChatPersistence = (deps: {
     listMessages,
     getMessage,
     createMessage,
-    createMessageWithProcessing,
     updateMessage,
     deleteMessage,
     /**
@@ -347,17 +310,21 @@ export const createChatPersistence = (deps: {
      * it. Unlike createMessage this never silently keeps a stale partial.
      */
     upsertTurnMessage: (input: unknown) => {
-      const id = isObjectRecord(input) && typeof (input as { id?: unknown }).id === 'string'
-        ? (input as { id: string }).id.trim()
-        : '';
+      const id =
+        isObjectRecord(input) && typeof (input as { id?: unknown }).id === 'string'
+          ? (input as { id: string }).id.trim()
+          : '';
       const existing = id ? chatMessageDb.getChatMessage(id) : null;
       if (existing && id) {
         // Normalize object message payloads to the sanitized JSON string the
         // column stores, mirroring createMessage.
-        const rawMessage = isObjectRecord(input) ? (input as { message?: unknown }).message : undefined;
-        const payload = rawMessage !== undefined && typeof rawMessage !== 'string'
-          ? { ...(input as Record<string, unknown>), message: JSON.stringify(rawMessage) }
-          : input;
+        const rawMessage = isObjectRecord(input)
+          ? (input as { message?: unknown }).message
+          : undefined;
+        const payload =
+          rawMessage !== undefined && typeof rawMessage !== 'string'
+            ? { ...(input as Record<string, unknown>), message: JSON.stringify(rawMessage) }
+            : input;
         return updateMessage(id, payload);
       }
       return createMessage(input);

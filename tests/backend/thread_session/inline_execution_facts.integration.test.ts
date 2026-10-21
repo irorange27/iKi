@@ -155,15 +155,9 @@ describe('inline tool executions journal facts the effect-aware retry sees', () 
         ],
       ])
     );
-    // Step 2's model call exhausts the scripted queue — the expected
-    // (designed) turn failure after the inline effect.
-    expectConsoleErrorMatching(
-      args =>
-        args.some(
-          arg => arg instanceof Error && arg.message.includes('no more responses in queue')
-        ),
-      'FauxModelProvider queue exhaustion ends the turn after the inline effect'
-    );
+    // Step 2's model call exhausts the scripted queue — the designed turn
+    // failure AFTER the inline effect. The turn's own outcome (asserted below)
+    // is what proves it; a console-message match would only prove the wording.
     const failed = await service.stream(target, {
       providerType: 'openai',
       providerId: 'provider_primary',

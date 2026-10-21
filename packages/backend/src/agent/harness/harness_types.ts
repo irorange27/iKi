@@ -1,7 +1,13 @@
 import type { ModelMessage } from '@iki/backend/message/model_history';
 
 import type { AgentStep, ModelInferenceRecord } from '@iki/backend/agent/agent_step';
-import type { AgentTool, AgentUsage, ToolApprovalRequest, AgentResult, AgentTurnPerf } from '@iki/backend/agent/types';
+import type {
+  AgentTool,
+  AgentUsage,
+  ToolApprovalRequest,
+  AgentResult,
+  AgentTurnPerf,
+} from '@iki/backend/agent/types';
 import type { ApprovalPolicy } from './tool_resolver';
 
 // ── Harness configuration ─────────────────────────────────────────────
@@ -14,8 +20,6 @@ export type HarnessConfig = {
   enableTools: boolean;
   enabledToolNames: string[];
   availableSkillIds: string[];
-  guardActive: boolean;
-  /** Whether guard requires explicit tool approval. Defaults to guardActive. */
   requireApproval?: boolean;
   /** Bypass approval for tools when user has opted in globally. */
   autoApproveToolRequests?: boolean;
@@ -27,7 +31,6 @@ export type HarnessConfig = {
   /** Reasoning-effort override forwarded to the provider call (e.g. 'low' | 'medium' | 'high'). */
   reasoningEffort?: string;
   threadId?: string;
-  /** Inject a custom model (FauxModelProvider in tests). */
 };
 
 // ── Turn input / output ───────────────────────────────────────────────
@@ -84,9 +87,7 @@ export type TurnOutput = {
 // ── Turn event ────────────────────────────────────────────────────────
 
 /** Each yield is either an AgentStep to forward, or the final result. */
-export type TurnEvent =
-  | { event: 'step'; step: AgentStep }
-  | { event: 'done'; output: TurnOutput };
+export type TurnEvent = { event: 'step'; step: AgentStep } | { event: 'done'; output: TurnOutput };
 
 /**
  * The structural harness surface the TurnDriver consumes. AgentHarness

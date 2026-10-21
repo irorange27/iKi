@@ -5,6 +5,7 @@ import { PiTextTurnHarness } from '../agent/runners/pi_text_turn_harness';
 import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
 import { resolvePiTurnSupply } from '../provider/llm/factory';
 import { planToHarnessConfig, type ExecutionPlan } from './execution_plan';
+import { todoReminderFor } from './todo_reminder';
 
 /**
  * The single supply-selection point for fresh tool/text turns and handoff-
@@ -44,8 +45,8 @@ export type TurnHarnessOverride = (plan: ExecutionPlan) => TurnDriverHarness | n
  */
 export const piTurnHarness: TurnHarnessOverride = plan =>
   plan.enableTools
-    ? new PiToolTurnHarness(planToHarnessConfig(plan, { guardActive: false }))
-    : new PiTextTurnHarness(planToHarnessConfig(plan, { guardActive: false }));
+    ? new PiToolTurnHarness(planToHarnessConfig(plan))
+    : new PiTextTurnHarness(planToHarnessConfig(plan));
 
 /**
  * Process-wide FORCED executor.
@@ -92,7 +93,11 @@ export const selectTurnHarness = (
   if (!plan.enableTools) {
     return new PiTextTurnHarness(planToHarnessConfig(plan));
   }
-  return new PiToolTurnHarness(planToHarnessConfig(plan));
+  return new PiToolTurnHarness(planToHarnessConfig(plan), {
+    // The plan is cleared at turn start (session_loop), so a long turn needs
+    // a mid-flight nudge or write_todo_list is a one-shot at t=0.
+    stepReminder: steps => todoReminderFor(steps, plan.enabledTools),
+  });
 };
 
 /**
@@ -148,7 +153,10 @@ export const piDomainResumeHistory = (history: ModelMessage[]): ModelMessage[] =
  * #133): the selection must not depend on which transport carries the
  * history. Mode does not gate either: an autonomous pause must resume on the
  * supply it paused on, or the supply flips mid-turn. */
-export const pausedPlanRunsOnPiToolSupply = (plan: ExecutionPlan, history: ModelMessage[]): boolean => {
+export const pausedPlanRunsOnPiToolSupply = (
+  plan: ExecutionPlan,
+  history: ModelMessage[]
+): boolean => {
   if (!plan.enableTools) return false;
   return resolvePiTurnSupply({
     providerType: plan.providerType,

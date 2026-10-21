@@ -1,6 +1,6 @@
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import * as continuityDb from '@iki/backend/db/continuity';
-import { extractTextFromMessageJson } from '@iki/backend/db/memory';
+import { extractTextFromMessageJson } from '@iki/backend/message/message_parts';
 import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
 import type {
@@ -97,10 +97,10 @@ const buildAssistantProfileSystemMessage = (profile: AssistantProfileRecord): st
     ...(collaborationStyle.length > 0
       ? ['- Collaboration style:', ...collaborationStyle.map(item => `  - ${item}`)]
       : []),
-    ...(boundaries.length > 0 ? ['- Hard boundaries:', ...boundaries.map(item => `  - ${item}`)] : []),
-    ikiNotes
-      ? ['- Manual assistant note from brain/iki.md:', ikiNotes].join('\n')
-      : '',
+    ...(boundaries.length > 0
+      ? ['- Hard boundaries:', ...boundaries.map(item => `  - ${item}`)]
+      : []),
+    ikiNotes ? ['- Manual assistant note from brain/iki.md:', ikiNotes].join('\n') : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -126,7 +126,9 @@ const continuityKindLabel = (kind: ContinuityItemKind): string => {
   }
 };
 
-const toContinuityPreview = (item: ContinuityItemRecord & { score: number; evidence_count: number }): ContinuityMemoryPreview => ({
+const toContinuityPreview = (
+  item: ContinuityItemRecord & { score: number; evidence_count: number }
+): ContinuityMemoryPreview => ({
   id: item.id,
   summary: `${continuityKindLabel(item.kind)}: ${item.summary}`,
   score: item.score,
@@ -142,7 +144,8 @@ const buildContinuitySystemMessage = (results: ContinuityMemoryPreview[]): strin
     ...results.map(entry => {
       const score = Number.isFinite(entry.score) ? entry.score.toFixed(3) : '0.000';
       const dateText = entry.updated_at ? new Date(entry.updated_at).toLocaleDateString() : '';
-      const tagText = Array.isArray(entry.tags) && entry.tags.length > 0 ? `[${entry.tags.join(', ')}] ` : '';
+      const tagText =
+        Array.isArray(entry.tags) && entry.tags.length > 0 ? `[${entry.tags.join(', ')}] ` : '';
       return dateText
         ? `- (${score}, ${dateText}) ${tagText}${entry.summary}`
         : `- (${score}) ${tagText}${entry.summary}`;
@@ -157,14 +160,19 @@ type ExplicitCapture = {
 };
 
 const cleanCapturedValue = (value: string): string =>
-  normalizeWhitespace(value).replace(/[。.!?;；，,]+$/u, '').trim();
+  normalizeWhitespace(value)
+    .replace(/[。.!?;；，,]+$/u, '')
+    .trim();
 
 const extractExplicitContinuity = (content: string): ExplicitCapture[] => {
   const normalized = normalizeWhitespace(content);
   if (!normalized) return [];
 
   const captures: ExplicitCapture[] = [];
-  const patterns: Array<{ regex: RegExp; map: (match: RegExpExecArray) => ExplicitCapture | null }> = [
+  const patterns: Array<{
+    regex: RegExp;
+    map: (match: RegExpExecArray) => ExplicitCapture | null;
+  }> = [
     {
       regex: /\bmy name is\s+(.+)$/iu,
       map: match => {
@@ -188,7 +196,11 @@ const extractExplicitContinuity = (content: string): ExplicitCapture[] => {
       map: match => {
         const value = cleanCapturedValue(match[1] || '');
         return value
-          ? { kind: 'preference', title: 'Stated preference', summary: `The owner prefers ${value}.` }
+          ? {
+              kind: 'preference',
+              title: 'Stated preference',
+              summary: `The owner prefers ${value}.`,
+            }
           : null;
       },
     },
@@ -205,35 +217,49 @@ const extractExplicitContinuity = (content: string): ExplicitCapture[] => {
       regex: /我的名字是(.+)$/u,
       map: match => {
         const value = cleanCapturedValue(match[1] || '');
-        return value ? { kind: 'owner_fact', title: 'Owner name', summary: `The owner's name is ${value}.` } : null;
+        return value
+          ? { kind: 'owner_fact', title: 'Owner name', summary: `The owner's name is ${value}.` }
+          : null;
       },
     },
     {
       regex: /叫我(.+)$/u,
       map: match => {
         const value = cleanCapturedValue(match[1] || '');
-        return value ? { kind: 'preference', title: 'Preferred address', summary: `Call the owner ${value}.` } : null;
+        return value
+          ? { kind: 'preference', title: 'Preferred address', summary: `Call the owner ${value}.` }
+          : null;
       },
     },
     {
       regex: /我更喜欢(.+)$/u,
       map: match => {
         const value = cleanCapturedValue(match[1] || '');
-        return value ? { kind: 'preference', title: 'Stated preference', summary: `The owner prefers ${value}.` } : null;
+        return value
+          ? {
+              kind: 'preference',
+              title: 'Stated preference',
+              summary: `The owner prefers ${value}.`,
+            }
+          : null;
       },
     },
     {
       regex: /请记住(.+)$/u,
       map: match => {
         const value = cleanCapturedValue(match[1] || '');
-        return value ? { kind: 'reference_note', title: 'Explicit memory request', summary: value } : null;
+        return value
+          ? { kind: 'reference_note', title: 'Explicit memory request', summary: value }
+          : null;
       },
     },
     {
       regex: /记住(.+)$/u,
       map: match => {
         const value = cleanCapturedValue(match[1] || '');
-        return value ? { kind: 'reference_note', title: 'Explicit memory request', summary: value } : null;
+        return value
+          ? { kind: 'reference_note', title: 'Explicit memory request', summary: value }
+          : null;
       },
     },
   ];
@@ -274,14 +300,14 @@ export const retrieveRelevantContinuity = (query: string): ContinuityRetrievalPa
     })
     .map(toContinuityPreview);
 
-  const results = [...itemResults].sort((a, b) => b.score - a.score).slice(0, config.maxRetrievedItems);
+  const results = [...itemResults]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, config.maxRetrievedItems);
 
   if (!results.length) return null;
 
   continuityDb.touchContinuityItems(
-    itemResults
-      .map(entry => entry.id)
-      .filter(id => results.some(result => result.id === id))
+    itemResults.map(entry => entry.id).filter(id => results.some(result => result.id === id))
   );
 
   return {
@@ -290,7 +316,6 @@ export const retrieveRelevantContinuity = (query: string): ContinuityRetrievalPa
     systemMessage: buildContinuitySystemMessage(results),
   };
 };
-
 
 export const onMessagePersisted = async (params: {
   threadId: string;

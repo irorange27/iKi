@@ -6,7 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { getProviders } from '../../db/providers';
 import { createLogger } from '@iki/backend/logger';
-import { langfuseTelemetry, tracePiGeneration } from '@iki/backend/observability/langfuse';
+import { tracePiGeneration } from '@iki/backend/observability/langfuse';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
 import {
@@ -20,14 +20,12 @@ import {
   type ModelsDevCatalog,
 } from '@iki/backend/utils/provider_models';
 import type {
-  ProviderModelDiscoveryOverride,
   ProviderModelOptions,
   ProviderModelOptionsMap,
 } from '@iki/backend/types/provider';
 import type { TokenUsageMetrics } from '@iki/backend/types/chat_usage';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
-import { normalizeLanguageModelUsage } from './usage';
 import {
   buildPiModel,
   callPiChat,
@@ -135,9 +133,6 @@ export interface ChatGenerationResult {
   usage: TokenUsageMetrics;
 }
 
-const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
 const readBootstrapAuthConfig = (providerType: string): ProviderConfig | null => {
   try {
     const filePath = path.join(os.homedir(), '.iki', 'agent', 'auth.json');
@@ -199,12 +194,6 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
     modelOptions: parseProviderModelOptionsMap(provider.model_options),
     isResponseApi: provider.is_response_api === true,
   };
-};
-
-const normalizeOptionalString = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
 };
 
 const getStoredProviderModelOptions = (
@@ -456,15 +445,6 @@ const supportsPiGeneration = (_providerType: string, config: ProviderConfig): bo
   config.baseURL.trim().length > 0;
 
 /**
- * Per-request admission for the Pi streaming-turn supply (switch item 2c):
- * the provider predicate AND the projection domain gate in one decision.
- * The dry-run is the domain test (ADR 007 decision 2) — history carrying
- * parts outside the projection's covered domain keeps the AI SDK harness,
- * and coverage widening re-routes automatically. A missing provider config
- * also returns false: the AI SDK harness's createModel then raises today's
- * exact error surface.
- */
-/**
  * The supply decision, with the reason it can be refused.
  *
  * A bare boolean forced every caller to invent its own story for "why not Pi",
@@ -511,13 +491,6 @@ export const resolvePiTurnSupply = (params: {
     };
   }
 };
-
-export const supportsPiTurnSupply = (params: {
-  providerType: string;
-  providerId?: string;
-  modelId: string;
-  history: ModelMessage[];
-}): boolean => resolvePiTurnSupply(params).admitted;
 
 /**
  * Single-shot generation over the Pi supply layer (ADR 007, switch item 1).
@@ -704,11 +677,9 @@ export const generateChatWithModelMessages = async (options: {
   abortSignal?: AbortSignal;
 }): Promise<ChatGenerationResult> => {
   const config = getProviderConfig(options.providerType, options.providerId);
-  let usePi = supportsPiGeneration(options.providerType, config);
-  if (!usePi) {
-    // No second supply. The AI SDK branch that used to sit here is gone
-    // (ADR 009): a provider this layer cannot serve must fail with the reason
-    // rather than quietly run the request somewhere else.
+  if (!supportsPiGeneration(options.providerType, config)) {
+    // Pi is the only supply: a provider this layer cannot serve must fail with
+    // the reason rather than quietly run the request somewhere else.
     throw new Error(
       `Provider "${options.providerType}" cannot be served: it has no base URL, so no model endpoint can be addressed.`
     );

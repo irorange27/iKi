@@ -154,6 +154,9 @@ const createElectronApi = (options?: {
           return options?.configured ?? true;
         }),
         stopStream: vi.fn(async () => ({ success: true })),
+        // Required by the ElectronApi contract; useRunStatus subscribes
+        // unconditionally, so every mount provides it.
+        onRunStatus: vi.fn(() => () => undefined),
         stream,
         threads: {
           get: vi.fn(async () => options?.thread ?? null),

@@ -1,6 +1,5 @@
 import http from 'node:http';
 
-import * as memoryDb from '@iki/backend/db/memory';
 import { createAppClient } from '@iki/backend/db/app_clients';
 import type { McpManager } from '@iki/backend/mcp';
 import type { ChatTransportMessage } from '@iki/backend/thread_session';
@@ -24,7 +23,6 @@ import {
   type ChatSendPayload,
   type ChatThreadCreatePayload,
   type ClientRegistrationPayload,
-  type MemorySearchPayload,
   parseApproveToolPayload,
   parseChatMessageCreatePayload,
   parseChatSendPayload,
@@ -32,7 +30,6 @@ import {
   parseClientRegistrationPayload,
   parseMcpServerCreatePayload,
   parseMcpServerUpdatePayload,
-  parseMemorySearchPayload,
 } from './server_schemas';
 import { createRateLimiter } from '@iki/backend/rate_limiter';
 import {
@@ -72,28 +69,29 @@ const readParsedBody = async <T>(
   }
 };
 
-export const createDaemonRequestHandler =
-  (deps: CreateDaemonRequestHandlerDeps): http.RequestListener => {
-    const chatSendLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30 });
+export const createDaemonRequestHandler = (
+  deps: CreateDaemonRequestHandlerDeps
+): http.RequestListener => {
+  const chatSendLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30 });
 
-    const checkRateLimit = (
-      clientId: string,
-      limiter: ReturnType<typeof createRateLimiter>,
-      res: http.ServerResponse
-    ): boolean => {
-      const result = limiter.check(clientId);
-      if (!result.allowed) {
-        res.setHeader('Retry-After', Math.ceil((result.retryAfterMs ?? 1000) / 1000));
-        writeJson(res, 429, {
-          success: false,
-          error: 'Too many requests',
-        });
-        return false;
-      }
-      return true;
-    };
+  const checkRateLimit = (
+    clientId: string,
+    limiter: ReturnType<typeof createRateLimiter>,
+    res: http.ServerResponse
+  ): boolean => {
+    const result = limiter.check(clientId);
+    if (!result.allowed) {
+      res.setHeader('Retry-After', Math.ceil((result.retryAfterMs ?? 1000) / 1000));
+      writeJson(res, 429, {
+        success: false,
+        error: 'Too many requests',
+      });
+      return false;
+    }
+    return true;
+  };
 
-    return async (req, res) => {
+  return async (req, res) => {
     withCors(res);
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
@@ -250,27 +248,22 @@ export const createDaemonRequestHandler =
           return;
         }
 
-        const message = await deps.chatService.createMessageWithProcessing?.(
-          {
-            thread_id: body.threadId,
-            message: {
-              role: body.role,
-              content: body.content,
-            },
-            ...(typeof body.timestamp === 'string' && body.timestamp.trim()
-              ? { timestamp: body.timestamp.trim() }
-              : {}),
-            ...(body.metadata !== undefined
-              ? {
-                  metadata:
-                    typeof body.metadata === 'string'
-                      ? body.metadata
-                      : JSON.stringify(body.metadata),
-                }
-              : {}),
+        const message = await deps.chatService.createMessage({
+          thread_id: body.threadId,
+          message: {
+            role: body.role,
+            content: body.content,
           },
-          { waitForEmotionAnalysis: body.awaitEmotionAnalysis }
-        );
+          ...(typeof body.timestamp === 'string' && body.timestamp.trim()
+            ? { timestamp: body.timestamp.trim() }
+            : {}),
+          ...(body.metadata !== undefined
+            ? {
+                metadata:
+                  typeof body.metadata === 'string' ? body.metadata : JSON.stringify(body.metadata),
+              }
+            : {}),
+        });
 
         writeJson(res, 200, { success: true, message });
         return;
@@ -398,11 +391,16 @@ export const createDaemonRequestHandler =
         }
         const statusParam = url.searchParams.get('status') || '';
         const statuses = statusParam
-          ? statusParam.split(',').map(s => s.trim()).filter(Boolean)
+          ? statusParam
+              .split(',')
+              .map(s => s.trim())
+              .filter(Boolean)
           : [];
         const limit = Number(url.searchParams.get('limit') || '');
         const runs = deps.chatService.listRunsByStatus(
-          statuses.length > 0 ? (statuses as import('@iki/backend/types/agent_run').AgentRunStatus[]) : ['queued', 'running', 'blocked', 'completed', 'failed', 'cancelled'],
+          statuses.length > 0
+            ? (statuses as import('@iki/backend/types/agent_run').AgentRunStatus[])
+            : ['queued', 'running', 'blocked', 'completed', 'failed', 'cancelled'],
           {
             clientId: client.id,
             ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
@@ -486,71 +484,6 @@ export const createDaemonRequestHandler =
           writeJson(res, 200, result);
           return;
         }
-      }
-
-      if (req.method === 'GET' && pathName === '/v1/memory/short') {
-        if (!hasScope(client, 'memory:read')) {
-          writeJson(res, 403, { success: false, error: 'Missing memory:read scope' });
-          return;
-        }
-        const threadId = url.searchParams.get('thread_id') || '';
-        if (!threadId) {
-          writeJson(res, 400, { success: false, error: 'Missing thread_id' });
-          return;
-        }
-        const access = getThreadOrError(threadId, client.id);
-        if (!access.thread) {
-          writeJson(res, access.status || 404, { success: false, error: access.error });
-          return;
-        }
-        const limit = Number(url.searchParams.get('limit') || '');
-        const rows = memoryDb.listShortMemory(threadId, Number.isFinite(limit) ? limit : undefined);
-        writeJson(res, 200, { success: true, entries: rows });
-        return;
-      }
-
-      if (req.method === 'GET' && pathName === '/v1/memory/long') {
-        if (!hasScope(client, 'memory:read')) {
-          writeJson(res, 403, { success: false, error: 'Missing memory:read scope' });
-          return;
-        }
-        const threadId = url.searchParams.get('thread_id') || '';
-        if (!threadId) {
-          writeJson(res, 400, { success: false, error: 'Missing thread_id' });
-          return;
-        }
-        const access = getThreadOrError(threadId, client.id);
-        if (!access.thread) {
-          writeJson(res, access.status || 404, { success: false, error: access.error });
-          return;
-        }
-        const limit = Number(url.searchParams.get('limit') || '');
-        const rows = memoryDb.listLongMemory(threadId, Number.isFinite(limit) ? limit : undefined);
-        writeJson(res, 200, { success: true, entries: rows });
-        return;
-      }
-
-      if (req.method === 'POST' && pathName === '/v1/memory/search') {
-        if (!hasScope(client, 'memory:read')) {
-          writeJson(res, 403, { success: false, error: 'Missing memory:read scope' });
-          return;
-        }
-        const body = await readParsedBody<MemorySearchPayload>(
-          req,
-          res,
-          parseMemorySearchPayload,
-          'Invalid search payload'
-        );
-        if (!body) return;
-
-        const results = await memoryDb.searchLongMemoryAcrossThreads(body.query, {
-          limit: body.limit,
-          threshold: body.threshold,
-          includeIncognito: body.includeIncognito,
-          clientId: client.id,
-        });
-        writeJson(res, 200, { success: true, results });
-        return;
       }
 
       if (req.method === 'GET' && pathName === '/v1/mcp/servers') {

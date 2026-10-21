@@ -1,6 +1,4 @@
-import {
-  extractTextFromModelMessageContent,
-} from '@iki/backend/agent/model_messages';
+import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
 import {
   clipTextToTokenBudget,
   estimateMessageTokens,
@@ -8,7 +6,6 @@ import {
 } from '../agent/context_budget';
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { AppConfig } from '@iki/backend/types/config';
-import type { ModelCapability } from '@iki/backend/utils/provider_models';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 import type {
   AssembleChatContextResult,
@@ -22,18 +19,13 @@ import type {
   ContextCompositionSummary,
 } from '@iki/backend/types/context_composition';
 
-export const getContextConfig = (
-  configured?: AppConfig['memory']['context'] | null
-): ContextConfig => ({
-  ...DEFAULT_APP_CONFIG.memory.context,
+export const getContextConfig = (configured?: AppConfig['context'] | null): ContextConfig => ({
+  ...DEFAULT_APP_CONFIG.context,
   ...(configured ?? {}),
 });
 
-export const countMessageTokens = (
-  message: ChatInputMessage,
-  _modelCapability?: unknown
-): number => estimateMessageTokens(message);
-
+export const countMessageTokens = (message: ChatInputMessage, _modelCapability?: unknown): number =>
+  estimateMessageTokens(message);
 
 export const buildMessagePreview = (message: ChatInputMessage): string => {
   if (typeof message.content === 'string') return message.content;
@@ -69,9 +61,7 @@ const CONTEXT_COMPOSITION_BLOCK_CATEGORIES: Record<ContextBlockKind, ContextComp
   'recent-history': 'messages',
   identity: 'systemPrompt',
   skills: 'skills',
-  memory: 'memory',
   'thread-summary': 'other',
-  affect: 'other',
 };
 
 export const summarizeContextComposition = (params: {
@@ -85,10 +75,7 @@ export const summarizeContextComposition = (params: {
   };
 
   for (const block of params.report.blocks) {
-    add(
-      CONTEXT_COMPOSITION_BLOCK_CATEGORIES[block.kind] ?? 'other',
-      block.estimatedTokens
-    );
+    add(CONTEXT_COMPOSITION_BLOCK_CATEGORIES[block.kind] ?? 'other', block.estimatedTokens);
   }
   add('tools', params.toolSchemaTokens?.builtin ?? 0);
   add('mcpTools', params.toolSchemaTokens?.mcp ?? 0);
@@ -100,45 +87,9 @@ export const summarizeContextComposition = (params: {
   return { estimatedTotalTokens, categories };
 };
 
-/**
- * Volatile per-turn context rides with the newest user message rather than the
- * system prefix. Prompt caching is a prefix: anything that changes ahead of the
- * transcript forces the whole history to be re-prefilled, so only stable
- * instruction blocks belong in front of it. The envelope keeps injected text
- * from being read as something the user actually said.
- */
-const ENVELOPE_OPEN = '<system-reminder>';
-const ENVELOPE_CLOSE = '</system-reminder>';
-
 /** Inverse of the envelope: exports show what the user wrote, not what we injected. */
 export const stripInjectedContext = (text: string): string =>
   text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
-
-export const appendContextToLastUserMessage = (
-  messages: ChatInputMessage[],
-  context: string
-): ChatInputMessage[] => {
-  const trimmed = context.trim();
-  if (!trimmed) return messages;
-
-  const envelope = `${ENVELOPE_OPEN}\n${trimmed}\n${ENVELOPE_CLOSE}`;
-  const index = messages.findLastIndex(message => message.role === 'user');
-  if (index === -1) {
-    return [...messages, { role: 'user', content: envelope } as ChatInputMessage];
-  }
-
-  const target = messages[index];
-  const enriched =
-    typeof target.content === 'string'
-      ? `${target.content}\n\n${envelope}`
-      : [...(target.content ?? []), { type: 'text', text: `\n\n${envelope}` } as never];
-
-  return [
-    ...messages.slice(0, index),
-    { ...target, content: enriched } as ChatInputMessage,
-    ...messages.slice(index + 1),
-  ];
-};
 
 export const buildAssembleResult = (params: {
   messages: ChatInputMessage[];

@@ -4,9 +4,8 @@ import os from 'node:os';
 
 import { registerStandardTools, defaultToolRegistry } from '@iki/backend/tools';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { startTurnHarness } from '@iki/backend/agent/harness';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getToolModel } from '@iki/backend/provider/tool_model';
-import { createSimpleAgentRunner } from '@iki/backend/agent/runners/simple_agent_runner';
 import { type AgentTool } from '@iki/backend/agent';
 
 const AUTH_PATH = path.join(os.homedir(), '.iki', 'agent', 'auth.json');
@@ -30,7 +29,7 @@ const ensureTools = () => {
       delegatedAgentRuntime: {
         createRunTracker: createAgentRunTracker,
         getConversationToolModel: getToolModel,
-        createHarness: startTurnHarness,
+        createHarness: startPiTurnHarness,
       },
     });
     toolsRegistered = true;
@@ -42,22 +41,6 @@ export const hasProviderConfig = (): boolean => hasAuth;
 export const getIntegrationTestContext = () => {
   if (!hasAuth) return null;
   return { providerType: 'deepseek' as const, model: 'deepseek-v4-flash' };
-};
-
-export const createTestRunner = (
-  opts: { tools?: AgentTool[]; systemPrompt?: string; maxIterations?: number } = {}
-): ReturnType<typeof createSimpleAgentRunner> => {
-  return createSimpleAgentRunner({
-    systemPrompt:
-      opts.systemPrompt ??
-      'You are a concise AI assistant for integration testing. Answer directly and briefly.',
-    providerType: 'deepseek',
-    model: 'deepseek-v4-flash',
-    enableTools: (opts.tools?.length ?? 0) > 0,
-    maxIterations: opts.maxIterations ?? 3,
-    maxTokens: 500,
-    temperature: 0.1,
-  });
 };
 
 export const resolveEnabledTools = (names: string[]): AgentTool[] => {

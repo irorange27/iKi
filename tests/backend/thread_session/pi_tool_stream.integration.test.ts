@@ -36,27 +36,32 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
 
 vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
   createChatTurnPreparer: () => ({
-    prepareChatTurn: vi.fn(async (options: { messages: Array<{ parts: Array<{ text: string }> }>; tools?: string[] }) => {
-      const prompt = options.messages[0]?.parts[0]?.text ?? 'probe';
-      return {
-        report: { totalEstimatedTokens: 1, blocks: [] },
-        usedSkills: [],
-        selectedSkillIds: [],
-        skillMode: 'manual' as const,
-        finalMessages: [{ role: 'user' as const, content: prompt }],
-        history: [] as unknown[],
-        prompt,
-        guardActive: false,
-        requireApproval: false,
-        autoApproveToolRequests: false,
-        affectSignal: null,
-        interventionPolicy: null,
-        guardedTools: [...(options.tools ?? [])],
-        enableTools: (options.tools?.length ?? 0) > 0,
-        maxInputTokens: 98000,
-        maxOutputTokens: 2000,
-      };
-    }),
+    prepareChatTurn: vi.fn(
+      async (options: {
+        messages: Array<{ parts: Array<{ text: string }> }>;
+        tools?: string[];
+      }) => {
+        const prompt = options.messages[0]?.parts[0]?.text ?? 'probe';
+        return {
+          report: { totalEstimatedTokens: 1, blocks: [] },
+          usedSkills: [],
+          selectedSkillIds: [],
+          skillMode: 'manual' as const,
+          finalMessages: [{ role: 'user' as const, content: prompt }],
+          history: [] as unknown[],
+          prompt,
+          guardActive: false,
+          requireApproval: false,
+          autoApproveToolRequests: false,
+          affectSignal: null,
+          interventionPolicy: null,
+          guardedTools: [...(options.tools ?? [])],
+          enableTools: (options.tools?.length ?? 0) > 0,
+          maxInputTokens: 98000,
+          maxOutputTokens: 2000,
+        };
+      }
+    ),
   }),
 }));
 
@@ -65,8 +70,6 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   retrieveRelevantContinuity: (): null => null,
   onMessagePersisted: async (): Promise<void> => undefined,
   getCompanion: () => ({
-    setChatPolicy: vi.fn(),
-    setAffect: vi.fn(),
     beginThinking: vi.fn(),
     endThinking: vi.fn(),
     clearConversationPreview: vi.fn(),
@@ -87,15 +90,21 @@ import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { exportRunTrajectory } from '@iki/backend/thread_session/atif_export';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { z } from 'zod';
-import { createScriptedPiServer, sse, type ScriptedPiServer } from '../pi_candidate/helpers/scripted_pi_server';
+import {
+  createScriptedPiServer,
+  sse,
+  type ScriptedPiServer,
+} from '../pi_candidate/helpers/scripted_pi_server';
 
 let root: string;
 let server: ScriptedPiServer;
 let conversation: ReturnType<typeof createChatPersistence>;
-const usageEvents: Array<{ source?: string; usage?: { inputTokens?: number; cacheReadTokens?: number } }> = [];
+const usageEvents: Array<{
+  source?: string;
+  usage?: { inputTokens?: number; cacheReadTokens?: number };
+}> = [];
 const executions: string[] = [];
 
 const TOOL_NAME = 'pi_tool_probe';
@@ -132,9 +141,16 @@ const buildStreaming = (approvalsOverride?: {
     getThreadTitle: () => 'Pi tool stream',
   });
 
-const chunksOf = (target: { send: (channel: string, payload: unknown) => void }, type: string): Array<Record<string, unknown>> => {
-  const calls = (target.send as ReturnType<typeof vi.fn>).mock.calls as Array<[string, Record<string, unknown>]>;
-  return calls.filter(call => call[0] === 'chat:ui-chunk' && call[1]?.type === type).map(call => call[1]);
+const chunksOf = (
+  target: { send: (channel: string, payload: unknown) => void },
+  type: string
+): Array<Record<string, unknown>> => {
+  const calls = (target.send as ReturnType<typeof vi.fn>).mock.calls as Array<
+    [string, Record<string, unknown>]
+  >;
+  return calls
+    .filter(call => call[0] === 'chat:ui-chunk' && call[1]?.type === type)
+    .map(call => call[1]);
 };
 
 const publishedText = (target: { send: (channel: string, payload: unknown) => void }): string =>
@@ -148,9 +164,16 @@ const committedText = (threadId: string): string =>
     .map(e => (e.payload as { text: string }).text)
     .join('');
 
-const lastRunStatus = (target: { send: (channel: string, payload: unknown) => void }): string | undefined => {
-  const calls = (target.send as ReturnType<typeof vi.fn>).mock.calls as Array<[string, { status?: string }]>;
-  return calls.filter(call => call[0] === 'chat:run-status').map(call => call[1]?.status).at(-1);
+const lastRunStatus = (target: {
+  send: (channel: string, payload: unknown) => void;
+}): string | undefined => {
+  const calls = (target.send as ReturnType<typeof vi.fn>).mock.calls as Array<
+    [string, { status?: string }]
+  >;
+  return calls
+    .filter(call => call[0] === 'chat:run-status')
+    .map(call => call[1]?.status)
+    .at(-1);
 };
 
 beforeAll(async () => {
@@ -258,10 +281,12 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     const toolCalls = chunksOf(target, 'tool-input-available');
     const toolResults = chunksOf(target, 'tool-output-available');
     expect(toolCalls[0]).toMatchObject({ toolName: TOOL_NAME, input: { path: '/probe.txt' } });
-    expect((toolResults[0] as { output?: { type?: string; value?: string } }).output).toMatchObject({
-      type: 'text',
-      value: 'contents of /probe.txt',
-    });
+    expect((toolResults[0] as { output?: { type?: string; value?: string } }).output).toMatchObject(
+      {
+        type: 'text',
+        value: 'contents of /probe.txt',
+      }
+    );
 
     // Shown text === committed text (D22).
     const shown = publishedText(target);
@@ -297,7 +322,10 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
         ],
       },
       {
-        chunks: [sse.delta('the file says hi'), sse.finish('stop', { prompt_tokens: 40, completion_tokens: 10, total_tokens: 50 })],
+        chunks: [
+          sse.delta('the file says hi'),
+          sse.finish('stop', { prompt_tokens: 40, completion_tokens: 10, total_tokens: 50 }),
+        ],
       },
     ]);
 
@@ -310,7 +338,11 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       threadId: 'thread_pi_tool_stream',
       approvalPolicy: 'never',
       messages: [
-        { id: 'msg_pi_traj', role: 'user', parts: [{ type: 'text', text: 'trajectory the probe file' }] },
+        {
+          id: 'msg_pi_traj',
+          role: 'user',
+          parts: [{ type: 'text', text: 'trajectory the probe file' }],
+        },
       ],
       tools: [TOOL_NAME],
     });
@@ -389,7 +421,11 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       threadId: 'thread_pi_tool_stream',
       approvalPolicy: 'always',
       messages: [
-        { id: 'msg_pi_guarded', role: 'user', parts: [{ type: 'text', text: 'guarded tool probe' }] },
+        {
+          id: 'msg_pi_guarded',
+          role: 'user',
+          parts: [{ type: 'text', text: 'guarded tool probe' }],
+        },
       ],
       tools: [TOOL_NAME],
     });
@@ -435,7 +471,11 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     server.setScriptSequence('hand the task over', [
       {
         chunks: [
-          sse.toolCallDelta('call_h', 'handoff', '{"summary":"done enough","next_steps":"rest","reason":"other"}'),
+          sse.toolCallDelta(
+            'call_h',
+            'handoff',
+            '{"summary":"done enough","next_steps":"rest","reason":"other"}'
+          ),
           sse.finish('tool_calls', { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }),
         ],
       },
@@ -451,7 +491,11 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       threadId: 'thread_pi_tool_stream',
       approvalPolicy: 'never',
       messages: [
-        { id: 'msg_pi_handoff', role: 'user', parts: [{ type: 'text', text: 'hand the task over' }] },
+        {
+          id: 'msg_pi_handoff',
+          role: 'user',
+          parts: [{ type: 'text', text: 'hand the task over' }],
+        },
       ],
       tools: [TOOL_NAME, 'handoff'], // handoff is a grant, not an injected one
     });
@@ -656,7 +700,11 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       approvalPolicy: 'always',
       autonomous: { maxIterations: 3, continuePrompt: 'continue' },
       messages: [
-        { id: 'msg_pi_chain_guard', role: 'user', parts: [{ type: 'text', text: 'chained guard probe' }] },
+        {
+          id: 'msg_pi_chain_guard',
+          role: 'user',
+          parts: [{ type: 'text', text: 'chained guard probe' }],
+        },
       ],
       tools: [TOOL_NAME],
     });

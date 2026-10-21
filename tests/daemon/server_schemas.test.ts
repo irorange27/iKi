@@ -30,8 +30,6 @@ describe('daemon server schemas', () => {
       scopes: [
         'chat:read',
         'chat:write',
-        'memory:read',
-        'memory:write',
         'tools:run',
         'tools:approve',
         'mcp:read',
@@ -91,9 +89,7 @@ describe('daemon server schemas', () => {
         skillIds: ['skill_1'],
         skillMode: 'manual',
         experimental_context: {
-          affect_mode: 'explicit_policy',
           context_mode: 'benchmark_clean',
-          await_realtime_affect: true,
         },
       })
     ).toEqual({
@@ -106,9 +102,7 @@ describe('daemon server schemas', () => {
       skillIds: ['skill_1'],
       skillMode: 'manual',
       experimentalContext: {
-        affectMode: 'explicit_policy',
         contextMode: 'benchmark_clean',
-        awaitRealtimeAffect: true,
       },
     });
 

@@ -14,19 +14,20 @@ import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 
-const external = vi.hoisted(() => ({ userData: vi.fn(() => ''), model: vi.fn() }));
-vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
-  // `resolvePiTurnSupply` calls `getProviderConfig` INTERNALLY inside the
-  // factory module, so mocking that module cannot reach it. These suites have
-  // no provider table and do not test admission.
-  pausedPlanRunsOnPiToolSupply: () => true,
+const external = vi.hoisted(() => ({ userData: vi.fn(() => '') }));
+const callPiChatMock = vi.hoisted(() => vi.fn());
+
+// The streaming path reaches the supply through `callPiChat`. These cases fail
+// BEFORE the model call, so the script is one settled answer that must never be
+// consumed — reaching it would mean the guard did not fire.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
 }));
 
 vi.mock('@iki/backend/platform', () => ({ getUserDataPath: external.userData }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
-  createModel: external.model,
   resolvePersonaPrompt: () => 'review',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({
@@ -50,6 +51,8 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   }),
 }));
 import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/database';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import {
   piTurnHarness,
   setTurnHarnessFallback,
@@ -59,7 +62,6 @@ import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createMessageSend } from '@iki/backend/thread_session/message_send';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
-import { FauxModelProvider, fauxText } from '@iki/backend/agent/testing/faux_model';
 
 let root: string;
 let conversation: ReturnType<typeof createChatPersistence>;
@@ -71,6 +73,10 @@ const memory = {
 };
 
 beforeEach(async () => {
+  // One settled answer: these cases are about the COMMIT gate, not the model.
+  callPiChatMock.mockImplementation(
+    createScriptedPiChat([[{ kind: 'text', text: 'SEND_ANSWER' }, { kind: 'done' }]])
+  );
   // Durable-layer suite: a scripted model drives the turn, so the executor is
   // forced rather than routed (the production default refuses a turn whose
   // provider row does not exist, which is not what this suite is about).
@@ -78,13 +84,12 @@ beforeEach(async () => {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-log-discipline-'));
   external.userData.mockReturnValue(root);
   initializeDatabase({ dbPath: path.join(root, 'discipline.db') });
+    seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
   conversation = createChatPersistence({
     memory: memory as never,
     onContinuityMessagePersisted: async (): Promise<void> => undefined,
   });
   conversation.createThread({ id: 'review_settle', metadata: '{"mode":"chat"}' });
-  external.model.mockReset();
-  external.model.mockReturnValue(new FauxModelProvider([fauxText(text)]));
 });
 afterEach(async () => {
   closeDatabase();
@@ -172,7 +177,7 @@ const runSend = async () => {
 it('losing the input/start fact fails the stream before any model call', async () => {
   rejectEventType('input_accepted');
   const evidence = await runStream();
-  expect(external.model, 'an unrecorded turn must not execute').not.toHaveBeenCalled();
+  expect(callPiChatMock, 'an unrecorded turn must not execute').not.toHaveBeenCalled();
   expect(evidence.result.success).toBe(false);
   expect(evidence.errors.length, 'the subscriber must learn of the failure').toBeGreaterThan(0);
   expect(evidence.runs[0]).toMatchObject({ status: 'failed' });

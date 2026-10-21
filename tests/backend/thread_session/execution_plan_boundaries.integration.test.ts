@@ -13,14 +13,6 @@ const callPiChatMock = vi.hoisted(() => vi.fn());
 
 // Pi is the only supply (ADR 009); script it here instead of the retired
 // `createModel`.
-vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
-  // `resolvePiTurnSupply` calls `getProviderConfig` INTERNALLY inside the
-  // factory module, so mocking that module cannot reach it. These suites have
-  // no provider table and do not test admission.
-  pausedPlanRunsOnPiToolSupply: () => true,
-}));
-
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -44,6 +36,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
 }));
 
 import { closeDatabase, getDb, initializeDatabase } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import {
   piTurnHarness,
   setTurnHarnessFallback,
@@ -76,7 +69,7 @@ import {
   recordSessionEvents,
   SESSION_EVENT_VERSION,
 } from '@iki/backend/thread_session/session_log';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { resolveThreadWorkspaceSelectionSnapshot } from '@iki/backend/workspaces/thread_workspace';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
@@ -100,7 +93,6 @@ describe('execution plan admission boundaries', () => {
   let conversation: ReturnType<typeof createChatPersistence>;
   let coordinator: ReturnType<typeof createThreadStreamCoordinator>;
   let streaming: ReturnType<typeof createChatStreaming>;
-  let model: FauxModelProvider;
   let releases: Array<() => void>;
 
   beforeEach(async () => {
@@ -111,6 +103,7 @@ describe('execution plan admission boundaries', () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-plan-boundaries-'));
     external.userData.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'boundaries.db') });
+    seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
     releases = [];
     external.capability.mockReset();
     external.capability.mockResolvedValue(capacity);
@@ -132,11 +125,17 @@ describe('execution plan admission boundaries', () => {
       metadata: '{"mode":"work"}',
     });
     defaultToolRegistry.register(new WriteFileTool().toAgentTool());
-    model = new FauxModelProvider([
-      fauxToolCall('write_file', { path: 'effect.txt', content: 'bound' }, { id: 'call_bound' }),
-      fauxText('done'),
-    ]);
-    external.model.mockReturnValue(model);
+    // The model writes through the real tool, then answers — both calls are
+    // scripted on the Pi seam.
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName: 'write_file', args: { path: 'effect.txt', content: 'bound' }, id: 'call_bound' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [{ kind: 'text', text: 'done' }, { kind: 'done', reason: 'stop' }],
+      ])
+    );
     coordinator = createThreadStreamCoordinator({
       crossProcessThreadRun: (threadId, options) => {
         const release = tryAcquireCrossProcessThreadRun(threadId, {
@@ -253,7 +252,8 @@ describe('execution plan admission boundaries', () => {
     // identity, never B's — the model must not reason under rules of a
     // workspace its tools do not run in.
     expect(doStream).toHaveBeenCalled();
-    const request = doStream.mock.calls[0]?.[0] as { prompt?: unknown } | undefined;
+    // `callPiChat(model, context, options)` — the request context is arg 1.
+    const request = doStream.mock.calls[0]?.[1];
     const prompt = JSON.stringify(request);
     expect(prompt).toContain('SCOPE_MARKER_A');
     expect(prompt).toContain(`Current workspace: A (${path.join(root, 'a')})`);
@@ -375,7 +375,8 @@ describe('execution plan admission boundaries', () => {
 
     expect(await fs.readFile(path.join(root, 'a', 'effect.txt'), 'utf8')).toBe('bound');
     await expect(fs.stat(path.join(root, 'b', 'effect.txt'))).rejects.toThrow();
-    const request = doStream.mock.calls[0]?.[0] as { prompt?: unknown } | undefined;
+    // `callPiChat(model, context, options)` — the request context is arg 1.
+    const request = doStream.mock.calls[0]?.[1];
     const prompt = JSON.stringify(request);
     expect(prompt).toContain(`Current workspace: A (${path.join(root, 'a')})`);
     expect(prompt).not.toContain('Current workspace: B');

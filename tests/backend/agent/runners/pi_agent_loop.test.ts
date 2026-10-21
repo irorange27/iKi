@@ -1,8 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
+vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
+  return {
+    ...actual,
+    resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
+    getProviderConfig: vi.fn(() => ({
+      id: 'provider_primary',
+      type: 'custom-openai',
+      apiKey: 'unit-key',
+      baseURL: 'http://127.0.0.1:9/v1',
+      models: ['gpt-4o-mini'],
+      modelOptions: {},
+      isResponseApi: false,
+    })),
+  };
+});
+
 import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
-import { AgentHarness } from '@iki/backend/agent/harness/agent_harness';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { PiToolTurnHarness, type PiToolModelCall } from '@iki/backend/agent/runners/pi_tool_turn_harness';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { z } from 'zod';
 import {
@@ -512,6 +528,39 @@ describe('pi agent loop — orchestration semantics', () => {
   });
 });
 
+
+/** A PiToolModelCall double: each scripted step is one model call. */
+const harnessModelCall = (
+  steps: Array<{ text?: string; toolCall?: { id: string; name: string; args: Record<string, unknown> } }>
+): PiToolModelCall => {
+  let attempt = 0;
+  return async () => {
+    const step = steps[attempt];
+    if (!step) throw new Error(`unexpected model call #${attempt + 1}`);
+    attempt += 1;
+    const usage = { input: 12, output: 3, cacheRead: 0, cacheWrite: 0, reasoning: 0, totalTokens: 15 };
+    const content: AssistantMessage['content'] = step.toolCall
+      ? [{ type: 'toolCall', id: step.toolCall.id, name: step.toolCall.name, arguments: step.toolCall.args }]
+      : [{ type: 'text', text: step.text ?? '' }];
+    const message: AssistantMessage = {
+      role: 'assistant',
+      content,
+      api: 'openai-completions',
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      usage,
+      stopReason: 'stop',
+      timestamp: Date.now(),
+    } as AssistantMessage;
+    return {
+      events: (async function* () {
+        if (step.text) yield { type: 'text_delta' as const, delta: step.text };
+      })(),
+      final: Promise.resolve(message),
+    };
+  };
+};
+
 // ── differential: the same scenario through the REAL harness ────────────────
 // Both engines must satisfy the same invariants for the text+tools scenario:
 // the tool executes exactly once with the same args, and the turn ends with
@@ -535,23 +584,26 @@ describe('differential: same scenario through the real harness', () => {
       })
     );
     try {
-      const harness = new AgentHarness({
-        providerType: 'openai',
-        providerId: 'provider_primary',
-        model: 'gpt-4o-mini',
-        systemPrompt: 'system prompt',
-        enableTools: true,
-        enabledToolNames: [toolName],
-        availableSkillIds: [],
-        guardActive: false,
-        approvalPolicy: 'never',
-        maxIterations: 4,
-        modelFactory: () =>
-          new FauxModelProvider([
-            fauxToolCall(toolName, { path: '/diff.txt' }, { id: 'call_diff' }),
-            fauxText('diff done'),
+      const harness = new PiToolTurnHarness(
+        {
+          providerType: 'openai',
+          providerId: 'provider_primary',
+          model: 'gpt-4o-mini',
+          systemPrompt: 'system prompt',
+          enableTools: true,
+          enabledToolNames: [toolName],
+          availableSkillIds: [],
+          guardActive: false,
+          approvalPolicy: 'never',
+          maxIterations: 4,
+        },
+        {
+          modelCall: harnessModelCall([
+            { toolCall: { id: 'call_diff', name: toolName, args: { path: '/diff.txt' } } },
+            { text: 'diff done' },
           ]),
-      });
+        }
+      );
 
       await runWithToolRuntimeContext(
         {

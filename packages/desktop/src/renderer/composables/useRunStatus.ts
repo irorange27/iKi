@@ -2,36 +2,27 @@ import { onMounted, onUnmounted, ref, type Ref } from 'vue';
 import type { ElectronApi, RunStatusEvent } from '@iki/backend/types/electron_api';
 
 export type RunStatusState = {
-  currentRunId: Ref<string | null>;
   currentStatus: Ref<string | null>;
-  currentThreadId: Ref<string | null>;
   isActive: Ref<boolean>;
 };
 
 export const useRunStatus = (deps: {
   electronAPI: Pick<ElectronApi, 'chat'>;
 }): RunStatusState => {
-  const currentRunId = ref<string | null>(null);
   const currentStatus = ref<string | null>(null);
-  const currentThreadId = ref<string | null>(null);
   const isActive = ref(false);
 
   const handleRunStatus = (event: RunStatusEvent) => {
-    currentRunId.value = event.runId;
     currentStatus.value = event.status;
-    currentThreadId.value = event.threadId ?? null;
-
     isActive.value = event.status === 'running' || event.status === 'blocked';
   };
 
   let removeListener: () => void = () => undefined;
 
+  // Preload and renderer ship in the same asar, so the channel is a fixed
+  // contract: no feature-detection, and no try/catch around subscribing.
   onMounted(() => {
-    try {
-      removeListener = deps.electronAPI.chat.onRunStatus?.(handleRunStatus) ?? (() => undefined);
-    } catch {
-      // onRunStatus not available in older builds
-    }
+    removeListener = deps.electronAPI.chat.onRunStatus(handleRunStatus);
   });
 
   onUnmounted(() => {
@@ -42,10 +33,5 @@ export const useRunStatus = (deps: {
     }
   });
 
-  return {
-    currentRunId,
-    currentStatus,
-    currentThreadId,
-    isActive,
-  };
+  return { currentStatus, isActive };
 };

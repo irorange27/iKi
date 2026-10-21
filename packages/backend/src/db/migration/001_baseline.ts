@@ -8,13 +8,6 @@ import type { Migration } from './runner';
 // baseline, so they open unchanged. Re-generate by replaying a chain when the
 // schema changes materially; otherwise append forward migrations above 001.
 const BASELINE_STATEMENTS: readonly string[] = [
-  `CREATE TABLE IF NOT EXISTS affect_states (
-        thread_id TEXT PRIMARY KEY,
-        state TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
-      )`,
   `CREATE TABLE IF NOT EXISTS agent_run_checkpoints (
         id TEXT PRIMARY KEY,
         run_id TEXT NOT NULL,
@@ -141,14 +134,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
             )`,
-  `CREATE TABLE IF NOT EXISTS chat_thread_context (
-    thread_id TEXT PRIMARY KEY REFERENCES chat_threads(id) ON DELETE CASCADE,
-    summary TEXT NOT NULL,
-    covered_message_count INTEGER NOT NULL DEFAULT 0,
-    metadata TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  )`,
   `CREATE TABLE IF NOT EXISTS chat_thread_todos (
         thread_id TEXT PRIMARY KEY REFERENCES chat_threads(id) ON DELETE CASCADE,
         items TEXT NOT NULL,
@@ -216,15 +201,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
         metadata TEXT NOT NULL DEFAULT '{}',
         created_at TEXT NOT NULL
       )`,
-  `CREATE TABLE IF NOT EXISTS clipboard_snapshots (
-        id TEXT PRIMARY KEY,
-        content_hash TEXT NOT NULL,
-        content_preview TEXT NOT NULL,
-        content_length INTEGER NOT NULL,
-        mime_type TEXT NOT NULL DEFAULT 'text/plain',
-        captured_at TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      )`,
   `CREATE TABLE IF NOT EXISTS config (
       key TEXT PRIMARY KEY,
       value TEXT
@@ -262,16 +238,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
         updated_at TEXT NOT NULL,
         FOREIGN KEY (profile_id) REFERENCES identity_profiles(id) ON DELETE CASCADE
       )`,
-  `CREATE TABLE IF NOT EXISTS emotion_events (
-        id TEXT PRIMARY KEY,
-        thread_id TEXT NOT NULL,
-        message_id TEXT NOT NULL UNIQUE,
-        role TEXT NOT NULL,
-        emotion TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
-      )`,
   `CREATE TABLE IF NOT EXISTS identity_profiles (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -304,31 +270,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
         updated_at TEXT NOT NULL,
         last_connected_at TEXT,
         last_error TEXT
-      )`,
-  `CREATE TABLE IF NOT EXISTS memory_long (
-        id TEXT PRIMARY KEY,
-        thread_id TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        embedding TEXT NOT NULL,
-        source_message_ids TEXT,
-        emotion TEXT,
-        tags TEXT,
-        metadata TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
-      )`,
-  `CREATE TABLE IF NOT EXISTS memory_short (
-        id TEXT PRIMARY KEY,
-        thread_id TEXT NOT NULL,
-        message_id TEXT NOT NULL UNIQUE,
-        role TEXT NOT NULL,
-        content TEXT NOT NULL,
-        emotion TEXT,
-        importance REAL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
       )`,
   `CREATE TABLE IF NOT EXISTS proactive_tasks (
         id TEXT PRIMARY KEY,
@@ -435,7 +376,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )`,
-  `CREATE INDEX IF NOT EXISTS idx_affect_states_updated ON affect_states(updated_at)`,
   `CREATE INDEX IF NOT EXISTS idx_agent_run_checkpoints_run_created
         ON agent_run_checkpoints(run_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_agent_run_checkpoints_run_step
@@ -465,8 +405,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
         ON awaiters(status, next_wake_at ASC)`,
   `CREATE INDEX IF NOT EXISTS idx_awaiters_thread_updated
         ON awaiters(thread_id, updated_at DESC)`,
-  `CREATE INDEX IF NOT EXISTS idx_chat_thread_context_updated
-  ON chat_thread_context(updated_at)`,
   `CREATE INDEX IF NOT EXISTS idx_chat_thread_todos_updated
         ON chat_thread_todos(updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_chat_threads_client_id ON chat_threads(client_id)`,
@@ -484,10 +422,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
         ON chat_usage_events(provider_type, model)`,
   `CREATE INDEX IF NOT EXISTS idx_chat_usage_thread_created
         ON chat_usage_events(thread_id, created_at)`,
-  `CREATE INDEX IF NOT EXISTS idx_clipboard_snapshots_captured
-        ON clipboard_snapshots(captured_at DESC)`,
-  `CREATE INDEX IF NOT EXISTS idx_clipboard_snapshots_hash
-        ON clipboard_snapshots(content_hash, captured_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_continuity_evidence_item
         ON continuity_evidence(item_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_continuity_items_kind
@@ -497,8 +431,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_continuity_items_source_ref
         ON continuity_items(profile_id, source_ref)
         WHERE source_ref IS NOT NULL`,
-  `CREATE INDEX IF NOT EXISTS idx_emotion_events_thread ON emotion_events(thread_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_emotion_events_updated ON emotion_events(updated_at)`,
   `CREATE INDEX IF NOT EXISTS idx_eval_labels_run
         ON agent_run_eval_labels(run_id)`,
   `CREATE INDEX IF NOT EXISTS idx_eval_labels_step
@@ -508,10 +440,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
         WHERE active = 1`,
   `CREATE INDEX IF NOT EXISTS idx_identity_profiles_updated_at
         ON identity_profiles(updated_at DESC)`,
-  `CREATE INDEX IF NOT EXISTS idx_memory_long_thread ON memory_long(thread_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_memory_long_updated ON memory_long(updated_at)`,
-  `CREATE INDEX IF NOT EXISTS idx_memory_short_thread ON memory_short(thread_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_memory_short_updated ON memory_short(updated_at)`,
   `CREATE INDEX IF NOT EXISTS idx_proactive_tasks_enabled_next_run
         ON proactive_tasks(enabled, next_run_at)`,
   `CREATE INDEX IF NOT EXISTS idx_todo_items_list_sort

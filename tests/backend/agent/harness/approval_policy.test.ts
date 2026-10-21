@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { registerStandardTools } from '@iki/backend/tools';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { startTurnHarness } from '@iki/backend/agent/harness';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { resolveTools } from '@iki/backend/agent/harness/tool_resolver';
 
@@ -10,7 +10,7 @@ registerStandardTools({
   delegatedAgentRuntime: {
     createRunTracker: createAgentRunTracker,
     getConversationToolModel: getToolModel,
-    createHarness: startTurnHarness,
+    createHarness: startPiTurnHarness,
   },
 });
 
@@ -45,7 +45,13 @@ describe('resolveTools approvalPolicy (ADR 005)', () => {
   });
 
   it('trustWorkspace auto-approves workspace writes but gates all shell commands', () => {
-    const tools = resolve('trustWorkspace', ['write_file', 'read_file', 'edit', 'shell', 'delete_file']);
+    const tools = resolve('trustWorkspace', [
+      'write_file',
+      'read_file',
+      'edit',
+      'shell',
+      'delete_file',
+    ]);
 
     const writeNeed = needsApproval(tools, 'write_file');
     expect(typeof writeNeed).toBe('function');

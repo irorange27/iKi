@@ -71,9 +71,6 @@ import {
   DEEP_THINKING_SPRITE,
   HOVER_SPRITE,
   CLICK_SPRITE,
-  AFFECT_SAD_SPRITE,
-  AFFECT_EXCITED_SPRITE,
-  AFFECT_TIRED_SPRITE,
 } from '../composables/useCompanionSprites';
 import { useCompanionVoice } from '../composables/useCompanionVoice';
 import type { CompanionSnapshot } from '@iki/backend/types/companion';
@@ -135,26 +132,6 @@ const resolveSprite = (phase: string, nudgeKind?: string): string => {
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
 const resolveIdleSprite = (): string | null => {
-  const affect = snapshot.value.affect;
-  if (!affect) {
-    const variants = IDLE_VARIANTS.filter(v => v !== oldSrc.value);
-    if (variants.length === 0) return IDLE_VARIANTS[0];
-    return variants[Math.floor(Math.random() * variants.length)];
-  }
-
-  const sadLabels = ['sadness', 'anger', 'fear', 'disgust'];
-  const excitedLabels = ['joy', 'surprise'];
-
-  if (sadLabels.includes(affect.label) && affect.valence < 0) {
-    return AFFECT_SAD_SPRITE;
-  }
-  if (excitedLabels.includes(affect.label) && affect.arousal > 0.4) {
-    return AFFECT_EXCITED_SPRITE;
-  }
-  if (affect.arousal < 0.2) {
-    return AFFECT_TIRED_SPRITE;
-  }
-
   const variants = IDLE_VARIANTS.filter(v => v !== oldSrc.value);
   if (variants.length === 0) return IDLE_VARIANTS[0];
   return variants[Math.floor(Math.random() * variants.length)];

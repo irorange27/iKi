@@ -9,6 +9,8 @@ import { migration as baseline } from './001_baseline';
 import { migration as renameChatToolApprovals } from './002_rename_chat_tool_approvals';
 import { migration as approvalSessionWorkspaceSelection } from './003_approval_session_workspace_selection';
 import { migration as approvalSessionPlan } from './004_approval_session_plan';
+import { migration as dropMemoryAndAffect } from './005_drop_memory_and_affect';
+import { migration as dropThreadContext } from './006_drop_thread_context';
 
 // Forward-only migrations after the baseline. Add new ones above 001 in name
 // order (002_*, 003_*, …) — runMigrations sorts by name. Tables introduced
@@ -19,6 +21,8 @@ export const registeredMigrations: Migration[] = [
   renameChatToolApprovals,
   approvalSessionWorkspaceSelection,
   approvalSessionPlan,
+  dropMemoryAndAffect,
+  dropThreadContext,
 ];
 
 export const initializeMigrations = (db: SqliteDatabase) => {

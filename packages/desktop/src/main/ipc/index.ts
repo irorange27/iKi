@@ -3,7 +3,6 @@ import { registerCompanionIpc } from './companion';
 import { registerConfigIpc } from './config';
 import { registerDevIpc } from './dev';
 import { registerDevToolsIpc } from './devtools';
-import { registerMemoryIpc } from './memory';
 import { registerMcpIpc } from './mcp';
 import { registerPromptAppsIpc } from './prompt_apps';
 import { registerProvidersIpc } from './providers';
@@ -29,7 +28,6 @@ export const registerMainIpc = (): void => {
   registerUpdaterIpc();
   registerProvidersIpc();
   registerMcpIpc();
-  registerMemoryIpc();
   registerWorkspacesIpc();
   registerPromptAppsIpc();
   registerToolModelIpc();

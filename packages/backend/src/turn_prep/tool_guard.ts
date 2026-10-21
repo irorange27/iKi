@@ -1,7 +1,6 @@
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { applyToolApprovalPolicyList } from '@iki/backend/utils/tool_approval';
 import { createLogger } from '@iki/backend/logger';
-import type { AffectState } from '@iki/backend/affect/affect_state';
 import { selectToolsWithAgent } from '../provider/tool_selection';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 import { toLlmChatMessages } from '@iki/backend/message/ui_messages';
@@ -101,7 +100,10 @@ const shouldRetainTodoTool = (messages: ChatInputMessage[], selectedTools: strin
   const nonTodoTools = selectedTools.filter(toolName => toolName !== TODO_PLANNING_TOOL_NAME);
   const llmMessages = toLlmChatMessages(messages);
   const latestUserText =
-    [...llmMessages].reverse().find(message => message.role === 'user')?.content.trim() ?? '';
+    [...llmMessages]
+      .reverse()
+      .find(message => message.role === 'user')
+      ?.content.trim() ?? '';
 
   if (!latestUserText) return false;
   if (TODO_EXPLICIT_REQUEST_PATTERN.test(latestUserText)) return true;
@@ -159,7 +161,6 @@ export const resolveToolNames = async (params: {
   tools?: string[];
   mcpServerIds?: string[];
   inputMessages?: ChatInputMessage[];
-  affectState?: AffectState | null;
   autoApproveToolRequests?: boolean;
 }): Promise<{ explicitTools: string[]; resolvedTools: string[]; mode: ToolResolveMode }> => {
   const autoApproveToolRequests = params.autoApproveToolRequests === true;
@@ -188,7 +189,6 @@ export const resolveToolNames = async (params: {
       ? await selectToolsWithAgent({
           messages: toLlmChatMessages(params.inputMessages ?? []),
           availableTools: catalog,
-          affectState: params.affectState,
         })
       : null;
 

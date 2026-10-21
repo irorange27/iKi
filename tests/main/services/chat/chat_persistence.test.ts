@@ -99,14 +99,9 @@ describe('chat_persistence', () => {
   });
 
   it('persists thread creation fields that drive composer state and workspace scoping', async () => {
-    const { createChatPersistence } = await import(
-      '@iki/backend/turn_prep/persistence'
-    );
+    const { createChatPersistence } = await import('@iki/backend/turn_prep/persistence');
 
     const persistence = createChatPersistence({
-      memory: {
-        onMessagePersisted: vi.fn(),
-      } as never,
       onContinuityMessagePersisted: onContinuityMessagePersistedMock,
     });
 
@@ -145,15 +140,9 @@ describe('chat_persistence', () => {
   });
 
   it('touches thread ordering and persists continuity when saving a chat message', async () => {
-    const onMessagePersisted = vi.fn();
-    const { createChatPersistence } = await import(
-      '@iki/backend/turn_prep/persistence'
-    );
+    const { createChatPersistence } = await import('@iki/backend/turn_prep/persistence');
 
     const persistence = createChatPersistence({
-      memory: {
-        onMessagePersisted,
-      } as never,
       onContinuityMessagePersisted: onContinuityMessagePersistedMock,
     });
 
@@ -165,7 +154,6 @@ describe('chat_persistence', () => {
     });
 
     expect(touchChatThreadMock).toHaveBeenCalledWith('thread_1');
-    expect(onMessagePersisted).toHaveBeenCalled();
     expect(onContinuityMessagePersistedMock).toHaveBeenCalledWith({
       threadId: 'thread_1',
       messageId: 'msg_1',
@@ -179,14 +167,9 @@ describe('chat_persistence', () => {
   it('rejects workspace rebinding once a thread already has persisted messages', async () => {
     countChatMessagesByThreadMock.mockReturnValue(3);
 
-    const { createChatPersistence } = await import(
-      '@iki/backend/turn_prep/persistence'
-    );
+    const { createChatPersistence } = await import('@iki/backend/turn_prep/persistence');
 
     const persistence = createChatPersistence({
-      memory: {
-        onMessagePersisted: vi.fn(),
-      } as never,
       onContinuityMessagePersisted: onContinuityMessagePersistedMock,
     });
 
@@ -203,9 +186,7 @@ describe('chat_persistence', () => {
   });
 
   it('clears a thread atomically while re-binding proactive tasks to the recreated thread id', async () => {
-    const { createChatPersistence } = await import(
-      '@iki/backend/turn_prep/persistence'
-    );
+    const { createChatPersistence } = await import('@iki/backend/turn_prep/persistence');
 
     getChatThreadMock
       .mockReturnValueOnce({
@@ -231,9 +212,6 @@ describe('chat_persistence', () => {
     listProactiveTaskIdsByThreadMock.mockReturnValue(['task_1', 'task_2']);
 
     const persistence = createChatPersistence({
-      memory: {
-        onMessagePersisted: vi.fn(),
-      } as never,
       onContinuityMessagePersisted: onContinuityMessagePersistedMock,
     });
 

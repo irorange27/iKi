@@ -133,62 +133,16 @@ const ChatSchema = z
   })
   .catch(DEFAULT_APP_CONFIG.chat);
 
-const MemorySchema = z
+const ContextSchema = z
   .object({
-    enabled: booleanField(DEFAULT_APP_CONFIG.memory.enabled),
-    autoSummarize: booleanField(DEFAULT_APP_CONFIG.memory.autoSummarize),
-    maxRetrievalCount: numberField(DEFAULT_APP_CONFIG.memory.maxRetrievalCount),
-    similarThreshold: numberField(DEFAULT_APP_CONFIG.memory.similarThreshold),
-    embeddingModel: z
-      .object({
-        providerId: stringField(DEFAULT_APP_CONFIG.memory.embeddingModel.providerId),
-        providerType: stringField(DEFAULT_APP_CONFIG.memory.embeddingModel.providerType),
-        model: stringField(DEFAULT_APP_CONFIG.memory.embeddingModel.model),
-      })
-      .catch(DEFAULT_APP_CONFIG.memory.embeddingModel),
-    context: z
-      .object({
-        enabled: booleanField(DEFAULT_APP_CONFIG.memory.context.enabled),
-        recentMessageCount: intField(DEFAULT_APP_CONFIG.memory.context.recentMessageCount),
-        maxRecentTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxRecentTokens),
-        maxMessageTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxMessageTokens),
-        maxIdentityTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxIdentityTokens),
-        summaryTriggerMessages: intField(DEFAULT_APP_CONFIG.memory.context.summaryTriggerMessages),
-        summaryRecentMessages: intField(DEFAULT_APP_CONFIG.memory.context.summaryRecentMessages),
-        maxSummaryTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxSummaryTokens),
-        maxMemoryTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxMemoryTokens),
-        maxSkillTokens: intField(DEFAULT_APP_CONFIG.memory.context.maxSkillTokens),
-      })
-      .catch(DEFAULT_APP_CONFIG.memory.context),
-    emotion: z
-      .object({
-        enabled: booleanField(DEFAULT_APP_CONFIG.memory.emotion.enabled),
-        injectToSystemPrompt: booleanField(DEFAULT_APP_CONFIG.memory.emotion.injectToSystemPrompt),
-        realtimeAnalysis: booleanField(DEFAULT_APP_CONFIG.memory.emotion.realtimeAnalysis),
-        minConfidence: numberField(DEFAULT_APP_CONFIG.memory.emotion.minConfidence),
-        minSampleCount: numberField(DEFAULT_APP_CONFIG.memory.emotion.minSampleCount),
-        windowSize: numberField(DEFAULT_APP_CONFIG.memory.emotion.windowSize),
-        halfLifeMinutes: numberField(DEFAULT_APP_CONFIG.memory.emotion.halfLifeMinutes),
-        maxAgeMinutes: numberField(DEFAULT_APP_CONFIG.memory.emotion.maxAgeMinutes),
-        includeNeutral: booleanField(DEFAULT_APP_CONFIG.memory.emotion.includeNeutral),
-        toolGuard: z
-          .object({
-            enabled: booleanField(DEFAULT_APP_CONFIG.memory.emotion.toolGuard.enabled),
-            minConfidence: numberField(DEFAULT_APP_CONFIG.memory.emotion.toolGuard.minConfidence),
-            minArousal: numberField(DEFAULT_APP_CONFIG.memory.emotion.toolGuard.minArousal),
-            maxValence: numberField(DEFAULT_APP_CONFIG.memory.emotion.toolGuard.maxValence),
-            requireApproval: booleanField(
-              DEFAULT_APP_CONFIG.memory.emotion.toolGuard.requireApproval
-            ),
-            disableAutoTools: booleanField(
-              DEFAULT_APP_CONFIG.memory.emotion.toolGuard.disableAutoTools
-            ),
-          })
-          .catch(DEFAULT_APP_CONFIG.memory.emotion.toolGuard),
-      })
-      .catch(DEFAULT_APP_CONFIG.memory.emotion),
+    enabled: booleanField(DEFAULT_APP_CONFIG.context.enabled),
+    maxRecentTokens: intField(DEFAULT_APP_CONFIG.context.maxRecentTokens),
+    maxMessageTokens: intField(DEFAULT_APP_CONFIG.context.maxMessageTokens),
+    maxIdentityTokens: intField(DEFAULT_APP_CONFIG.context.maxIdentityTokens),
+    maxSummaryTokens: intField(DEFAULT_APP_CONFIG.context.maxSummaryTokens),
+    maxSkillTokens: intField(DEFAULT_APP_CONFIG.context.maxSkillTokens),
   })
-  .catch(DEFAULT_APP_CONFIG.memory);
+  .catch(DEFAULT_APP_CONFIG.context);
 
 const ContinuitySchema = z
   .object({
@@ -277,20 +231,6 @@ const WorkflowOptimizationSchema = z
   })
   .catch(DEFAULT_APP_CONFIG.workflowOptimization);
 
-const AgentSchema = z
-  .object({
-    enabled: booleanField(DEFAULT_APP_CONFIG.agent.enabled),
-    systemPrompt: stringField(DEFAULT_APP_CONFIG.agent.systemPrompt),
-    providerType: stringField(DEFAULT_APP_CONFIG.agent.providerType),
-    model: stringField(DEFAULT_APP_CONFIG.agent.model),
-    temperature: numberField(DEFAULT_APP_CONFIG.agent.temperature),
-    maxTokens: numberField(DEFAULT_APP_CONFIG.agent.maxTokens),
-    maxIterations: numberField(DEFAULT_APP_CONFIG.agent.maxIterations),
-    enableTools: booleanField(DEFAULT_APP_CONFIG.agent.enableTools),
-    enableMemory: booleanField(DEFAULT_APP_CONFIG.agent.enableMemory),
-  })
-  .catch(DEFAULT_APP_CONFIG.agent);
-
 export const AppConfigSchema = z
   .object({
     general: GeneralSchema,
@@ -300,7 +240,7 @@ export const AppConfigSchema = z
     security: SecuritySchema,
     keybindings: KeybindingsSchema,
     chat: ChatSchema,
-    memory: MemorySchema,
+    context: ContextSchema,
     continuity: ContinuitySchema,
     speech: SpeechSchema,
     toolModel: ToolModelSchema,
@@ -309,7 +249,6 @@ export const AppConfigSchema = z
     daemon: DaemonSchema,
     bridges: BridgesSchema,
     workflowOptimization: WorkflowOptimizationSchema,
-    agent: AgentSchema,
   })
   .passthrough()
   .catch(toCatchRecord(DEFAULT_APP_CONFIG));

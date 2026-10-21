@@ -178,6 +178,34 @@ describe('pi tool turn harness (switch item 3a)', () => {
     }
   });
 
+  it('appends the injected step reminder to a later request without duplicating it', async () => {
+    const scripted = scriptedModelCall([
+      { content: [toolCallBlock('call_1', 'probe_read', { path: '/a.txt' })] },
+      { content: [toolCallBlock('call_2', 'probe_read', { path: '/b.txt' })] },
+      { content: [textBlock('done')], deltas: ['done'] },
+    ]);
+    // Snapshot AT CALL TIME: the harness hands over the live transcript, so
+    // reading it afterwards describes every step rather than this one.
+    const counts: number[] = [];
+    const modelCall: PiToolModelCall = (_config, request) => {
+      counts.push(JSON.stringify(request.messages).match(/Update your todos\./g)?.length ?? 0);
+      return scripted(_config, request as never);
+    };
+    const harness = new PiToolTurnHarness(harnessConfig(), {
+      modelCall,
+      // Stand-in for the session-owned todo rule: nudge from the second call.
+      stepReminder: steps => (steps.length >= 1 ? '<reminder>Update your todos.</reminder>' : undefined),
+    });
+
+    await collect(harness, { prompt: 'probe' });
+
+    // Nudged exactly once for the whole turn: not on the first request, and
+    // never a second copy on the requests that follow.
+    expect(counts[0]).toBe(0);
+    expect(counts.at(-1)).toBe(1);
+    expect(Math.max(...counts)).toBe(1);
+  });
+
   it('runs a tool step chain: live deltas, tool events around the effect, terminal mapping', async () => {
     const modelCall = scriptedModelCall([
       { content: [textBlock('reading '), toolCallBlock('call_1', 'probe_read', { path: '/a.txt' })], deltas: ['reading '], usage: { input: 0, output: 0, totalTokens: 0 } },
@@ -462,8 +490,8 @@ describe('pi tool turn harness (switch item 3a)', () => {
     const events = await collect(harness, { prompt: 'probe' });
     const done = events.at(-1);
     assert(done && done.event === 'done');
-    // Cumulative usage sums (500+... plus 90+10), but the occupancy signal
-    // is the FINAL request's billed input (90 + 10 cached).
+    // Cumulative usage sums (500 + 90 + 10 cached): Pi's `input` is the
+    // UNCACHED prompt, so the billed total includes the cache reads.
     expect(done.output.usage.inputTokens).toBe(600);
     expect(done.output.lastStepInputTokens).toBe(100);
   });

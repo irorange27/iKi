@@ -19,7 +19,6 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
     getMessage: vi.fn((id: string) => ({ id })),
     createMessage: vi.fn((message: Record<string, unknown>) => ({ id: 'message_new', ...message })),
     updateMessage: vi.fn((id: string, message: Record<string, unknown>) => ({ id, ...message })),
-    deleteMessage: vi.fn((id: string) => ({ success: true, id })),
     truncateAfterMessage: vi.fn((threadId: string, messageId: string) => ({
       success: true,
       threadId,
@@ -154,12 +153,8 @@ describe('chat IPC', () => {
       thread_id: 'thread_1',
       message: '{}',
     });
-    expect(await ipcHandlers.get('chat:messages:delete')?.(null, 'message_1')).toEqual({
-      success: true,
-      id: 'message_1',
-    });
-    // The backend-owned atomic truncate (P5): ONE channel — the renderer no
-    // longer loops chat:messages:delete for an edit/resend truncation.
+    // The backend-owned atomic truncate (P5): ONE channel — the renderer never
+    // deletes rows individually for an edit/resend truncation.
     expect(
       await ipcHandlers.get('chat:messages:truncate-after')?.(null, 'thread_1', 'message_1')
     ).toEqual({ success: true, threadId: 'thread_1', messageId: 'message_1', deletedIds: [] });
@@ -222,7 +217,6 @@ describe('chat IPC', () => {
     expect(chatServiceMock.listMessages).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.getMessage).toHaveBeenCalledWith('message_1');
     expect(chatServiceMock.updateMessage).toHaveBeenCalledWith('message_1', messagePayload);
-    expect(chatServiceMock.deleteMessage).toHaveBeenCalledWith('message_1');
     expect(chatServiceMock.listRuns).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.getRunTrace).toHaveBeenCalledWith('run_1');
     expect(chatServiceMock.getRunTree).toHaveBeenCalledWith('run_root_1');

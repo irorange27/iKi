@@ -13,14 +13,6 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   callPiChat: callPiChatMock,
 }));
 
-vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
-  // The admission check calls `getProviderConfig` INTERNALLY inside the factory
-  // module, so mocking that module cannot reach it. This suite has no database
-  // and does not test admission.
-  pausedPlanRunsOnPiToolSupply: () => true,
-}));
-
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
@@ -40,6 +32,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { listAgentRunsByThread } from '@iki/backend/db/agent_runs';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { onMessagePersisted } from '@iki/backend/thread_session/platform';
@@ -204,6 +197,7 @@ describe('approval resume restores the persisted plan after a restart', () => {
   beforeEach(async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-approval-plan-'));
     initializeDatabase({ dbPath: path.join(root, 'plan.db') });
+    seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
     conversation = createChatPersistence({
       memory: memory as never,
       onContinuityMessagePersisted: onMessagePersisted,

@@ -182,47 +182,19 @@ export interface AppConfig {
       preferredModel: string;
     };
   };
-  memory: {
+  /**
+   * Context assembly budgets (history/identity/skill token caps). This used to
+   * be nested under `memory`, which conflated it with the memory subsystem —
+   * it is consumed by `turn_prep/context_budget.ts` and is unrelated to
+   * memory retrieval.
+   */
+  context: {
     enabled: boolean;
-    autoSummarize: boolean;
-    maxRetrievalCount: number;
-    similarThreshold: number;
-    embeddingModel: {
-      providerId: string;
-      providerType: string;
-      model: string;
-    };
-    context: {
-      enabled: boolean;
-      recentMessageCount: number;
-      maxRecentTokens: number;
-      maxMessageTokens: number;
-      maxIdentityTokens: number;
-      summaryTriggerMessages: number;
-      summaryRecentMessages: number;
-      maxSummaryTokens: number;
-      maxMemoryTokens: number;
-      maxSkillTokens: number;
-    };
-    emotion: {
-      enabled: boolean;
-      injectToSystemPrompt: boolean;
-      realtimeAnalysis: boolean;
-      minConfidence: number;
-      minSampleCount: number;
-      windowSize: number;
-      halfLifeMinutes: number;
-      maxAgeMinutes: number;
-      includeNeutral: boolean;
-      toolGuard: {
-        enabled: boolean;
-        minConfidence: number;
-        minArousal: number;
-        maxValence: number;
-        requireApproval: boolean;
-        disableAutoTools: boolean;
-      };
-    };
+    maxRecentTokens: number;
+    maxMessageTokens: number;
+    maxIdentityTokens: number;
+    maxSummaryTokens: number;
+    maxSkillTokens: number;
   };
   continuity: {
     enabled: boolean;
@@ -271,15 +243,4 @@ export interface AppConfig {
     };
   };
   workflowOptimization: WorkflowOptimizationConfig;
-  agent: {
-    enabled: boolean;
-    systemPrompt: string;
-    providerType: string;
-    model: string;
-    temperature: number;
-    maxTokens: number;
-    maxIterations: number;
-    enableTools: boolean;
-    enableMemory: boolean;
-  };
 }

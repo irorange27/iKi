@@ -12,7 +12,6 @@ import type {
 } from '@iki/backend/message/message_parts';
 import { isChatUiMetadataPart } from '@iki/backend/message/message_parts';
 import { isTerminalDynamicToolPart, toInterruptedToolPart } from '@iki/backend/message/tool_parts';
-import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatInputMessage, ChatTransportMessage, LlmChatMessage } from './chat_message_types';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { normalizeToolPartForValidation } from '@iki/backend/message/tool_parts';

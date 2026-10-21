@@ -43,8 +43,8 @@ export const useAppConfig = () => {
   const security = computed(() => config.value?.security);
   /** 快捷键配置 */
   const keybindings = computed(() => config.value?.keybindings);
-  /** 记忆配置 */
-  const memory = computed(() => config.value?.memory);
+  /** 上下文预算配置 */
+  const context = computed(() => config.value?.context);
   /** 工具模型配置 */
   const toolModel = computed(() => config.value?.toolModel);
 
@@ -151,14 +151,14 @@ export const useAppConfig = () => {
   };
 
   /**
-   * 更新 Memory 配置
+   * 更新 Context 预算配置
    */
-  const updateMemory = <K extends keyof AppConfig['memory']>(
+  const updateContext = <K extends keyof AppConfig['context']>(
     key: K,
-    value: AppConfig['memory'][K]
+    value: AppConfig['context'][K]
   ) => {
     if (!config.value) return;
-    config.value.memory[key] = value;
+    config.value.context[key] = value;
     debouncedSave();
   };
 
@@ -177,11 +177,7 @@ export const useAppConfig = () => {
    * 嵌套对象更新（内部使用）
    * @example updateNested(obj, 'proxy.host', '127.0.0.1')
    */
-  const updateNested = (
-    target: Record<string, unknown>,
-    path: string,
-    value: unknown
-  ) => {
+  const updateNested = (target: Record<string, unknown>, path: string, value: unknown) => {
     const keys = path.split('.');
     let current: Record<string, unknown> = target;
     for (let index = 0; index < keys.length - 1; index++) {
@@ -238,7 +234,7 @@ export const useAppConfig = () => {
     network,
     security,
     keybindings,
-    memory,
+    context,
     toolModel,
     fontSize,
     density,
@@ -257,7 +253,7 @@ export const useAppConfig = () => {
     updateNetwork,
     updateSecurity,
     updateKeybinding,
-    updateMemory,
+    updateContext,
     updateToolModel,
 
     // 重置

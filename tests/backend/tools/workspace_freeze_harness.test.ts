@@ -205,11 +205,6 @@ describe('workspace freeze across the harness tool adapter', () => {
       guardActive: false,
       maxIterations: 5,
       threadId: 'thread_freeze',
-      modelFactory: () =>
-        new FauxModelProvider([
-          fauxToolCall(toolName, { content: 'next-turn' }, { id: 'call_freeze_3' }),
-          fauxText('done'),
-        ]),
     });
     await runWithToolRuntimeContext({ threadId: 'thread_freeze' }, async () => {
       for await (const _event of nextHarness.turn({ prompt: 'run once more' })) {

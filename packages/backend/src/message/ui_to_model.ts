@@ -35,6 +35,25 @@ type UiPartLike = {
   approval?: unknown;
 };
 
+/**
+ * The approval id a pending part carries, falling back to the call id.
+ *
+ * The persisted part normally has `approval.id`; a snapshot written before the
+ * decision existed may only have the call id, and an id the owner can still
+ * match is better than dropping the pair.
+ */
+const readApproval = (approval: unknown): { id?: string; approved?: boolean } => {
+  if (typeof approval !== 'object' || approval === null) return {};
+  const record = approval as { id?: unknown; approved?: unknown };
+  return {
+    ...(typeof record.id === 'string' && record.id.length > 0 ? { id: record.id } : {}),
+    ...(typeof record.approved === 'boolean' ? { approved: record.approved } : {}),
+  };
+};
+
+const readableApprovalId = (approval: unknown, toolCallId: string): string =>
+  readApproval(approval).id ?? toolCallId;
+
 const isObjectPart = (value: unknown): value is UiPartLike =>
   typeof value === 'object' && value !== null && typeof (value as { type?: unknown }).type === 'string';
 
@@ -120,6 +139,27 @@ const toModelMessage = (role: string, parts: UiPartLike[]): ModelMessage[] => {
     });
 
     const state = readString(part.state);
+
+    // A call waiting on a decision is a LIVE pair: the assistant's tool-call
+    // plus the approval request that names it. The provider needs both to
+    // resume the turn; emitting only the call left the decision unpairable.
+    //
+    // `approval-responded` without an `approved` flag is the same live state —
+    // `stampLiveApprovalRequests` rewrites it that way so the part cannot be
+    // confused with an answered one, and only a part carrying a decision is
+    // answered.
+    const answered = readApproval(part.approval).approved;
+    if (state === 'approval-requested' || (state === 'approval-responded' && answered === undefined)) {
+      const approvalId = readableApprovalId(part.approval, toolCallId);
+      assistantParts.push({
+        type: 'tool-approval-request',
+        approvalId,
+        toolCallId,
+        ...(toolName ? { toolName } : {}),
+      });
+      continue;
+    }
+
     if (!isSettledToolState(state)) continue;
     // A settled call pairs with exactly one tool message entry; an unsettled
     // one (pending approval) deliberately has none.

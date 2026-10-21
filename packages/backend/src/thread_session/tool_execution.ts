@@ -9,7 +9,6 @@ import {
 } from '../db/session_events';
 import { parseStoredUiMessageRow } from '../message/ui_message_codec';
 import { toModelInputMessages } from '../message/ui_messages';
-import type { ChatInputMessage } from '../message/chat_message_types';
 import type { JsonValue } from '../types/provider';
 import { getErrorMessage } from '../utils/errors';
 import { getToolRuntimeContext, runWithToolRuntimeContext } from '../utils/runtime_context';

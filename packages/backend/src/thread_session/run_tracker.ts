@@ -11,7 +11,6 @@ import { claimQueuedAgentRun } from '@iki/backend/db/agent_runs';
 import { hasLiveThreadRunLease } from '@iki/backend/db/thread_run_locks';
 import { getChatMessages, updateChatMessage } from '@iki/backend/db/chat_message';
 import { expirePendingToolCallApprovalsByRunIds, getToolCallApprovalSession } from '@iki/backend/db/tool_call_approval';
-import type { ToolCallApproval } from '@iki/backend/types/tool_call_approval';
 import {
   APPROVAL_DECIDED,
   recordFailureTerminalEvent,

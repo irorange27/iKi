@@ -6,7 +6,6 @@ import path from 'node:path';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const prepareChatTurnMock = vi.hoisted(() => vi.fn());
 
@@ -212,13 +211,24 @@ describe('session log turn facts and pure replay', () => {
         ],
       ])
     );
-    const original = faux.doStream.bind(faux);
+    // Steering fires on the second MODEL call; `callPiChat(model, context,
+    // options)` is the seam.
+    const scripted = callPiChatMock.getMockImplementation()!;
+    const spy = callPiChatMock;
     let calls = 0;
-    const spy = vi.spyOn(faux, 'doStream').mockImplementation(options => {
+    callPiChatMock.mockImplementation(((
+      model: unknown,
+      context: unknown,
+      options: unknown
+    ) => {
       calls += 1;
       if (calls === 2) coordinator.steerStream(83, 'thread_steer', 'change course');
-      return original(options);
-    });
+      return (scripted as (m: unknown, c: unknown, o: unknown) => unknown)(
+        model,
+        context,
+        options
+      );
+    }) as never);
 
     const result = await stream.stream(
       { id: 83, send: vi.fn() },
@@ -282,7 +292,6 @@ describe('session log turn facts and pure replay', () => {
     // Rebuild with the model factory rigged to explode: the replay must not
     // invoke it (acceptance item 2 — rebuilding calls nothing). The mock is
     // cleared first so the turn's own legitimate call does not count.
-    createModelMock.mockClear();
     createModelMock.mockImplementation(() => {
       throw new Error('replay must not call the model');
     });

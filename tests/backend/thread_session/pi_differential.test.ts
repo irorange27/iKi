@@ -20,7 +20,6 @@ import path from 'node:path';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createModelMock = vi.hoisted(() => vi.fn());
 const callPiChatMock = vi.hoisted(() => vi.fn());
 
 // The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps

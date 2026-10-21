@@ -1,12 +1,10 @@
 import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
 import { getStreamErrorMessage } from '@iki/backend/utils/errors';
-import type { ChatMemory } from './memory';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
 import { createApprovalRecoveryContext } from './approval_types';
 import {
   assembleExecutionPlan,
-  planToHarnessConfig,
   planToRunTrackerParams,
 } from './execution_plan';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
@@ -40,7 +38,6 @@ import {
   recordSessionEvents,
   turnFactsToEvents,
 } from './session_log';
-import type { UiChunkEmitter } from './types';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
 import {
   createTurnDriver,
@@ -54,7 +51,6 @@ const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
 export const createChatStreaming = (deps: {
   streamCoordinator: ThreadStreamCoordinator;
-  memory: ChatMemory;
   getThreadTitle?: (threadId: string) => string | undefined;
   usage: {
     recordUsageEvent: (params: {
@@ -93,7 +89,6 @@ export const createChatStreaming = (deps: {
   };
 }) => {
   const turnPreparer = createChatTurnPreparer({
-    memory: deps.memory,
     resolveSkillsSystemPrompt,
     getAssistantProfileContextMessage,
     retrieveRelevantContinuity,
@@ -101,12 +96,11 @@ export const createChatStreaming = (deps: {
       try {
         const config = getAppConfig();
         return {
-          emotion: config?.memory?.emotion || null,
           autoApproveToolRequests: config?.general?.autoApproveToolRequests === true,
-          memoryContext: config?.memory?.context ?? null,
+          contextBudget: config?.context ?? null,
         };
       } catch {
-        return { emotion: null, autoApproveToolRequests: false, memoryContext: null };
+        return { autoApproveToolRequests: false, contextBudget: null };
       }
     },
   });
@@ -147,7 +141,10 @@ export const createChatStreaming = (deps: {
         const delaySec = Math.ceil((rateCheck.retryAfterMs ?? 1000) / 1000);
         release();
         uiChunkEmitter.error(`Too many requests on this thread. Retry in ${delaySec}s.`);
-        return { success: false, error: `Too many requests on this thread. Retry in ${delaySec}s.` };
+        return {
+          success: false,
+          error: `Too many requests on this thread. Retry in ${delaySec}s.`,
+        };
       }
     }
 
@@ -201,7 +198,7 @@ export const createChatStreaming = (deps: {
 
     try {
       // Turn-start workspace binding (D30), resolved at admission — it stays
-      // synchronous and ahead of every await (preparation, memory retrieval),
+      // synchronous and ahead of every await (preparation, workspace resolution),
       // so a mid-turn switch cannot be observed. It sits inside the try so a
       // failing resolution (broken workspace directory, profile error) flows
       // through the cleanup path and releases the admission instead of
@@ -217,12 +214,6 @@ export const createChatStreaming = (deps: {
       const preparedTurn = await turnPreparer.prepareChatTurn({
         ...options,
         workspaceSelection: turnStartWorkspace,
-        onMemoryRetrieved: payload => {
-          uiChunkEmitter.emitMemoryRetrieval({
-            query: payload.query,
-            results: payload.results,
-          });
-        },
       });
       streamState.abortController.signal.throwIfAborted();
       const autonomousMode = options.autonomous && options.autonomous.maxIterations > 1;
@@ -236,22 +227,6 @@ export const createChatStreaming = (deps: {
             ...(skill.description ? { description: skill.description } : {}),
           })),
         });
-      }
-
-      if (preparedTurn.affectSignal) {
-        uiChunkEmitter.emitAffectSignal(preparedTurn.affectSignal);
-      }
-
-      getCompanion().setChatPolicy(preparedTurn.interventionPolicy);
-      const affectState = preparedTurn.affectSignal?.state;
-      if (affectState && affectState.valence !== undefined && affectState.arousal !== undefined) {
-        getCompanion().setAffect({
-          label: affectState.label,
-          valence: affectState.valence,
-          arousal: affectState.arousal,
-        });
-      } else {
-        getCompanion().setAffect(null);
       }
 
       const approvalPolicy = parseApprovalPolicy(options.approvalPolicy);
@@ -269,7 +244,9 @@ export const createChatStreaming = (deps: {
           entity: { thread_id: options.threadId || null },
           message:
             'Tool-enabled turn started without an explicit approval policy; legacy defaults may auto-run workspace writes.',
-          data: { hint: 'The composer should send approvalPolicy (ChatInput approvalPolicy prop).' },
+          data: {
+            hint: 'The composer should send approvalPolicy (ChatInput approvalPolicy prop).',
+          },
         });
       }
 
@@ -327,10 +304,13 @@ export const createChatStreaming = (deps: {
         userTurnInput && asChatUiMessage(userTurnInput.message)
           ? { messageId: userTurnInput.messageId, message: asChatUiMessage(userTurnInput.message)! }
           : undefined;
-      recordSessionEvents(options.threadId ?? '', turnFactsToEvents({
-        ...(acceptedInput ? { input: acceptedInput } : {}),
-        started: { runId: runTracker.id, kind: plan.kind, plan },
-      }));
+      recordSessionEvents(
+        options.threadId ?? '',
+        turnFactsToEvents({
+          ...(acceptedInput ? { input: acceptedInput } : {}),
+          started: { runId: runTracker.id, kind: plan.kind, plan },
+        })
+      );
 
       const approvalContext = preparedTurn.enableTools
         ? createApprovalRecoveryContext({
@@ -340,11 +320,11 @@ export const createChatStreaming = (deps: {
           })
         : undefined;
 
-      // Supply selection (switch items 2c/3a/3b/3c): one selector decides —
-      // the Pi supply layer serves text-only turns and tool turns in every
-      // mode (autonomous chains included) under ANY approval policy (pause +
-      // five-state resume); every other shape stays on the AI SDK harness
-      // until its switch item.
+      // Supply selection (switch items 2c/3a/3b/3c): one selector decides.
+      // Pi serves text-only turns and tool turns in every mode (autonomous
+      // chains included) under ANY approval policy (pause + five-state
+      // resume). A shape the selector cannot serve is refused, never
+      // re-routed to another executor.
       const harness = selectTurnHarness(plan, streamHistory);
 
       // An effect-aware continuation (#143) re-enters with the dead chain's
@@ -387,25 +367,28 @@ export const createChatStreaming = (deps: {
           });
         }, 300);
       };
-      const activeDriver = createTurnDriver({
-        harness,
-        runTracker,
-        approvalContext,
-        streamHistory,
-        streamPrompt,
-        workspaceSelectionBox: { selection: plan.workspaceSelection },
-      }, {
-        target,
-        plan,
-        streamState,
-        uiChunkEmitter,
-        notifyRunStatus,
-        drainSteerMessages: () => coordinator.takeSteerMessages(senderId),
-        onToolActivity: persistTurnProgress,
-        onRunIdChanged: runId => execution.setRunId(runId),
-        registerChildRunAlias: coordinator.registerChildRunAlias,
-        approvals: deps.approvals,
-      });
+      const activeDriver = createTurnDriver(
+        {
+          harness,
+          runTracker,
+          approvalContext,
+          streamHistory,
+          streamPrompt,
+          workspaceSelectionBox: { selection: plan.workspaceSelection },
+        },
+        {
+          target,
+          plan,
+          streamState,
+          uiChunkEmitter,
+          notifyRunStatus,
+          drainSteerMessages: () => coordinator.takeSteerMessages(senderId),
+          onToolActivity: persistTurnProgress,
+          onRunIdChanged: runId => execution.setRunId(runId),
+          registerChildRunAlias: coordinator.registerChildRunAlias,
+          approvals: deps.approvals,
+        }
+      );
       driver = activeDriver;
 
       const streamResult = await activeDriver.run();
@@ -452,8 +435,7 @@ export const createChatStreaming = (deps: {
         });
       }
 
-      const finalResponse =
-        activeDriver.getAccumulatedResponse() || streamResult.response;
+      const finalResponse = activeDriver.getAccumulatedResponse() || streamResult.response;
       const finalRunTracker = activeDriver.getRunTracker();
 
       // Event-first (ADR 008 F1): the turn's facts reach the session log
@@ -477,24 +459,27 @@ export const createChatStreaming = (deps: {
         // fact mirrors finalizeRunForOutcome's outcome mapping (the
         // event-side twin; undefined for an approval pause).
         const terminal = terminalFactForOutcome(streamResult);
-        recordSessionEvents(options.threadId, turnFactsToEvents({
-          committed: {
-            runId: finalRunTracker.id,
-            messageId: settledMessage.id,
-            message: settledMessage as never,
-            transport: 'stream',
-          },
-          ...(terminal
-            ? {
-                terminal: {
-                  runId: finalRunTracker.id,
-                  status: terminal.status,
-                  ...(terminal.finishReason ? { finishReason: terminal.finishReason } : {}),
-                  ...(terminal.errorText ? { errorText: terminal.errorText } : {}),
-                },
-              }
-            : {}),
-        }));
+        recordSessionEvents(
+          options.threadId,
+          turnFactsToEvents({
+            committed: {
+              runId: finalRunTracker.id,
+              messageId: settledMessage.id,
+              message: settledMessage as never,
+              transport: 'stream',
+            },
+            ...(terminal
+              ? {
+                  terminal: {
+                    runId: finalRunTracker.id,
+                    status: terminal.status,
+                    ...(terminal.finishReason ? { finishReason: terminal.finishReason } : {}),
+                    ...(terminal.errorText ? { errorText: terminal.errorText } : {}),
+                  },
+                }
+              : {}),
+          })
+        );
         turnPersistFinalized = true;
         await persistAssistantTurnMessage(
           deps.conversation,
@@ -541,22 +526,25 @@ export const createChatStreaming = (deps: {
           // terminal: the record must not mask the cancellation being
           // reported (ADR 008 F1).
           if (cancelledTracker) {
-            recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-              committed: {
-                runId: cancelledTracker.id,
-                messageId: abortedMessage.id,
-                message: abortedMessage as never,
-                transport: 'stream-abort',
-              },
-              terminal: {
-                runId: cancelledTracker.id,
-                status:
-                  cancelledTracker.getRun().status === 'running' ||
-                  cancelledTracker.getRun().status === 'blocked'
-                    ? 'cancelled'
-                    : cancelledTracker.getRun().status,
-              },
-            }));
+            recordFailureTerminalEvent(
+              options.threadId,
+              turnFactsToEvents({
+                committed: {
+                  runId: cancelledTracker.id,
+                  messageId: abortedMessage.id,
+                  message: abortedMessage as never,
+                  transport: 'stream-abort',
+                },
+                terminal: {
+                  runId: cancelledTracker.id,
+                  status:
+                    cancelledTracker.getRun().status === 'running' ||
+                    cancelledTracker.getRun().status === 'blocked'
+                      ? 'cancelled'
+                      : cancelledTracker.getRun().status,
+                },
+              })
+            );
           }
         }
         const activeRunTracker = driver?.getRunTracker();
@@ -595,13 +583,16 @@ export const createChatStreaming = (deps: {
       // (ADR 008 F1).
       const failedTracker = activeRunTracker ?? sessionLogTracker;
       if (options.threadId && failedTracker) {
-        recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-          terminal: {
-            runId: failedTracker.id,
-            status: 'failed',
-            errorText: message,
-          },
-        }));
+        recordFailureTerminalEvent(
+          options.threadId,
+          turnFactsToEvents({
+            terminal: {
+              runId: failedTracker.id,
+              status: 'failed',
+              errorText: message,
+            },
+          })
+        );
       }
       uiChunkEmitter.error(message);
       return { success: false, error: message };
@@ -609,14 +600,10 @@ export const createChatStreaming = (deps: {
       getCompanion().clearConversationPreview();
       getCompanion().endThinking(companionThinkingKey);
       if (driver?.hasToolCalls() && !streamState.cancelled) {
-        const threadLabel =
-          options.threadId ? deps.getThreadTitle?.(options.threadId) : undefined;
+        const threadLabel = options.threadId ? deps.getThreadTitle?.(options.threadId) : undefined;
         getCompanion().notifyReplyComplete(threadLabel);
       }
-      if (
-        coordinator.peekStream(senderId) === streamState &&
-        !driver?.isAwaitingApproval()
-      ) {
+      if (coordinator.peekStream(senderId) === streamState && !driver?.isAwaitingApproval()) {
         deps.approvals.cleanupPendingSessionsForSender(senderId, uiChunkEmitter.messageId);
       }
       if (coordinator.peekStream(senderId) === streamState && options.threadId) {

@@ -6,10 +6,8 @@ import { PiTextTurnHarness } from '../runners/pi_text_turn_harness';
  * The single assembly point for harness construction (conventions landmine #6):
  * every harness is built here so new always-pass config fields and default
  * policy land in one place, not at five call sites.
- *
- * The AI SDK executors (`startTurnHarness`, `rehydrateHarness`) were removed
- * with the supply retirement (ADR 009); `startPiTurnHarness` is the only
- * builder left.
+ * `startPiTurnHarness` is the only builder: build harnesses through it, never
+ * call the constructors directly.
  */
 export type TurnHarnessAssembly = Omit<HarnessConfig, 'maxOutputTokens'> & {
   /** Non-finite/null values omit the output cap instead of passing it through. */

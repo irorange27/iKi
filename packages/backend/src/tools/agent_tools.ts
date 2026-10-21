@@ -50,11 +50,7 @@ type DelegatedAgentRunTracker = {
   recordModelStep: (record: ModelInferenceRecord) => void;
   recordAgentStep: (step: AgentStep) => void;
   syncModelMessages: (messages: unknown[]) => unknown;
-  markCompleted: (params: {
-    text?: string;
-    finishReason?: string;
-    usage?: AgentUsage;
-  }) => unknown;
+  markCompleted: (params: { text?: string; finishReason?: string; usage?: AgentUsage }) => unknown;
   markFailed: (error: { message: string; code?: string; retryable?: boolean }) => unknown;
 };
 
@@ -168,11 +164,7 @@ const buildDelegationPrompt = (
   toolNames: string[],
   scratchpadPath: string
 ): string => {
-  const sections = [
-    '<delegated_subtask>',
-    args.task.trim(),
-    '</delegated_subtask>',
-  ];
+  const sections = ['<delegated_subtask>', args.task.trim(), '</delegated_subtask>'];
 
   const context = args.context?.trim();
   if (context) {
@@ -300,7 +292,7 @@ const resolveDelegableTools = (
 
   if (toolMap.size > 0 && delegable.length === 0) {
     throw new Error(
-      'No tool is delegable to the subagent: none of this turn\'s available tools is approval-free for this subagent type. Either the tools themselves require an approval decision, or this subagent type may not use them. Narrow the task to one without tools, or pass tools: [] for a tool-free subagent.'
+      "No tool is delegable to the subagent: none of this turn's available tools is approval-free for this subagent type. Either the tools themselves require an approval decision, or this subagent type may not use them. Narrow the task to one without tools, or pass tools: [] for a tool-free subagent."
     );
   }
   // The child has no approval surface, so strip the parent's per-call decision
@@ -318,8 +310,7 @@ const summarizeUsedTools = (
 ): Array<{ name: string; callCount: number }> => {
   const counts = new Map<string, number>();
   for (const toolCall of toolCalls ?? []) {
-    const toolName =
-      typeof toolCall?.toolName === 'string' ? toolCall.toolName.trim() : '';
+    const toolName = typeof toolCall?.toolName === 'string' ? toolCall.toolName.trim() : '';
     if (!toolName) continue;
     counts.set(toolName, (counts.get(toolName) ?? 0) + 1);
   }
@@ -340,7 +331,7 @@ export class DelegatedAgentTool extends BaseTool {
   override autoAllowed = true;
   override needsApproval = false;
   override description =
-    'Delegate a bounded investigation, review, or synthesis subtask to a fresh subagent scratchpad. Best for side work such as comparing sources, scanning directory structure, or producing focused findings. The delegated run inherits only the current turn\'s approval-free tools and cannot recursively spawn more agents. Pick subagent_type deliberately: explorer is a read-only research agent (safe for investigation), general carries the full approval-free tool set.';
+    "Delegate a bounded investigation, review, or synthesis subtask to a fresh subagent scratchpad. Best for side work such as comparing sources, scanning directory structure, or producing focused findings. The delegated run inherits only the current turn's approval-free tools and cannot recursively spawn more agents. Pick subagent_type deliberately: explorer is a read-only research agent (safe for investigation), general carries the full approval-free tool set.";
   override paramSchema = AgentToolInputSchema;
   override outputSchema = zodSchemaToJsonSchema(AgentToolOutputSchema, {
     title: 'agent_output',
@@ -360,7 +351,10 @@ export class DelegatedAgentTool extends BaseTool {
 
     // Create scratchpad directory for intermediate subagent findings
     const scratchpadBase = path.join(os.tmpdir(), 'iki-scratch');
-    const scratchpadPath = path.join(scratchpadBase, `agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    const scratchpadPath = path.join(
+      scratchpadBase,
+      `agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    );
     await fs.mkdir(scratchpadPath, { recursive: true });
 
     const typePrompt = SUBAGENT_TYPE_POLICY[subagentType].prompt;
@@ -388,7 +382,6 @@ export class DelegatedAgentTool extends BaseTool {
       enableTools: delegatedTools.length > 0,
       enabledToolNames: [],
       availableSkillIds: runtimeContext.availableSkillIds ?? [],
-      guardActive: false,
       // The child inherits ALREADY-SELECTED approval-free tools (see
       // isApprovalFreeTool), and it has no UI to answer a card. Without an
       // explicit policy it fell back to legacy flags, where a tool carrying a

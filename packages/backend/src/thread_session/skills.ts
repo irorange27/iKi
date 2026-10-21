@@ -1,5 +1,4 @@
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import type { AffectState } from '@iki/backend/affect/affect_state';
 import { createLogger } from '@iki/backend/logger';
 import {
   buildSkillsMetadataSystemPrompt,
@@ -21,7 +20,6 @@ export const resolveSkillsSystemPrompt = async (params: {
   threadId?: string;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
-  affectState?: AffectState | null;
 }): Promise<{
   skillsSystemPrompt: string;
   usedSkills: SkillSummary[];
@@ -101,7 +99,6 @@ export const resolveSkillsSystemPrompt = async (params: {
             messages: toLlmChatMessages(params.inputMessages),
             availableSkills: availableSkillCatalog,
             formatCatalogItem: formatSkillMetadataForPrompt,
-            affectState: params.affectState,
           })
         : null) ?? [];
 

@@ -36,7 +36,6 @@ const {
   readRequestedMcpServerIdsMock,
   resolveMcpServerIdsForClientMock,
   resolveToolsForClientMock,
-  searchLongMemoryAcrossThreadsMock,
   mkdirSyncMock,
   writeFileSyncMock,
   daemonLoggerEventMock,
@@ -171,7 +170,7 @@ const {
     listThreads: vi.fn(() => []),
     createThread: vi.fn((thread: Record<string, unknown>) => ({ id: 'thread_new', ...thread })),
     listMessages: vi.fn(() => []),
-    createMessageWithProcessing: vi.fn(async (message: Record<string, unknown>) => ({
+    createMessage: vi.fn((message: Record<string, unknown>) => ({
       id: 'msg_new',
       ...message,
     })),
@@ -200,7 +199,6 @@ const {
     updateServer: vi.fn(async (_id: string, input: unknown) => input),
   };
   const getMcpManagerMock = vi.fn(() => mcpManagerMock);
-  const searchLongMemoryAcrossThreadsMock = vi.fn(() => []);
   const defaultAllowedTools = [
     'web',
     'fetch',
@@ -304,8 +302,7 @@ const {
     readRequestedMcpServerIdsMock,
     resolveMcpServerIdsForClientMock,
     resolveToolsForClientMock,
-    searchLongMemoryAcrossThreadsMock,
-    mkdirSyncMock,
+      mkdirSyncMock,
     writeFileSyncMock,
     daemonLoggerEventMock,
     applyAppLoggingConfigMock,
@@ -380,12 +377,6 @@ vi.mock('@iki/backend/thread_session', () => ({
 
 vi.mock('@iki/backend/db/chat_thread', () => ({
   getChatThread: getChatThreadMock,
-}));
-
-vi.mock('@iki/backend/db/memory', () => ({
-  listShortMemory: vi.fn(() => []),
-  listLongMemory: vi.fn(() => []),
-  searchLongMemoryAcrossThreads: searchLongMemoryAcrossThreadsMock,
 }));
 
 vi.mock('@iki/backend/db/app_clients', () => ({
@@ -556,7 +547,6 @@ describe('daemon server', () => {
     chatServiceMock.listThreads.mockReturnValue([]);
     chatServiceMock.listMessages.mockReturnValue([]);
     chatServiceMock.send.mockResolvedValue({ success: true });
-    searchLongMemoryAcrossThreadsMock.mockReturnValue([]);
     mcpManagerMock.addServer.mockImplementation(async (input: unknown) => input);
     getChatThreadMock.mockReset();
     getChatThreadMock.mockReturnValue(null);
@@ -639,8 +629,6 @@ describe('daemon server', () => {
       scopes: [
         'chat:read',
         'chat:write',
-        'memory:read',
-        'memory:write',
         'tools:run',
         'tools:approve',
         'mcp:read',
@@ -1048,7 +1036,6 @@ describe('daemon server', () => {
         thread_id: 'thread_owned',
         role: 'user',
         content: 'hello',
-        await_emotion_analysis: true,
       },
     });
 
@@ -1060,15 +1047,14 @@ describe('daemon server', () => {
         thread_id: 'thread_owned',
       }),
     });
-    expect(chatServiceMock.createMessageWithProcessing).toHaveBeenCalledWith(
+    expect(chatServiceMock.createMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         thread_id: 'thread_owned',
         message: {
           role: 'user',
           content: 'hello',
         },
-      }),
-      { waitForEmotionAnalysis: true }
+      })
     );
   });
 
@@ -1195,15 +1181,14 @@ describe('daemon server', () => {
       skillMode: 'manual',
       threadId: 'thread_owned',
       experimentalContext: {
-        affectMode: 'explicit_policy',
         contextMode: 'benchmark_clean',
       },
     });
   });
 
-  it('rejects invalid search payload types instead of coercing them', async () => {
+  it('serves no memory routes: the subsystem is removed', async () => {
     const started = await startTestDaemon();
-    const issued = issueClient({ scopes: ['memory:read'] });
+    const issued = issueClient({ scopes: ['chat:read'] });
 
     const result = await requestJson(started, '/v1/memory/search', {
       method: 'POST',
@@ -1211,18 +1196,10 @@ describe('daemon server', () => {
         Authorization: `Bearer ${issued.token}`,
         'X-Iki-Client': issued.client.id,
       },
-      body: {
-        query: 'memory',
-        include_incognito: 'yes',
-      },
+      body: { query: 'anything' },
     });
 
-    expect(result.status).toBe(400);
-    expect(result.json).toEqual({
-      success: false,
-      error: 'include_incognito: Invalid input: expected boolean, received string',
-    });
-    expect(searchLongMemoryAcrossThreadsMock).not.toHaveBeenCalled();
+    expect(result.status).toBe(404);
   });
 
   it('rejects invalid MCP server payloads before reaching the manager', async () => {

@@ -4,7 +4,6 @@ import {
   tryParseJson,
   type SelectionMessage,
 } from './catalog_selection';
-import { buildAffectDecisionMessage, type AffectState } from '@iki/backend/affect/affect_state';
 import { getToolModel } from './tool_model';
 
 export type ToolSelectionMessage = SelectionMessage;
@@ -44,7 +43,7 @@ const SYSTEM_PROMPT =
   '- Do NOT use `agent` to restate or fully execute the entire user request; use it only for bounded intermediate results.\n' +
   '- Prefer 1-3 tools; only exceed that when a multi-step workflow clearly needs it.\n' +
   '- If a task likely needs a longer sequential workflow in one turn (for example inspect -> edit -> verify), include each needed tool and add `todo` only when the workflow is not trivial.\n' +
-  '- Approval-gated tools (shell, write_file, edit, delete_file, etc.) may be selected when the task likely needs them. The user will separately approve or reject each use — your job is only to include them when the task calls for them, not to preempt the user\'s decision.\n' +
+  "- Approval-gated tools (shell, write_file, edit, delete_file, etc.) may be selected when the task likely needs them. The user will separately approve or reject each use — your job is only to include them when the task calls for them, not to preempt the user's decision.\n" +
   '- Return a JSON array of tool names. Example: ["web","fetch"].\n' +
   '- If no tool is needed, return [].\n' +
   '- Never invent tool names not present in the catalog.\n' +
@@ -105,7 +104,9 @@ const buildToolCatalogText = (tools: ToolCatalogItem[]) => {
   const lines = sliced.map(tool => {
     const desc = normalizeWhitespace(tool.description || '');
     const displayName =
-      typeof tool.displayName === 'string' && tool.displayName.trim() && tool.displayName !== tool.name
+      typeof tool.displayName === 'string' &&
+      tool.displayName.trim() &&
+      tool.displayName !== tool.name
         ? normalizeWhitespace(tool.displayName)
         : '';
     const sourceLabel =
@@ -122,11 +123,9 @@ const buildToolCatalogText = (tools: ToolCatalogItem[]) => {
 export const selectToolsWithAgent = async (params: {
   messages: ToolSelectionMessage[];
   availableTools: ToolCatalogItem[];
-  affectState?: AffectState | null;
 }): Promise<string[] | null> => {
   const toolModel = getToolModel();
   if (!toolModel) return null;
-  const affectMessage = params.affectState ? buildAffectDecisionMessage(params.affectState) : '';
 
   return selectCatalogWithAgent({
     messages: params.messages,
@@ -135,7 +134,6 @@ export const selectToolsWithAgent = async (params: {
     buildPrompt: (catalogText, transcript) =>
       'Tool catalog (choose only from these exact names):\n' +
       `${catalogText}\n\n` +
-      (affectMessage ? `Current user affect signal:\n${affectMessage}\n\n` : '') +
       'Conversation (most recent last):\n' +
       `${transcript}\n\n` +
       'Return ONLY a JSON array of tool names.\n',

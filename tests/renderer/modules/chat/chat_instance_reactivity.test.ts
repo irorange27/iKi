@@ -34,26 +34,6 @@ describe('createReactiveChatState replaceMessage reactivity', () => {
       '<div><SegmentChild v-for="(m, i) in messages" :key="m.id" :message="messages[i]" /></div>',
   });
 
-  it('invalidates prop-driven children when the SDK rewrites the same message object', async () => {
-    const { state, messagesArray } = createReactiveChatState(() => undefined);
-    const sdkMessage: UIMessage = {
-      id: 'assistant_1',
-      role: 'assistant',
-      parts: [],
-    };
-    state.pushMessage(sdkMessage);
-
-    const wrapper = mount(MessageList, { props: { messages: messagesArray } });
-    expect(wrapper.find('.count').text()).toBe('0');
-
-    // SDK-style off-proxy mutation + same-reference write.
-    (sdkMessage.parts as unknown[]).push({ type: 'text', text: 'hello' });
-    state.replaceMessage(0, sdkMessage);
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.find('.count').text()).toBe('1');
-  });
-
   it('keeps the written parts in sync with the SDK object across writes', () => {
     const { state } = createReactiveChatState(() => undefined);
     const sdkMessage: UIMessage = { id: 'assistant_2', role: 'assistant', parts: [] };

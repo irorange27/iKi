@@ -3,7 +3,6 @@ import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
 import { noopPlatformDeps } from '@iki/backend/chat_platform';
 import type { ChatStreamTarget } from './types';
 import { createChatApproval } from './approval';
-import { createChatMemory } from './memory';
 import { createChatPersistence } from '../turn_prep/persistence';
 import { createChatRuns } from './runs';
 import { truncateAfterMessage } from './history_truncation';
@@ -20,7 +19,10 @@ import { deriveResumeStreamOptions, rebuildResumeHistoryFromEvents } from './run
 import type { AgentRun, AgentRunKind } from '@iki/backend/types/agent_run';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ModelMessage } from '../message/model_history';
-import { buildThreadMarkdown, parseStoredMessageForExport } from '../message/thread_markdown_export';
+import {
+  buildThreadMarkdown,
+  parseStoredMessageForExport,
+} from '../message/thread_markdown_export';
 import { searchThreadContent } from '../message/thread_content_search';
 
 export type { ChatStreamTarget } from './types';
@@ -29,7 +31,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   const deps = platformDeps ?? noopPlatformDeps;
   setChatServicePlatformDeps(deps);
 
-  const memory = createChatMemory();
   const usage = createChatUsage();
   // The SQLite lease extends per-thread admission across processes sharing
   // this database (desktop window + headless daemon both enter here).
@@ -38,7 +39,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       tryAcquireCrossProcessThreadRun(threadId, { onLeaseLost: options.onLeaseLost }),
   });
   const persistence = createChatPersistence({
-    memory,
     onContinuityMessagePersisted: onMessagePersisted,
   });
   const approvals = createChatApproval({
@@ -50,7 +50,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       registerExecution: streamCoordinator.registerExecution,
       registerChildRunAlias: streamCoordinator.registerChildRunAlias,
     },
-    memory,
     conversation: persistence,
     usage: {
       recordUsageEvent: usage.recordUsageEvent,
@@ -65,7 +64,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   const eval_ = createChatEval({ exportTrace: deps.exportTrace });
   const streaming = createChatStreaming({
     streamCoordinator,
-    memory,
     conversation: persistence,
     getThreadTitle: (id: string) => persistence.getThread(id)?.title,
     usage: {
@@ -130,7 +128,8 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     run: AgentRun,
     admittedKinds: readonly AgentRunKind[]
   ): Promise<
-    { history: ModelMessage[]; systemPrompts: string[] } | { refusal: { success: false; error: string } }
+    | { history: ModelMessage[]; systemPrompts: string[] }
+    | { refusal: { success: false; error: string } }
   > => {
     if (!run.threadId) return { refusal: { success: false, error: 'Run has no thread ID' } };
     if (!admittedKinds.includes(run.kind)) {
@@ -223,7 +222,8 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
         })
       );
       return { success: true, ...(result as Record<string, unknown>) };
-    }    const result = await streaming.stream(
+    }
+    const result = await streaming.stream(
       target,
       deriveResumeStreamOptions(run, {
         kind: 'handoff-resume',
@@ -234,12 +234,13 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
           blockedAt: run.updatedAt,
           ...(run.working.lastStepIndex > 0 ? { resumeFromStep: run.working.lastStepIndex } : {}),
         },
-        autonomous: run.working.pendingApprovalIds.length > 0
-          ? {
-              maxIterations: 10,
-              continuePrompt: 'Continue the work that was interrupted.',
-            }
-          : undefined,
+        autonomous:
+          run.working.pendingApprovalIds.length > 0
+            ? {
+                maxIterations: 10,
+                continuePrompt: 'Continue the work that was interrupted.',
+              }
+            : undefined,
         inputMessages: recovered.history,
         systemPrompts: recovered.systemPrompts,
       })
@@ -299,7 +300,11 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       })
     );
 
-    return { success: true, newRunId: retryResult.newRunId, ...(result as Record<string, unknown>) };
+    return {
+      success: true,
+      newRunId: retryResult.newRunId,
+      ...(result as Record<string, unknown>),
+    };
   };
 
   const exportThreadMarkdown = async (

@@ -1,22 +1,23 @@
 /**
  * Scripted Pi stream for tests.
  *
- * Replaces `FauxModelProvider`: that class implemented the AI SDK's
- * `LanguageModelV3` interface, so every test that drove a turn had to pin the
- * turn onto the AI SDK executor to be reachable. Both are gone (ADR 009) — the
- * only supply is Pi, whose seam is `callPiChat` returning an async iterable of
- * `AssistantMessageEvent`-shaped events plus a `result()` promise.
+ * The scripted model seam for turn tests. It replaced the former
+ * `FauxModelProvider` (which implemented the AI SDK's `LanguageModelV3`
+ * interface and forced every turn test onto that executor); both are gone
+ * (ADR 009). The only supply is Pi, whose seam is `callPiChat` returning an
+ * async iterable of `AssistantMessageEvent`-shaped events plus a `result()`
+ * promise.
  *
  * Script a turn with the helpers below and pass the factory to
  * `setPiChatScript(...)`, or mock `callPiChat` with it directly.
  */
-import type { AssistantMessage, AssistantMessageEvent, Usage } from '@earendil-works/pi-ai';
+import type { AssistantMessage, AssistantMessageEvent, JsonObject, Usage } from '@earendil-works/pi-ai';
 
 export type PiScriptStep =
   /** Stream `text` as one text block. */
   | { kind: 'text'; text: string }
   /** Stream a tool call the harness is expected to execute. */
-  | { kind: 'toolCall'; toolName: string; args: Record<string, unknown>; id?: string }
+  | { kind: 'toolCall'; toolName: string; args: JsonObject; id?: string }
   /** End the turn. `reason` defaults to `stop`. */
   | {
       kind: 'done';
@@ -137,7 +138,15 @@ export const piEventsForScript = (script: PiScript): AssistantMessageEvent[] => 
 export const createScriptedPiChat = (scripts: PiScript[]) => {
   let calls = 0;
   return ((_model: unknown, _context: unknown, options?: { signal?: AbortSignal }) => {
-    const script = calls < scripts.length ? scripts[calls] : [{ kind: 'done' } as PiScriptStep];
+    // An exhausted script is a BUG in the test, not a settled turn: replaying
+    // an earlier reply hid extra model calls (a nine-step loop produced one
+    // sentence nine times). Failing loudly is the only honest signal.
+    if (calls >= scripts.length) {
+      throw new Error(
+        `scripted Pi model call #${calls + 1} has no response in queue: the turn made more model calls than the script covers`
+      );
+    }
+    const script = scripts[calls];
     calls += 1;
     // Built per invocation, never shared: two concurrent turns each iterate
     // their own events and settle on their own message. Reusing one event array

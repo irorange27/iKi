@@ -37,7 +37,6 @@ import {
   toolResultText as toolExecutionText,
   type PiLoopDelta,
   type PiLoopEvent,
-  type PiLoopModelCall,
   type PiLoopTool,
   type PiUsageBuckets,
 } from './pi_agent_loop';
@@ -48,7 +47,6 @@ import {
   resolveTools,
 } from '../harness/tool_resolver';
 import {
-  estimateMessageTokens,
   estimateTextTokens,
   estimateToolSchemaTokens,
 } from '../context_budget';
@@ -433,6 +431,7 @@ type ToolResultOutput =
 export class PiToolTurnHarness {
   private readonly config: HarnessConfig;
   private readonly modelCall: PiToolModelCall;
+  private readonly stepReminder?: (steps: ReadonlyArray<{ toolCalls: ReadonlyArray<{ name: string }> }>) => string | undefined;
   private readonly executorOverride?: (
     call: { name: string; arguments: Record<string, unknown> },
     signal?: AbortSignal
@@ -468,6 +467,11 @@ export class PiToolTurnHarness {
     config: HarnessConfig,
     deps?: {
       modelCall?: PiToolModelCall;
+      /** Mid-turn nudge (the todo reminder). Injected from thread_session —
+       * agent must not import the session layer (arch rule
+       * agent-below-session-and-orchestration). Returns the text to append
+       * before the next model call, or undefined for no nudge. */
+      stepReminder?: (steps: ReadonlyArray<{ toolCalls: ReadonlyArray<{ name: string }> }>) => string | undefined;
       /** Intercepts MODEL-driven tool calls after the resume block. Owner-
        * executed resume calls (the five-state port) run RAW and do NOT pass
        * through this — record them at the owner port instead. */
@@ -501,6 +505,7 @@ export class PiToolTurnHarness {
   ) {
     this.config = config;
     this.modelCall = deps?.modelCall ?? defaultPiToolModelCall;
+    this.stepReminder = deps?.stepReminder;
     this.executorOverride = deps?.executeTool;
     this.resume = deps?.resume;
   }
@@ -855,6 +860,7 @@ export class PiToolTurnHarness {
       sentSnapshots.push([...requestView, ...pendingNotes]);
     };
 
+    let reminderSent = false;
     const iterator = runPiAgentLoop({
       systemPrompt,
       messages: transcript,
@@ -913,6 +919,7 @@ export class PiToolTurnHarness {
         systemPrompt: string;
         messages: PiMessage[];
         tools?: unknown;
+        steps?: ReadonlyArray<{ toolCalls: ReadonlyArray<{ name: string }> }>;
       }) => {
         // prepareStep parity: EVERY request re-checks the input budget.
         // Under the threshold this is one estimate pass; over it, the
@@ -922,6 +929,22 @@ export class PiToolTurnHarness {
         // refuses loudly (no silent truncation).
         if (typeof this.config.maxInputTokens === 'number') {
           await applyCompaction({ force: false });
+        }
+        // The todo nudge rides the same request view as everything else, so
+        // it is persisted, compactible and visible to the next step. It is
+        // derived from settled steps, never appended twice for one step list.
+        const reminder = this.stepReminder?.(context.steps ?? []);
+        // ONE nudge per turn. The rule keeps matching once its threshold is
+        // crossed, so appending on every later step would bury the transcript
+        // under reminders; the model gets told once and either updates the
+        // plan or keeps working.
+        if (reminder && !reminderSent) {
+          reminderSent = true;
+          // The transcript IS what the model receives (the loop appends its
+          // own assistant/toolResult entries there), so push there once.
+          // requestView is rebuilt from it by applyCompaction; recomputing it
+          // here would append the same nudge a second time.
+          transcript.push({ role: 'user', content: reminder, timestamp: Date.now() });
         }
         // Snapshot at call time = exactly what this step sends: the request
         // view (compacted basis included) plus any recovery note that has

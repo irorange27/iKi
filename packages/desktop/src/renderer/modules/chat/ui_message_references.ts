@@ -6,18 +6,13 @@ import type {
   ContextCompositionCategory,
   ContextCompositionSummary,
 } from '@iki/backend/types/context_composition';
-import { isAffectLabel, type AffectLabel } from '@iki/backend/types/affect';
 import { normalizeModelCapabilityLimits } from '@iki/backend/utils/provider_models';
 import { normalizeWhitespace } from '@iki/backend/utils/text';
 import { translate } from '../../i18n';
 
 import {
-  getAffectSignalPartData,
-  getMemoryPartData,
   getSkillUsagePartData,
   getTokenUsagePartData,
-  isAffectSignalPart,
-  isMemoryPart,
   isObjectRecord,
   isSkillUsagePart,
   isTokenUsagePart,
@@ -56,37 +51,6 @@ export type SkillReferenceSummary = {
   items: SkillReferenceItem[];
   selectedItems: SkillReferenceItem[];
   selectedOnlyItems: SkillReferenceItem[];
-};
-
-export type MemoryReferenceItem = {
-  id?: string;
-  summary: string;
-  score: number | null;
-  updatedAt: string;
-  tags: string[];
-  sourceMessageCount: number | null;
-};
-
-export type MemoryReferenceSummary = {
-  query: string;
-  items: MemoryReferenceItem[];
-};
-
-export type AffectReferenceSummary = {
-  source: 'history' | 'realtime' | '';
-  guardActive: boolean;
-  label: AffectLabel | '';
-  confidence: number | null;
-  valence: number | null;
-  arousal: number | null;
-  sampleCount: number | null;
-  windowSize: number | null;
-  ageMinutes: number | null;
-  windowMinutes: number | null;
-  emotions: Array<{
-    label: AffectLabel;
-    score: number;
-  }>;
 };
 
 export type TokenUsageSummary = {
@@ -178,41 +142,6 @@ export type SessionPerfStats = {
 const getMessageParts = (message: unknown): unknown[] =>
   isObjectRecord(message) && Array.isArray(message.parts) ? message.parts : [];
 
-const parseStringArray = (value: unknown): string[] => {
-  if (Array.isArray(value)) {
-    return value
-      .filter((entry): entry is string => typeof entry === 'string')
-      .map(entry => normalizeWhitespace(entry))
-      .filter(Boolean);
-  }
-
-  if (typeof value === 'string' && value.trim()) {
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter((entry): entry is string => typeof entry === 'string')
-          .map(entry => normalizeWhitespace(entry))
-          .filter(Boolean);
-      }
-    } catch {
-      return [normalizeWhitespace(value)];
-    }
-  }
-
-  return [];
-};
-
-const getSourceMessageCount = (entry: Record<string, unknown>): number | null => {
-  const directCount = entry.sourceMessageCount;
-  if (typeof directCount === 'number' && Number.isFinite(directCount) && directCount > 0) {
-    return Math.trunc(directCount);
-  }
-
-  const ids = parseStringArray(entry.source_message_ids);
-  return ids.length > 0 ? ids.length : null;
-};
-
 const toScore = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim()) {
@@ -231,28 +160,6 @@ const formatSkillSourceLabel = (value: unknown): SkillReferenceItem['sourceLabel
 const normalizeSkillSource = (value: unknown): SkillReferenceItem['source'] => {
   if (value === 'user' || value === 'codex') return value;
   return '';
-};
-
-const normalizeAffectScores = (
-  value: unknown
-): Array<{
-  label: AffectLabel;
-  score: number;
-}> => {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .filter(
-      (entry): entry is { label: AffectLabel; score: number } =>
-        isObjectRecord(entry) &&
-        isAffectLabel(entry.label) &&
-        typeof entry.score === 'number' &&
-        Number.isFinite(entry.score)
-    )
-    .map(entry => ({
-      label: entry.label,
-      score: Math.min(1, Math.max(0, entry.score)),
-    }));
 };
 
 const normalizeSkillItems = (rawSkills: unknown): SkillReferenceItem[] => {
@@ -398,81 +305,6 @@ const buildSkillReferenceSummary = (message: ChatUiMessage | unknown): SkillRefe
   };
 };
 
-const buildMemoryReferenceSummary = (message: ChatUiMessage | unknown): MemoryReferenceSummary => {
-  const parts = getMessageParts(message);
-  const memoryPart = parts.find(part => isMemoryPart(part));
-
-  if (!memoryPart) {
-    return {
-      query: '',
-      items: [],
-    };
-  }
-
-  const memoryData = getMemoryPartData(memoryPart);
-  const rawResults = Array.isArray(memoryData?.results) ? memoryData.results : [];
-  const items = rawResults
-    .filter(
-      (entry): entry is Record<string, unknown> =>
-        isObjectRecord(entry) &&
-        typeof entry.summary === 'string' &&
-        entry.summary.trim().length > 0
-    )
-    .map(entry => ({
-      ...(typeof entry.id === 'string' && entry.id.trim() ? { id: entry.id.trim() } : {}),
-      summary: normalizeWhitespace(entry.summary as string),
-      score: toScore(entry.score),
-      updatedAt: typeof entry.updated_at === 'string' ? entry.updated_at : '',
-      tags: parseStringArray(entry.tags),
-      sourceMessageCount: getSourceMessageCount(entry),
-    }));
-
-  return {
-    query: typeof memoryData?.query === 'string' ? normalizeWhitespace(memoryData.query) : '',
-    items,
-  };
-};
-
-const buildAffectReferenceSummary = (message: ChatUiMessage | unknown): AffectReferenceSummary => {
-  const parts = getMessageParts(message);
-  const affectPart = parts.find(part => isAffectSignalPart(part));
-
-  if (!affectPart) {
-    return {
-      source: '',
-      guardActive: false,
-      label: '',
-      confidence: null,
-      valence: null,
-      arousal: null,
-      sampleCount: null,
-      windowSize: null,
-      ageMinutes: null,
-      windowMinutes: null,
-      emotions: [],
-    };
-  }
-
-  const affectData = getAffectSignalPartData(affectPart);
-
-  return {
-    source:
-      affectData?.source === 'history' || affectData?.source === 'realtime'
-        ? affectData.source
-        : '',
-    guardActive: affectData?.guardActive === true,
-    label: isAffectLabel(affectData?.label) ? affectData.label : '',
-    confidence: toScore(affectData?.confidence),
-    valence: toScore(affectData?.valence),
-    arousal: toScore(affectData?.arousal),
-    sampleCount: toScore(affectData?.sampleCount),
-    windowSize: toScore(affectData?.windowSize),
-    ageMinutes: toScore(affectData?.ageMinutes),
-    windowMinutes: toScore(affectData?.windowMinutes),
-    emotions: normalizeAffectScores(affectData?.emotions),
-  };
-};
-
 const buildTokenUsageSummary = (message: ChatUiMessage | unknown): TokenUsageSummary => {
   const parts = getMessageParts(message);
   const usagePart = parts.find(part => isTokenUsagePart(part));
@@ -553,8 +385,6 @@ const reuseSummary = <T>(
 };
 const toolSummaryCache: SummaryCache<ToolReferenceSummary> = new WeakMap();
 const skillSummaryCache: SummaryCache<SkillReferenceSummary> = new WeakMap();
-const memorySummaryCache: SummaryCache<MemoryReferenceSummary> = new WeakMap();
-const affectSummaryCache: SummaryCache<AffectReferenceSummary> = new WeakMap();
 const selectedSkillSummaryCache: SummaryCache<
   Pick<SkillReferenceSummary, 'mode' | 'selectedItems'>
 > = new WeakMap();
@@ -564,8 +394,6 @@ export const getReferenceSummaries = (message: unknown) => {
   const parts = getMessageParts(message);
   const tools: unknown[] = [];
   const skills: unknown[] = [];
-  const memories: unknown[] = [];
-  const affects: unknown[] = [];
   const toolSources: unknown[] = [];
   const skillSources: unknown[] = [];
   for (const part of parts) {
@@ -579,10 +407,6 @@ export const getReferenceSummaries = (message: unknown) => {
     } else if (isSkillUsagePart(part)) {
       skills.push(part);
       skillSources.push(getSkillUsagePartData(part));
-    } else if (isMemoryPart(part)) {
-      memories.push(part);
-    } else if (isAffectSignalPart(part)) {
-      affects.push(part);
     }
   }
   return {
@@ -591,12 +415,6 @@ export const getReferenceSummaries = (message: unknown) => {
     ),
     skill: reuseSummary(skillSummaryCache, parts, skillSources, () =>
       buildSkillReferenceSummary({ parts: skills })
-    ),
-    memory: reuseSummary(memorySummaryCache, parts, memories.map(getMemoryPartData), () =>
-      buildMemoryReferenceSummary({ parts: memories })
-    ),
-    affect: reuseSummary(affectSummaryCache, parts, affects.map(getAffectSignalPartData), () =>
-      buildAffectReferenceSummary({ parts: affects })
     ),
   };
 };
@@ -609,10 +427,6 @@ export const getSelectedSkillReferenceSummary = (message: unknown) => {
     buildSelectedSkillReferenceSummary({ parts: part ? [part] : [] })
   );
 };
-export const getMemoryReferenceSummary = (message: unknown) =>
-  getReferenceSummaries(message).memory;
-export const getAffectReferenceSummary = (message: unknown) =>
-  getReferenceSummaries(message).affect;
 export const getTokenUsageSummary = (message: unknown): TokenUsageSummary => {
   const parts = getMessageParts(message);
   const part = parts.find(isTokenUsagePart);
@@ -777,8 +591,6 @@ export const buildTokenUsageIndicator = (
 };
 
 export const hasReferenceSummary = (message: ChatUiMessage | unknown): boolean => {
-  const { tool, skill, memory, affect } = getReferenceSummaries(message);
-  return (
-    tool.callCount > 0 || skill.items.length > 0 || memory.items.length > 0 || Boolean(affect.label)
-  );
+  const { tool, skill } = getReferenceSummaries(message);
+  return tool.callCount > 0 || skill.items.length > 0;
 };

@@ -416,8 +416,8 @@ export class PiTextTurnHarness {
     const mappedUsage: AgentUsage = final.usage
       ? {
           ...projectUsageToIki(final.usage),
-          // Catalog cost rates are not wired into the Pi model yet (tracked
-          // since switch item 1) — the provider-computed cost rides along.
+          // The Pi model carries the catalog's cost rates (D35), so the
+          // provider-computed cost is real here, not a placeholder.
           estimatedCostUsd: final.usage.cost.total,
         }
       : ZERO_USAGE;

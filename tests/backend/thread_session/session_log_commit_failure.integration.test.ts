@@ -3,19 +3,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 
-const external = vi.hoisted(() => ({ userData: vi.fn(() => ''), model: vi.fn() }));
-vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
-  // `resolvePiTurnSupply` calls `getProviderConfig` INTERNALLY inside the
-  // factory module, so mocking that module cannot reach it. These suites have
-  // no provider table and do not test admission.
-  pausedPlanRunsOnPiToolSupply: () => true,
+const external = vi.hoisted(() => ({ userData: vi.fn(() => '') }));
+const callPiChatMock = vi.hoisted(() => vi.fn());
+
+// The supply seam (ADR 009): the streaming path calls `callPiChat`.
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
 }));
 
 vi.mock('@iki/backend/platform', () => ({ getUserDataPath: external.userData }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
-  createModel: external.model,
   resolvePersonaPrompt: () => 'review',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({
@@ -32,6 +31,8 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   }),
 }));
 import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import {
   piTurnHarness,
   setTurnHarnessFallback,
@@ -42,7 +43,6 @@ import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { rebuildThreadViewFromEvents } from '@iki/backend/thread_session/session_log';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
-import { FauxModelProvider, fauxText } from '@iki/backend/agent/testing/faux_model';
 
 let root: string;
 let conversation: ReturnType<typeof createChatPersistence>;
@@ -58,16 +58,19 @@ beforeEach(async () => {
   // forced rather than routed (the production default refuses a turn whose
   // provider row does not exist, which is not what this suite is about).
   setTurnHarnessFallback(piTurnHarness);
+  // One settled answer: these cases are about the COMMIT gate, not the model.
+  callPiChatMock.mockImplementation(
+    createScriptedPiChat([[{ kind: 'text', text }, { kind: 'done' }]])
+  );
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-pi-settle-review-'));
   external.userData.mockReturnValue(root);
   initializeDatabase({ dbPath: path.join(root, 'review.db') });
+    seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
   conversation = createChatPersistence({
     memory: memory as never,
     onContinuityMessagePersisted: async () => undefined,
   });
   conversation.createThread({ id: 'review_settle', metadata: '{"mode":"chat"}' });
-  external.model.mockReset();
-  external.model.mockReturnValue(new FauxModelProvider([fauxText(text)]));
 });
 afterEach(async () => {
   closeDatabase();
@@ -131,7 +134,8 @@ it('a public stream must not settle as success after losing the withheld generat
   const evidence = await run();
   // Characterize the reached path before the discriminating assertion:
   // reply generated; rejected text withheld; final UI/history contains no answer.
-  expect(external.model).toHaveBeenCalledTimes(1);
+  // The model ran once on the Pi supply (the retired factory seam is unused).
+  expect(callPiChatMock).toHaveBeenCalledTimes(1);
   expect(evidence.observed).toBe('');
   expect(JSON.stringify(evidence.rows)).not.toContain(text);
   expect(JSON.stringify(evidence.recovered.messages)).not.toContain(text);

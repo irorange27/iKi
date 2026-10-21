@@ -104,39 +104,33 @@
               </button>
             </PopoverTrigger>
             <PopoverPortal>
-            <PopoverContent
-              class="permission-panel"
-              side="top"
-              align="start"
-              :side-offset="8"
-            >
-              <p class="permission-panel-title">{{ t('chat.input.permission.panelTitle') }}</p>
-              <div role="radiogroup" :aria-label="t('chat.input.permission.panelTitle')">
-                <button
-                  v-for="option in permissionOptions"
-                  :key="option.value"
-                  class="permission-option"
-                  :class="{ 'permission-option--selected': approvalPolicy === option.value }"
-                  role="radio"
-                  :aria-checked="approvalPolicy === option.value"
-                  :data-policy="option.value"
-                  @click="selectApprovalPolicy(option.value)"
-                >
-                  <span class="permission-option-icon" aria-hidden="true">
-                    <component :is="option.icon" class="h-4 w-4" />
-                  </span>
-                  <span class="permission-option-copy">
-                    <span class="permission-option-name">{{ option.name }}</span>
-                    <span class="permission-option-desc">{{ option.description }}</span>
-                  </span>
-                  <Check
-                    v-if="approvalPolicy === option.value"
-                    class="permission-option-check h-4 w-4"
-                  />
-                </button>
-              </div>
-            </PopoverContent>
-
+              <PopoverContent class="permission-panel" side="top" align="start" :side-offset="8">
+                <p class="permission-panel-title">{{ t('chat.input.permission.panelTitle') }}</p>
+                <div role="radiogroup" :aria-label="t('chat.input.permission.panelTitle')">
+                  <button
+                    v-for="option in permissionOptions"
+                    :key="option.value"
+                    class="permission-option"
+                    :class="{ 'permission-option--selected': approvalPolicy === option.value }"
+                    role="radio"
+                    :aria-checked="approvalPolicy === option.value"
+                    :data-policy="option.value"
+                    @click="selectApprovalPolicy(option.value)"
+                  >
+                    <span class="permission-option-icon" aria-hidden="true">
+                      <component :is="option.icon" class="h-4 w-4" />
+                    </span>
+                    <span class="permission-option-copy">
+                      <span class="permission-option-name">{{ option.name }}</span>
+                      <span class="permission-option-desc">{{ option.description }}</span>
+                    </span>
+                    <Check
+                      v-if="approvalPolicy === option.value"
+                      class="permission-option-check h-4 w-4"
+                    />
+                  </button>
+                </div>
+              </PopoverContent>
             </PopoverPortal>
           </PopoverRoot>
         </template>
@@ -165,10 +159,19 @@
               </div>
             </HoverCardTrigger>
             <HoverCardPortal>
-              <HoverCardContent class="context-usage-panel" side="top" align="end" :side-offset="10">
+              <HoverCardContent
+                class="context-usage-panel"
+                side="top"
+                align="end"
+                :side-offset="10"
+              >
                 <div class="context-usage-panel-header">
-                  <span class="context-usage-panel-title">{{ t('chat.contextUsage.panelTitle') }}</span>
-                  <span class="context-usage-panel-total">{{ composerContextUsage.tokenLabel }}</span>
+                  <span class="context-usage-panel-title">{{
+                    t('chat.contextUsage.panelTitle')
+                  }}</span>
+                  <span class="context-usage-panel-total">{{
+                    composerContextUsage.tokenLabel
+                  }}</span>
                 </div>
                 <div class="context-usage-panel-bar" role="presentation">
                   <div
@@ -183,9 +186,13 @@
                     :key="row.key"
                     class="context-usage-panel-row"
                   >
-                    <span class="context-usage-row-label">{{ t(`chat.contextUsage.category.${row.key}`) }}</span>
+                    <span class="context-usage-row-label">{{
+                      t(`chat.contextUsage.category.${row.key}`)
+                    }}</span>
                     <span class="context-usage-row-values">
-                      <span class="context-usage-row-tokens">{{ formatTokenCount(row.tokens) }}</span>
+                      <span class="context-usage-row-tokens">{{
+                        formatTokenCount(row.tokens)
+                      }}</span>
                       <span class="context-usage-row-percent">{{ row.percent }}%</span>
                     </span>
                   </li>
@@ -264,11 +271,7 @@
         </template>
       </ChatComposerShell>
     </div>
-    <ImageViewerOverlay
-      :visible="viewerSrc.length > 0"
-      :src="viewerSrc"
-      @close="viewerSrc = ''"
-    />
+    <ImageViewerOverlay :visible="viewerSrc.length > 0" :src="viewerSrc" @close="viewerSrc = ''" />
   </div>
 </template>
 
@@ -309,15 +312,9 @@ import { useRunStatus } from '../composables/useRunStatus';
 import { useThreadSessionStore } from '../store/thread_session';
 import { useConfigStore } from '../store/config';
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
-import {
-  HoverCardContent,
-  HoverCardPortal,
-  HoverCardRoot,
-  HoverCardTrigger,
-} from 'reka-ui';
+import { HoverCardContent, HoverCardPortal, HoverCardRoot, HoverCardTrigger } from 'reka-ui';
 import {
   parseApprovalPolicy,
-  type ThreadApprovalPolicy,
 } from '@iki/backend/workspaces/thread_mode';
 import { storeToRefs } from 'pinia';
 import { resolveThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
@@ -328,7 +325,9 @@ const electronAPI = getElectronAPI();
 const { t } = useI18n();
 const threadSession = useThreadSessionStore();
 const configStore = useConfigStore();
-const autoApproveEnabled = computed(() => configStore.config?.general?.autoApproveToolRequests === true);
+const autoApproveEnabled = computed(
+  () => configStore.config?.general?.autoApproveToolRequests === true
+);
 const approvalPolicy = computed(() => props.approvalPolicy ?? '');
 const permissionPanelOpen = ref(false);
 
@@ -425,9 +424,7 @@ const message = ref('');
 const attachedImages = ref<FileUIPart[]>([]);
 const viewerSrc = ref('');
 
-const modelSupportsVision = computed(
-  () => selectedModelCapability.value?.supportsVision === true
-);
+const modelSupportsVision = computed(() => selectedModelCapability.value?.supportsVision === true);
 
 const showVisionWarning = computed(
   () => attachedImages.value.length > 0 && !modelSupportsVision.value
@@ -457,7 +454,6 @@ const {
   speechEngineAvailable,
   showWaveform,
   waveformBars,
-  audioEmotion,
   loadSpeechStatus,
   toggleVoiceInput,
   stopVoiceInput,
@@ -499,7 +495,12 @@ const {
 const handlePasteImage = (payload: { mediaType: string; url: string; filename?: string }) => {
   attachedImages.value = [
     ...attachedImages.value,
-    { type: 'file' as const, mediaType: payload.mediaType, url: payload.url, filename: payload.filename },
+    {
+      type: 'file' as const,
+      mediaType: payload.mediaType,
+      url: payload.url,
+      filename: payload.filename,
+    },
   ];
 };
 
@@ -549,7 +550,6 @@ const {
   ensureProviderReady,
   stopVoiceInput,
   attachedImages,
-  audioEmotion,
 });
 sendMessageHandler = sendMessage;
 watchEffect(() => {

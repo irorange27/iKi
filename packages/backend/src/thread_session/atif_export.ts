@@ -4,10 +4,7 @@ import { z } from 'zod';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import type { AgentRun, AgentRunStep } from '@iki/backend/types/agent_run';
 import type {
-  AtifMetrics,
-  AtifObservation,
   AtifStep,
-  AtifToolCall,
   AtifTrajectory,
   AtifTrajectoryExportResult,
 } from '@iki/backend/types/atif';

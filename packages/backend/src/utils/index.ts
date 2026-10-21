@@ -4,7 +4,6 @@ export * from './guards';
 export * from './id';
 export * from './plain_clone';
 export * from './json';
-export * from './memory_embedding_models';
 export * from './path_boundary';
 export * from './plain_text_markdown';
 export * from './provider_models';

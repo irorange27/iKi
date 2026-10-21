@@ -101,16 +101,8 @@
         <SettingsUsageSection :active="activeSection === 'models'" />
       </section>
 
-      <!-- 记忆与技能: what the agent remembers and can do. -->
+      <!-- 技能: what the agent can do. -->
       <section v-show="activeSection === 'intelligence'" class="settings-page">
-        <h2 class="settings-page-title">{{ t('settings.menu.memory') }}</h2>
-        <SettingsMemorySection
-          :active="activeSection === 'intelligence'"
-          :providers="providers"
-          @config-change="autoSave"
-          @reset="resetSection('memory')"
-        />
-
         <h2 class="settings-page-title">{{ t('settings.menu.skills') }}</h2>
         <SettingsSkillsSection
           :active="activeSection === 'intelligence'"
@@ -164,7 +156,6 @@ import NapCatSettings from '../components/settings/NapCatSettings.vue';
 import SettingsColorSchemeSection from '../components/settings/SettingsColorSchemeSection.vue';
 import SettingsNetworkSection from '../components/settings/SettingsNetworkSection.vue';
 import SettingsSpeechSection from '../components/settings/SettingsSpeechSection.vue';
-import SettingsMemorySection from '../components/settings/SettingsMemorySection.vue';
 import SettingsTasksSection from '../components/settings/SettingsTasksSection.vue';
 import SettingsUsageSection from '../components/settings/SettingsUsageSection.vue';
 import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.vue';

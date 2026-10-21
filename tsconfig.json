@@ -45,6 +45,6 @@
   "include": [
     "packages/daemon/src/**/*",
     "packages/desktop/src/**/*",
-    "packages/backend/src/provider/llm/pi_adapter.ts"
+    "packages/backend/src/**/*"
   ]
 }

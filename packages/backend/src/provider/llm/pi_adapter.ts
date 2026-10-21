@@ -75,7 +75,6 @@ import type {
   ImageContent,
   Message as PiMessage,
   TextContent,
-  ThinkingContent,
   Tool as PiTool,
   ToolCall,
   ToolResultMessage,

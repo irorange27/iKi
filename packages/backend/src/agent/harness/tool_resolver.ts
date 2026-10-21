@@ -26,9 +26,10 @@ export type ApprovalPolicyBox = {
   allowPatterns: Map<string, string[]>;
 };
 
-export const createApprovalPolicyBox = (
-  policy?: ApprovalPolicy
-): ApprovalPolicyBox => ({ policy, allowPatterns: new Map() });
+export const createApprovalPolicyBox = (policy?: ApprovalPolicy): ApprovalPolicyBox => ({
+  policy,
+  allowPatterns: new Map(),
+});
 
 /** Called once per SDK step (agent_harness onModelStep). */
 export const advanceApprovalPolicySnapshot = (
@@ -43,7 +44,6 @@ export const advanceApprovalPolicySnapshot = (
 const resolveStaticTool = (
   tool: AgentTool,
   approvalPolicy: ApprovalPolicy | undefined,
-  guardActive: boolean,
   requireApproval: boolean,
   autoApproveToolRequests: boolean
 ): AgentTool => {
@@ -62,12 +62,12 @@ const resolveStaticTool = (
     resolved = {
       ...resolved,
       needsApproval: (input: unknown) =>
-        classifyActionRisk(tool.name, input, allowPatterns, approvalPolicy === 'trustWorkspace') === 'escalate',
+        classifyActionRisk(tool.name, input, allowPatterns, approvalPolicy === 'trustWorkspace') ===
+        'escalate',
     };
   } else if (requireApproval) {
     resolved = { ...resolved, needsApproval: true };
   } else if (
-    !guardActive &&
     tool.approvalMode !== 'always' &&
     (tool.needsApproval === false || tool.needsApproval === undefined)
   ) {
@@ -89,7 +89,6 @@ const resolveStaticTool = (
 const prepareToolWithGuard = (
   toolName: string,
   approvalPolicy: ApprovalPolicy | undefined,
-  guardActive: boolean,
   requireApproval: boolean,
   autoApproveToolRequests: boolean,
   policyBox?: ApprovalPolicyBox
@@ -98,14 +97,14 @@ const prepareToolWithGuard = (
   if (!tool) return null;
 
   if (!policyBox) {
-    return resolveStaticTool(tool, approvalPolicy, guardActive, requireApproval, autoApproveToolRequests);
+    return resolveStaticTool(tool, approvalPolicy, requireApproval, autoApproveToolRequests);
   }
 
   // Decide at call time against the current per-step snapshot, so the dial and
   // the learned allow rules advance together at the step boundary. A turn
   // without an explicit policy still falls back to the legacy flags — never
   // escalate by default just because a snapshot exists.
-  const fallback = resolveStaticTool(tool, undefined, guardActive, requireApproval, autoApproveToolRequests);
+  const fallback = resolveStaticTool(tool, undefined, requireApproval, autoApproveToolRequests);
   return {
     ...tool,
     // `...tool` is the raw registry tool, so carry the declaration computed by
@@ -125,7 +124,9 @@ const prepareToolWithGuard = (
           patterns = listToolAllowPatterns(toolName);
           policyBox.allowPatterns.set(toolName, patterns);
         }
-        return classifyActionRisk(toolName, input, patterns, policy === 'trustWorkspace') === 'escalate';
+        return (
+          classifyActionRisk(toolName, input, patterns, policy === 'trustWorkspace') === 'escalate'
+        );
       }
       const legacy = fallback.needsApproval;
       return typeof legacy === 'function' ? legacy(input, options) : Boolean(legacy);
@@ -149,10 +150,9 @@ export const resolveTools = (params: {
   enableTools: boolean;
   enabledToolNames: string[];
   availableSkillIds: string[];
-  guardActive: boolean;
   requireApproval: boolean;
   autoApproveToolRequests: boolean;
-  /** ADR 005: overrides guardActive/requireApproval when present. */
+  /** ADR 005: overrides requireApproval when present. */
   approvalPolicy?: ApprovalPolicy;
   /**
    * Per-step snapshot. When present, `needsApproval` decides against the box at
@@ -175,9 +175,7 @@ export const resolveTools = (params: {
     if (toolName === 'load_skill') {
       if (params.availableSkillIds.length > 0) {
         resolvedTools.push(
-          params.skillToolFactory
-            ? params.skillToolFactory()
-            : new LoadSkillTool().toAgentTool()
+          params.skillToolFactory ? params.skillToolFactory() : new LoadSkillTool().toAgentTool()
         );
       }
       continue;
@@ -189,10 +187,9 @@ export const resolveTools = (params: {
     const registered = prepareToolWithGuard(
       toolName,
       params.approvalPolicy,
-      params.guardActive,
       params.requireApproval,
       params.autoApproveToolRequests,
-      params.approvalPolicyBox,
+      params.approvalPolicyBox
     );
     if (registered) {
       resolvedTools.push(registered);

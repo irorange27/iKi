@@ -52,7 +52,6 @@ import {
 } from '@earendil-works/pi-ai';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { AgentHarness, startPiTurnHarness } from '@iki/backend/agent/harness';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import {
   PiToolTurnHarness,
   withPiRetry,

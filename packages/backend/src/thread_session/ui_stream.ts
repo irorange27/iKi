@@ -1,16 +1,18 @@
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { reduceChunkLogToMessage } from '@iki/backend/message/ui_chunk_reducer';
 import type {
-  AffectSignalPartData,
   ChatUiMessageChunk,
   SkillUsageEntry,
   TokenUsagePartData,
 } from '@iki/backend/message/message_parts';
-import type { AffectSignal } from '@iki/backend/types/affect';
 import { isObjectRecord } from '@iki/backend/message/tool_parts';
 import { createLogger } from '@iki/backend/logger';
 
-import type { ChatStreamTarget, ChatStreamEvent, PersistedTurnMessage, UiChunkEmitter } from './types';
+import type {
+  ChatStreamTarget,
+  ChatStreamEvent,
+  UiChunkEmitter,
+} from './types';
 import { createPrefixedId } from '@iki/backend/utils/id';
 
 const uiStreamLogger = createLogger({ module: 'ui_stream' });
@@ -151,7 +153,9 @@ const toUiChunkFromToolEvent = (event: ChatStreamEvent): ChatUiMessageChunk | nu
   }
   if (event.type === 'tool-approval-request') {
     const approvalInput = isObjectRecord(event.toolCall)
-      ? (isObjectRecord(event.toolCall.args) ? event.toolCall.args : event.toolCall.input)
+      ? isObjectRecord(event.toolCall.args)
+        ? event.toolCall.args
+        : event.toolCall.input
       : undefined;
 
     return {
@@ -187,9 +191,7 @@ export const createUiChunkEmitter = (
   // be reduced from the same facts the client consumed.
   const chunkLog: ChatUiMessageChunk[] = [];
 
-  const emitChunk = (
-    chunk: ChatUiMessageChunk
-  ) => {
+  const emitChunk = (chunk: ChatUiMessageChunk) => {
     target.send('chat:ui-chunk', chunk);
     chunkLog.push(chunk);
   };
@@ -289,9 +291,9 @@ export const createUiChunkEmitter = (
         const toolName = getToolNameFromEvent(event);
         const input =
           event.type === 'tool-approval-request' && event.toolCall
-            ? (isObjectRecord(event.toolCall.args)
-                ? event.toolCall.args
-                : event.toolCall.input)
+            ? isObjectRecord(event.toolCall.args)
+              ? event.toolCall.args
+              : event.toolCall.input
             : undefined;
         ensureToolPartSeeded(toolCallId, toolName, input ?? {});
       }
@@ -315,46 +317,11 @@ export const createUiChunkEmitter = (
         },
       });
     },
-    emitMemoryRetrieval: payload => {
-      if (terminated) return;
-      ensureStarted();
-      emitChunk({
-        type: 'data-memory-retrieval',
-        id: 'memory-retrieval',
-        data: {
-          query: payload?.query ?? '',
-          results: Array.isArray(payload?.results) ? payload.results : [],
-        },
-      });
-    },
-    emitAffectSignal: (payload: AffectSignal) => {
-      if (terminated) return;
-      ensureStarted();
-      const data: AffectSignalPartData = {
-        source: payload.source,
-        guardActive: payload.guardActive,
-        label: payload.state.label,
-        confidence: payload.state.confidence,
-        ...(typeof payload.state.valence === 'number' ? { valence: payload.state.valence } : {}),
-        ...(typeof payload.state.arousal === 'number' ? { arousal: payload.state.arousal } : {}),
-        ...(payload.state.emotions ? { emotions: payload.state.emotions } : {}),
-        sampleCount: payload.state.sampleCount,
-        windowSize: payload.state.windowSize,
-        startAt: payload.state.startAt,
-        endAt: payload.state.endAt,
-        ageMinutes: payload.state.ageMinutes,
-        windowMinutes: payload.state.windowMinutes,
-      };
-      emitChunk({
-        type: 'data-affect-signal',
-        id: 'affect-signal',
-        data,
-      });
-    },
     emitTokenUsage: payload => {
       if (terminated) return;
       ensureStarted();
-      const data: TokenUsagePartData = {        ...(typeof payload?.inputTokens === 'number' ? { inputTokens: payload.inputTokens } : {}),
+      const data: TokenUsagePartData = {
+        ...(typeof payload?.inputTokens === 'number' ? { inputTokens: payload.inputTokens } : {}),
         ...(typeof payload?.outputTokens === 'number'
           ? { outputTokens: payload.outputTokens }
           : {}),
@@ -395,9 +362,7 @@ export const createUiChunkEmitter = (
           : {}),
         ...(typeof payload?.steps === 'number' ? { steps: payload.steps } : {}),
         ...(typeof payload?.toolCalls === 'number' ? { toolCalls: payload.toolCalls } : {}),
-        ...(payload?.contextComposition
-          ? { contextComposition: payload.contextComposition }
-          : {}),
+        ...(payload?.contextComposition ? { contextComposition: payload.contextComposition } : {}),
       };
       emitChunk({
         type: 'data-token-usage',
@@ -415,9 +380,7 @@ export const createUiChunkEmitter = (
         reduced = reduceChunkLogToMessage(chunkLog, {
           // Every chunk of this turn belongs to the stream's single message.
           messageId,
-          ...(Array.isArray(seedParts)
-            ? { seed: { messageId, parts: seedParts as never } }
-            : {}),
+          ...(Array.isArray(seedParts) ? { seed: { messageId, parts: seedParts as never } } : {}),
         });
       } catch (error) {
         uiStreamLogger.event({

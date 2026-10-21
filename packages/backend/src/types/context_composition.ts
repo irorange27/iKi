@@ -3,7 +3,6 @@ export type ContextCompositionCategory =
   | 'messages'
   | 'systemPrompt'
   | 'skills'
-  | 'memory'
   | 'tools'
   | 'mcpTools'
   | 'other';

@@ -48,8 +48,7 @@ describe('context composition summary', () => {
         { kind: 'recent-history', status: 'included', estimatedTokens: 5760, charCount: 0 },
         { kind: 'identity', status: 'included', estimatedTokens: 900, charCount: 0 },
         { kind: 'skills', status: 'included', estimatedTokens: 300, charCount: 0 },
-        { kind: 'memory', status: 'included', estimatedTokens: 80, charCount: 0 },
-        { kind: 'affect', status: 'included', estimatedTokens: 40, charCount: 0 },
+        { kind: 'thread-summary', status: 'included', estimatedTokens: 40, charCount: 0 },
       ]),
       toolSchemaTokens: { builtin: 440, mcp: 120 },
     });
@@ -58,19 +57,18 @@ describe('context composition summary', () => {
       messages: 5760,
       systemPrompt: 900,
       skills: 300,
-      memory: 80,
       tools: 440,
       mcpTools: 120,
       other: 40,
     });
-    expect(summary.estimatedTotalTokens).toBe(7640);
+    expect(summary.estimatedTotalTokens).toBe(7560);
   });
 
   it('omits zero categories and tolerates a missing tool estimate', () => {
     const summary = summarizeContextComposition({
       report: makeReport([
         { kind: 'recent-history', status: 'included', estimatedTokens: 1200, charCount: 0 },
-        { kind: 'memory', status: 'dropped', estimatedTokens: 0, charCount: 0 },
+        { kind: 'skills', status: 'dropped', estimatedTokens: 0, charCount: 0 },
       ]),
       toolSchemaTokens: null,
     });

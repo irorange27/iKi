@@ -21,14 +21,6 @@ const userDataMock = vi.hoisted(() => vi.fn(() => ''));
 // The supply seam: Pi is the only executor (ADR 009). Scripting it here keeps
 // these suites on the durable-layer behaviour they assert without reaching a
 // network endpoint.
-vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
-  // `resolvePiTurnSupply` calls `getProviderConfig` INTERNALLY inside the
-  // factory module, so mocking that module cannot reach it. These suites have
-  // no provider table and do not test admission.
-  pausedPlanRunsOnPiToolSupply: () => true,
-}));
-
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
@@ -59,6 +51,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
 }));
 
 import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
@@ -137,6 +130,9 @@ describe('retry and queued resume read the session log alone', () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-retry-events-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'retry.db') });
+    // A real provider row: the supply resolves it, so this suite does not have
+    // to stub the admission decision.
+    seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
     addWorkspace({ id: 'ws_retry', path: root, name: 'retry' });
     const conversation = (service = createChatService()) as unknown as {
       createThread: (input: Record<string, unknown>) => unknown;
@@ -463,7 +459,8 @@ describe('retry and queued resume read the session log alone', () => {
     // the retry itself fails too (a third dead attempt joins the chain), and
     // the NEXT retry of the ORIGINAL still finds the task — every dead
     // attempt above and below is excluded.
-    createModelMock.mockImplementation(() => {
+    // B's retry must still fail at the MODEL: script a provider error.
+    callPiChatMock.mockImplementation(() => {
       throw new Error('still failing');
     });
     const retryB = await service.retryAndExecute(target, 'run_stack_b');
@@ -480,10 +477,11 @@ describe('retry and queued resume read the session log alone', () => {
         ],
       ])
     );
-    const providerCalls2 = vi.spyOn(model2, 'doStream');
+    const providerCalls2 = callPiChatMock;
     const retryA = await service.retryAndExecute(target, 'run_stack_a');
     if (!retryA.success) throw new Error(`retry A failed: ${JSON.stringify(retryA)}`);
-    const promptA = JSON.stringify(providerCalls2.mock.calls[0][0].prompt);
+    // `callPiChat(model, context, options)` — the request context is arg 1.
+    const promptA = JSON.stringify(providerCalls2.mock.calls[0][1]);
     expect(promptA).toContain('STACK_TASK_MARKER');
     expect(promptA).not.toContain('DEAD_ATTEMPT_TEXT_');
   });

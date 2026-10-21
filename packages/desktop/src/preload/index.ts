@@ -18,7 +18,6 @@ import type {
   ProviderModelDiscoveryOverride,
 } from '@iki/backend/types/provider';
 import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/backend/types/chat_usage';
-import type { AffectStateEntry } from '@iki/backend/types/memory';
 import type { ProactiveTask } from '@iki/backend/types/tasks';
 import type { McpServerInput, McpServerSummary } from '@iki/backend/types/mcp';
 import type { AgentRun, AgentRunTrace, AgentRunTree } from '@iki/backend/types/agent_run';
@@ -35,11 +34,9 @@ import type {
 import type {
   ChatInvocationOptions,
   ElectronApi,
-  LongMemoryInput,
   PromptAppInput,
   ProactiveTaskInput,
   ProviderInput,
-  ShortMemoryInput,
   WorkspaceInput,
   ChatThreadInput,
   ChatMessageInput,
@@ -77,9 +74,6 @@ const electronApi: ElectronApi = {
     install: (): Promise<void> => ipcRenderer.invoke('updates:install'),
     onStatusChanged: (callback: (status: AppUpdateStatus) => void) =>
       subscribe('updates:status-changed', callback),
-    removeAllListeners: () => {
-      ipcRenderer.removeAllListeners('updates:status-changed');
-    },
   },
   providers: {
     list: () => ipcRenderer.invoke('providers:list'),
@@ -111,10 +105,6 @@ const electronApi: ElectronApi = {
     onRunStatus: (
       callback: (event: import('@iki/backend/types/electron_api').RunStatusEvent) => void
     ) => subscribe('chat:run-status', callback),
-    removeAllListeners: () => {
-      ipcRenderer.removeAllListeners('chat:ui-chunk');
-      ipcRenderer.removeAllListeners('chat:run-status');
-    },
     threads: {
       list: () => ipcRenderer.invoke('chat:threads:list'),
       get: (id: string) => ipcRenderer.invoke('chat:threads:get', id),
@@ -135,7 +125,6 @@ const electronApi: ElectronApi = {
       get: (id: string) => ipcRenderer.invoke('chat:messages:get', id),
       update: (id: string, message: ChatMessageInput) =>
         ipcRenderer.invoke('chat:messages:update', id, message),
-      delete: (id: string) => ipcRenderer.invoke('chat:messages:delete', id),
       truncateAfter: (threadId: string, messageId: string) =>
         ipcRenderer.invoke('chat:messages:truncate-after', threadId, messageId),
     },
@@ -148,16 +137,11 @@ const electronApi: ElectronApi = {
         ipcRenderer.invoke('chat:runs:tree:get', rootRunId),
       trajectory: (runId: string) => ipcRenderer.invoke('chat:runs:trajectory:get', runId),
       cancel: (runId: string) => ipcRenderer.invoke('chat:runs:cancel', runId),
-      retry: (runId: string) => ipcRenderer.invoke('chat:runs:retry', runId),
       retryAndExecute: (runId: string) => ipcRenderer.invoke('chat:runs:retry-and-execute', runId),
       resume: (runId: string) => ipcRenderer.invoke('chat:runs:resume', runId),
-      listByStatus: (statuses: string[], opts?: { limit?: number; clientId?: string }) =>
-        ipcRenderer.invoke('chat:runs:list-by-status', statuses, opts),
       reviewQueue: (limit?: number) => ipcRenderer.invoke('chat:runs:review-queue', limit),
       eval: {
         exportTrace: (runId: string) => ipcRenderer.invoke('chat:eval:export-trace', runId),
-        exportRunTrajectory: (runId: string) =>
-          ipcRenderer.invoke('chat:eval:export-run-trajectory', runId),
         addLabel: input => ipcRenderer.invoke('chat:eval:add-label', input),
         listLabels: (runId: string) => ipcRenderer.invoke('chat:eval:list-labels', runId),
         deleteLabel: (labelId: string) => ipcRenderer.invoke('chat:eval:delete-label', labelId),
@@ -166,31 +150,6 @@ const electronApi: ElectronApi = {
     usage: {
       summary: (period: ChatUsagePeriod = '30d'): Promise<ChatUsageSummary> =>
         ipcRenderer.invoke('chat:usage:summary', period),
-    },
-  },
-  memory: {
-    short: {
-      list: (threadId: string, limit?: number) =>
-        ipcRenderer.invoke('memory:short:list', threadId, limit),
-      add: (entry: ShortMemoryInput) => ipcRenderer.invoke('memory:short:add', entry),
-      listAll: (limit?: number) => ipcRenderer.invoke('memory:short:listAll', limit),
-    },
-    long: {
-      add: (entry: LongMemoryInput) => ipcRenderer.invoke('memory:long:add', entry),
-      update: (id: string, updates: Partial<LongMemoryInput>) =>
-        ipcRenderer.invoke('memory:long:update', id, updates),
-      delete: (id: string) => ipcRenderer.invoke('memory:long:delete', id),
-      list: (threadId: string, limit?: number) =>
-        ipcRenderer.invoke('memory:long:list', threadId, limit),
-      listAll: (limit?: number) => ipcRenderer.invoke('memory:long:listAll', limit),
-      search: (threadId: string, query: string, options?: Record<string, unknown>) =>
-        ipcRenderer.invoke('memory:long:search', threadId, query, options),
-      searchAll: (query: string, options?: Record<string, unknown>) =>
-        ipcRenderer.invoke('memory:long:searchAll', query, options),
-    },
-    affect: {
-      get: (threadId: string): Promise<AffectStateEntry | null> =>
-        ipcRenderer.invoke('memory:affect:get', threadId),
     },
   },
   workspaces: {
@@ -243,9 +202,6 @@ const electronApi: ElectronApi = {
       ipcRenderer.invoke('speech:download-model', modelName),
     onDownloadProgress: (callback: (payload: WhisperNodeDownloadProgress) => void) =>
       subscribe('speech:download-progress', callback),
-    removeAllListeners: () => {
-      ipcRenderer.removeAllListeners('speech:download-progress');
-    },
   },
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
@@ -267,15 +223,9 @@ const electronApi: ElectronApi = {
     delete: (id: string) => ipcRenderer.invoke('tasks:delete', id),
     runNow: (id: string) => ipcRenderer.invoke('tasks:run-now', id),
     onPush: (callback: (payload: unknown) => void) => subscribe('tasks:push', callback),
-    removeAllListeners: () => {
-      ipcRenderer.removeAllListeners('tasks:push');
-    },
   },
   awaiters: {
     onPush: (callback: (payload: unknown) => void) => subscribe('awaiters:push', callback),
-    removeAllListeners: () => {
-      ipcRenderer.removeAllListeners('awaiters:push');
-    },
   },
   mcp: {
     list: (): Promise<McpServerSummary[]> => ipcRenderer.invoke('mcp:list'),

@@ -136,6 +136,10 @@ export type PiLoopModelCall = (context: {
   systemPrompt: string;
   messages: PiMessage[];
   tools?: PiTool[];
+  /** Steps that already settled, oldest first. A caller that needs to react
+   * to what the loop has done so far (e.g. the todo reminder) reads this
+   * instead of reconstructing history from `messages`. */
+  steps: ReadonlyArray<PiLoopStep>;
 }) =>
   | {
       events: AsyncIterable<PiLoopDelta>;
@@ -225,6 +229,7 @@ export const runPiAgentLoop = async function* (
       systemPrompt: params.systemPrompt,
       messages,
       tools: params.tools,
+      steps,
     });
     for await (const delta of call.events) {
       if (delta.type === 'text_delta') {

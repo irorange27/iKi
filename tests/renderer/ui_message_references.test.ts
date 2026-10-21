@@ -4,10 +4,8 @@ import { DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS } from '@iki/backend/utils/provider
 import {
   buildContextCompositionRows,
   buildSessionPerfStats,
-  getAffectReferenceSummary,
   buildTokenUsageIndicator,
   formatTokenCount,
-  getMemoryReferenceSummary,
   getSkillReferenceSummary,
   getTokenUsageSummary,
   getToolReferenceSummary,
@@ -214,54 +212,6 @@ describe('ui_message_references', () => {
     ]);
   });
 
-  it('normalizes memory references including tags and source counts', () => {
-    const summary = getMemoryReferenceSummary({
-      id: 'assistant_1',
-      role: 'assistant',
-      parts: [
-        {
-          type: 'data-memory-retrieval',
-          data: {
-            query: 'project constraints',
-            results: [
-              {
-                id: 'mem_1',
-                summary: 'User prefers long-term maintainable solutions.',
-                score: '0.834',
-                updated_at: '2026-03-19T12:00:00.000Z',
-                tags: '["preference","engineering"]',
-                sourceMessageCount: 2,
-              },
-            ],
-          },
-        },
-      ],
-    } as never);
-
-    expect(summary).toEqual({
-      query: 'project constraints',
-      items: [
-        {
-          id: 'mem_1',
-          summary: 'User prefers long-term maintainable solutions.',
-          score: 0.834,
-          updatedAt: '2026-03-19T12:00:00.000Z',
-          tags: ['preference', 'engineering'],
-          sourceMessageCount: 2,
-        },
-      ],
-    });
-    expect(
-      hasReferenceSummary({
-        id: 'assistant_1',
-        role: 'assistant',
-        parts: [
-          { type: 'data-memory-retrieval', data: { results: [{ summary: 'hello' }] } },
-        ],
-      } as never)
-    ).toBe(true);
-  });
-
   it('parses token usage reports for composer inspection', () => {
     const summary = getTokenUsageSummary({
       id: 'assistant_1',
@@ -363,57 +313,6 @@ describe('ui_message_references', () => {
 
     expect(buildContextCompositionRows(summary)).toEqual([]);
     expect(buildContextCompositionRows(null)).toEqual([]);
-  });
-
-  it('parses affect signals for reference inspection', () => {
-    const summary = getAffectReferenceSummary({
-      id: 'assistant_1',
-      role: 'assistant',
-      parts: [
-        {
-          type: 'data-affect-signal',
-          data: {
-            source: 'realtime',
-            guardActive: true,
-            label: 'anger',
-            confidence: 0.82,
-            valence: -0.64,
-            arousal: 0.77,
-            emotions: [{ label: 'anger', score: 0.82 }],
-            sampleCount: 3,
-            windowSize: 8,
-            ageMinutes: 1,
-            windowMinutes: 5,
-          },
-        },
-      ],
-    } as never);
-
-    expect(summary).toEqual({
-      source: 'realtime',
-      guardActive: true,
-      label: 'anger',
-      confidence: 0.82,
-      valence: -0.64,
-      arousal: 0.77,
-      sampleCount: 3,
-      windowSize: 8,
-      ageMinutes: 1,
-      windowMinutes: 5,
-      emotions: [{ label: 'anger', score: 0.82 }],
-    });
-    expect(
-      hasReferenceSummary({
-        id: 'assistant_3',
-        role: 'assistant',
-        parts: [
-          {
-            type: 'data-affect-signal',
-            data: { label: 'anger', confidence: 0.5 },
-          },
-        ],
-      } as never)
-    ).toBe(true);
   });
 
   it('does not expose selected-only skills as executed skill references', () => {

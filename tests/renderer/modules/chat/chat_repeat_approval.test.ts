@@ -50,7 +50,11 @@ describe('repeat approval across a resume chunk stream', () => {
     });
 
     // Turn 1: a tool call pauses for approval.
-    void instance.chat.sendMessage({ text: 'write a file' } as never);
+    void instance.chat.sendMessage({
+      id: 'user_1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'write a file' }],
+    });
     await flush();
     api.emit({ type: 'start', messageId: 'assistant_1' });
     api.emit({
@@ -126,7 +130,11 @@ describe('repeat approval across a resume chunk stream', () => {
       getCurrentThreadId: () => 'thread_1',
     });
 
-    void instance.chat.sendMessage({ text: 'write a file' } as never);
+    void instance.chat.sendMessage({
+      id: 'user_1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'write a file' }],
+    });
     await flush();
     api.emit({ type: 'start', messageId: 'assistant_1' });
     api.emit({

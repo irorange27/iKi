@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 const createModelMock = vi.hoisted(() => vi.fn());
@@ -42,47 +42,13 @@ vi.mock('@iki/backend/db/thread_todos', () => ({
   writeThreadTodoPlan: writeThreadTodoPlanMock,
 }));
 
-vi.mock('@iki/backend/db/agent_runs', () => ({
-  appendAgentRunStep: vi.fn(),
-  appendAgentRunStepAndUpdateRun: vi.fn(
-    (step: { runId: string; stepIndex: number }, updates: Record<string, unknown>) => ({
-      id: step.runId,
-      kind: 'chat-turn',
-      status: updates.status ?? 'running',
-      threadId: 'thread_1',
-      rootRunId: step.runId,
-      createdAt: '2026-06-20T00:00:00.000Z',
-      updatedAt: '2026-06-20T00:00:00.000Z',
-      working: {
-        modelMessages: [],
-        accumulatedText: '',
-        pendingApprovalIds: [],
-        lastStepIndex: step.stepIndex,
-        ...((updates.working as Record<string, unknown> | undefined) ?? {}),
-      },
-      output: updates.output ?? null,
-      error: updates.error ?? null,
-    })
-  ),
-  createAgentRun: vi.fn((run: Record<string, unknown>) => ({
-    ...run,
-    createdAt: '2026-06-20T00:00:00.000Z',
-    updatedAt: '2026-06-20T00:00:00.000Z',
-  })),
-  createAgentRunCheckpoint: vi.fn(),
-  getAgentRun: vi.fn(() => null),
-  listAgentRunSteps: vi.fn(() => []),
-  updateAgentRun: vi.fn((id: string, updates: Record<string, unknown>) => ({
-    id,
-    kind: 'chat-turn',
-    status: 'running',
-    createdAt: '2026-06-20T00:00:00.000Z',
-    updatedAt: '2026-06-20T00:00:00.000Z',
-    working: { modelMessages: [], accumulatedText: '', pendingApprovalIds: [], lastStepIndex: 0 },
-    ...updates,
-  })),
-}));
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
+import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { createMessageSend } from '@iki/backend/thread_session/message_send';
 import {
   piTurnHarness,
@@ -95,8 +61,17 @@ import { createTool, defaultToolRegistry, HandoffTool } from '@iki/backend/tools
 
 const toolName = 'message_send_context_probe';
 
+let dbRoot: string;
+
 describe('createMessageSend integration', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    if (!dbRoot) {
+      dbRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-message-send-'));
+    }
+    // A real database: these cases assert what the DURABLE layer records, so a
+    // fabricated `agent_runs` module would only prove the fabrication.
+    initializeDatabase({ dbPath: path.join(dbRoot, 'send.db') });
+    seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
     // These suites drive the DURABLE layer (streaming, approvals, session-log
     // facts, retry, persistence) with a scripted AI SDK model. They are not about
     // which supply serves the turn, so they opt into the legacy executor: the
@@ -106,8 +81,13 @@ describe('createMessageSend integration', () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     defaultToolRegistry.remove(toolName);
+  });
+
+  afterAll(async () => {
+    closeDatabase();
+    if (dbRoot) await fs.rm(dbRoot, { recursive: true, force: true });
   });
 
   it('runs tool-enabled send through AgentHarness and preserves runtime context', async () => {
@@ -224,9 +204,10 @@ describe('createMessageSend integration', () => {
         expect.objectContaining({ type: 'text', text: 'done', state: 'done' }),
       ]),
     });
-    const recordedSteps = vi
-      .mocked(agentRunDb.appendAgentRunStepAndUpdateRun)
-      .mock.calls.map(([step]) => step);
+    // The steps are read from the database the turn actually wrote to.
+    const recordedSteps = agentRunDb
+      .listAgentRunsByThread('thread_1')
+      .flatMap(run => agentRunDb.listAgentRunSteps(run.id));
     expect(recordedSteps.some(step => step.type === 'tool-call' && !step.input?.toolCallId)).toBe(
       false
     );
@@ -327,12 +308,12 @@ describe('createMessageSend integration', () => {
       })
     ).toMatchObject({ success: true });
 
-    const completedUpdate = vi
-      .mocked(agentRunDb.appendAgentRunStepAndUpdateRun)
-      .mock.calls.map(([, updates]) => updates)
-      .filter(updates => updates.status === 'completed')
+    // The completed run's recorded output, read from the database.
+    const completedRun = agentRunDb
+      .listAgentRunsByThread('thread_1')
+      .filter(run => run.status === 'completed')
       .at(-1);
-    expect(completedUpdate?.output).toMatchObject({ finishReason: 'budget-exhausted' });
+    expect(completedRun?.output).toMatchObject({ finishReason: 'budget-exhausted' });
   });
 
   it('finalizes a send that calls handoff with the handoff outcome and composed text', async () => {
@@ -398,13 +379,12 @@ describe('createMessageSend integration', () => {
     // with the composed next-steps block — not a plain 'completed'.
     expect(result.text).toContain('[Handoff #1] Found the leak');
 
-    const completedUpdate = vi
-      .mocked(agentRunDb.appendAgentRunStepAndUpdateRun)
-      .mock.calls.map(([, updates]) => updates)
-      .filter(updates => updates.status === 'completed')
+    const completedRun = agentRunDb
+      .listAgentRunsByThread('thread_1')
+      .filter(run => run.status === 'completed')
       .at(-1);
-    expect(completedUpdate?.output).toMatchObject({ finishReason: 'handoff' });
-    expect(String(completedUpdate?.output?.text)).toContain('Next steps: Patch it');
+    expect(completedRun?.output).toMatchObject({ finishReason: 'handoff' });
+    expect(String(completedRun?.output?.text)).toContain('Next steps: Patch it');
   });
 
   it('leaves no durable rows when the thread rate limit rejects the send', async () => {

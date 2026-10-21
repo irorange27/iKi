@@ -19,12 +19,6 @@ export interface ConversationPreview {
   text: string;
 }
 
-export interface CompanionAffectHint {
-  label: string;
-  valence: number;
-  arousal: number;
-}
-
 export interface CompanionSnapshot {
   phase: CompanionPhase;
   label: string;
@@ -34,5 +28,4 @@ export interface CompanionSnapshot {
   dormantReason?: CompanionDormantReason;
   nudgeKind?: CompanionNudgeKind;
   preview?: ConversationPreview;
-  affect?: CompanionAffectHint;
 }
