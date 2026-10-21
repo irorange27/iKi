@@ -345,26 +345,26 @@ describe('pi agent loop — orchestration semantics', () => {
     expect(callModel).not.toHaveBeenCalled();
   });
 
-  it('terminal tools (handoff) execute in their step and then end the turn (stopWhen parity)', async () => {
+  it('a tool named in terminalToolNames executes, then ends the turn', async () => {
     const callModel = scriptedCall([
-      { content: [toolCallBlock('call_h', 'handoff', { summary: 's', next_steps: 'n' })] },
+      { content: [toolCallBlock('call_t', 'probe_terminal', { note: 's' })] },
       { content: [textBlock('NEVER — the loop must stop after the terminal step')] },
     ]);
     const executed: string[] = [];
     const { outcome } = await collectLoop({
       systemPrompt: 'loop',
-      messages: [{ role: 'user', content: 'hand off', timestamp: Date.now() }],
+      messages: [{ role: 'user', content: 'probe', timestamp: Date.now() }],
       maxSteps: 4,
-      terminalToolNames: new Set(['handoff']),
+      terminalToolNames: new Set(['probe_terminal']),
       callModel,
       executeTool: async call => {
         executed.push(call.name);
-        return { type: 'json', value: { summary: 's' } };
+        return { type: 'json', value: { note: 's' } };
       },
     });
 
     expect(outcome.status).toBe('completed');
-    expect(executed).toEqual(['handoff']);
+    expect(executed).toEqual(['probe_terminal']);
     expect(outcome.steps).toHaveLength(1);
     expect(outcome.pendingToolCalls).toHaveLength(0);
   });

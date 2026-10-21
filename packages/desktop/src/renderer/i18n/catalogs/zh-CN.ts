@@ -149,7 +149,6 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.runs.runKind.proactive-task': '定时任务',
   'chat.runs.runKind.awaiter-wake': '唤醒',
   'chat.runs.runKind.delegated-agent': '子代理',
-  'chat.runs.runKind.handoff-resume': '交接续行',
   'chat.runs.time': '时间',
   'chat.runs.timeHint': '切换操作顺序与记录时间。滚轮缩放，右键拖动平移。',
   'chat.runs.runs': '运行',

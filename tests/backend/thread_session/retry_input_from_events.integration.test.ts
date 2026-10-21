@@ -305,7 +305,7 @@ describe('retry and queued resume read the session log alone', () => {
     ).toBeUndefined();
   });
 
-  it('a handoff-chained failure retries the original task with the whole dead chain excluded', async () => {
+  it('a chained failure retries the original task with the whole dead chain excluded', async () => {
     seedRun('run_failed_h', 'thread_retry', 'failed');
     recordTaskFact('thread_retry', 'CHAIN_TASK_MARKER');
     recordSessionEvents('thread_retry', [

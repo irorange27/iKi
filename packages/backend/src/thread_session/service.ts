@@ -188,7 +188,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     const result = await streaming.stream(
       target,
       deriveResumeStreamOptions(run, {
-        kind: 'handoff-resume',
+        kind: 'chat-turn',
         parentRunId: run.id,
         metadata: {
           source: 'resume',

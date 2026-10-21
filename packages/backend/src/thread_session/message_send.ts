@@ -385,7 +385,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           outcome: result.outcome,
           text: finalResponse,
           ...(result.usage ? { usage: result.usage } : {}),
-          ...(result.outcome === 'handoff' ? { handoff: result.handoff } : {}),
           ...(options.threadId ? { threadId: options.threadId } : {}),
           transport: 'send',
           ...(settledMessage

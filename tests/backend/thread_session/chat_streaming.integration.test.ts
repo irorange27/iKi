@@ -103,7 +103,7 @@ import {
   type PiScriptStep,
 } from '@iki/backend/agent/testing/scripted_pi';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
-import { createTool, defaultToolRegistry, HandoffTool } from '@iki/backend/tools';
+import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 
 const toolName = 'streaming_context_probe';
 
@@ -628,37 +628,6 @@ describe('createChatStreaming integration', () => {
     ]);
     expect(await run()).toMatchObject({ success: true, text: 'done' });
     expect(callPiChatMock.mock.calls.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('resumes an autonomous handoff with its summary and next task', async () => {
-    defaultToolRegistry.register(new HandoffTool());
-    const { run } = setupLoop(
-      [
-        [
-          {
-            kind: 'toolCall',
-            toolName: 'handoff',
-            args: { summary: 'Found the defect', next_steps: 'Fix it', reason: 'context_limit' },
-          },
-          { kind: 'done', reason: 'toolUse' },
-        ],
-        [
-          { kind: 'text', text: 'fixed' },
-          { kind: 'done', reason: 'stop' },
-        ],
-      ],
-      ['handoff']
-    );
-    const call = callPiChatMock;
-    try {
-      expect(await run()).toMatchObject({ success: true });
-      expect(call).toHaveBeenCalledTimes(2);
-      const prompt = JSON.stringify(call.mock.calls[1][1]);
-      expect(prompt).toContain('Found the defect');
-      expect(prompt).toContain('Fix it');
-    } finally {
-      defaultToolRegistry.remove('handoff');
-    }
   });
 
   it('respects the autonomous batch limit after SDK step exhaustion', async () => {

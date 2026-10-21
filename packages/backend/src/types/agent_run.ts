@@ -4,7 +4,6 @@ export type AgentRunKind =
   | 'proactive-task'
   | 'awaiter-wake'
   | 'delegated-agent'
-  | 'handoff-resume';
 
 export type AgentRunStatus =
   | 'queued'

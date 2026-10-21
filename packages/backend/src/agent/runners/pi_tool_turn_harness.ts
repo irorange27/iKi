@@ -30,7 +30,6 @@ import {
   projectHistoryToPiContext,
   projectToolsToPiTools,
 } from '../../provider/llm/pi_adapter';
-import { TERMINAL_TOOL_NAMES } from '../harness/harness_types';
 import {
   runPiAgentLoop,
   toolResultIsError as toolExecutionIsError,
@@ -552,7 +551,7 @@ export class PiToolTurnHarness {
           runId &&
           output.type !== 'error-text' &&
           output.type !== 'execution-denied' &&
-          !TERMINAL_TOOL_NAMES.has(call.name)
+          true
         ) {
           recordInlineExecution({
             runId,
@@ -721,7 +720,6 @@ export class PiToolTurnHarness {
       messages: transcript,
       ...(loopTools ? { tools: loopTools } : {}),
       maxSteps: this.config.maxIterations,
-      terminalToolNames: TERMINAL_TOOL_NAMES,
 
       onModelCall: settled => {
         if (!isLangfuseEnabled()) return;
@@ -874,17 +872,15 @@ export class PiToolTurnHarness {
         });
       } else if (event.type === 'tool_start') {
 
-        if (!TERMINAL_TOOL_NAMES.has(event.call.name)) {
-          yield {
-            event: 'step',
-            step: {
-              type: 'tool_execution_start',
-              toolCallId: event.call.id,
-              toolName: event.call.name,
-              input: event.call.arguments,
-            },
-          };
-        }
+        yield {
+          event: 'step',
+          step: {
+            type: 'tool_execution_start',
+            toolCallId: event.call.id,
+            toolName: event.call.name,
+            input: event.call.arguments,
+          },
+        };
       } else {
         const isError = toolExecutionIsError(event.output);
         toolCallResults.push({
@@ -892,30 +888,16 @@ export class PiToolTurnHarness {
           args: event.call.arguments,
           result: event.output,
         });
-        if (!TERMINAL_TOOL_NAMES.has(event.call.name)) {
-          yield {
-            event: 'step',
-            step: {
-              type: 'tool_execution_end',
-              toolCallId: event.call.id,
-              outcome: isError ? ('error' as const) : ('success' as const),
-              output: event.output,
-              ...(isError ? { error: toolOutputText(event.output) } : {}),
-            },
-          };
-        } else if (event.call.name === 'handoff') {
-
-          const args = event.call.arguments as Record<string, unknown>;
-          yield {
-            event: 'step',
-            step: {
-              type: 'handoff',
-              summary: typeof args.summary === 'string' ? args.summary : '',
-              nextSteps: typeof args.next_steps === 'string' ? args.next_steps : '',
-              reason: typeof args.reason === 'string' ? args.reason : 'other',
-            },
-          };
-        }
+        yield {
+          event: 'step',
+          step: {
+            type: 'tool_execution_end',
+            toolCallId: event.call.id,
+            outcome: isError ? ('error' as const) : ('success' as const),
+            output: event.output,
+            ...(isError ? { error: toolOutputText(event.output) } : {}),
+          },
+        };
         const toolResultEntry: ModelMessage = {
           role: 'tool',
           content: [

@@ -35,13 +35,6 @@ export interface ApprovalRequestStep {
   requests: ToolApprovalRequest[];
 }
 
-export interface HandoffStep {
-  type: 'handoff';
-  summary: string;
-  nextSteps: string;
-  reason: string;
-}
-
 export interface SourceInfo {
   sourceId: string;
   title?: string;
@@ -64,5 +57,4 @@ export type AgentStep =
   | ToolExecutionStartStep
   | ToolExecutionEndStep
   | ApprovalRequestStep
-  | HandoffStep
   | TurnEndStep;

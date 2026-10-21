@@ -137,7 +137,7 @@ describe('reduceChunkLogToMessages', () => {
     ]);
   });
 
-  it('gives each message id its own message (handoff chains emit a new one)', () => {
+  it('gives each message id its own message (a successor run emits a new one)', () => {
     const chunks: ChatUiChunk[] = [
       { type: 'start', messageId: 'a' },
       { type: 'text-delta', messageId: 'a', delta: 'first segment' },

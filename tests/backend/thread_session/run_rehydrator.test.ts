@@ -90,7 +90,7 @@ describe('deriveRunTurnPlan', () => {
 describe('deriveResumeStreamOptions', () => {
   it('restores the policy and iteration cap the original turn ran under', () => {
     const options = deriveResumeStreamOptions(baseRun, {
-      kind: 'handoff-resume',
+      kind: 'chat-turn',
       parentRunId: 'run_1',
       metadata: { source: 'resume', originalRunId: 'run_1' },
       continuePrompt: 'Continue.',
@@ -107,7 +107,7 @@ describe('deriveResumeStreamOptions', () => {
     expect(options.tools).toEqual(['read_file', 'shell']);
     expect(options.skillIds).toEqual(['skill_a']);
     expect(options.runConfig).toEqual({
-      kind: 'handoff-resume',
+      kind: 'chat-turn',
       parentRunId: 'run_1',
       rootRunId: 'run_1',
       metadata: { source: 'resume', originalRunId: 'run_1' },

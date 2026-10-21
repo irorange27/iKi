@@ -14,7 +14,6 @@ import { selectTurnHarness } from './turn_supply_selection';
 import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from '../turn_prep/turn_preparer';
 import { createMessageSend } from './message_send';
-import { buildHandoffResumeContext } from './handoff_resume';
 export type { MessageSendResult } from './message_send';
 import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent } from './types';
 import { createUiChunkEmitter } from './ui_stream';
@@ -225,22 +224,8 @@ export const createChatStreaming = (deps: {
         });
       }
 
-      let streamHistory = preparedTurn.history;
-      let streamPrompt = preparedTurn.prompt;
-
-      if (options.runConfig?.kind === 'handoff-resume' && options.runConfig?.parentRunId) {
-
-        const parentRun = agentRunDb.getAgentRun(options.runConfig.parentRunId);
-        const handoffResume = await buildHandoffResumeContext({
-          threadId: parentRun?.threadId ?? options.threadId,
-          preparedHistory: preparedTurn.history,
-          preparedPrompt: preparedTurn.prompt,
-        });
-        if (handoffResume) {
-          streamHistory = handoffResume.history;
-          streamPrompt = handoffResume.prompt;
-        }
-      }
+      const streamHistory = preparedTurn.history;
+      const streamPrompt = preparedTurn.prompt;
 
       const plan = assembleExecutionPlan({
         options,
@@ -422,7 +407,6 @@ export const createChatStreaming = (deps: {
         ...(lastFacts.pendingToolCalls && lastFacts.pendingToolCalls.length > 0
           ? { pendingToolCalls: lastFacts.pendingToolCalls }
           : {}),
-        ...(streamResult.outcome === 'handoff' ? { handoff: streamResult.handoff } : {}),
         ...(options.threadId ? { threadId: options.threadId } : {}),
         transport: 'stream',
         ...(settledMessageRef

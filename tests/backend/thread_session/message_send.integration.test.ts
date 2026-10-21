@@ -42,7 +42,7 @@ import {
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
-import { createTool, defaultToolRegistry, HandoffTool } from '@iki/backend/tools';
+import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 
 const toolName = 'message_send_context_probe';
 
@@ -252,69 +252,6 @@ describe('createMessageSend integration', () => {
       .filter(run => run.status === 'completed')
       .at(-1);
     expect(completedRun?.output).toMatchObject({ finishReason: 'budget-exhausted' });
-  });
-
-  it('finalizes a send that calls handoff with the handoff outcome and composed text', async () => {
-    defaultToolRegistry.register(new HandoffTool());
-    callPiChatMock.mockImplementation(
-      createScriptedPiChat([
-        [
-          {
-            kind: 'toolCall',
-            toolName: 'handoff',
-            args: { summary: 'Found the leak', next_steps: 'Patch it', reason: 'context_limit' },
-          },
-          { kind: 'done', reason: 'toolUse' },
-        ],
-        [
-          { kind: 'text', text: 'must not run' },
-          { kind: 'done', reason: 'stop' },
-        ],
-      ])
-    );
-
-    const send = createMessageSend({
-      tryAcquireThreadRun: () => () => undefined,
-      checkThreadRunRate: () => ({ allowed: true }),
-      usage: { recordUsageEvent: vi.fn() },
-      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
-      turnPreparer: {
-        prepareChatTurn: vi.fn(async () => ({
-          report: { totalEstimatedTokens: 1 },
-          usedSkills: [],
-          selectedSkillIds: [],
-          skillMode: 'manual' as const,
-          finalMessages: [{ role: 'user' as const, content: 'hand off the work' }],
-          history: [],
-          prompt: 'hand off the work',
-          guardActive: false,
-          requireApproval: false,
-          autoApproveToolRequests: false,
-          affectSignal: null,
-          interventionPolicy: null,
-          guardedTools: ['handoff'],
-          enableTools: true,
-        })),
-      } as never,
-    }).send;
-
-    const result = await send({
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'gpt-4o-mini',
-      threadId: 'thread_handoff',
-      messages: [{ id: 'msg_handoff', role: 'user', content: 'hand off the work' }],
-      tools: ['handoff'],
-    });
-    expect(result).toMatchObject({ success: true });
-    expect(result.text).toContain('[Handoff #1] Found the leak');
-
-    const completedRun = agentRunDb
-      .listAgentRunsByThread('thread_handoff')
-      .filter(run => run.status === 'completed')
-      .at(-1);
-    expect(completedRun?.output).toMatchObject({ finishReason: 'handoff' });
-    expect(String(completedRun?.output?.text)).toContain('Next steps: Patch it');
   });
 
   it('leaves no durable rows when the thread rate limit rejects the send', async () => {

@@ -318,7 +318,7 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     expectToolPairsAligned(second.messages);
   }, 30000);
 
-  it('keeps a leading transcript system AND a turn-start summary distinct across mid-turn compaction (handoff + summary shape)', async () => {
+  it('keeps a leading transcript system AND a turn-start summary distinct across mid-turn compaction (leading system + summary shape)', async () => {
     const modelCall = scriptedModelCall([
       { content: [textBlock(STEP_ONE_TEXT), toolCallBlock('call_1', TOOL_NAME, {})] },
       { content: [textBlock('done')] },
@@ -328,7 +328,7 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     await collect(harness, {
       prompt: 'go',
       history: [
-        { role: 'system', content: '[HANDOFF CONTEXT] You are a fresh agent instance.' },
+        { role: 'system', content: '[FRESH AGENT CONTEXT] You are a fresh agent instance.' },
         { role: 'user', content: 'x'.repeat(4000) },
         { role: 'assistant', content: 'ok' },
       ],
@@ -336,16 +336,16 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
 
     expect(summarize).toHaveBeenCalledTimes(2);
     const second = modelCall.requests[1]!;
-    const handoffOccurrences = second.systemPrompt.split('[HANDOFF CONTEXT]').length - 1;
-    expect(handoffOccurrences).toBe(1);
-    expect(JSON.stringify(second.messages)).not.toContain('[HANDOFF CONTEXT]');
+    const freshContextOccurrences = second.systemPrompt.split('[FRESH AGENT CONTEXT]').length - 1;
+    expect(freshContextOccurrences).toBe(1);
+    expect(JSON.stringify(second.messages)).not.toContain('[FRESH AGENT CONTEXT]');
     expect(JSON.stringify(second.messages)).toContain('summary#2');
     expect(JSON.stringify(second.messages)).not.toContain('summary#1');
     expect(second.systemPrompt).not.toContain('Earlier conversation summary');
     expectToolPairsAligned(second.messages);
   }, 30000);
 
-  it('keeps a leading transcript system (handoff shape) intact across mid-turn compaction', async () => {
+  it('keeps a leading transcript system intact across mid-turn compaction', async () => {
     const modelCall = scriptedModelCall([
       { content: [textBlock(STEP_ONE_TEXT), toolCallBlock('call_1', TOOL_NAME, {})] },
       { content: [textBlock('done')] },
@@ -355,15 +355,15 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     const { records } = await collect(harness, {
       prompt: 'go',
       history: [
-        { role: 'system', content: '[HANDOFF CONTEXT] You are a fresh agent instance.' },
+        { role: 'system', content: '[FRESH AGENT CONTEXT] You are a fresh agent instance.' },
         { role: 'user', content: OLD_TEXT },
         { role: 'assistant', content: 'ok' },
       ],
     });
 
     const second = modelCall.requests[1]!;
-    expect(second.systemPrompt).toContain('[HANDOFF CONTEXT]');
-    expect(JSON.stringify(second.messages)).not.toContain('[HANDOFF CONTEXT]');
+    expect(second.systemPrompt).toContain('[FRESH AGENT CONTEXT]');
+    expect(JSON.stringify(second.messages)).not.toContain('[FRESH AGENT CONTEXT]');
     expect(JSON.stringify(second.messages)).toContain('Earlier conversation summary');
     expect(JSON.stringify(second.messages)).not.toContain(OLD_TEXT);
     expectToolPairsAligned(second.messages);

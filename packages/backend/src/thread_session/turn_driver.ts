@@ -24,7 +24,6 @@ import {
   turnFactsToEvents,
 } from './session_log';
 import { recordInlineToolExecution } from './tool_execution';
-import { buildFreshHandoffSystemMessage } from './handoff_resume';
 import { getCompanion } from './platform';
 import type { ActiveStreamState, ChatStreamEvent, ChatStreamTarget, UiChunkEmitter } from './types';
 import type { AgentRunStatus } from '@iki/backend/types/agent_run';
@@ -44,8 +43,6 @@ type TurnDriverResultBase = {
   pendingToolCalls?: import('../agent/runners/pi_agent_loop').PiLoopToolCall[];
 };
 
-type HandoffResult = { summary: string; nextSteps: string; reason: string };
-
 type HarnessTurnResult = import('@iki/backend/agent').AgentResult & {
   pendingToolCalls?: TurnOutput['pendingToolCalls'];
 };
@@ -55,8 +52,7 @@ export type TurnDriverResult =
   | (TurnDriverResultBase & { outcome: 'budget-exhausted' })
   | (TurnDriverResultBase & { outcome: 'awaiting-approval' })
   | (TurnDriverResultBase & { outcome: 'cancelled' })
-  | (TurnDriverResultBase & { outcome: 'partial-failure' })
-  | (TurnDriverResultBase & { outcome: 'handoff'; handoff: HandoffResult });
+  | (TurnDriverResultBase & { outcome: 'partial-failure' });
 
 type TurnDriverState = {
 
@@ -69,7 +65,6 @@ type TurnDriverState = {
   workspaceSelectionBox?: { selection: unknown };
   accumulatedResponse: string;
   batchIndex: number;
-  handoffChain: number;
   turnHadToolCalls: boolean;
   isAwaitingApproval: boolean;
 
@@ -124,7 +119,6 @@ export type TurnDriverHandle = {
 };
 
 const MAX_AUTONOMOUS_BATCHES = 50;
-const MAX_HANDOFF_CHAIN = 5;
 
 const TEXT_COMMIT_INTERVAL_MS = 250;
 
@@ -152,15 +146,10 @@ type TurnOutcomeSpec = {
 
   terminal?: { eventKind: 'completed' | 'failed' | 'cancelled'; status: AgentRunStatus };
 
-  text?: (text: string, handoff: HandoffResult | undefined) => string | undefined;
+  text?: (text: string) => string | undefined;
 };
 
 const asOptionalText = (text: string): string | undefined => (text ? text : undefined);
-
-const handoffText = (text: string, handoff: HandoffResult | undefined): string | undefined =>
-  ((text ? text + '\n\n' : '') +
-    `[Handoff] ${handoff?.summary ?? ''}\n\nNext steps: ${handoff?.nextSteps ?? ''}`).trim() ||
-  undefined;
 
 export const TURN_OUTCOMES: Record<TurnDriverResult['outcome'], TurnOutcomeSpec> = {
   completed: {
@@ -175,12 +164,6 @@ export const TURN_OUTCOMES: Record<TurnDriverResult['outcome'], TurnOutcomeSpec>
     finishReason: 'budget-exhausted',
     terminal: { eventKind: 'completed', status: 'completed' },
     text: asOptionalText,
-  },
-  handoff: {
-    runStatus: 'completed',
-    finishReason: 'handoff',
-    terminal: { eventKind: 'completed', status: 'completed' },
-    text: handoffText,
   },
   'awaiting-approval': {
 
@@ -225,7 +208,6 @@ export type FinalizeTurnParams = {
   text?: string;
   usage?: import('@iki/backend/agent').AgentResult['usage'];
 
-  handoff?: HandoffResult;
 
   pendingToolCalls?: TurnOutput['pendingToolCalls'];
 
@@ -249,7 +231,6 @@ export type FinalizeTurnParams = {
 const projectTurnOutcome = (
   outcome: TurnDriverResult['outcome'],
   text: string,
-  handoff: HandoffResult | undefined
 ): {
   spec: TurnOutcomeSpec;
   text: string | undefined;
@@ -261,7 +242,7 @@ const projectTurnOutcome = (
   eventKind?: 'completed' | 'failed' | 'cancelled';
 } => {
   const spec = TURN_OUTCOMES[outcome];
-  const projected = spec.text?.(text, handoff);
+  const projected = spec.text?.(text);
   const terminalFact = spec.terminal
     ? {
         status: spec.terminal.status,
@@ -274,7 +255,7 @@ const projectTurnOutcome = (
 
 export const finalizeTurn = (params: FinalizeTurnParams): void => {
   const { tracker, outcome, transport } = params;
-  const projection = projectTurnOutcome(outcome, params.text ?? '', params.handoff);
+  const projection = projectTurnOutcome(outcome, params.text ?? '');
   const { spec } = projection;
   const status = tracker.getRun().status;
   const writable = !params.skipRow && (!params.onlyIfRunning || status === 'running');
@@ -554,17 +535,6 @@ const runTurnBatches = async (
         }
       }
       return;
-    } else if (step.type === 'handoff') {
-      event = {
-        type: 'tool-call',
-        toolCallId: `handoff-${state.batchIndex}`,
-        toolName: 'handoff',
-        input: {
-          summary: step.summary,
-          nextSteps: step.nextSteps,
-          reason: step.reason,
-        },
-      };
     }
 
     if (event) {
@@ -755,10 +725,6 @@ const runTurnBatches = async (
         break;
       }
 
-      const handoff = agentResult?.toolCalls?.find(
-        tc => tc.toolName === 'handoff'
-      );
-
       const resultBase: TurnDriverResultBase = {
         ...(agentResult?.response?.trim()
           ? { response: agentResult.response }
@@ -775,24 +741,10 @@ const runTurnBatches = async (
           ? { pendingToolCalls: agentResult.pendingToolCalls }
           : {}),
       };
-      if (handoff) {
-        const args = handoff.args as Record<string, unknown>;
-        streamResult = {
-          ...resultBase,
-          outcome: 'handoff',
-          handoff: {
-            summary: typeof args.summary === 'string' ? args.summary : '',
-            nextSteps: typeof args.next_steps === 'string' ? args.next_steps : '',
-            reason: typeof args.reason === 'string' ? args.reason : 'other',
-          },
-        };
-      } else {
-
-        streamResult = {
-          ...resultBase,
-          outcome: agentResult?.finishReason === 'tool-calls' ? 'budget-exhausted' : 'completed',
-        };
-      }
+      streamResult = {
+        ...resultBase,
+        outcome: agentResult?.finishReason === 'tool-calls' ? 'budget-exhausted' : 'completed',
+      };
 
       if (streamResult.response) {
         state.accumulatedResponse = state.accumulatedResponse
@@ -812,91 +764,6 @@ const runTurnBatches = async (
         streamResult.outcome === 'completed'
       ) break;
 
-      if (streamResult.outcome === 'handoff') {
-
-        flushCommittedText();
-        const handoffText =
-          (streamResult.response ? streamResult.response + '\n\n' : '') +
-          `[Handoff #${state.handoffChain + 1}] ${streamResult.handoff.summary}`;
-        state.accumulatedResponse = state.accumulatedResponse
-          ? state.accumulatedResponse + '\n\n---\n\n' + handoffText
-          : handoffText;
-
-        state.handoffChain++;
-        const parentRunId = state.runTracker.id;
-        const chainContinues = state.handoffChain < MAX_HANDOFF_CHAIN && autonomousMode;
-
-        finalizeTurn({
-          tracker: state.runTracker,
-          outcome: 'handoff',
-          text: handoffText,
-          ...(streamResult.usage ? { usage: streamResult.usage } : {}),
-          handoff: streamResult.handoff,
-          ...(chainContinues ? { threadId } : {}),
-          transport: plan.transport,
-          notify: deps.notifyRunStatus,
-        });
-
-        if (!chainContinues) {
-
-          break;
-        }
-
-        state.runTracker = createAgentRunTracker(
-          planToRunTrackerParams(
-            reidentifyPlan(deps.plan, { kind: 'handoff-resume', parentRunId }),
-            {
-              input: {
-                prompt: streamResult.handoff.nextSteps || streamResult.handoff.summary,
-                messages: [],
-              },
-              working: {
-                accumulatedText: '',
-                pendingApprovalIds: [],
-                lastStepIndex: 0,
-              },
-              metadataExtras: {
-                source: 'handoff',
-                parentRunId,
-                summary: streamResult.handoff.summary,
-                nextSteps: streamResult.handoff.nextSteps,
-                reason: streamResult.handoff.reason,
-                handoffChain: state.handoffChain,
-              },
-            }
-          )
-        );
-        streamState.runId = state.runTracker.id;
-
-        deps.onRunIdChanged?.(state.runTracker.id);
-
-        recordSessionEvents(threadId, turnFactsToEvents({
-          started: {
-            runId: state.runTracker.id,
-            kind: 'handoff-resume',
-            plan: reidentifyPlan(deps.plan, { kind: 'handoff-resume', parentRunId }),
-          },
-        }));
-
-        state.streamHistory = [
-          {
-            role: 'system',
-            content: buildFreshHandoffSystemMessage(streamResult.handoff),
-          },
-        ];
-        state.harness = selectTurnHarness(deps.plan, state.streamHistory);
-
-        state.approvalContext = deps.plan.enableTools
-          ? createApprovalRecoveryContext({
-              plan: reidentifyPlan(deps.plan, { kind: 'handoff-resume', parentRunId }),
-              sessionId: uiChunkEmitter.messageId,
-              runId: state.runTracker.id,
-            })
-          : undefined;
-
-        state.streamPrompt = streamResult.handoff.nextSteps || 'Continue the work from the handoff summary.';
-        continue;
-      }
 
       state.lastFacts = {
         text: state.accumulatedResponse || streamResult.response,
@@ -937,7 +804,6 @@ export const createTurnDriver = (
     ...setup,
     accumulatedResponse: '',
     batchIndex: 0,
-    handoffChain: 0,
     turnHadToolCalls: false,
     isAwaitingApproval: false,
     lastFacts: {},

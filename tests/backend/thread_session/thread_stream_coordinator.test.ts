@@ -310,7 +310,7 @@ describe('createThreadStreamCoordinator run-keyed executions', () => {
     expect(coordinator.cancelExecutionByRunId('run_elsewhere', 'run-cancelled')).toBe(false);
   });
 
-  it('re-keys the index when a handoff chain swaps the executing run', () => {
+  it('re-keys the index when a successor run swaps the executing run', () => {
     const coordinator = createThreadStreamCoordinator();
     const execution = coordinator.registerExecution({ runId: 'run_parent', cancel: () => undefined });
 

@@ -45,8 +45,8 @@ let runCounter = 0;
  *
  * The parent's root id is deliberately NOT its own id: a child must inherit
  * `rootRunId`, and if the two were equal the assertion could not tell
- * inheritance from "use the parent id". A handoff-chained parent has exactly
- * this shape.
+ * inheritance from "use the parent id". A run that started a successor has
+ * exactly this shape.
  */
 const seedParent = () => {
   runCounter += 1;

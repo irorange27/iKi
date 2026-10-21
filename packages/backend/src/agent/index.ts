@@ -17,7 +17,6 @@ export type {
   ToolExecutionEndStep,
   SourceInfo,
   ApprovalRequestStep,
-  HandoffStep,
   TurnEndStep,
 } from './agent_step';
 

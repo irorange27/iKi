@@ -16,7 +16,6 @@ import {
   DeletePersonalSkillTool,
 } from '@iki/backend/tools/skill_tools';
 import { PlanTool } from '@iki/backend/tools/plan_tools';
-import { HandoffTool } from '@iki/backend/tools/handoff_tool';
 import {
   ListProactiveTasksTool,
   ReadProactiveTaskTool,
@@ -56,7 +55,6 @@ const TABLE: ReadonlyArray<[tool: BaseTool, replay: 'safe' | 'unsafe', why: stri
   [new DeleteProactiveTaskTool(), 'unsafe', 'deletes a row'],
   [new WriteAwaiterTool(), 'unsafe', 'writes a row'],
   [new DeleteAwaiterTool(), 'unsafe', 'deletes a row'],
-  [new HandoffTool(), 'unsafe', 'ends the turn and starts a successor run'],
 ];
 
 describe('the replay classification table', () => {

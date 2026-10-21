@@ -82,7 +82,6 @@ describe('turn preparer explicit tool upper bound', () => {
   afterEach(async () => {
     defaultToolRegistry.remove('shell');
     defaultToolRegistry.remove('web_search');
-    defaultToolRegistry.remove('handoff');
     defaultToolRegistry.remove('plan');
     defaultToolRegistry.remove('load_skill');
     closeDatabase();
@@ -133,7 +132,7 @@ describe('turn preparer explicit tool upper bound', () => {
         handler: async () => 'searched',
       })
     );
-    for (const name of ['handoff', 'plan']) {
+    for (const name of ['plan']) {
       defaultToolRegistry.register(
         createTool({
           name,

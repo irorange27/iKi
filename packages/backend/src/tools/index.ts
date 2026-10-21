@@ -10,7 +10,6 @@ export * from './schemas';
 export * from './proactive_task_tools';
 export * from './awaiter_tools';
 export * from './plan_tools';
-export * from './handoff_tool';
 
 import { defaultToolRegistry } from './base';
 import {
@@ -48,7 +47,6 @@ import {
 import { PlanTool } from './plan_tools';
 import { WebSearchTool, FetchTool } from './web_tools';
 import { ElementSourceTool, setElementSourceResolver, type ElementSourceResolver } from './element_source_tool';
-import { HandoffTool } from './handoff_tool';
 
 export type StandardToolRegistrationOptions = {
   delegatedAgentRuntime: DelegatedAgentRuntime;
@@ -81,7 +79,6 @@ const buildStandardTools = () => [
   new ReadAwaiterTool(),
   new WriteAwaiterTool(),
   new DeleteAwaiterTool(),
-  new HandoffTool(),
 ];
 
 let standardTools: ReturnType<typeof buildStandardTools> | null = null;

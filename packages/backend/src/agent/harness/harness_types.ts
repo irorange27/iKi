@@ -68,11 +68,6 @@ export type TurnOutput = {
   requiresApproval: boolean;
   finishReason?: string;
   toolApprovalRequests?: ToolApprovalRequest[];
-  handoff?: {
-    summary: string;
-    nextSteps: string;
-    reason: string;
-  };
 };
 
 export type TurnEvent = { event: 'step'; step: AgentStep } | { event: 'done'; output: TurnOutput };
@@ -81,5 +76,3 @@ export type TurnDriverHarness = {
   turn(input: TurnInput): AsyncGenerator<TurnEvent, void>;
   getHistory(): ModelMessage[];
 };
-
-export const TERMINAL_TOOL_NAMES = new Set(['handoff']);

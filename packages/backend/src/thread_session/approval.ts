@@ -891,7 +891,6 @@ export const createChatApproval = (deps: {
         outcome: streamResult.outcome,
         text: continuationText,
         ...(streamResult.usage ? { usage: streamResult.usage } : {}),
-        ...(streamResult.outcome === 'handoff' ? { handoff: streamResult.handoff } : {}),
         ...(baseApprovalContext?.plan.threadId
           ? { threadId: baseApprovalContext.plan.threadId }
           : {}),

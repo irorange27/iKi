@@ -404,49 +404,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
     expect(second.messages.map((m: ModelMessage) => m.role)).toEqual(['user', 'assistant', 'tool']);
   });
 
-  it('terminal tools (handoff): executed and carried in toolCalls, but off the execution-event surface', async () => {
-    const modelCall = scriptedModelCall([
-      {
-        content: [toolCallBlock('call_h', 'handoff', { summary: 'handing over', next_steps: 'continue', reason: 'other' })],
-      },
-      { content: [textBlock('NEVER')] },
-    ]);
-    const harness = new PiToolTurnHarness(harnessConfig(), {
-      modelCall,
-      executeTool: async () => ({ type: 'json', value: { summary: 'handing over' } }),
-    });
-
-    const events = await collect(harness, { prompt: 'probe' });
-    const types = stepEvents(events).map(s => s.type);
-    expect(types).toContain('turn_end');
-    expect(types).not.toContain('tool_execution_start');
-    expect(types).not.toContain('tool_execution_end');
-
-    const done = events.at(-1);
-    assert(done && done.event === 'done');
-    expect(done.output.toolCalls).toEqual([
-      {
-        toolName: 'handoff',
-        args: { summary: 'handing over', next_steps: 'continue', reason: 'other' },
-        result: { type: 'json', value: { summary: 'handing over' } },
-      },
-    ]);
-    expect(modelCall.requests).toHaveLength(1);
-    const history = harness.getHistory();
-    expect(history[1]).toMatchObject({ role: 'assistant' });
-    expect(history.at(-1)).toEqual({
-      role: 'tool',
-      content: [
-        {
-          type: 'tool-result',
-          toolCallId: 'call_h',
-          toolName: 'handoff',
-          output: { type: 'json', value: { summary: 'handing over' } },
-        },
-      ],
-    });
-  });
-
   it('lastStepInputTokens is the final step billed input, not the multi-step sum', async () => {
     const modelCall = scriptedModelCall([
       { content: [toolCallBlock('call_s', 'probe_read', { path: '/s.txt' })], usage: { input: 500, output: 10, totalTokens: 510 } },

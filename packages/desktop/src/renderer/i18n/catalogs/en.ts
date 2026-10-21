@@ -149,7 +149,6 @@ export const en = defineCatalog({
   'chat.runs.runKind.proactive-task': 'Scheduled task',
   'chat.runs.runKind.awaiter-wake': 'Wake-up',
   'chat.runs.runKind.delegated-agent': 'Delegated agent',
-  'chat.runs.runKind.handoff-resume': 'Handoff continuation',
   'chat.runs.time': 'Time',
   'chat.runs.timeHint':
     'Switch between operation order and recorded timestamps. Scroll to zoom; right-drag to pan.',

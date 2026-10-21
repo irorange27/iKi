@@ -74,7 +74,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
   const seedRun = (
     runId: string,
     threadId: string,
-    kind: 'proactive-task' | 'delegated-agent' | 'handoff-resume'
+    kind: 'proactive-task' | 'delegated-agent'
   ) => {
     agentRunDb.createAgentRun({
       id: runId,
@@ -245,17 +245,12 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     expect(result.error).toContain('session-log resume is admitted');
   });
 
-  it('delegated-agent and handoff-resume retries still refuse', async () => {
+  it('delegated-agent retries still refuse', async () => {
     seedRun('run_delegated_139', 'thread_refuse139', 'delegated-agent');
     seedInputFact('thread_refuse139', TASK_TEXT);
     const delegated = await service.retryAndExecute(target, 'run_delegated_139');
     expect(delegated).toMatchObject({ success: false });
     expect(delegated.error).toContain('session-log resume is admitted');
-
-    seedRun('run_handoff_139', 'thread_refuse139', 'handoff-resume');
-    const handoff = await service.retryAndExecute(target, 'run_handoff_139');
-    expect(handoff).toMatchObject({ success: false });
-    expect(handoff.error).toContain('session-log resume is admitted');
   });
 
   it('a retry whose replay tail was recorded for a LATER send refuses instead of re-running the wrong task', async () => {
