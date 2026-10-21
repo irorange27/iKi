@@ -3,7 +3,7 @@ import { ipcMain } from 'electron';
 import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
 import { defaultToolRegistry } from '@iki/backend/tools';
-import { applyToolApprovalPolicyList } from '@iki/backend/utils/tool_approval';
+import { decideToolApproval } from '@iki/backend/utils/action_risk';
 
 let toolsIpcRegistered = false;
 const toolsIpcLogger = createLogger({ module: 'tools_ipc' });
@@ -21,9 +21,18 @@ export const registerToolsIpc = (): void => {
 
   ipcMain.handle('tools:list', () => {
     try {
-      return applyToolApprovalPolicyList(defaultToolRegistry.getToolMetadata(), {
-        autoApproveToolRequests: shouldAutoApproveToolRequests(),
-      });
+      // Annotate, never rewrite: the renderer and the auto router both need
+      // "does this tool need a decision?", but neither gets to change what the
+      // tool declared. The old rewrite (`applyToolApprovalPolicyList`) forced
+      // `needsApproval: true` to `false` here — a second approval policy that
+      // could lower a tool's floor (#166).
+      const autoApprove = shouldAutoApproveToolRequests();
+      return defaultToolRegistry
+        .getToolMetadata()
+        .map(tool => ({
+          ...tool,
+          needsApproval: decideToolApproval(tool, { autoApprove }) === 'ask',
+        }));
     } catch (error: unknown) {
       toolsIpcLogger.event({
         level: 'error',

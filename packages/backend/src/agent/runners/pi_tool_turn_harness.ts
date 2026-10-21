@@ -45,6 +45,7 @@ import {
   createApprovalPolicyBox,
   advanceApprovalPolicySnapshot,
   resolveTools,
+  type ApprovalPolicyBox,
 } from '../harness/tool_resolver';
 import {
   estimateTextTokens,
@@ -462,6 +463,24 @@ export class PiToolTurnHarness {
    * began, which is the frozen-root guarantee.
    */
   private workspaceSelectionBox?: { selection: unknown };
+  /**
+   * The resolver's per-call approval predicates, keyed by tool name, captured
+   * at resolve time.
+   *
+   * `loopTools` is a local inside `turn()`, so a resumed segment (approval
+   * resume, handoff) builds its own — and its predicate would then close over a
+   * DIFFERENT policy box than the one `advanceApprovalPolicySnapshot` refreshes
+   * each step. The same tool could therefore be gated at resolve time and
+   * ungated at call time (or the reverse). Holding the resolver's predicates
+   * here keeps every segment asking the box it actually advances: one owner for
+   * the approval decision.
+   */
+  private approvalPredicates = new Map<
+    string,
+    (input: unknown, options?: unknown) => boolean | Promise<boolean>
+  >();
+  /** The per-turn policy snapshot every segment advances and every predicate reads. */
+  private policyBox?: ApprovalPolicyBox;
 
   constructor(
     config: HarnessConfig,
@@ -519,7 +538,10 @@ export class PiToolTurnHarness {
     const recordInlineExecution = input.recordInlineExecution;
     const runId = input.runId;
 
-    const policyBox = createApprovalPolicyBox(this.config.approvalPolicy);
+    // ONE box per turn, kept on the instance: a resumed segment must advance
+    // the same snapshot the resolvers' predicates read, not a fresh copy.
+    this.policyBox = createApprovalPolicyBox(this.config.approvalPolicy);
+    const policyBox = this.policyBox;
     // A caller-supplied tool set is the capability upper bound (the same
     // contract the AI SDK harness honours): delegation hands the subagent its
     // pre-filtered tools here, and resolution is skipped entirely. This used to
@@ -559,8 +581,43 @@ export class PiToolTurnHarness {
     // Per-call approval decision: the resolver's function (policy box state
     // in its closure) rides the loop tool; the loop evaluates it before any
     // effect. Booleans pass through.
+    // Capture the resolver's per-call predicates for the cases where this
+    // segment skips resolution (a toolsOverride supplies its own, so nothing is
+    // captured and the override's own answer is honoured).
+    if (!input.toolsOverride) {
+      // CLEAR first: this map is per-INSTANCE but the predicates close over a
+      // per-TURN policy box (a fresh one is created above on every `turn()`).
+      // Keeping an entry from an earlier segment made the resumed segment ask
+      // the PREVIOUS turn's policy — an approval-paused turn resolved under
+      // `always` kept prompting forever, because the captured closure still
+      // read the box that `advanceApprovalPolicySnapshot` no longer touches.
+      // Same lifetime as `policyBox`: replaced, never accumulated.
+      this.approvalPredicates.clear();
+      for (const tool of tools) {
+        if (typeof tool.needsApproval === 'function') {
+          this.approvalPredicates.set(tool.name, tool.needsApproval);
+        }
+      }
+    }
     const loopTools: PiLoopTool[] | undefined = piTools?.map(piTool => {
       const agentTool = tools.find(candidate => candidate.name === piTool.name);
+      const predicate = this.approvalPredicates.get(piTool.name);
+      // Prefer the captured resolver decision. Without it a resumed segment
+      // would fall back to a boolean and lose the per-step policy snapshot.
+      if (predicate) {
+        return {
+          ...piTool,
+          // The resolver's decision is ASYNC (it may await a function-valued
+          // tool declaration). `Boolean(promise)` is always true, so wrapping
+          // it that way made EVERY tool need approval — the effect vanished
+          // from the transcript because the loop paused instead of executing.
+          // Await it: the gate must see the resolved boolean.
+          needsApproval: async (
+            input: unknown,
+            context: { toolCallId: string; messages: PiMessage[] }
+          ) => Boolean(await predicate(input, context)),
+        };
+      }
       return {
         ...piTool,
         needsApproval:
@@ -1155,6 +1212,11 @@ export class PiToolTurnHarness {
       perf,
       ...(toolSchemaTokens ? { toolSchemaTokens } : {}),
       requiresApproval: awaitingApproval,
+      // The remainder the loop could not consume — the exact list the loop
+      // reports (budget-exhausted: executed but unread; awaiting-approval: not
+      // run). It rides `outcome.pendingToolCalls` so a budget-exhausted turn
+      // is not reported as a whole answer (audit C-1/A-3).
+      pendingToolCalls: outcome.pendingToolCalls,
       finishReason: awaitingApproval ? undefined : finishReason,
       ...(toolCallResults.length > 0 ? { toolCalls: toolCallResults } : {}),
       ...(awaitingApproval ? { toolApprovalRequests: pendingApprovalRequests } : {}),

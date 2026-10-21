@@ -14,6 +14,10 @@ import { getMcpManager } from '@iki/backend/mcp';
 import { initLangfuseTracing, shutdownLangfuseTracing } from '@iki/backend/observability/langfuse';
 import { setHostFetch, setPlatformInfo } from '@iki/backend/platform';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
+import {
+  finalizeHarnessTurn,
+  finalizeTurnFailure,
+} from '@iki/backend/thread_session/turn_driver';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { resolveElement } from './main/services/devtools/element_source';
 import { startDaemonServer } from '@iki/daemon/server';
@@ -151,6 +155,12 @@ if (isDaemonMode) {
       // harness honours `toolsOverride`, so the child inherits exactly the
       // approval-free tool set the delegation selected.
       createHarness: startPiTurnHarness,
+      // The child finalizes through the SAME outcome authority a parent
+      // turn uses; the port keeps `tools/` below the session layer.
+      finalize: {
+        finalizeFailure: finalizeTurnFailure,
+        finalizeSuccess: finalizeHarnessTurn,
+      },
     },
   });
   void getMcpManager().initialize();

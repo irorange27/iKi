@@ -7,6 +7,10 @@ import { createRequire } from 'node:module';
 import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
+import {
+  finalizeHarnessTurn,
+  finalizeTurnFailure,
+} from '@iki/backend/thread_session/turn_driver';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { registerStandardTools } from '@iki/backend/tools';
@@ -91,6 +95,12 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
         createRunTracker: createAgentRunTracker,
         getConversationToolModel: getToolModel,
         createHarness: startPiTurnHarness,
+        // The child finalizes through the SAME outcome authority a parent
+        // turn uses; the port keeps `tools/` below the session layer.
+        finalize: {
+          finalizeFailure: finalizeTurnFailure,
+          finalizeSuccess: finalizeHarnessTurn,
+        },
       },
     });
     const mcpManager = getMcpManager();

@@ -74,6 +74,14 @@ export type TurnOutput = {
   /** Estimated tokens of the resolved tool schemas sent with the request. */
   toolSchemaTokens?: { builtin: number; mcp: number };
   toolCalls?: AgentResult['toolCalls'];
+  /**
+   * Calls the harness could not consume: the step budget ran out with them
+   * pending (they EXECUTED — their results are on the transcript — but no
+   * model call read them), or they wait for approval (they did NOT run).
+   * Without this field the remainder of a budget-exhausted turn vanishes at
+   * this seam and the run row reports a whole answer (audit C-1/A-3).
+   */
+  pendingToolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   requiresApproval: boolean;
   finishReason?: string;
   toolApprovalRequests?: ToolApprovalRequest[];

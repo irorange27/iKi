@@ -36,13 +36,25 @@ export type ExecutionPlan = {
   requireApproval: boolean;
   autoApproveToolRequests: boolean;
   approvalPolicy?: ApprovalPolicy;
-  maxIterations: number;
+  /**
+   * The two budgets, named for what they bound (audit C-1). They used to share
+   * the name `maxIterations` while meaning different things: the step budget
+   * bounds model calls INSIDE one `harness.turn()`; the batch bound decides
+   * whether the driver opens another batch. Same word, two owners.
+   *  - `step`  — the harness's step budget (default 200). Running out on a
+   *              step that asked for tools ENDS the batch budget-exhausted.
+   *  - `batch` — autonomous batching (ADR 004): at most `max` batches, each
+   *              after the first continuing with `continuePrompt`. Absent = a
+   *              single batch.
+   */
+  budget: {
+    step: number;
+    batch?: { max: number; continuePrompt?: string };
+  };
   // Budgets
   maxInputTokens?: number;
   maxOutputTokens?: number;
   reasoningEffort?: string;
-  // Autonomous batching (ADR 004)
-  autonomous?: { maxIterations: number; continuePrompt?: string };
   // Turn-start world binding (D30): tools and later-approved actions run
   // where the turn started, never where the thread points mid-turn.
   workspaceSelection?: ThreadWorkspaceSelection | null;
@@ -87,7 +99,19 @@ export const assembleExecutionPlan = (params: {
     requireApproval: preparedTurn.requireApproval,
     autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
     ...(approvalPolicy ? { approvalPolicy } : {}),
-    maxIterations: resolveToolCallMaxIterations(options.maxIterations),
+    budget: {
+      step: resolveToolCallMaxIterations(options.maxIterations),
+      ...(options.autonomous
+        ? {
+            batch: {
+              max: options.autonomous.maxIterations,
+              ...(options.autonomous.continuePrompt
+                ? { continuePrompt: options.autonomous.continuePrompt }
+                : {}),
+            },
+          }
+        : {}),
+    },
     ...(typeof preparedTurn.maxInputTokens === 'number'
       ? { maxInputTokens: preparedTurn.maxInputTokens }
       : {}),
@@ -95,7 +119,6 @@ export const assembleExecutionPlan = (params: {
       ? { maxOutputTokens: preparedTurn.maxOutputTokens }
       : {}),
     ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
-    ...(options.autonomous ? { autonomous: { ...options.autonomous } } : {}),
     workspaceSelection,
     systemPrompt: [
       preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : NO_TOOLS_SYSTEM_PROMPT,
@@ -130,7 +153,7 @@ export const planToHarnessConfig = (
   requireApproval: plan.requireApproval,
   autoApproveToolRequests: plan.autoApproveToolRequests,
   ...(plan.approvalPolicy ? { approvalPolicy: plan.approvalPolicy } : {}),
-  maxIterations: plan.maxIterations,
+  maxIterations: plan.budget.step,
   ...(typeof plan.maxOutputTokens === 'number' ? { maxOutputTokens: plan.maxOutputTokens } : {}),
   ...(typeof plan.maxInputTokens === 'number' ? { maxInputTokens: plan.maxInputTokens } : {}),
   ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
@@ -172,7 +195,16 @@ export const planToRunTrackerParams = (
       // restore them — the run row is those paths' only plan source, and a
       // silently dropped field is neither full recovery nor a new decision.
       ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
-      ...(plan.autonomous ? { autonomous: { ...plan.autonomous } } : {}),
+      ...(plan.budget.batch
+        ? {
+            autonomous: {
+              maxIterations: plan.budget.batch.max,
+              ...(plan.budget.batch.continuePrompt
+                ? { continuePrompt: plan.budget.batch.continuePrompt }
+                : {}),
+            },
+          }
+        : {}),
       // The turn-start world rides with the run row so a retry or
       // queued-resume — the same turn executing again — rebinds it instead of
       // silently adopting the thread's current selection.
@@ -181,7 +213,7 @@ export const planToRunTrackerParams = (
         : {}),
       ...(typeof plan.contextTokens === 'number' ? { contextTokens: plan.contextTokens } : {}),
       skillMode: plan.skillMode,
-      maxIterations: plan.maxIterations,
+      maxIterations: plan.budget.step,
       enableTools: plan.enableTools,
       ...params.metadataExtras,
     },

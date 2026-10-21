@@ -41,11 +41,12 @@
     "test:e2e:real": "node tests/integration/e2e/run_real_provider.mjs",
     "test:integration": "vitest run --config vitest.integration.config.mts",
     "ts:vue": "vue-tsc --noEmit",
-    "ci:quality": "pnpm run -s lint && pnpm run -s ts && pnpm run -s ts:vue && pnpm run -s lint:arch && pnpm run -s test:coverage",
+    "ci:quality": "pnpm run -s lint && pnpm run -s ts && pnpm run -s ts:vue && pnpm run -s lint:arch && pnpm run -s test:arch && pnpm run -s test:coverage",
     "commit": "git-cz",
     "eval:live": "IKI_RUN_LIVE_EVALS=1 vitest run --config vitest.integration.config.mts tests/integration/agent_evals.live.test.ts",
     "commit:check": "commitlint --from=HEAD~20 --to=HEAD --verbose",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:arch": "vitest run tests/scripts/architecture_rules_negative_controls.test.ts"
   },
   "keywords": [],
   "repository": {
@@ -95,18 +96,12 @@
     "vue-tsc": "^3.2.6"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.123",
-    "@ai-sdk/deepseek": "^2.0.68",
-    "@ai-sdk/minimax": "^2.0.21",
-    "@ai-sdk/openai": "^3.0.119",
-    "@ai-sdk/openai-compatible": "^2.0.79",
     "@langfuse/otel": "^5.5.3",
     "@langfuse/tracing": "^5.5.3",
     "@modelcontextprotocol/sdk": "^1.25.1",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/sdk-node": "^0.219.0",
     "@tailwindcss/vite": "^4.1.18",
-    "ai": "^6.0.293",
     "cron-parser": "^5.5.0",
     "electron-squirrel-startup": "^1.0.1",
     "ffmpeg-static": "^5.2.0",

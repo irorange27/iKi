@@ -234,13 +234,11 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
           blockedAt: run.updatedAt,
           ...(run.working.lastStepIndex > 0 ? { resumeFromStep: run.working.lastStepIndex } : {}),
         },
-        autonomous:
-          run.working.pendingApprovalIds.length > 0
-            ? {
-                maxIterations: 10,
-                continuePrompt: 'Continue the work that was interrupted.',
-              }
-            : undefined,
+        // A resume does NOT invent a batch bound (audit C-1: this was the
+        // third budget authority — a hardcoded 10 that overwrote whatever the
+        // paused turn ran under). The row's own batch bound is restored by
+        // deriveResumeStreamOptions; a bound-less turn stays single-batch.
+        continuePrompt: 'Continue the work that was interrupted.',
         inputMessages: recovered.history,
         systemPrompts: recovered.systemPrompts,
       })

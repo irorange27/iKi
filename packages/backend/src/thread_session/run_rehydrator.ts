@@ -36,10 +36,13 @@ export type RunTurnPlan = {
    * true (its pre-rehydrator default).
    */
   requireApproval?: boolean;
+  /** The harness step budget (ExecutionPlan.budget.step). */
   maxIterations: number;
   /** Restored execution configuration (run metadata); undefined when the row
-   *  never stored it — callers keep their current behavior then. */
+   *  never stored it. */
   reasoningEffort?: string;
+  /** The autonomous batch bound (ExecutionPlan.budget.batch); undefined when
+   *  the turn was a single batch. */
   autonomous?: { maxIterations: number; continuePrompt?: string };
   /** The original turn's workspace world (D30): a retry/queued-resume is the
    *  same turn re-executing, so it rebinds this world rather than adopting
@@ -364,7 +367,9 @@ export const deriveResumeStreamOptions = (
     kind: ResumeKind;
     parentRunId?: string;
     metadata?: Record<string, unknown>;
-    autonomous?: { maxIterations: number; continuePrompt?: string };
+    /** Overrides the prompt a batch continuation uses. The batch BOUND is the
+     *  row's own restored one — a resume never invents a budget. */
+    continuePrompt?: string;
     /** Adopt this run id as the executing identity (queued resume / retry). */
     adoptRunId?: string;
     /** The session-log recovery history (rebuildResumeHistoryFromEvents). */
@@ -393,6 +398,13 @@ export const deriveResumeStreamOptions = (
     ...callerMetadata,
     ...(continuation ? { continuation: true } : {}),
   };
+  // The batch bound is the row's own restored one; only the prompt may be
+  // overridden, and only for a turn that already had a batch bound. A resume
+  // never invents a budget (audit C-1).
+  const batch =
+    plan.autonomous && overrides.continuePrompt
+      ? { ...plan.autonomous, continuePrompt: overrides.continuePrompt }
+      : plan.autonomous;
   return {
     providerType: plan.providerType,
     ...(plan.providerId ? { providerId: plan.providerId } : {}),
@@ -400,7 +412,7 @@ export const deriveResumeStreamOptions = (
     ...(plan.approvalPolicy ? { approvalPolicy: plan.approvalPolicy } : {}),
     ...(plan.requireApproval !== undefined ? { requireApproval: plan.requireApproval } : {}),
     ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
-    ...(plan.autonomous ? { autonomous: { ...plan.autonomous } } : {}),
+    ...(batch ? { autonomous: { ...batch } } : {}),
     ...(plan.workspaceSelection !== undefined
       ? { workspaceSelection: plan.workspaceSelection }
       : {}),
@@ -420,6 +432,5 @@ export const deriveResumeStreamOptions = (
       ...(overrides.adoptRunId ? { adoptRunId: overrides.adoptRunId } : {}),
       ...(Object.keys(runMetadata).length > 0 ? { metadata: runMetadata } : {}),
     },
-    ...(overrides.autonomous ? { autonomous: overrides.autonomous } : {}),
   };
 };
