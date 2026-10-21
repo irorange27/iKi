@@ -80,6 +80,7 @@ export class LoadSkillTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  override replay = 'safe' as const;
   override description =
     'Load the full instructions for a skill that was already selected for this turn. Use the exact skill id from the skill metadata in the prompt.';
   override paramSchema = LoadSkillInputSchema;
@@ -115,6 +116,7 @@ export class ListPersonalSkillsTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  override replay = 'safe' as const;
   override description =
     'List the user-managed personal skills stored under the Personal skills folder. Use this before updating or deleting a personal skill so you can target the correct id.';
   override paramSchema = ListPersonalSkillsInputSchema;
@@ -142,6 +144,7 @@ export class ReadPersonalSkillTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  override replay = 'safe' as const;
   override description =
     'Read the full SKILL.md content for a personal skill under the Personal skills folder.';
   override paramSchema = ReadPersonalSkillInputSchema;
@@ -167,6 +170,7 @@ export class WritePersonalSkillTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = true;
+  override replay = 'unsafe' as const;
   override approvalMode = 'always' as const;
   override description =
     'Create or replace a personal skill under the Personal skills folder. Only use this when the user explicitly asks to create or update a personal skill.';
@@ -193,6 +197,7 @@ export class DeletePersonalSkillTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = true;
+  override replay = 'unsafe' as const;
   override approvalMode = 'always' as const;
   override description =
     'Delete a personal skill from the Personal skills folder. Only use this when the user explicitly asks to remove that skill.';

@@ -57,7 +57,6 @@ describe('SettingsView smoke', () => {
 
     expect(wrapper.find('.settings-view').exists() || wrapper.find('section').exists()).toBe(true);
 
-    // Switch to a data-heavy section and back — exercises the async loaders.
     const sections = wrapper.findAll('button, [role="tab"]');
     expect(sections.length).toBeGreaterThan(0);
     await wrapper.unmount();

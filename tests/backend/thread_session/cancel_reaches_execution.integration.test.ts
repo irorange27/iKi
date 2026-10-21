@@ -1,21 +1,5 @@
 // @vitest-environment node
 
-/**
- * Cancellation must reach the execution it names, not just the run row.
- *
- * The defect: `chatService.cancelRun(runId)` looked only at the stream
- * registry (`abortStreamByRunId`). The non-streaming `send` transport holds
- * its own AbortController and registers no stream, so cancelRun fell through
- * to `rehydrateAgentRunTracker(runId).markCancelled(...)` — a durable
- * terminal write with nothing actually stopped. The tool handler kept
- * running, and when it finished, the live tracker appended a step at an
- * index the cancellation writer had already used:
- * `UNIQUE constraint failed: agent_run_steps.run_id, agent_run_steps.step_index`.
- *
- * These tests pin the contract at the real consumer boundary (the chat
- * service + SQLite), not a mocked registry: a cancelled run's execution
- * observes its abort signal, and no writer may append to a cancelled run.
- */
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -23,8 +7,13 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
+
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/platform', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/platform')>()),
@@ -32,8 +21,6 @@ vi.mock('@iki/backend/platform', async importOriginal => ({
 }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
-  createModel: createModelMock,
-  disposeLanguageModel: vi.fn(),
   resolvePersonaPrompt: () => 'persona prompt',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({
@@ -41,12 +28,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     maxInputTokens: 98000,
     maxOutputTokens: 2000,
   }),
-  // These suites verify DURABLE behaviour (effect-aware retry, cancel routing,
-  // handoff facts, inline journaling) using a scripted AI SDK model. They are
-  // not about supply routing, so they pin the AI SDK harness explicitly: Pi
-  // claims every provider type now, and a stubbed `createModel` would never be
-  // reached. Routing itself is covered by factory_pi_generation.test.ts and
-  // turn_supply_selection.test.ts.
   supportsPiTurnSupply: () => false,
 }));
 
@@ -55,8 +36,11 @@ import { addProvider } from '@iki/backend/db/providers';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 
@@ -69,12 +53,7 @@ describe('cancelling a run reaches the execution that owns it', () => {
   const target = { id: 11, send: vi.fn() };
 
   beforeEach(async () => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(legacyTurnHarness);
+    setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-cancel-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'cancel.db') });
@@ -126,15 +105,24 @@ describe('cancelling a run reaches the execution that owns it', () => {
       })
     );
 
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall(TOOL_NAME, { path: '/probe.txt' }, { id: 'call_cancel_1' }),
-        fauxText('finished after the tool'),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: TOOL_NAME,
+            args: { path: '/probe.txt' },
+            id: 'call_cancel_1',
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'finished after the tool' },
+          { kind: 'done', reason: 'stop' },
+        ],
       ])
     );
 
-    // The non-streaming send transport: it registers no stream, so nothing
-    // in the stream registry names this run.
     const pending = service
       .send({
         providerType: 'openai',
@@ -160,21 +148,15 @@ describe('cancelling a run reaches the execution that owns it', () => {
     const cancelled = service.cancelRun(run!.id);
     expect(cancelled).toEqual({ success: true });
 
-    // Contract 1: the execution that owns the run observes the cancellation.
     expect(observedSignal?.aborted).toBe(true);
 
     release();
     const outcome = await pending;
 
-    // Contract 2: the cancelled run stays cancelled and no late writer
-    // appended to it (the old behavior surfaced as a UNIQUE step-index
-    // constraint failure here).
     expect('error' in outcome ? String(outcome.error) : '').not.toContain('UNIQUE constraint');
     expect(agentRunDb.getAgentRun(run!.id)?.status).toBe('cancelled');
 
-    const stepIndexes = agentRunDb
-      .listAgentRunSteps(run!.id)
-      .map(step => step.stepIndex);
+    const stepIndexes = agentRunDb.listAgentRunSteps(run!.id).map(step => step.stepIndex);
     expect(new Set(stepIndexes).size).toBe(stepIndexes.length);
   });
 });

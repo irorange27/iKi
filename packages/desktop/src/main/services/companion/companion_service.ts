@@ -3,7 +3,6 @@ import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
 import { parseModelList } from '@iki/backend/utils/provider_models';
 import type {
-  CompanionAffectHint,
   CompanionDormantReason,
   CompanionNudgeKind,
   CompanionPhase,
@@ -12,7 +11,6 @@ import type {
 } from '@iki/backend/types/companion';
 import type { AppConfig } from '@iki/backend/types/config';
 import type { Provider } from '@iki/backend/types/provider';
-import type { InterventionPolicySignal } from '@iki/backend/message/intervention_policy';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 
 type CompanionWindowTarget = {
@@ -30,11 +28,6 @@ type CompanionServiceDeps = {
   clearTimeoutFn?: typeof clearTimeout;
 };
 
-type TimedPolicyState = {
-  policy: InterventionPolicySignal;
-  expiresAt: number;
-};
-
 type TimedNudgeState = {
   kind: CompanionNudgeKind;
   taskName: string;
@@ -44,8 +37,6 @@ type TimedNudgeState = {
 const companionLogger = createLogger({ module: 'companion_service' });
 
 const COMPANION_UPDATED_CHANNEL = 'companion:updated';
-const EXECUTE_POLICY_TTL_MS = 25_000;
-const REFLECTIVE_POLICY_TTL_MS = 90_000;
 const NUDGE_TTL_MS = 12_000;
 
 const COMPANION_COPY = {
@@ -156,7 +147,6 @@ const createSnapshot = (
     updatedAt: string;
     dormantReason?: CompanionDormantReason;
     nudgeKind?: CompanionNudgeKind;
-    affect?: CompanionAffectHint;
   }
 ): CompanionSnapshot => ({
   phase,
@@ -166,7 +156,6 @@ const createSnapshot = (
   updatedAt: params.updatedAt,
   ...(params.dormantReason ? { dormantReason: params.dormantReason } : {}),
   ...(params.nudgeKind ? { nudgeKind: params.nudgeKind } : {}),
-  ...(params.affect ? { affect: params.affect } : {}),
 });
 
 const isEnabledProvider = (provider: Provider): boolean => provider.enabled === true;
@@ -241,10 +230,7 @@ const snapshotsEqual = (left: CompanionSnapshot, right: CompanionSnapshot): bool
   left.preview?.kind === right.preview?.kind &&
   left.preview?.text === right.preview?.text &&
   left.preview?.toolName === right.preview?.toolName &&
-  left.preview?.threadId === right.preview?.threadId &&
-  left.affect?.label === right.affect?.label &&
-  left.affect?.valence === right.affect?.valence &&
-  left.affect?.arousal === right.affect?.arousal;
+  left.preview?.threadId === right.preview?.threadId;
 
 export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
   const getConfig = deps.getConfig ?? getAppConfig;
@@ -264,9 +250,7 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
       }
     }
   };
-  let timedPolicyState: TimedPolicyState | null = null;
   let timedNudgeState: TimedNudgeState | null = null;
-  let policyTimer: ReturnType<typeof setTimeout> | null = null;
   let nudgeTimer: ReturnType<typeof setTimeout> | null = null;
   let currentSnapshot = createSnapshot('idle', {
     label: COMPANION_COPY.en.idle.label,
@@ -275,31 +259,12 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
     updatedAt: now().toISOString(),
   });
   let currentPreview: ConversationPreview | null = null;
-  let currentAffect: CompanionAffectHint | null = null;
 
   const clearExpiredState = () => {
     const nowMs = now().getTime();
-    if (timedPolicyState && isExpired(timedPolicyState.expiresAt, nowMs)) {
-      timedPolicyState = null;
-    }
     if (timedNudgeState && isExpired(timedNudgeState.expiresAt, nowMs)) {
       timedNudgeState = null;
     }
-  };
-
-  const schedulePolicyExpiry = () => {
-    if (policyTimer) {
-      clearTimeoutFn(policyTimer);
-      policyTimer = null;
-    }
-    if (!timedPolicyState) return;
-
-    const delay = Math.max(0, timedPolicyState.expiresAt - now().getTime());
-    policyTimer = setTimeoutFn(() => {
-      timedPolicyState = null;
-      policyTimer = null;
-      publish();
-    }, delay);
   };
 
   const scheduleNudgeExpiry = () => {
@@ -360,46 +325,11 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
       });
     }
 
-    if (timedPolicyState) {
-      switch (timedPolicyState.policy.interventionState) {
-        case 'stabilize':
-          return createSnapshot('stabilize', {
-            label: copy.stabilize.label,
-            headline: copy.stabilize.headline,
-            detail: copy.stabilize.detail,
-            updatedAt,
-          });
-        case 'clarify':
-          return createSnapshot('clarify', {
-            label: copy.clarify.label,
-            headline: copy.clarify.headline,
-            detail: copy.clarify.detail,
-            updatedAt,
-          });
-        case 'co_plan':
-          return createSnapshot('co_plan', {
-            label: copy.coPlan.label,
-            headline: copy.coPlan.headline,
-            detail: copy.coPlan.detail,
-            updatedAt,
-          });
-        case 'guided_execute':
-        case 'autonomous_execute':
-          return createSnapshot('execute', {
-            label: copy.execute.label,
-            headline: copy.execute.headline,
-            detail: copy.execute.detail,
-            updatedAt,
-          });
-      }
-    }
-
     return createSnapshot('idle', {
       label: copy.idle.label,
       headline: copy.idle.headline,
       detail: copy.idle.detail,
       updatedAt,
-      ...(currentAffect ? { affect: currentAffect } : {}),
     });
   };
 
@@ -433,28 +363,6 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
   return {
     getSnapshot: (): CompanionSnapshot => publish(),
     refreshAvailability: (): CompanionSnapshot => publish(),
-    setAffect: (affect: CompanionAffectHint | null): void => {
-      currentAffect = affect;
-    },
-    setChatPolicy: (policy: InterventionPolicySignal | null): CompanionSnapshot => {
-      if (!policy) {
-        timedPolicyState = null;
-        schedulePolicyExpiry();
-        return publish();
-      }
-
-      const ttlMs =
-        policy.interventionState === 'guided_execute' ||
-        policy.interventionState === 'autonomous_execute'
-          ? EXECUTE_POLICY_TTL_MS
-          : REFLECTIVE_POLICY_TTL_MS;
-      timedPolicyState = {
-        policy,
-        expiresAt: now().getTime() + ttlMs,
-      };
-      schedulePolicyExpiry();
-      return publish();
-    },
     beginThinking: (key: string): CompanionSnapshot => {
       const trimmedKey = key.trim();
       if (!trimmedKey) return publish();

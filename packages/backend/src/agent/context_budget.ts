@@ -1,8 +1,7 @@
 import { countTokens, decode, encode } from 'gpt-tokenizer';
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
 
 import type { AgentTool } from './types';
-
 
 const MESSAGE_OVERHEAD_TOKENS = 4;
 const TOOL_MESSAGE_OVERHEAD_TOKENS = 8;
@@ -47,7 +46,6 @@ export const clipTextToTokenBudget = (
   return { text: `${truncated}${TRUNCATION_SUFFIX}`, truncated: true };
 };
 
-/** Estimated tokens of the JSON schemas sent to the provider, split by origin. */
 export const estimateToolSchemaTokens = (tools: AgentTool[]): { builtin: number; mcp: number } => {
   const totals = { builtin: 0, mcp: 0 };
   for (const tool of tools) {
@@ -66,7 +64,6 @@ export const estimateToolSchemaTokens = (tools: AgentTool[]): { builtin: number;
 export const AUTO_COMPACT_THRESHOLD = 0.8;
 export const AUTO_COMPACT_KEEP_RATIO = 0.5;
 
-/** Plan a prefix replacement at complete tool-exchange boundaries; the caller must summarize omitted messages. */
 export const autoCompactHistory = (params: {
   history: ModelMessage[];
   maxInputTokens?: number;

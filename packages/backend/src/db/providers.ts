@@ -45,7 +45,6 @@ export const addProvider = (
     )
   `);
 
-  // Provide default values for all optional fields
   const data = {
     id: provider.id,
     name: provider.name,
@@ -77,8 +76,8 @@ export const updateProvider = (id: string, provider: Partial<Provider>) => {
   if (!fields) return null;
 
   const stmt = getDb().prepare(`
-    UPDATE providers 
-    SET ${fields}, updated_at = @updated_at 
+    UPDATE providers
+    SET ${fields}, updated_at = @updated_at
     WHERE id = @id
   `);
 

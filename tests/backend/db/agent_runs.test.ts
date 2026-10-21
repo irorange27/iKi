@@ -63,7 +63,6 @@ describe('agent_runs db', () => {
         metadata: { transport: 'send' },
       },
       working: {
-        modelMessages: [{ role: 'user', content: 'hello' }],
         accumulatedText: '',
         pendingApprovalIds: [],
         lastStepIndex: 0,
@@ -87,7 +86,6 @@ describe('agent_runs db', () => {
     );
     expect(params.working_json).toBe(
       JSON.stringify({
-        modelMessages: [{ role: 'user', content: 'hello' }],
         accumulatedText: '',
         pendingApprovalIds: [],
         lastStepIndex: 0,
@@ -98,7 +96,7 @@ describe('agent_runs db', () => {
     expect(created.createdAt).toBe(created.updatedAt);
   });
 
-  it('updates runs and maps stored steps/checkpoints back into typed records', () => {
+  it('updates runs and maps stored steps back into typed records', () => {
     const updateRunMock = vi.fn();
     const selectRunMock = vi.fn(() => ({
       id: 'run_1',
@@ -135,40 +133,11 @@ describe('agent_runs db', () => {
         finished_at: '2026-04-10T00:00:01.000Z',
       },
     ]);
-    const getCheckpointMock = vi.fn(() => ({
-      id: 'checkpoint_1',
-      run_id: 'run_1',
-      step_index: 2,
-      reason: 'approval-requested',
-      snapshot_json: JSON.stringify({
-        id: 'run_1',
-        kind: 'chat-turn',
-        status: 'blocked',
-        thread_id: 'thread_1',
-        parent_run_id: null,
-        root_run_id: 'run_1',
-        provider_type: 'openai',
-        provider_id: null,
-        model: 'gpt-5.4',
-        system_prompt: 'system prompt',
-        enabled_tools: '["web"]',
-        available_skill_ids: '["user:planner"]',
-        input_json: '{"prompt":"hello"}',
-        working_json:
-          '{"modelMessages":[{"role":"user","content":"hello"}],"accumulatedText":"partial","pendingApprovalIds":["approval_1"],"lastStepIndex":2}',
-        output_json: '{"text":"partial","finishReason":"approval-requested"}',
-        error_json: null,
-        created_at: '2026-04-10T00:00:00.000Z',
-        updated_at: '2026-04-10T00:00:10.000Z',
-      }),
-      created_at: '2026-04-10T00:00:10.000Z',
-    }));
 
     const prepareMock = vi.fn((sql: string) => {
       if (sql.includes('UPDATE agent_runs')) return { run: updateRunMock };
       if (sql.includes('SELECT * FROM agent_runs WHERE id')) return { get: selectRunMock };
       if (sql.includes('SELECT * FROM agent_run_steps')) return { all: listStepsMock };
-      if (sql.includes('SELECT * FROM agent_run_checkpoints')) return { get: getCheckpointMock };
       return { run: vi.fn(), get: vi.fn(), all: vi.fn() };
     });
 
@@ -177,7 +146,6 @@ describe('agent_runs db', () => {
     const updated = updateAgentRun('run_1', {
       status: 'blocked',
       working: {
-        modelMessages: [{ role: 'user', content: 'hello' }],
         accumulatedText: 'partial',
         pendingApprovalIds: ['approval_1'],
         lastStepIndex: 2,
@@ -191,7 +159,7 @@ describe('agent_runs db', () => {
     const updateParams = updateRunMock.mock.calls[0][0] as Record<string, unknown>;
     expect(updateParams.status).toBe('blocked');
     expect(updateParams.working_json).toBe(
-      '{"modelMessages":[{"role":"user","content":"hello"}],"accumulatedText":"partial","pendingApprovalIds":["approval_1"],"lastStepIndex":2}'
+      '{"accumulatedText":"partial","pendingApprovalIds":["approval_1"],"lastStepIndex":2}'
     );
     expect(updated).toEqual({
       id: 'run_1',
@@ -211,7 +179,6 @@ describe('agent_runs db', () => {
         metadata: { transport: 'stream' },
       },
       working: {
-        modelMessages: [{ role: 'user', content: 'hello' }],
         accumulatedText: 'partial',
         pendingApprovalIds: ['approval_1'],
         lastStepIndex: 2,
@@ -317,34 +284,6 @@ describe('agent_runs db', () => {
       },
     ];
     const runSelectMap = new Map(rootRunsRows.map(row => [row.id, row]));
-    const checkpointByRunId = new Map([
-      [
-        'run_root_1',
-        {
-          id: 'checkpoint_root_1',
-          run_id: 'run_root_1',
-          step_index: 1,
-          reason: 'child-run-spawned',
-          snapshot_json: JSON.stringify({
-            ...rootRunsRows[0],
-          }),
-          created_at: '2026-04-10T00:00:01.500Z',
-        },
-      ],
-      [
-        'run_child_1',
-        {
-          id: 'checkpoint_child_1',
-          run_id: 'run_child_1',
-          step_index: 1,
-          reason: 'run-completed',
-          snapshot_json: JSON.stringify({
-            ...rootRunsRows[1],
-          }),
-          created_at: '2026-04-10T00:00:02.000Z',
-        },
-      ],
-    ]);
 
     const prepareMock = vi.fn((sql: string) => {
       if (sql.includes('WHERE root_run_id = ?')) {
@@ -366,16 +305,6 @@ describe('agent_runs db', () => {
       if (sql.includes('SELECT * FROM agent_run_steps WHERE run_id = ?')) {
         return {
           all: vi.fn((runId: string) => (runId === 'run_root_1' ? rootStepsRows : childStepsRows)),
-        };
-      }
-      if (sql.includes('SELECT * FROM agent_run_checkpoints') && sql.includes('WHERE run_id IN')) {
-        return {
-          all: vi.fn(() => Array.from(checkpointByRunId.values())),
-        };
-      }
-      if (sql.includes('SELECT * FROM agent_run_checkpoints')) {
-        return {
-          get: vi.fn((runId: string) => checkpointByRunId.get(runId)),
         };
       }
       return { run: vi.fn(), get: vi.fn(), all: vi.fn() };

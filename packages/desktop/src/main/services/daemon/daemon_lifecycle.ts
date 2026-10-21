@@ -45,9 +45,6 @@ const normalizePort = (value: unknown, fallback: number): number => {
 };
 
 const readConfigDaemonBinding = (): { host: string; port: number } => {
-  // IKI_DAEMON_PORT (also honored by standalone daemon mode) wins over the
-  // stored config so isolation-scoped launches (e2e) never fight over the
-  // default port with a concurrently running instance.
   const envPort = normalizePort(process.env.IKI_DAEMON_PORT ?? null, Number.NaN);
   try {
     const config = getAppConfig();

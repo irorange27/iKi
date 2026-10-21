@@ -10,7 +10,6 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
   chatServiceMock: {
     listThreads: vi.fn(() => [{ id: 'thread_1' }]),
     getThread: vi.fn((id: string) => ({ id })),
-    getThreadTodoPlan: vi.fn((threadId: string) => ({ thread_id: threadId, items: [] })),
     createThread: vi.fn((thread: Record<string, unknown>) => ({ id: 'thread_new', ...thread })),
     clearThread: vi.fn((id: string, thread: Record<string, unknown>) => ({ id, ...thread })),
     updateThread: vi.fn((id: string, thread: Record<string, unknown>) => ({ id, ...thread })),
@@ -19,7 +18,6 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
     getMessage: vi.fn((id: string) => ({ id })),
     createMessage: vi.fn((message: Record<string, unknown>) => ({ id: 'message_new', ...message })),
     updateMessage: vi.fn((id: string, message: Record<string, unknown>) => ({ id, ...message })),
-    deleteMessage: vi.fn((id: string) => ({ success: true, id })),
     truncateAfterMessage: vi.fn((threadId: string, messageId: string) => ({
       success: true,
       threadId,
@@ -83,9 +81,6 @@ describe('chat IPC', () => {
 
     registerChatIpc();
 
-    // Namespace invariant instead of a full channel mirror: every registered
-    // handler must belong to the chat IPC surface. Exact channel lists are the
-    // registration code's own concern.
     const channels = [...ipcHandlers.keys()];
     expect(channels.length).toBeGreaterThan(0);
     expect(channels.every(channel => channel.startsWith('chat:'))).toBe(true);
@@ -116,10 +111,6 @@ describe('chat IPC', () => {
     expect(await ipcHandlers.get('chat:threads:get')?.(null, 'thread_1')).toEqual({
       id: 'thread_1',
     });
-    expect(await ipcHandlers.get('chat:threads:todo:get')?.(null, 'thread_1')).toEqual({
-      thread_id: 'thread_1',
-      items: [],
-    });
     expect(await ipcHandlers.get('chat:threads:create')?.(null, threadPayload)).toEqual({
       id: 'thread_new',
       title: 'Thread',
@@ -145,8 +136,6 @@ describe('chat IPC', () => {
     expect(await ipcHandlers.get('chat:messages:get')?.(null, 'message_1')).toEqual({
       id: 'message_1',
     });
-    // chat:messages:create was removed with A3: turn-driven persistence is
-    // backend-owned; the renderer keeps only user-driven edit/delete channels.
     expect(
       await ipcHandlers.get('chat:messages:update')?.(null, 'message_1', messagePayload)
     ).toEqual({
@@ -154,12 +143,6 @@ describe('chat IPC', () => {
       thread_id: 'thread_1',
       message: '{}',
     });
-    expect(await ipcHandlers.get('chat:messages:delete')?.(null, 'message_1')).toEqual({
-      success: true,
-      id: 'message_1',
-    });
-    // The backend-owned atomic truncate (P5): ONE channel — the renderer no
-    // longer loops chat:messages:delete for an edit/resend truncation.
     expect(
       await ipcHandlers.get('chat:messages:truncate-after')?.(null, 'thread_1', 'message_1')
     ).toEqual({ success: true, threadId: 'thread_1', messageId: 'message_1', deletedIds: [] });
@@ -214,7 +197,6 @@ describe('chat IPC', () => {
 
     expect(chatServiceMock.listThreads).toHaveBeenCalledTimes(1);
     expect(chatServiceMock.getThread).toHaveBeenCalledWith('thread_1');
-    expect(chatServiceMock.getThreadTodoPlan).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.createThread).toHaveBeenCalledWith(threadPayload);
     expect(chatServiceMock.clearThread).toHaveBeenCalledWith('thread_1', threadPayload);
     expect(chatServiceMock.updateThread).toHaveBeenCalledWith('thread_1', threadPayload);
@@ -222,7 +204,6 @@ describe('chat IPC', () => {
     expect(chatServiceMock.listMessages).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.getMessage).toHaveBeenCalledWith('message_1');
     expect(chatServiceMock.updateMessage).toHaveBeenCalledWith('message_1', messagePayload);
-    expect(chatServiceMock.deleteMessage).toHaveBeenCalledWith('message_1');
     expect(chatServiceMock.listRuns).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.getRunTrace).toHaveBeenCalledWith('run_1');
     expect(chatServiceMock.getRunTree).toHaveBeenCalledWith('run_root_1');

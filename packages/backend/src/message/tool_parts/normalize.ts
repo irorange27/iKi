@@ -1,4 +1,4 @@
-import type { ProviderMetadata } from 'ai';
+import type { ProviderMetadata } from '@iki/backend/provider/llm/wire_types';
 
 import type { DynamicToolPart, DynamicToolState } from '../message_parts';
 import { isObjectRecord } from '../message_parts';

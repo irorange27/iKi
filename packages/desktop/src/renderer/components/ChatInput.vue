@@ -2,7 +2,6 @@
   <div class="chat-input-outer">
     <!-- Width is owned by the parent (.composer-area tracks the chat column). -->
     <div>
-      <ChatTodoPlan v-if="props.todoPlan" class="chat-input-plan" :plan="props.todoPlan" />
       <ChatComposerShell
         :set-input-ref="setInputRef"
         v-model="message"
@@ -104,39 +103,33 @@
               </button>
             </PopoverTrigger>
             <PopoverPortal>
-            <PopoverContent
-              class="permission-panel"
-              side="top"
-              align="start"
-              :side-offset="8"
-            >
-              <p class="permission-panel-title">{{ t('chat.input.permission.panelTitle') }}</p>
-              <div role="radiogroup" :aria-label="t('chat.input.permission.panelTitle')">
-                <button
-                  v-for="option in permissionOptions"
-                  :key="option.value"
-                  class="permission-option"
-                  :class="{ 'permission-option--selected': approvalPolicy === option.value }"
-                  role="radio"
-                  :aria-checked="approvalPolicy === option.value"
-                  :data-policy="option.value"
-                  @click="selectApprovalPolicy(option.value)"
-                >
-                  <span class="permission-option-icon" aria-hidden="true">
-                    <component :is="option.icon" class="h-4 w-4" />
-                  </span>
-                  <span class="permission-option-copy">
-                    <span class="permission-option-name">{{ option.name }}</span>
-                    <span class="permission-option-desc">{{ option.description }}</span>
-                  </span>
-                  <Check
-                    v-if="approvalPolicy === option.value"
-                    class="permission-option-check h-4 w-4"
-                  />
-                </button>
-              </div>
-            </PopoverContent>
-
+              <PopoverContent class="permission-panel" side="top" align="start" :side-offset="8">
+                <p class="permission-panel-title">{{ t('chat.input.permission.panelTitle') }}</p>
+                <div role="radiogroup" :aria-label="t('chat.input.permission.panelTitle')">
+                  <button
+                    v-for="option in permissionOptions"
+                    :key="option.value"
+                    class="permission-option"
+                    :class="{ 'permission-option--selected': approvalPolicy === option.value }"
+                    role="radio"
+                    :aria-checked="approvalPolicy === option.value"
+                    :data-policy="option.value"
+                    @click="selectApprovalPolicy(option.value)"
+                  >
+                    <span class="permission-option-icon" aria-hidden="true">
+                      <component :is="option.icon" class="h-4 w-4" />
+                    </span>
+                    <span class="permission-option-copy">
+                      <span class="permission-option-name">{{ option.name }}</span>
+                      <span class="permission-option-desc">{{ option.description }}</span>
+                    </span>
+                    <Check
+                      v-if="approvalPolicy === option.value"
+                      class="permission-option-check h-4 w-4"
+                    />
+                  </button>
+                </div>
+              </PopoverContent>
             </PopoverPortal>
           </PopoverRoot>
         </template>
@@ -165,10 +158,19 @@
               </div>
             </HoverCardTrigger>
             <HoverCardPortal>
-              <HoverCardContent class="context-usage-panel" side="top" align="end" :side-offset="10">
+              <HoverCardContent
+                class="context-usage-panel"
+                side="top"
+                align="end"
+                :side-offset="10"
+              >
                 <div class="context-usage-panel-header">
-                  <span class="context-usage-panel-title">{{ t('chat.contextUsage.panelTitle') }}</span>
-                  <span class="context-usage-panel-total">{{ composerContextUsage.tokenLabel }}</span>
+                  <span class="context-usage-panel-title">{{
+                    t('chat.contextUsage.panelTitle')
+                  }}</span>
+                  <span class="context-usage-panel-total">{{
+                    composerContextUsage.tokenLabel
+                  }}</span>
                 </div>
                 <div class="context-usage-panel-bar" role="presentation">
                   <div
@@ -183,9 +185,13 @@
                     :key="row.key"
                     class="context-usage-panel-row"
                   >
-                    <span class="context-usage-row-label">{{ t(`chat.contextUsage.category.${row.key}`) }}</span>
+                    <span class="context-usage-row-label">{{
+                      t(`chat.contextUsage.category.${row.key}`)
+                    }}</span>
                     <span class="context-usage-row-values">
-                      <span class="context-usage-row-tokens">{{ formatTokenCount(row.tokens) }}</span>
+                      <span class="context-usage-row-tokens">{{
+                        formatTokenCount(row.tokens)
+                      }}</span>
                       <span class="context-usage-row-percent">{{ row.percent }}%</span>
                     </span>
                   </li>
@@ -264,21 +270,16 @@
         </template>
       </ChatComposerShell>
     </div>
-    <ImageViewerOverlay
-      :visible="viewerSrc.length > 0"
-      :src="viewerSrc"
-      @close="viewerSrc = ''"
-    />
+    <ImageViewerOverlay :visible="viewerSrc.length > 0" :src="viewerSrc" @close="viewerSrc = ''" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue';
 import type { Component } from 'vue';
-import type { FileUIPart } from 'ai';
+import type { UiFilePart as FileUIPart } from '@iki/backend/message/ui_protocol';
 import { Check, Hand, Settings, ShieldCheck, Zap } from 'lucide-vue-next';
 import type { Provider } from '@iki/backend/types/provider';
-import type { TaskPlan } from '@iki/backend/types/task_plan';
 import {
   buildContextCompositionRows,
   buildTokenUsageIndicator,
@@ -291,7 +292,6 @@ import type {
   PrepareMessageSendPayload,
 } from '../modules/chat/chat_prepare_send';
 import type { SubmitTurnParams, SubmitTurnResult } from '../composables/useChatComposerSend';
-import ChatTodoPlan from './chat/ChatTodoPlan.vue';
 import ChatComposerActions from './ChatComposerActions.vue';
 import ChatModelSelector from './ChatModelSelector.vue';
 import ChatComposerShell from './ChatComposerShell.vue';
@@ -309,15 +309,9 @@ import { useRunStatus } from '../composables/useRunStatus';
 import { useThreadSessionStore } from '../store/thread_session';
 import { useConfigStore } from '../store/config';
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
-import {
-  HoverCardContent,
-  HoverCardPortal,
-  HoverCardRoot,
-  HoverCardTrigger,
-} from 'reka-ui';
+import { HoverCardContent, HoverCardPortal, HoverCardRoot, HoverCardTrigger } from 'reka-ui';
 import {
   parseApprovalPolicy,
-  type ThreadApprovalPolicy,
 } from '@iki/backend/workspaces/thread_mode';
 import { storeToRefs } from 'pinia';
 import { resolveThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
@@ -328,7 +322,9 @@ const electronAPI = getElectronAPI();
 const { t } = useI18n();
 const threadSession = useThreadSessionStore();
 const configStore = useConfigStore();
-const autoApproveEnabled = computed(() => configStore.config?.general?.autoApproveToolRequests === true);
+const autoApproveEnabled = computed(
+  () => configStore.config?.general?.autoApproveToolRequests === true
+);
 const approvalPolicy = computed(() => props.approvalPolicy ?? '');
 const permissionPanelOpen = ref(false);
 
@@ -336,9 +332,6 @@ const permissionOptions = computed<
   { value: string; icon: Component; name: string; description: string }[]
 >(() => [
   {
-    // "Default" IS Ask first. It carries the explicit policy value so the
-    // backend never has to guess: an empty policy used to reach the turn as
-    // "no policy given" and degraded to legacy auto-run behaviour.
     value: 'askRisky',
     icon: Settings,
     name: t('chat.input.permission.defaultName'),
@@ -374,8 +367,6 @@ const permissionChipLabel = computed(() => {
 });
 
 const selectApprovalPolicy = (value: string) => {
-  // Always store a concrete policy: an empty value is what made tool turns
-  // reach the backend with no policy at all.
   void threadSession.setApprovalPolicy(parseApprovalPolicy(value) ?? 'askRisky');
   permissionPanelOpen.value = false;
 };
@@ -389,8 +380,6 @@ const {
   selectedWorkspaceId: sessionSelectedWorkspaceId,
 } = storeToRefs(threadSession);
 
-// Plain chats have no workspace concept — the composer no longer renders a
-// picker, but work threads still need one, so the send-guard below remains.
 const isWorkThread = computed(() => resolveThreadWorkMode(currentThread.value) === 'work');
 const emit = defineEmits<{
   'new-chat-requested': [];
@@ -404,7 +393,6 @@ const props = defineProps<{
   submitTurn: (params: SubmitTurnParams) => Promise<SubmitTurnResult>;
   latestTokenUsage?: TokenUsageSummary | null;
   sessionPerfStats?: SessionPerfStats | null;
-  todoPlan?: TaskPlan | null;
 }>();
 
 type ComposerTextControl = HTMLInputElement | HTMLTextAreaElement;
@@ -425,9 +413,7 @@ const message = ref('');
 const attachedImages = ref<FileUIPart[]>([]);
 const viewerSrc = ref('');
 
-const modelSupportsVision = computed(
-  () => selectedModelCapability.value?.supportsVision === true
-);
+const modelSupportsVision = computed(() => selectedModelCapability.value?.supportsVision === true);
 
 const showVisionWarning = computed(
   () => attachedImages.value.length > 0 && !modelSupportsVision.value
@@ -457,7 +443,6 @@ const {
   speechEngineAvailable,
   showWaveform,
   waveformBars,
-  audioEmotion,
   loadSpeechStatus,
   toggleVoiceInput,
   stopVoiceInput,
@@ -499,7 +484,12 @@ const {
 const handlePasteImage = (payload: { mediaType: string; url: string; filename?: string }) => {
   attachedImages.value = [
     ...attachedImages.value,
-    { type: 'file' as const, mediaType: payload.mediaType, url: payload.url, filename: payload.filename },
+    {
+      type: 'file' as const,
+      mediaType: payload.mediaType,
+      url: payload.url,
+      filename: payload.filename,
+    },
   ];
 };
 
@@ -549,7 +539,6 @@ const {
   ensureProviderReady,
   stopVoiceInput,
   attachedImages,
-  audioEmotion,
 });
 sendMessageHandler = sendMessage;
 watchEffect(() => {
@@ -668,7 +657,6 @@ const contextRingToneClass = computed(() => {
 const contextCompositionRows = computed(() =>
   buildContextCompositionRows(props.latestTokenUsage ?? null)
 );
-// Session-cumulative weighted average (same aggregation as the stats bar).
 const contextCacheHitRate = computed(() => {
   const percent = props.sessionPerfStats?.cacheHitPercent ?? null;
   return percent === null ? null : Math.round(percent);

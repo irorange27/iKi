@@ -6,18 +6,12 @@ import { parseAwaiterTriggerSpec, type Awaiter } from '@iki/backend/types/awaite
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { toIsoNow } from '@iki/backend/utils/text';
 import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
+import { rebuildResumeHistoryFromEvents } from '@iki/backend/thread_session/run_rehydrator';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 
 const awaiterLogger = createLogger({ module: 'awaiters' });
 
-/**
- * How long a `waking` row may sit untouched before the scheduler treats its
- * holder as dead and reclaims it. A live wake refreshes `updated_at` as it
- * advances; the cutoff only has to exceed that cadence, and being generous
- * costs nothing (a reclaimed row simply wakes on the next tick) while being
- * too eager would double-run an in-flight wake.
- */
 const WAKE_STALE_AFTER_MS = 10 * 60 * 1000;
 
 const AWAITER_WAKE_SYSTEM_PROMPT = [
@@ -59,11 +53,6 @@ const buildAwaiterWakePrompt = (
   return sections.filter(Boolean).join('\n\n');
 };
 
-/**
- * Host capabilities the runner needs — no Electron types cross this line.
- * The host shell supplies desktop notifications and renderer transport;
- * the chat service is injected at assembly.
- */
 export type AwaiterRunnerHostPort = {
   notify?: (params: { title: string; body: string }) => void;
   pushAwaiterEvent?: (payload: unknown) => void;
@@ -130,51 +119,6 @@ export const createAwaiterRunner = (deps: AwaiterRunnerDeps) => {
   return uiMessage;
 };
 
-const persistWakeEvent = (params: {
-  awaiter: Awaiter;
-  triggerFiredAt: string;
-  outcome: 'success' | 'error';
-  error?: string | null;
-  runId?: string | null;
-}) => {
-  try {
-    awaitersDb.addAwaiterWakeEvent({
-      id: createPrefixedId('awaiter_wake'),
-      awaiter_id: params.awaiter.id,
-      run_id: params.runId ?? null,
-      trigger_fired_at: params.triggerFiredAt,
-      trigger_snapshot_json: JSON.stringify({
-        triggerKind: params.awaiter.trigger_kind,
-        triggerSpec: parseAwaiterTriggerSpec(
-          params.awaiter.trigger_spec_json,
-          params.awaiter.trigger_kind
-        ),
-        scheduledFor: params.awaiter.next_wake_at ?? null,
-      }),
-      outcome: params.outcome,
-      error: params.error ?? null,
-    });
-    return true;
-  } catch (error) {
-    const errorText = getErrorMessage(error);
-    if (errorText.includes('FOREIGN KEY constraint failed')) {
-      awaiterLogger.event({
-        level: 'warn',
-        event: 'awaiter.wake_event',
-        outcome: 'skipped',
-        message: 'Skipped wake audit row because the awaiter was removed before persistence.',
-        error,
-        entity: {
-          awaiter_id: params.awaiter.id,
-          run_id: params.runId ?? null,
-        },
-      });
-      return false;
-    }
-    throw error;
-  }
-};
-
 const isAwaiterRunnable = (awaiter: Awaiter): boolean =>
   awaiter.status === 'armed' || awaiter.status === 'waking';
 
@@ -223,36 +167,11 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
       last_wake_at: startedAt,
       next_wake_at: null,
     });
-    persistWakeEvent({
-      awaiter,
-      triggerFiredAt: startedAt,
-      outcome: 'error',
-      error: 'Target thread is unavailable',
-    });
     return { success: false, error: 'Target thread is unavailable' };
   }
 
   awaiterInFlight.add(awaiterId);
 
-  // CLAIM the wake atomically, CAS on status.
-  //
-  // This used to be an unconditional updateAwaiter(status:'waking'), so two
-  // schedulers sharing one database (the desktop embeds the daemon, so both
-  // processes run a tick) could each read the same due row and both proceed:
-  // one recorded a successful wake, the other recorded "A turn is already
-  // running on this thread". The in-process `awaiterInFlight` set cannot see
-  // across processes.
-  //
-  // The claim is `armed -> waking` via a conditional UPDATE, so exactly one
-  // racer's statement matches a row. It ALSO clears `next_wake_at`: the due
-  // query matches on that column (`status IN ('armed','waking') AND
-  // next_wake_at <= now`), so leaving it set keeps the row selectable for the
-  // whole wake — the next tick re-picks it while the first wake is still
-  // awaiting the model, and the loser records a spurious "A turn is already
-  // running on this thread" (observed live: success at T+0, error at T+2.6s).
-  // Clearing it makes the row invisible to the due query the instant it is
-  // claimed. A row left `waking` by a process that died mid-wake therefore has
-  // no slot and is recovered by `reclaimStaleWakingAwaiters`, not by re-picking.
   const claim = awaitersDb.updateAwaiterIfStatus(awaiterId, 'armed', {
     status: 'waking',
     last_error: null,
@@ -264,14 +183,16 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
   }
 
   try {
-    const messages: import('ai').ModelMessage[] = [
+    const messages: import('../message/model_history').ModelMessage[] = [
       { role: 'system', content: AWAITER_WAKE_SYSTEM_PROMPT },
     ];
 
     if (awaiter.origin_run_id) {
+
       const originRun = agentRunDb.getAgentRun(awaiter.origin_run_id);
-      const resumedMessages = Array.isArray(originRun?.working?.modelMessages)
-        ? (originRun!.working!.modelMessages as import('ai').ModelMessage[])
+      const originThreadId = originRun?.threadId;
+      const resumedMessages = originThreadId
+        ? ((await rebuildResumeHistoryFromEvents(originThreadId))?.history ?? [])
         : [];
       if (resumedMessages.length > 0) {
         messages.push({
@@ -323,17 +244,6 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
         next_wake_at: null,
       });
       if (failureDisposition === 'suppress') {
-        return buildSuppressedAwaiterResult(runId);
-      }
-      if (
-        !persistWakeEvent({
-          awaiter,
-          triggerFiredAt: startedAt,
-          outcome: 'error',
-          error: errorText,
-          runId,
-        })
-      ) {
         return buildSuppressedAwaiterResult(runId);
       }
 
@@ -403,17 +313,6 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
       if (deliveryFailureDisposition === 'suppress') {
         return buildSuppressedAwaiterResult(runId);
       }
-      if (
-        !persistWakeEvent({
-          awaiter,
-          triggerFiredAt: startedAt,
-          outcome: 'error',
-          error: deliveryError,
-          runId,
-        })
-      ) {
-        return buildSuppressedAwaiterResult(runId);
-      }
 
       const failedDeliveryMessage = createThreadMessage({
         awaiter,
@@ -463,16 +362,6 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
     if (completionDisposition === 'suppress') {
       return buildSuppressedAwaiterResult(runId);
     }
-    if (
-      !persistWakeEvent({
-        awaiter,
-        triggerFiredAt: startedAt,
-        outcome: 'success',
-        runId,
-      })
-    ) {
-      return buildSuppressedAwaiterResult(runId);
-    }
 
     const uiMessage = createThreadMessage({
       awaiter,
@@ -511,16 +400,6 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
     if (catchDisposition === 'suppress') {
       return buildSuppressedAwaiterResult();
     }
-    if (
-      !persistWakeEvent({
-        awaiter,
-        triggerFiredAt: startedAt,
-        outcome: 'error',
-        error: errorText,
-      })
-    ) {
-      return buildSuppressedAwaiterResult();
-    }
     return { success: false, error: errorText };
   } finally {
     awaiterInFlight.delete(awaiterId);
@@ -528,15 +407,13 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
 };
 
   let tickInFlight = false;
-  /** One scheduler pass — the host clock calls this. */
+
   const tick = async (): Promise<void> => {
     if (tickInFlight) return;
     tickInFlight = true;
 
     try {
-      // Reclaim rows whose wake holder went silent BEFORE listing due work.
-      // Without this, a `waking` row left by a dead process is refused by the
-      // claim forever and the awaiter never wakes again.
+
       const reclaimed = awaitersDb.reclaimStaleWakingAwaiters(
         new Date(Date.now() - WAKE_STALE_AFTER_MS).toISOString()
       );

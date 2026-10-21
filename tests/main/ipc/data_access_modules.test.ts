@@ -45,23 +45,6 @@ vi.mock('@iki/backend/logger', () => ({
   })),
 }));
 
-vi.mock('@iki/backend/db/affect_state', () => ({
-  getAffectState: vi.fn(),
-}));
-
-vi.mock('@iki/backend/db/memory', () => ({
-  listShortMemory: vi.fn(),
-  addShortMemory: vi.fn(),
-  listShortMemoryAcrossThreads: vi.fn(),
-  addLongMemory: vi.fn(),
-  updateLongMemory: vi.fn(),
-  deleteLongMemory: vi.fn(),
-  listLongMemory: vi.fn(),
-  listLongMemoryAcrossThreads: vi.fn(),
-  searchLongMemory: vi.fn(),
-  searchLongMemoryAcrossThreads: vi.fn(),
-}));
-
 vi.mock('@iki/backend/db/providers', () => ({
   getProviders: vi.fn(),
   getProvider: vi.fn(),
@@ -92,27 +75,12 @@ vi.mock('@iki/backend/db/prompt_apps', () => ({
   updatePromptAppSortOrder: vi.fn(),
 }));
 
-import { registerMemoryIpc } from '../../../packages/desktop/src/main/ipc/memory';
 import { registerPromptAppsIpc } from '../../../packages/desktop/src/main/ipc/prompt_apps';
 import { registerProvidersIpc } from '../../../packages/desktop/src/main/ipc/providers';
 import { registerWorkspacesIpc } from '../../../packages/desktop/src/main/ipc/workspaces';
-import * as affectDb from '@iki/backend/db/affect_state';
-import * as memoryDb from '@iki/backend/db/memory';
 import * as promptAppDb from '@iki/backend/db/prompt_apps';
 import * as providerDb from '@iki/backend/db/providers';
 import * as workspaceDb from '@iki/backend/db/workspaces';
-
-const getAffectStateMock = vi.mocked(affectDb.getAffectState);
-const addLongMemoryMock = vi.mocked(memoryDb.addLongMemory);
-const addShortMemoryMock = vi.mocked(memoryDb.addShortMemory);
-const deleteLongMemoryMock = vi.mocked(memoryDb.deleteLongMemory);
-const listLongMemoryAcrossThreadsMock = vi.mocked(memoryDb.listLongMemoryAcrossThreads);
-const listLongMemoryMock = vi.mocked(memoryDb.listLongMemory);
-const listShortMemoryAcrossThreadsMock = vi.mocked(memoryDb.listShortMemoryAcrossThreads);
-const listShortMemoryMock = vi.mocked(memoryDb.listShortMemory);
-const searchLongMemoryAcrossThreadsMock = vi.mocked(memoryDb.searchLongMemoryAcrossThreads);
-const searchLongMemoryMock = vi.mocked(memoryDb.searchLongMemory);
-const updateLongMemoryMock = vi.mocked(memoryDb.updateLongMemory);
 
 const addPromptAppMock = vi.mocked(promptAppDb.addPromptApp);
 const deletePromptAppMock = vi.mocked(promptAppDb.deletePromptApp);
@@ -139,7 +107,6 @@ const toggleWorkspaceVisibilityMock = vi.mocked(workspaceDb.toggleWorkspaceVisib
 const updateWorkspaceMock = vi.mocked(workspaceDb.updateWorkspace);
 
 beforeAll(() => {
-  registerMemoryIpc();
   registerProvidersIpc();
   registerWorkspacesIpc();
   registerPromptAppsIpc();
@@ -162,66 +129,14 @@ afterEach(() => {
 });
 
 describe('data access IPC modules', () => {
-  it('keeps repeated registration idempotent for memory/providers/workspaces/prompt apps', () => {
+  it('keeps repeated registration idempotent for providers/workspaces/prompt apps', () => {
     const initialCount = ipcHandleMock.mock.calls.length;
 
-    registerMemoryIpc();
     registerProvidersIpc();
     registerWorkspacesIpc();
     registerPromptAppsIpc();
 
     expect(ipcHandleMock).toHaveBeenCalledTimes(initialCount);
-  });
-
-  it('routes memory IPC handlers to the correct database helpers', async () => {
-    listShortMemoryMock.mockReturnValue([{ id: 'short_1' } as never]);
-    addShortMemoryMock.mockReturnValue({ success: true } as never);
-    listShortMemoryAcrossThreadsMock.mockReturnValue([{ id: 'short_all' } as never]);
-    addLongMemoryMock.mockReturnValue({ success: true } as never);
-    updateLongMemoryMock.mockReturnValue({ success: true } as never);
-    deleteLongMemoryMock.mockReturnValue({ success: true } as never);
-    listLongMemoryMock.mockReturnValue([{ id: 'long_1' } as never]);
-    listLongMemoryAcrossThreadsMock.mockReturnValue([{ id: 'long_all' } as never]);
-    searchLongMemoryMock.mockReturnValue([{ id: 'search_1' } as never]);
-    searchLongMemoryAcrossThreadsMock.mockReturnValue([{ id: 'search_all' } as never]);
-    getAffectStateMock.mockReturnValue({ thread_id: 'thread_1' } as never);
-
-    const shortEntry = { thread_id: 'thread_1', message_id: 'message_1', role: 'user', content: 'hi' };
-    const longEntry = { thread_id: 'thread_1', summary: 'summary' };
-    const longUpdates = { summary: 'updated' };
-    const searchOptions = { limit: 3, threshold: 0.2 };
-
-    expect(await ipcHandlers.get('memory:short:list')?.(null, 'thread_1', 5)).toEqual([{ id: 'short_1' }]);
-    expect(await ipcHandlers.get('memory:short:add')?.(null, shortEntry)).toEqual({ success: true });
-    expect(await ipcHandlers.get('memory:short:listAll')?.(null, 10)).toEqual([{ id: 'short_all' }]);
-    expect(await ipcHandlers.get('memory:long:add')?.(null, longEntry)).toEqual({ success: true });
-    expect(await ipcHandlers.get('memory:long:update')?.(null, 'long_1', longUpdates)).toEqual({
-      success: true,
-    });
-    expect(await ipcHandlers.get('memory:long:delete')?.(null, 'long_1')).toEqual({ success: true });
-    expect(await ipcHandlers.get('memory:long:list')?.(null, 'thread_1', 4)).toEqual([{ id: 'long_1' }]);
-    expect(await ipcHandlers.get('memory:long:listAll')?.(null, 4)).toEqual([{ id: 'long_all' }]);
-    expect(await ipcHandlers.get('memory:long:search')?.(null, 'thread_1', 'topic', searchOptions)).toEqual([
-      { id: 'search_1' },
-    ]);
-    expect(await ipcHandlers.get('memory:long:searchAll')?.(null, 'topic', searchOptions)).toEqual([
-      { id: 'search_all' },
-    ]);
-    expect(await ipcHandlers.get('memory:affect:get')?.(null, 'thread_1')).toEqual({
-      thread_id: 'thread_1',
-    });
-
-    expect(listShortMemoryMock).toHaveBeenCalledWith('thread_1', 5);
-    expect(addShortMemoryMock).toHaveBeenCalledWith(shortEntry);
-    expect(listShortMemoryAcrossThreadsMock).toHaveBeenCalledWith(10);
-    expect(addLongMemoryMock).toHaveBeenCalledWith(longEntry, { force: true });
-    expect(updateLongMemoryMock).toHaveBeenCalledWith('long_1', longUpdates);
-    expect(deleteLongMemoryMock).toHaveBeenCalledWith('long_1');
-    expect(listLongMemoryMock).toHaveBeenCalledWith('thread_1', 4);
-    expect(listLongMemoryAcrossThreadsMock).toHaveBeenCalledWith(4);
-    expect(searchLongMemoryMock).toHaveBeenCalledWith('thread_1', 'topic', searchOptions);
-    expect(searchLongMemoryAcrossThreadsMock).toHaveBeenCalledWith('topic', searchOptions);
-    expect(getAffectStateMock).toHaveBeenCalledWith('thread_1');
   });
 
   it('forwards provider IPC handlers and rethrows write errors after logging', async () => {
@@ -239,12 +154,17 @@ describe('data access IPC modules', () => {
     expect(await ipcHandlers.get('providers:add')?.(null, { id: 'provider_new' })).toEqual({
       id: 'provider_new',
     });
-    expect(await ipcHandlers.get('providers:update')?.(null, 'provider_1', { enabled: true })).toEqual({
+    expect(
+      await ipcHandlers.get('providers:update')?.(null, 'provider_1', { enabled: true })
+    ).toEqual({
       success: true,
     });
-    expect(await ipcHandlers.get('providers:delete')?.(null, 'provider_1')).toEqual({ success: true });
+    expect(await ipcHandlers.get('providers:delete')?.(null, 'provider_1')).toEqual({
+      success: true,
+    });
     const providerUpdateEvents = providerWindowSendMock.mock.calls.filter(
-      (call): call is [string, { action: string; providerId: string }] => call[0] === 'providers:updated'
+      (call): call is [string, { action: string; providerId: string }] =>
+        call[0] === 'providers:updated'
     );
     expect(providerUpdateEvents).toEqual([
       [
@@ -301,8 +221,6 @@ describe('data access IPC modules', () => {
         error: updateError,
       })
     );
-    // ponytail: CI can push this case past the 5s default under load (it runs ~22ms
-    // locally). Per-case timeout only — a global testTimeout would slow real hangs.
   }, 15000);
 
   it('creates workspace records with normalized defaults and forwards remaining workspace handlers', async () => {
@@ -311,7 +229,7 @@ describe('data access IPC modules', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.123456789);
 
     getWorkspacesMock.mockReturnValue([{ id: 'workspace_1' } as never]);
-    getWorkspaceMock.mockImplementation((id: string) => ({ id, name: 'Workspace' } as never));
+    getWorkspaceMock.mockImplementation((id: string) => ({ id, name: 'Workspace' }) as never);
     getWorkspaceByPathMock.mockReturnValue({ id: 'workspace_path' } as never);
     getVisibleWorkspacesMock.mockReturnValue([{ id: 'workspace_visible' } as never]);
     updateWorkspaceMock.mockReturnValue({ success: true } as never);
@@ -361,7 +279,9 @@ describe('data access IPC modules', () => {
     });
     expect(getWorkspaceMock).toHaveBeenCalledWith(createdWorkspaceId);
 
-    expect(await ipcHandlers.get('workspaces:update')?.(null, 'workspace_1', { name: 'Renamed' })).toEqual({
+    expect(
+      await ipcHandlers.get('workspaces:update')?.(null, 'workspace_1', { name: 'Renamed' })
+    ).toEqual({
       success: true,
     });
     expect(await ipcHandlers.get('workspaces:delete')?.(null, 'workspace_1')).toEqual({
@@ -378,7 +298,7 @@ describe('data access IPC modules', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.987654321);
 
     getPromptAppsMock.mockReturnValue([{ id: 'app_1' } as never]);
-    getPromptAppMock.mockImplementation((id: string) => ({ id, name: 'Prompt App' } as never));
+    getPromptAppMock.mockImplementation((id: string) => ({ id, name: 'Prompt App' }) as never);
     getEnabledPromptAppsMock.mockReturnValue([{ id: 'app_enabled' } as never]);
     updatePromptAppMock.mockReturnValue({ success: true } as never);
     deletePromptAppMock.mockReturnValue({ success: true } as never);
@@ -421,7 +341,9 @@ describe('data access IPC modules', () => {
       font_size: null,
     });
 
-    expect(await ipcHandlers.get('promptApps:update')?.(null, 'app_1', { description: 'Updated' })).toEqual({
+    expect(
+      await ipcHandlers.get('promptApps:update')?.(null, 'app_1', { description: 'Updated' })
+    ).toEqual({
       success: true,
     });
     expect(await ipcHandlers.get('promptApps:delete')?.(null, 'app_1')).toEqual({ success: true });

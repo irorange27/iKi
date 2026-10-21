@@ -2,7 +2,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
-import type { UIMessage } from 'ai';
+import type { ChatUiMessage as UIMessage } from '@iki/backend/message/message_parts';
 
 import ToolCallPart from '../../../packages/desktop/src/renderer/components/chat/ToolCallPart.vue';
 import {
@@ -134,36 +134,4 @@ describe('ToolCallPart', () => {
     expect(wrapper.text()).toContain('MCP Server: Docs Server');
   });
 
-  it('hides thread-scoped todo tool parts from the transcript', () => {
-    const wrapper = mount(ToolCallPart, {
-      props: {
-        approvalProcessing: false,
-        mcpServerLabel: '',
-        message: createMessage(),
-        part: {
-          type: 'tool-result',
-          toolCallId: 'call_todo',
-          toolName: 'todo',
-          state: 'output-available',
-          input: {
-            items: [
-              { id: '1', text: 'Inspect current code', status: 'completed' },
-              { id: '2', text: 'Implement fix', status: 'in_progress' },
-              { id: '3', text: 'Run tests', status: 'pending' },
-            ],
-          },
-          output: {
-            items: [
-              { id: '1', text: 'Inspect current code', status: 'completed' },
-              { id: '2', text: 'Implement fix', status: 'in_progress' },
-              { id: '3', text: 'Run tests', status: 'pending' },
-            ],
-          },
-        },
-      },
-    });
-
-    expect(wrapper.find('.tool-result-content').exists()).toBe(false);
-    expect(wrapper.text()).toBe('');
-  });
 });

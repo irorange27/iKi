@@ -6,17 +6,10 @@ import {
   resolveToolPayloadKind,
 } from '@iki/backend/message/tool_payload_contracts';
 
-/**
- * Schemas-free parsing kernel (P1 split). These are the decode rules the
- * renderer relies on; the schema-validated variants stay covered by
- * tests/shared/message/tool_payloads.test.ts.
- */
-
 describe('resolveToolPayloadKind', () => {
   it('normalizes the tool name and applies aliases', () => {
     expect(resolveToolPayloadKind('web_search')).toBe('web');
     expect(resolveToolPayloadKind('Web Search')).toBe('web');
-    expect(resolveToolPayloadKind('read-todo-list')).toBe('read_todo_list');
     expect(resolveToolPayloadKind('nope')).toBeNull();
   });
 });

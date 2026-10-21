@@ -58,7 +58,6 @@ describe('ChatModelSelector', () => {
     await wrapper.find('.model-selector-trigger').trigger('click');
     await flushPromises();
 
-    // The menu opens on the root pane; models live behind the drill-in cell.
     const menuCells = wrapper.findAll('.model-menu-cell');
     expect(menuCells.length).toBe(2);
     await menuCells[0].trigger('click');
@@ -150,8 +149,6 @@ describe('ChatModelSelector', () => {
       base_url: 'https://gateway.example.com/v1',
       api_key: 'gateway-key',
     });
-    // A provider the user just saved in settings but has not enabled any model
-    // for yet — it must still be listed, otherwise it can never be selected.
     const withoutModels = buildProvider({
       id: 'deepseek_new',
       name: 'DeepSeek',
@@ -172,7 +169,6 @@ describe('ChatModelSelector', () => {
     await wrapper.find('.model-selector-trigger').trigger('click');
     await flushPromises();
 
-    // root pane -> model list pane
     await wrapper.find('.model-menu-cell').trigger('click');
     await flushPromises();
 

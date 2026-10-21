@@ -139,7 +139,7 @@ const writeDaemonEntry = (
       entry
     );
   } catch {
-    // Best-effort logging only. Keep the in-memory buffer available for diagnostics.
+    // Intentionally ignored: the caller cannot act on it.
   }
 
   return daemonEntry;
@@ -255,7 +255,7 @@ export const recordNapCatMessagePreview = (
       napcatPreviewBuffer
     );
   } catch {
-    // Best-effort preview persistence only. Keep the in-memory buffer available for diagnostics.
+    // Intentionally ignored: the caller cannot act on it.
   }
 
   return normalized;

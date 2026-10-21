@@ -40,8 +40,6 @@ const jsonResponse = (payload: unknown, ok = true) => ({
 
 describe('live provider model discovery', () => {
   beforeEach(() => {
-    // clearAllMocks drops calls but keeps implementations, so reset those too —
-    // otherwise one test's mockResolvedValue leaks into the next.
     vi.resetAllMocks();
     resetModelDiscoveryCacheForTests();
     fetchModelsFromDevMock.mockResolvedValue([]);
@@ -100,8 +98,6 @@ describe('live provider model discovery', () => {
     });
 
     it('falls through to the next candidate URL when the first is not ok', async () => {
-      // An Ollama host has two candidates (/api/tags, then /v1/models); a plain
-      // base URL has one, so the fall-through path needs the two-candidate host.
       fetchWithTimeoutMock
         .mockResolvedValueOnce(jsonResponse({}, false))
         .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'fallback-model' }] }));
@@ -131,9 +127,6 @@ describe('live provider model discovery', () => {
   });
 
   describe('real-world response shapes', () => {
-    // A local router (e.g. a magpie-style gateway on 127.0.0.1) answers
-    // /v1/models with the OpenAI `data` envelope but each entry also carries
-    // capability fields. The ids must still be read out correctly.
     it('reads ids from a router that decorates each model entry', async () => {
       const payload = {
         object: 'list',

@@ -1,16 +1,12 @@
-import { generateText, smoothStream, type LanguageModel, type ModelMessage } from 'ai';
-import type { JSONValue, SharedV3ProviderOptions } from '@ai-sdk/provider';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createOpenAI } from '@ai-sdk/openai';
-import { createDeepSeek } from '@ai-sdk/deepseek';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { createMiniMax } from '@ai-sdk/minimax';
+
+import type { JSONValue, SharedV3ProviderOptions } from './wire_types';
+import type { ModelMessage } from '@iki/backend/message/model_history';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { getProviders } from '../../db/providers';
 import { createLogger } from '@iki/backend/logger';
-import { langfuseTelemetry, tracePiGeneration } from '@iki/backend/observability/langfuse';
+import { tracePiGeneration } from '@iki/backend/observability/langfuse';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
 import {
@@ -24,14 +20,15 @@ import {
   type ModelsDevCatalog,
 } from '@iki/backend/utils/provider_models';
 import type {
-  ProviderModelDiscoveryOverride,
   ProviderModelOptions,
   ProviderModelOptionsMap,
 } from '@iki/backend/types/provider';
 import type { TokenUsageMetrics } from '@iki/backend/types/chat_usage';
 import { getErrorMessage } from '@iki/backend/utils/errors';
-import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
-import { normalizeLanguageModelUsage } from './usage';
+import {
+  assembleAuxRequestSystemPrompt,
+  assembleRequestSystemPrompt,
+} from '@iki/backend/message/system_prompt';
 import {
   buildPiModel,
   callPiChat,
@@ -44,25 +41,8 @@ const MODELS_DEV_CACHE_TTL_MS = 3600000;
 const MODELS_DEV_TIMEOUT_MS = 1200;
 const MODELS_DEV_FAILURE_COOLDOWN_MS = 300000;
 
-/**
- * Context window assumed when the catalog has no record for the model
- * (custom openai-compatible endpoints, catalog unreachable). Large enough
- * that the window itself never truncates a legit request; the token
- * budget the harnesses enforce comes from the capability resolver, not
- * from here.
- */
 const PI_DEFAULT_CONTEXT_WINDOW = 128000;
 
-/**
- * The D35 bridge: peek the CACHED catalog for this model and build the
- * capability half of a Pi model from it. Synchronous by design — a model
- * call must never block on the network for a price list. Uses the same
- * in-memory snapshot every other capability consumer reads, refreshed in
- * the background by startModelsDevCatalogRefresh; a cold cache simply
- * yields no capability and the pre-D35 defaults (text-only, zero cost)
- * apply for this call. Stored provider/model options DO override the
- * catalog, exactly as resolveModelCapability composes them.
- */
 export const resolvePiModelCapability = (params: {
   providerType: string;
   modelId: string;
@@ -94,11 +74,6 @@ export const resolvePiModelCapability = (params: {
     );
     if (!capability) return null;
 
-    // A stored maxInputTokens override can be TIGHTER than the catalog's
-    // context window (the budget then uses the tighter one). Advertising the
-    // larger number on the Pi model would let the model object claim room
-    // the budget will not grant, so the Pi window is the min of the two —
-    // the consumer can only be wrong in the safe direction.
     const storedInputLimit = capability.maxInputTokens;
     const catalogWindow = capability.contextWindow;
 
@@ -112,9 +87,7 @@ export const resolvePiModelCapability = (params: {
       ...(capability.costPerMillionTokens ? { cost: capability.costPerMillionTokens } : {}),
     };
   } catch {
-    // A provider row that cannot be read (not configured, DB unavailable)
-    // must not turn a working AI-SDK-path model into a Pi-path failure:
-    // return null so buildPiModel falls back to its defaults.
+
     return null;
   }
 };
@@ -138,22 +111,6 @@ export interface ChatGenerationResult {
   text: string;
   usage: TokenUsageMetrics;
 }
-
-const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const isLanguageModelInstance = (value: unknown): value is LanguageModel => {
-  if (!isObjectRecord(value)) return false;
-
-  return (
-    value.specificationVersion === 'v3' &&
-    typeof value.provider === 'string' &&
-    typeof value.modelId === 'string' &&
-    typeof value.doGenerate === 'function' &&
-    typeof value.doStream === 'function' &&
-    'supportedUrls' in value
-  );
-};
 
 const readBootstrapAuthConfig = (providerType: string): ProviderConfig | null => {
   try {
@@ -181,7 +138,7 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
   try {
     providers = getProviders();
   } catch {
-    // DB unavailable — fall through to auth.json bootstrap
+    // Intentionally ignored: the caller cannot act on it.
   }
   const normalizedProviderId =
     typeof providerId === 'string' && providerId.trim().length > 0 ? providerId.trim() : '';
@@ -193,7 +150,7 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
     if (normalizedProviderId) {
       throw new Error(`Provider ${normalizedProviderId} is not configured or not enabled`);
     }
-    // Fallback to auth.json bootstrap before throwing
+
     const bootstrap = readBootstrapAuthConfig(providerType);
     if (bootstrap) return bootstrap;
     throw new Error(`Provider ${providerType} not configured or not enabled`);
@@ -216,12 +173,6 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
     modelOptions: parseProviderModelOptionsMap(provider.model_options),
     isResponseApi: provider.is_response_api === true,
   };
-};
-
-const normalizeOptionalString = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
 };
 
 const getStoredProviderModelOptions = (
@@ -347,7 +298,7 @@ export const getModelGenerationSettings = (params: {
   modelId: string;
   providerId?: string | null;
   temperature?: number;
-  /** Per-call reasoning effort override; wins over stored provider model options. */
+
   reasoningEffort?: string;
 }): { providerOptions?: SharedV3ProviderOptions; temperature?: number } => {
   const storedCallSettings = getModelCallSettings(params.providerType, params.modelId, params.providerId);
@@ -382,227 +333,46 @@ const createInstrumentedFetch = (): typeof globalThis.fetch => {
         }
         return globalThis.fetch(input, { ...init, body: JSON.stringify(body) });
       } catch {
-        // If we can't parse the body, pass through unchanged
-      }
+    // Intentionally ignored: the caller cannot act on it.
+  }
     }
     return globalThis.fetch(input, init);
   };
 };
 
-/**
- * Per-provider model wiring for the static provider types. Each entry
- * owns its SDK client construction and default endpoint; providers absent from
- * this table fall through to isResponseApi handling or the OpenAI-compatible path.
- */
-const STATIC_PROVIDER_MODEL_FACTORIES: Record<string, (config: ProviderConfig, modelId: string) => LanguageModel> = {
-  openai: (config, modelId) => {
-    const client = createOpenAI({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.openai.com/v1',
-    });
-    return client(modelId);
-  },
-  anthropic: (config, modelId) => {
-    const model = createAnthropic({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.anthropic.com/v1',
-    })(modelId);
-    if (!isLanguageModelInstance(model)) {
-      throw new Error(`Anthropic provider returned an invalid language model for "${modelId}".`);
-    }
-    return model;
-  },
-  'anthropic-compatible': (config, modelId) => {
-    const model = createAnthropic({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.anthropic.com/v1',
-      name: 'anthropic-compatible',
-    })(modelId);
-    if (!isLanguageModelInstance(model)) {
-      throw new Error(`Anthropic provider returned an invalid language model for "${modelId}".`);
-    }
-    return model;
-  },
-  deepseek: (config, modelId) => {
-    const client = createDeepSeek({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.deepseek.com/v1',
-    });
-    return client(modelId);
-  },
-  minimax: (config, modelId) => {
-    const model = createMiniMax({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.minimax.io/anthropic/v1',
-    })(modelId);
-    if (!isLanguageModelInstance(model)) {
-      throw new Error(`MiniMax provider returned an invalid language model for "${modelId}".`);
-    }
-    return model;
-  },
-};
-
-export const createModel = (
-  providerType: string,
-  modelId: string,
-  providerId?: string | null
-): LanguageModel => {
-  const config = getProviderConfig(providerType, providerId);
-
-  // Validations: If no modelId, try to pick the first one from config
-  if (!modelId && config.models.length > 0) {
-    modelId = config.models[0];
-  }
-
-  if (!modelId) {
-    throw new Error(
-      `Model not specified for provider "${providerType}". Please select a model in chat or update settings.`
-    );
-  }
-
-  const storedModelOptions = getProviderModelOptions(config.modelOptions, modelId);
-
-  const staticFactory = STATIC_PROVIDER_MODEL_FACTORIES[providerType];
-  if (staticFactory) {
-    return staticFactory(config, modelId);
-  }
-
-  if (config.isResponseApi) {
-    const client = createOpenAI({
-      name: providerType,
-      apiKey: config.apiKey,
-      baseURL: config.baseURL,
-    });
-    return client.responses(modelId);
-  }
-
-  // Default to OpenAI compatible for most other providers
-  const client = createOpenAICompatible({
-    name: providerType,
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-    fetch: createInstrumentedFetch(),
-  });
-  if (typeof storedModelOptions?.supportsStructuredOutputs === 'boolean') {
-    return client.languageModel(modelId, {
-      supportsStructuredOutputs: storedModelOptions.supportsStructuredOutputs,
-    });
-  }
-
-  return client(modelId);
-};
-
-/**
- * Dispose a language model after a call. The AI SDK model objects are inert
- * today, so this is a deliberate no-op — kept as the caller-side teardown
- * point the runners already call in `finally` (ACP's model needed cleanup;
- * that path is gone, and a future one re-implements this body).
- */
-export const disposeLanguageModel = (_model: LanguageModel): void => {
-  // Intentionally empty: see the doc comment above.
-};
-
-/** The persona SECTION of a request system prompt — named for exactly what
- * it returns: identity, date/timezone, OS, cwd (text owned by src/persona.ts).
- * The provider lookup doubles as an existence check, so this throws for an
- * unconfigured provider. Placement and joining are
- * message/system_prompt.ts's contract (`assembleRequestSystemPrompt`). */
 export const resolvePersonaPrompt = (providerType: string, providerId?: string | null) => {
   getProviderConfig(providerType, providerId);
   const personaPrompt = getPersonaPrompt();
   return personaPrompt;
 };
-/** Providers whose default openai-compatible branch the Pi supply layer
- * serves (ADR 007 first switch path). Static-factory providers (openai,
- * anthropic, anthropic-compatible, deepseek, minimax) and the Responses API
- * stay on the AI SDK until their own switch items land.
- * Wire deltas vs the AI SDK path (documented, tracked): maxTokens rides
- * max_completion_tokens for unknown baseUrls (no compat escape yet), the
- * request is streaming-shaped, and createInstrumentedFetch's unconditional
- * reasoning-disabled injection does not apply. Everything else is held equal
- * by buildPiModel's pinned protocol fields (system role, no `thinking`
- * injection, no reasoning_effort) — see the adapter for why the catalog's
- * reasoning flag must never drive the Pi model. */
-/**
- * Which protocol dialect a provider's traffic speaks.
- *
- * Policy (product): prefer the Responses API wherever the provider supports it;
- * chat completions is the floor for gateways that only speak it. The table
- * below is therefore NOT "what the old AI SDK client happened to do" — it is
- * the provider's real capability, cross-checked against Pi's own catalog
- * (`@earendil-works/pi-ai/dist/providers/data/*.json`), which is the authority
- * on which api each provider serves:
- *
- *   openai-responses   → openai, cloudflare-ai-gateway, github-copilot, meta,
- *                        opencode, opencode-go, xai
- *   anthropic-messages → anthropic, minimax(-cn), openrouter, fireworks, …
- *   openai-completions → deepseek, groq, cerebras, together, baseten, …
- *
- * "Prefer responses" is applied through CAPABILITY, not by blanket default:
- * forcing responses onto a completions-only provider (DeepSeek, whose catalog
- * entry says `openai-completions`) would 404 every call. A custom/gateway row
- * is the one place the operator decides — `is_response_api` is that
- * declaration and always wins.
- *
- * This is the ONE place that answers the question, so the supply predicate and
- * every Pi model build share it. Before it existed the dialect was implied by
- * which AI SDK factory was selected — knowledge that lived nowhere and could
- * not be carried onto the Pi model.
- */
+
 const STATIC_PROVIDER_API: Partial<Record<string, 'openai-responses' | 'anthropic-messages'>> = {
-  // Responses-capable (Pi catalog: `openai-responses`).
+
   openai: 'openai-responses',
-  // Messages-capable (Pi catalog: `anthropic-messages`). MiniMax's endpoint is
-  // `/anthropic/v1`, and the compatible gateway speaks the same protocol.
+
   anthropic: 'anthropic-messages',
   'anthropic-compatible': 'anthropic-messages',
   minimax: 'anthropic-messages',
-  // Everything else — deepseek included — speaks OpenAI chat completions, the
-  // default below.
+
 };
 
 export const resolveProviderApi = (
   providerType: string,
   config: Pick<ProviderConfig, 'isResponseApi'>
 ): 'openai-completions' | 'openai-responses' | 'anthropic-messages' => {
-  // An explicit flag wins over the type's default: a row can point a
-  // Responses-style type at a chat-completions gateway, and a custom row can
-  // declare a Responses-capable gateway the type cannot express.
+
   if (config.isResponseApi) return 'openai-responses';
   const declared = STATIC_PROVIDER_API[providerType];
   if (declared) return declared;
-  // Chat completions is the universal floor: every OpenAI-compatible gateway
-  // speaks it, so an unknown provider still works.
+
   return 'openai-completions';
 };
 
 const supportsPiGeneration = (_providerType: string, config: ProviderConfig): boolean =>
-  // Neither a static-factory provider type nor `isResponseApi` is an exclusion
-  // any more: Pi drives openai-completions, openai-responses and
-  // anthropic-messages natively, so every provider iKi shipped an AI SDK client
-  // for is served by the same supply. The dialect is chosen by
-  // resolveProviderApi and carried onto the model.
+
   typeof config.baseURL === 'string' &&
   config.baseURL.trim().length > 0;
 
-/**
- * Per-request admission for the Pi streaming-turn supply (switch item 2c):
- * the provider predicate AND the projection domain gate in one decision.
- * The dry-run is the domain test (ADR 007 decision 2) — history carrying
- * parts outside the projection's covered domain keeps the AI SDK harness,
- * and coverage widening re-routes automatically. A missing provider config
- * also returns false: the AI SDK harness's createModel then raises today's
- * exact error surface.
- */
-/**
- * The supply decision, with the reason it can be refused.
- *
- * A bare boolean forced every caller to invent its own story for "why not Pi",
- * and the turn silently re-routed to the AI SDK with only a log line behind it.
- * Carrying the reason lets the selector REFUSE the turn and say what part of
- * the history the Pi projection could not represent — the user sees the cause
- * instead of a different executor running their turn.
- */
 export type PiTurnSupplyDecision =
   | { admitted: true; reason?: never; cause?: never }
   | { admitted: false; reason: string; cause: 'config' | 'domain' };
@@ -642,20 +412,6 @@ export const resolvePiTurnSupply = (params: {
   }
 };
 
-export const supportsPiTurnSupply = (params: {
-  providerType: string;
-  providerId?: string;
-  modelId: string;
-  history: ModelMessage[];
-}): boolean => resolvePiTurnSupply(params).admitted;
-
-/**
- * Single-shot generation over the Pi supply layer (ADR 007, switch item 1).
- * Text-only: no tools, no inner loop. The transcript is projected by
- * projectHistoryToPiContext; usage maps onto the total-prompt convention
- * (projectUsageToIki). The model carries the catalog capability (D35:
- * modalities for image projection, cost rates so estimatedCostUsd is real).
- */
 const generateViaPi = async (
   options: {
     providerType: string;
@@ -663,11 +419,8 @@ const generateViaPi = async (
     modelId: string;
     messages: ModelMessage[];
     extraSystemPrompt?: string;
-    /** The EXACT request system prompt — skips the persona/extra/transcript
-     * assembly entirely (aux callers with their own context, e.g. the
-     * runtimes). A leading system message in `messages` still folds into the
-     * projection's slot but is superseded by the override. */
-    systemPromptOverride?: string;
+
+    auxSystemInstruction?: string;
     temperature?: number;
     maxOutputTokens?: number;
     threadId?: string;
@@ -685,9 +438,7 @@ const generateViaPi = async (
     providerType: config.type,
     baseUrl: config.baseURL,
     api: resolveProviderApi(options.providerType, config),
-    // Single-shot generation enforces no context budget in the AI SDK path
-    // either (only maxOutputTokens), so the window here is informational;
-    // the catalog's own value is used when the snapshot has one.
+
     contextWindow: capability?.contextWindow ?? PI_DEFAULT_CONTEXT_WINDOW,
     maxTokens: options.maxOutputTokens ?? capability?.maxTokens ?? 4096,
     ...(capability?.input ? { input: capability.input } : {}),
@@ -699,14 +450,17 @@ const generateViaPi = async (
     options.modelId,
     options.providerType
   );
-  const assembled = assembleRequestSystemPrompt([
-    { slot: 'persona', text: personaPrompt },
-    ...(typeof options.extraSystemPrompt === 'string'
-      ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
-      : []),
-    { slot: 'transcriptSystem', text: transcriptSystem },
-  ]);
-  const systemPrompt = options.systemPromptOverride ?? assembled.prompt;
+
+  const systemPrompt =
+    typeof options.auxSystemInstruction === 'string'
+      ? assembleAuxRequestSystemPrompt({ instruction: options.auxSystemInstruction }).prompt
+      : assembleRequestSystemPrompt([
+          { slot: 'persona', text: personaPrompt },
+          ...(typeof options.extraSystemPrompt === 'string'
+            ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
+            : []),
+          { slot: 'transcriptSystem', text: transcriptSystem },
+        ]).prompt;
 
   try {
     const settle = await tracePiGeneration(
@@ -738,7 +492,7 @@ const generateViaPi = async (
           );
           const resultPromise = eventStream.result();
           for await (const _event of eventStream) {
-            void _event; // drain: the final message carries text and usage
+            void _event;
           }
           const final = await resultPromise;
 
@@ -746,10 +500,7 @@ const generateViaPi = async (
             .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
             .map(block => block.text)
             .join('');
-          // Pi resolves provider failures into a result message — the event
-          // stream never rejects. The stopReason is the failure surface:
-          // swallowing it would surface a dead upstream as an empty-text
-          // success.
+
           if (final.stopReason === 'aborted' || final.stopReason === 'error') {
             const failure =
               final.stopReason === 'aborted'
@@ -794,8 +545,7 @@ const generateViaPi = async (
         cacheReadTokens: usage.cacheReadTokens,
         cacheWriteTokens: usage.cacheWriteTokens,
         reasoningTokens: usage.reasoningTokens,
-        // Pi computed this from the model's catalog rates (D35); 0 when the
-        // model carries none.
+
         estimatedCostUsd: final.usage.cost.total,
       },
     };
@@ -818,103 +568,27 @@ export const generateChatWithModelMessages = async (options: {
   modelId: string;
   messages: ModelMessage[];
   extraSystemPrompt?: string;
-  /** The EXACT request system prompt — skips the persona/extra assembly and
-   * the projection's system slot (aux callers with their own context, e.g.
-   * the runtimes). Applied on BOTH supply paths. */
-  systemPromptOverride?: string;
+
+  auxSystemInstruction?: string;
   temperature?: number;
-  /** AI-SDK-path generation options (providerOptions with reasoning-effort
-   * settings) — spread after getModelCallSettings so the caller wins. The Pi
-   * path drops it (tracked wire delta, same family as #107's). */
+
   providerOptions?: SharedV3ProviderOptions;
   maxOutputTokens?: number;
-  /** Optional thread id — forwarded to Langfuse as sessionId. */
+
   threadId?: string;
-  /** Cooperative cancellation (send execution aborts on lease loss). */
+
   abortSignal?: AbortSignal;
 }): Promise<ChatGenerationResult> => {
   const config = getProviderConfig(options.providerType, options.providerId);
-  let usePi = supportsPiGeneration(options.providerType, config);
-  if (usePi) {
-    // Per-request domain gate (ADR 007 decision 2): requests whose history
-    // carries parts outside the projection's covered domain (multimodal
-    // today) stay on the AI SDK until their own switch items land. The
-    // projection itself is the domain test — coverage widening automatically
-    // re-routes, and the fallback never sees a projection throw.
-    try {
-      projectHistoryToPiContext(options.messages, options.modelId, options.providerType);
-    } catch (error) {
-      usePi = false;
-      factoryLogger.event({
-        level: 'info',
-        outcome: 'degraded',
-        event: 'llm.generate.supply_fallback',
-        message: 'History outside the Pi projection domain — using the AI SDK path.',
-        data: {
-          providerType: options.providerType,
-          modelId: options.modelId,
-          reason: getErrorMessage(error),
-        },
-      });
-    }
-  }
-  if (usePi) {
-    return generateViaPi(options, config);
-  }
-  const model = createModel(options.providerType, options.modelId, options.providerId);
-  const assembled = assembleRequestSystemPrompt([
-    { slot: 'persona', text: resolvePersonaPrompt(options.providerType, options.providerId) },
-    ...(typeof options.extraSystemPrompt === 'string'
-      ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
-      : []),
-  ]);
-  const systemPrompt = options.systemPromptOverride ?? assembled.prompt;
+  if (!supportsPiGeneration(options.providerType, config)) {
 
-  try {
-    const telemetry = langfuseTelemetry('chat.generate', {
-      sessionId: options.threadId,
-      provider: options.providerType,
-      providerId: options.providerId,
-      model: options.modelId,
-    });
-    const result = await generateText({
-      model,
-      system: systemPrompt,
-      messages: injectReasoningContentIntoMessages(options.messages),
-      ...getModelCallSettings(options.providerType, options.modelId, options.providerId),
-      ...(options.providerOptions ? { providerOptions: options.providerOptions } : {}),
-      ...(typeof options.temperature === 'number' ? { temperature: options.temperature } : {}),
-      ...(typeof options.maxOutputTokens === 'number'
-        ? { maxOutputTokens: options.maxOutputTokens }
-        : {}),
-      ...(options.abortSignal ? { abortSignal: options.abortSignal } : {}),
-      ...(telemetry ? { experimental_telemetry: telemetry } : {}),
-    });
-
-    if (!result.text) {
-      factoryLogger.event({
-        level: 'warn',
-        event: 'llm.generate.empty',
-        outcome: 'degraded',
-        message: `Generation produced no text for provider "${options.providerType}" model "${options.modelId}".`,
-        data: { providerType: options.providerType, modelId: options.modelId },
-      });
-    }
-    return {
-      text: result.text,
-      usage: normalizeLanguageModelUsage(result.totalUsage || result.usage),
-    };
-  } catch (error) {
-    factoryLogger.event({
-      level: 'error',
-      event: 'llm.generate.failed',
-      outcome: 'failed',
-      message: `Generation failed for provider "${options.providerType}" model "${options.modelId}".`,
-      error,
-      data: { providerType: options.providerType, modelId: options.modelId },
-    });
-    throw error;
+    throw new Error(
+      `Provider "${options.providerType}" cannot be served: it has no base URL, so no model endpoint can be addressed.`
+    );
   }
+
+  projectHistoryToPiContext(options.messages, options.modelId, options.providerType);
+  return generateViaPi(options, config);
 };
 
 export const fetchModelsFromDev = async (providerType: string) => {
@@ -1024,34 +698,6 @@ export const resolveModelCapability = async (
   const baseCapability = await fetchModelCapabilityFromDev(providerType, trimmedModelId);
 
   return mergeModelCapability(baseCapability, providerType, trimmedModelId, modelOptions);
-};
-
-/**
- * Inject reasoning_content from reasoning content parts into each assistant
- * message's providerOptions, so that @ai-sdk/openai-compatible (and similar
- * providers) include it in the API request body. Needed for providers like MIMO
- * that require reasoning_content be passed back across all turns.
- */
-export const injectReasoningContentIntoMessages = (
-  messages: ModelMessage[],
-): ModelMessage[] => {
-  return messages.map(msg => {
-    if (msg.role !== 'assistant') return msg;
-    if (!Array.isArray(msg.content)) return msg;
-    const reasoningParts = msg.content.filter(p => p.type === 'reasoning');
-    if (reasoningParts.length === 0) return msg;
-    const reasoningContent = reasoningParts.map(p => p.text).join('');
-    return {
-      ...msg,
-      providerOptions: {
-        ...msg.providerOptions,
-        openaiCompatible: {
-          ...(msg.providerOptions?.openaiCompatible ?? {}),
-          reasoning_content: reasoningContent,
-        },
-      },
-    };
-  });
 };
 
 export const resetModelsDevCatalogCacheForTests = () => {

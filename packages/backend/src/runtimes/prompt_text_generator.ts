@@ -1,7 +1,5 @@
-import {
-  appendUserPromptToHistory,
-  buildPromptContext,
-} from '../provider/ai_sdk_runtime';
+import { appendUserPromptToHistory } from '@iki/backend/message/model_history';
+import { buildPromptContext } from '@iki/backend/message/prompt_context';
 import {
   loadAgentConfig,
   validateAgentConfig,
@@ -16,7 +14,7 @@ export interface PromptTextGenerator {
 }
 
 export type PromptTextGeneratorConfig = PartialAgentConfig & {
-  /** Optional thread id — forwarded to Langfuse as sessionId. */
+
   threadId?: string;
 };
 
@@ -38,10 +36,7 @@ export class SimplePromptTextGenerator implements PromptTextGenerator {
 
     const history = appendUserPromptToHistory([], prompt);
     const { systemPrompt, messages } = buildPromptContext(this.config, history);
-    // The factory entry picks the supply per the ADR 007 matrix (Pi for
-    // eligible providers, AI SDK otherwise) and owns model lifecycle and
-    // telemetry. The generator keeps its own system composition — passed as
-    // the exact request system, replacing the factory's persona-led join.
+
     const generationSettings = getModelGenerationSettings({
       providerType: this.config.providerType,
       modelId: this.config.model,
@@ -53,7 +48,7 @@ export class SimplePromptTextGenerator implements PromptTextGenerator {
       providerId: this.config.providerId,
       modelId: this.config.model,
       messages,
-      systemPromptOverride: systemPrompt,
+      auxSystemInstruction: systemPrompt,
       ...(typeof generationSettings.temperature === 'number'
         ? { temperature: generationSettings.temperature }
         : {}),

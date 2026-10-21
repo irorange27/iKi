@@ -1,6 +1,11 @@
-import * as chatMessageDb from '@iki/backend/db/chat_message';
+import {
+  MESSAGE_EVENT_TYPES,
+  SESSION_EVENT_VERSION,
+  appendSessionFacts,
+  findMessageEvent,
+  getSessionEvents,
+} from '@iki/backend/db/session_events';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import * as threadTodoDb from '@iki/backend/db/thread_todos';
 import * as awaitersDb from '@iki/backend/db/awaiters';
 import * as tasksDb from '@iki/backend/db/tasks';
 import { getDb } from '@iki/backend/db/database';
@@ -11,7 +16,6 @@ import { createPrefixedId } from '@iki/backend/utils/id';
 import { ensureThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/git_worktree';
 import { getErrorMessage } from '@iki/backend/utils/errors';
-import type { ChatMemory } from '../thread_session/memory';
 import { sanitizeUiMessageJsonForStorage } from '@iki/backend/message/ui_message_codec';
 
 const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
@@ -66,7 +70,8 @@ const normalizeThreadInput = (
       (typeof thread.title === 'string' && thread.title.trim() ? thread.title : 'New Chat'),
     model: normalizedString(thread.model) ?? undefined,
     reasoning_effort: normalizedString(thread.reasoning_effort) || 'medium',
-    metadata: typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
+    metadata:
+      typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
     is_generating: false,
     client_id: normalizedString(thread.client_id) ?? undefined,
     prompt_app_id: normalizedString(thread.prompt_app_id) ?? undefined,
@@ -80,20 +85,12 @@ const normalizeThreadInput = (
   };
 };
 
-export const createChatPersistence = (deps: {
-  memory: ChatMemory;
-  onContinuityMessagePersisted: (params: {
-    threadId: string;
-    messageId: string;
-    messageJson: string;
-  }) => Promise<void>;
-}) => {
+export const createChatPersistence = () => {
   const listThreads = () => chatThreadDb.getChatThreads();
   const getThread = (id: string) => {
     ensureThreadWorkspaceSelection(id);
     return chatThreadDb.getChatThread(id);
   };
-  const getThreadTodoPlan = (threadId: string) => threadTodoDb.getThreadTodoPlan(threadId);
   const createThread = (input: unknown) => {
     const normalizedThread = normalizeThreadInput(input);
     chatThreadDb.addChatThread(normalizedThread);
@@ -128,12 +125,11 @@ export const createChatPersistence = (deps: {
     const currentWorkspaceId = normalizedString(existingThread?.workspace_id);
     const workspaceChanged = hasWorkspaceUpdate && nextWorkspaceId !== currentWorkspaceId;
 
-    // Assigning the thread's own sanctioned worktree must pass even mid-thread;
-    // the guard only protects arbitrary workspace switches after messages exist.
-    const guardedWorkspaceChange = workspaceChanged && !isThreadWorktreeWorkspaceId(nextWorkspaceId);
+    const guardedWorkspaceChange =
+      workspaceChanged && !isThreadWorktreeWorkspaceId(nextWorkspaceId);
 
     if (guardedWorkspaceChange) {
-      const messageCount = chatMessageDb.countChatMessagesByThread(id);
+      const messageCount = listMessages(id).length;
       if (messageCount > 0) {
         chatPersistenceLogger.event({
           level: 'warn',
@@ -163,115 +159,79 @@ export const createChatPersistence = (deps: {
   };
   const deleteThread = (id: string) => chatThreadDb.deleteChatThread(id);
 
-  const listMessages = (threadId: string) => chatMessageDb.getChatMessages(threadId);
-  const getMessage = (id: string) => chatMessageDb.getChatMessage(id);
+  const projectRow = (threadId: string, event: { type: string; payload: unknown }): ChatMessage | null => {
+    const payload = event.payload as { message?: unknown; messageId?: unknown };
+    const message = payload?.message;
+    if (!message || typeof message !== 'object') return null;
+    const id = (message as { id?: unknown }).id;
+    if (typeof id !== 'string' || !id) return null;
+    return {
+      id,
+      thread_id: threadId,
+      parent_id: null,
+      slot_id: null,
+      depth: 0,
+      message: JSON.stringify(message),
+      timestamp:
+        typeof (payload as { timestamp?: unknown }).timestamp === 'string'
+          ? (payload as { timestamp: string }).timestamp
+          : new Date(0).toISOString(),
+      metadata: '{}',
+      created_at: new Date(0).toISOString(),
+      updated_at: new Date(0).toISOString(),
+    } as unknown as ChatMessage;
+  };
+
+  const listMessages = (threadId: string): ChatMessage[] => {
+    const rows = getSessionEvents(threadId, [MESSAGE_EVENT_TYPES.INPUT_ACCEPTED, MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED]);
+    const byId = new Map<string, ChatMessage>();
+    for (const event of rows) {
+      const row = projectRow(threadId, event);
+
+      if (row) byId.set(row.id, row);
+    }
+    return [...byId.values()];
+  };
+
+  const getMessage = (id: string): ChatMessage | null => {
+    const found = findMessageEvent(id);
+    if (!found) return null;
+    return projectRow(found.threadId, { type: '', payload: found.payload });
+  };
   const createMessage = (input: unknown) => {
     const message = isObjectRecord(input) ? (input as Partial<ChatMessage>) : {};
     const messageId =
       typeof message.id === 'string' && message.id.trim()
         ? message.id.trim()
         : createPrefixedId('msg');
-    const timestamp =
-      typeof message.timestamp === 'string' && message.timestamp.trim()
-        ? message.timestamp
-        : new Date().toISOString();
-    const sanitizedMessageJson =
+    const threadId = typeof message.thread_id === 'string' ? message.thread_id : '';
+    if (!threadId) throw new Error('createMessage requires a thread_id');
+
+    const parsedMessage: unknown =
       typeof message.message === 'string'
-        ? sanitizeUiMessageJsonForStorage(message.message)
-        : JSON.stringify(message.message ?? {});
+        ? (() => {
+            try {
+              return JSON.parse(message.message);
+            } catch {
+              return { id: messageId, role: 'user', parts: [{ type: 'text', text: message.message }] };
+            }
+          })()
+        : (message.message ?? {});
 
-    try {
-      chatMessageDb.addChatMessage({
-        id: messageId,
-        thread_id: message.thread_id,
-        parent_id: message.parent_id || null,
-        slot_id: message.slot_id || null,
-        depth: message.depth || 0,
-        message: sanitizedMessageJson,
-        timestamp,
-        metadata: message.metadata || '{}',
-      });
-      // Keep thread ordering consistent with recent activity.
-      if (message.thread_id) {
-        chatThreadDb.touchChatThread(message.thread_id);
-      }
-    } catch (error: unknown) {
-      const errorCode =
-        typeof error === 'object' && error !== null && 'code' in error
-          ? String((error as { code?: unknown }).code)
-          : '';
-      const errorMessage = getErrorMessage(error);
-
-      if (
-        errorCode === 'SQLITE_CONSTRAINT_PRIMARYKEY' ||
-        errorMessage.includes('UNIQUE constraint failed: chat_messages.id')
-      ) {
-        chatPersistenceLogger.event({
-          level: 'warn',
-          event: 'chat.message.create',
-          outcome: 'degraded',
-          message: 'Duplicate chat message create ignored.',
-          entity: {
-            message_id: messageId,
-            thread_id: typeof message.thread_id === 'string' ? message.thread_id : null,
-            parent_id: typeof message.parent_id === 'string' ? message.parent_id : null,
-          },
-        });
-        const existing = chatMessageDb.getChatMessage(messageId);
-        if (existing) return existing;
-      }
-
-      chatPersistenceLogger.event({
-        level: 'error',
-        event: 'chat.message.create',
-        outcome: 'failed',
-        error,
-        entity: {
-          message_id: messageId,
-          thread_id: typeof message.thread_id === 'string' ? message.thread_id : null,
+    appendSessionFacts(threadId, [
+      {
+        type: MESSAGE_EVENT_TYPES.INPUT_ACCEPTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          messageId,
+          message: parsedMessage,
+          transport: 'send',
         },
-        data: {
-          error_code: errorCode || 'unknown',
-          error_message: errorMessage,
-        },
-      });
-      throw error;
-    }
+      },
+    ]);
+    chatThreadDb.touchChatThread(threadId);
 
-    deps.memory.onMessagePersisted({
-      threadId: message.thread_id,
-      messageId,
-      messageJson: sanitizedMessageJson,
-    });
-    void deps.onContinuityMessagePersisted({
-      threadId: message.thread_id,
-      messageId,
-      messageJson: sanitizedMessageJson,
-    });
-
-    const created = chatMessageDb.getChatMessage(messageId);
-    return created;
-  };
-
-  const createMessageWithProcessing = async (
-    input: unknown,
-    options?: { waitForEmotionAnalysis?: boolean }
-  ) => {
-    const created = createMessage(input);
-    if (
-      options?.waitForEmotionAnalysis &&
-      created &&
-      typeof created.thread_id === 'string' &&
-      typeof created.id === 'string' &&
-      typeof created.message === 'string'
-    ) {
-      await deps.memory.waitForEmotionAnalysis?.({
-        threadId: created.thread_id,
-        messageId: created.id,
-        messageJson: created.message,
-      });
-    }
-    return created;
+    return getMessage(messageId);
   };
 
   const updateMessage = (id: string, input: unknown) => {
@@ -286,81 +246,72 @@ export const createChatPersistence = (deps: {
         }
       : {};
 
-    const result = chatMessageDb.updateChatMessage(id, sanitizedUpdate);
+    const existing = getMessage(id);
+    const threadId = sanitizedUpdate.thread_id || existing?.thread_id;
+    if (!threadId) return { changes: 0 };
 
+    const rawMessage = sanitizedUpdate.message ?? existing?.message ?? '{}';
+    let parsed: unknown = {};
     try {
-      const existing = chatMessageDb.getChatMessage(id);
-      const threadId = sanitizedUpdate.thread_id || existing?.thread_id;
-      const messageJson =
-        typeof sanitizedUpdate.message === 'string' ? sanitizedUpdate.message : existing?.message;
-
-      if (threadId && messageJson) {
-        deps.memory.onMessagePersisted({
-          threadId,
-          messageId: id,
-          messageJson,
-        });
-      }
-
-      if (threadId) {
-        chatThreadDb.touchChatThread(threadId);
-      }
-    } catch (error) {
-      chatPersistenceLogger.event({
-        level: 'warn',
-        event: 'chat.message.update',
-        outcome: 'degraded',
-        error,
-        entity: {
-          message_id: id,
-        },
-        data: {
-          error_message: getErrorMessage(error),
-        },
-      });
+      parsed = JSON.parse(rawMessage);
+    } catch {
+      parsed = { id, role: 'user', parts: [{ type: 'text', text: rawMessage }] };
     }
-
-    return result;
+    appendSessionFacts(threadId, [
+      {
+        type: MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED,
+        version: SESSION_EVENT_VERSION,
+        payload: {
+          runId: (parsed as { runId?: string }).runId ?? '',
+          messageId: id,
+          message: parsed,
+          transport: 'stream',
+        },
+      },
+    ]);
+    chatThreadDb.touchChatThread(threadId);
+    return { changes: 1 };
   };
 
-  const deleteMessage = (id: string) => chatMessageDb.deleteChatMessage(id);
+  const deleteMessage = (_id: string) => ({ changes: 0 });
 
   return {
-    // Threads
+
     listThreads,
     getThread,
-    getThreadTodoPlan,
     createThread,
     clearThread,
     updateThread,
     deleteThread,
-    // Messages
+
     listMessages,
     getMessage,
     createMessage,
-    createMessageWithProcessing,
     updateMessage,
     deleteMessage,
-    /**
-     * Turn-output write: create the row or update it in place when an earlier
-     * write (renderer dual-write, an approval-pending partial) already created
-     * it. Unlike createMessage this never silently keeps a stale partial.
-     */
+
     upsertTurnMessage: (input: unknown) => {
-      const id = isObjectRecord(input) && typeof (input as { id?: unknown }).id === 'string'
-        ? (input as { id: string }).id.trim()
-        : '';
-      const existing = id ? chatMessageDb.getChatMessage(id) : null;
-      if (existing && id) {
-        // Normalize object message payloads to the sanitized JSON string the
-        // column stores, mirroring createMessage.
-        const rawMessage = isObjectRecord(input) ? (input as { message?: unknown }).message : undefined;
-        const payload = rawMessage !== undefined && typeof rawMessage !== 'string'
-          ? { ...(input as Record<string, unknown>), message: JSON.stringify(rawMessage) }
-          : input;
+      const id =
+        isObjectRecord(input) && typeof (input as { id?: unknown }).id === 'string'
+          ? (input as { id: string }).id.trim()
+          : '';
+      if (!id) return null;
+      const existing = getMessage(id);
+      if (existing) {
+        const rawMessage = isObjectRecord(input)
+          ? (input as { message?: unknown }).message
+          : undefined;
+        const payload =
+          rawMessage !== undefined && typeof rawMessage !== 'string'
+            ? { ...(input as Record<string, unknown>), message: JSON.stringify(rawMessage) }
+            : input;
         return updateMessage(id, payload);
       }
-      return createMessage(input);
+      const threadId = isObjectRecord(input) && typeof (input as { thread_id?: unknown }).thread_id === 'string'
+        ? (input as { thread_id: string }).thread_id
+        : '';
+      if (!threadId) return null;
+      return updateMessage(id, input);
     },
   };
 };

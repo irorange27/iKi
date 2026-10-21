@@ -462,8 +462,6 @@ const { selectedWorkspaceId: sessionSelectedWorkspaceId } = storeToRefs(threadSe
 const { t } = useI18n();
 const sidebarLogger = createLogger({ module: 'sidebar' });
 
-// Content stays mounted through the shell's collapse transition so it clips
-// out with the panel instead of vanishing in a single frame.
 const SIDEBAR_TRANSITION_MS = 320;
 const contentVisible = ref(sidebar.isExpanded.value);
 let contentHideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -489,8 +487,6 @@ onBeforeUnmount(() => {
   }
 });
 
-// While drag-resizing, the shell's width transition must be off so the panel
-// tracks the cursor 1:1 instead of lagging behind it.
 const isResizing = ref(false);
 
 interface ChatThread {
@@ -523,7 +519,6 @@ const deletingThreadIds = ref<Record<string, boolean>>({});
 const collapsedGroups = ref<Record<string, boolean>>({});
 const expandedSections = ref<Set<string>>(new Set());
 
-// Sidebar grouping modes (Codex-style): flat by recency, or projects only.
 const GROUP_MODE_STORAGE_KEY = 'iki-sidebar-group-mode';
 const groupMode = ref<'time' | 'projects'>(
   localStorage.getItem(GROUP_MODE_STORAGE_KEY) === 'projects' ? 'projects' : 'time'
@@ -543,16 +538,12 @@ const menuPosition = ref({
 });
 let menuCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
-// Locked while the active thread already has messages — its project binding
-// is what the tools are rooted at.
 const props = defineProps<{
   workspaceLocked?: boolean;
-  /** The chat header renders the collapsed controls inline; this seat only
-   * covers the headerless welcome view. */
+  
   hideCollapsedToolbar?: boolean;
 }>();
 
-// Emit events to parent
 const emit = defineEmits<{
   'thread-selected': [threadId: string];
   'new-chat': [];
@@ -560,7 +551,6 @@ const emit = defineEmits<{
   'thread-deleted': [threadId: string];
 }>();
 
-// Ignore an older refresh when a later thread mutation has requested another.
 let threadLoadGeneration = 0;
 const loadChatThreads = async () => {
   const generation = ++threadLoadGeneration;
@@ -593,7 +583,6 @@ const loadChatThreads = async () => {
   }
 };
 
-// Select a thread
 const selectThread = (threadId: string) => {
   emit('thread-selected', threadId);
 };
@@ -630,12 +619,10 @@ const closeSearch = () => {
   searchQuery.value = '';
 };
 
-// Handle new chat button
 const handleNewChat = () => {
   emit('new-chat');
 };
 
-// New work task: pick a project folder first, then create the bound thread.
 const handleNewWork = async () => {
   if (typeof pickWorkspaceDirectory !== 'function') return;
   try {
@@ -652,9 +639,6 @@ const handleNewWork = async () => {
   }
 };
 
-// Project switcher: the button lives on each project section header; picking
-// a project rebinds the active thread — or seeds the next "new chat" when no
-// thread is open. The switcher hides entirely while the thread is locked.
 const projectSwitcherSection = ref<string | null>(null);
 const isPickingProjectDirectory = ref(false);
 
@@ -811,12 +795,6 @@ const workspaceNameById = computed(() => {
 const getWorkspaceDisplayName = (workspaceId: string): string =>
   workspaceNameById.value.get(workspaceId) ?? workspaceId;
 
-/**
- * Only user-added workspaces act as "projects" in the sidebar. Threads bound
- * to a scratch (`is_temporary`) or worktree workspace are thread-private —
- * grouping them would flood the list with one identically-named section per
- * thread, so they stay in the default list.
- */
 const isUserWorkspace = (workspaceId: string): boolean => {
   const workspace = workspaces.value.find(candidate => candidate.id === workspaceId);
   return Boolean(workspace) && workspace!.is_temporary !== 1;
@@ -827,7 +805,7 @@ const isWorkThread = (thread: ChatThread): boolean =>
 
 type SidebarThreadSection = {
   key: string;
-  /** null for the default ungrouped section (no header rendered). */
+  
   name: string | null;
   threads: ChatThread[];
 };
@@ -843,9 +821,6 @@ const threadSections = computed<SidebarThreadSection[]>(() => {
     return sections;
   }
 
-  // Projects view: work threads bound to a user workspace group under their
-  // project; worktree-isolated tasks (no project behind them) stay flat.
-  // Plain chats are hidden here — that is what the recent view is for.
   const isolatedWork = visibleDesktopThreads.filter(thread => {
     if (!isWorkThread(thread)) return false;
     const workspaceId = getThreadWorkspaceId(thread);
@@ -984,7 +959,6 @@ const startResize = (e: StartResizeEvent) => {
   e.preventDefault?.();
   isResizing.value = true;
 
-  // 类型守卫：区分鼠标和触摸事件
   const isTouch = e.type.startsWith('touch');
   const startX = isTouch ? (e.touches?.[0].clientX ?? 0) : (e.clientX ?? 0);
   const startWidth = sidebar.width.value;
@@ -1017,7 +991,6 @@ const startResize = (e: StartResizeEvent) => {
     document.removeEventListener('touchend', handleEnd);
   };
 
-  // 统一监听鼠标和触摸事件
   document.addEventListener('mousemove', handleMouseMove);
   document.addEventListener('mouseup', handleEnd);
   document.addEventListener('touchmove', handleTouchMove, {

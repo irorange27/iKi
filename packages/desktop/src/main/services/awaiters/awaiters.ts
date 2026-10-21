@@ -14,13 +14,6 @@ const SCHEDULER_TICK_MS = 30_000;
 
 let schedulerTimer: NodeJS.Timeout | null = null;
 
-/**
- * Stage E: the wake business (prompt construction, disposition transitions,
- * wake-event audit, delivery) lives in backend/awaiters/awaiter_runner. This
- * file is the desktop assembly: it supplies the Electron capabilities —
- * desktop notifications and renderer push — plus the chat service, and owns
- * the scheduler clock.
- */
 const sendPushEventToRenderers = (payload: unknown) => {
   for (const win of getAllBrowserWindows()) {
     try {

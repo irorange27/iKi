@@ -23,13 +23,6 @@ const MAX_EDIT_UNDO_DEPTH = 10;
 const editUndoStacks = new Map<string, Array<{ previousContent: string; writtenContent: string; encoding: BufferEncoding }>>();
 const undoKey = (filePath: string): string => JSON.stringify([getToolRuntimeContext().threadId ?? null, filePath]);
 
-// Mutating writes go through a same-directory temp file plus rename, so two
-// concurrent writers (threads sharing a workspace, or the desktop and daemon
-// processes) can never leave a torn half-written file behind: readers see
-// either the old or the new content, never a mix. The temp name carries a
-// random UUID — pid + timestamp alone collide for same-millisecond writes to
-// the same path from one process, and two writers sharing a temp file breaks
-// the atomicity the rename is there to provide.
 const writeFileAtomically = async (
   absolutePath: string,
   content: string,
@@ -45,11 +38,6 @@ const writeFileAtomically = async (
   }
 };
 
-// In-process read-modify-write serialization per absolute path. Concurrent
-// threads on one workspace would otherwise race edit/undo's read→write
-// sequence even with atomic replacement: each write is whole, but the later
-// writer clobbers a state it never read. Cross-process races remain
-// last-writer-wins (see backend README limits).
 const pathWriteLocks = new Map<string, Promise<unknown>>();
 
 const withPathWriteLock = <T>(absolutePath: string, fn: () => Promise<T>): Promise<T> => {
@@ -112,7 +100,7 @@ const findInContent = (
   contextBefore?: string,
   contextAfter?: string
 ): { index: number; matchType: 'exact' | 'fuzzy' | 'context'; matchedText: string } | { index: -1; error: { message: string; fileSnippet: string; retryHint: string } } => {
-  // Step 1: exact match
+
   const exactPos = content.indexOf(oldText);
   if (exactPos >= 0) {
     const count = countOccurrences(content, oldText);
@@ -120,9 +108,8 @@ const findInContent = (
       return { index: exactPos, matchType: 'exact', matchedText: oldText };
     }
 
-    // Multiple exact matches — try context anchors to disambiguate
     if (contextBefore || contextAfter) {
-      // Walk through each exact occurrence and test context anchors
+
       let searchFrom = 0;
       while (searchFrom <= content.length) {
         const candidatePos = content.indexOf(oldText, searchFrom);
@@ -151,7 +138,6 @@ const findInContent = (
         searchFrom = candidatePos + oldText.length;
       }
 
-      // Context anchors were provided but no occurrence satisfied them
       const missingAnchors = [contextBefore && 'contextBefore', contextAfter && 'contextAfter']
         .filter(Boolean)
         .join(' and ');
@@ -166,22 +152,19 @@ const findInContent = (
       };
     }
 
-    // Return first exact match; handler decides based on replaceAll / occurrences
     return { index: exactPos, matchType: 'exact', matchedText: oldText };
   }
 
-  // Step 2: fuzzy match over whole file (only when no exact match exists)
   const contentLines = content.split('\n');
   const searchLines = oldText.split('\n');
   const fuzzyPos = fuzzyLineMatch(contentLines, searchLines, 0);
   if (fuzzyPos >= 0) {
-    // Extract the actual matched text with original whitespace so replacement is reliable
+
     const matchedText = contentLines.slice(fuzzyPos, fuzzyPos + searchLines.length).join('\n');
     const charPos = content.indexOf(matchedText);
     return { index: Math.max(0, charPos), matchType: 'fuzzy', matchedText };
   }
 
-  // Step 3: failure — return structured error
   const oldFirstLine = oldText.split('\n')[0].substring(0, 80);
   const snippetStart = Math.max(0, exactPos > 0 ? exactPos - 200 : 0);
   const snippetEnd = Math.min(content.length, snippetStart + 600);
@@ -208,7 +191,6 @@ const generateUnifiedDiff = (
   parts.push(`--- a/${fileName}`);
   parts.push(`+++ b/${fileName}`);
 
-  // Find first and last changed blocks
   let firstChange = -1;
   let lastChange = -1;
   const maxLen = Math.max(origLines.length, newLines.length);
@@ -223,7 +205,6 @@ const generateUnifiedDiff = (
 
   if (firstChange < 0) return '';
 
-  // Include 2 lines of context
   const ctxStart = Math.max(0, firstChange - 2);
   const ctxEnd = Math.min(maxLen, lastChange + 3);
   const origChunkLen = Math.min(origLines.length, ctxEnd) - ctxStart;
@@ -251,6 +232,7 @@ export class ReadFileTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  override replay = 'safe' as const;
   override description = 'Read the content of a file from the local filesystem.';
 
   override paramSchema = ReadFileInputSchema;
@@ -262,13 +244,12 @@ export class ReadFileTool extends BaseTool {
   }
 }
 
-/**
- * Tool for writing file content
- */
 export class WriteFileTool extends BaseTool {
   override name = 'write_file';
   override type = 'function';
   override autoAllowed = true;
+
+  override replay = 'unsafe' as const;
   override description = 'Write or overwrite content to a file on the local filesystem.';
   override needsApproval = true;
   override paramSchema = WriteFileInputSchema;
@@ -278,26 +259,24 @@ export class WriteFileTool extends BaseTool {
 
     return await withPathWriteLock(resolved.validated, async () => {
       getToolRuntimeContext().abortSignal?.throwIfAborted();
-      // Ensure directory exists
+
       await fs.mkdir(path.dirname(resolved.validated), { recursive: true });
 
       getToolRuntimeContext().abortSignal?.throwIfAborted();
-      // WRITE to the validated path: the lock, the mkdir and the write must
-      // all name the file the boundary check examined.
+
       await writeFileAtomically(resolved.validated, args.content, args.encoding as BufferEncoding);
-      // REPORT the caller's spelling.
+
       return { path: resolved.display, success: true };
     });
   }
 }
 
-/**
- * Tool for applying text edits to an existing file with fuzzy matching and diff output
- */
 export class EditFileTool extends BaseTool {
   override name = 'edit';
   override type = 'function';
   override autoAllowed = true;
+
+  override replay = 'unsafe' as const;
   override description =
     'Edit an existing file by applying text replacements. Include 1-3 lines of surrounding context in oldText to make matches unambiguous. Use contextBefore/contextAfter anchors when the same text appears in multiple places. Edited files are syntax-checked before writing (JSON, Python, JS); syntax-breaking edits are rejected and the file stays untouched. Revert the most recent edit to a file with undo_edit.';
   override needsApproval = true;
@@ -391,9 +370,7 @@ export class EditFileTool extends BaseTool {
       : '';
 
     if (changed) {
-      // The extension is all this reads off the path (the checker writes the
-      // content to its own temp file), so either half works; `validated` keeps
-      // the convention that only validated paths reach filesystem-facing code.
+
       const syntaxVerdict = await checkEditedFileSyntax(resolved.validated, updatedContent);
       if (syntaxVerdict.status === 'failed') {
         return {
@@ -442,13 +419,12 @@ export class EditFileTool extends BaseTool {
   }
 }
 
-/**
- * Reverts the most recent successful edit_file change to a file
- */
 export class UndoEditTool extends BaseTool {
   override name = 'undo_edit';
   override type = 'function';
   override autoAllowed = true;
+
+  override replay = 'unsafe' as const;
   override description =
     'Revert the most recent successful edit_file change to the given file, restoring the content from before that edit. Only edits made during this session can be undone.';
   override needsApproval = true;
@@ -490,13 +466,11 @@ export class UndoEditTool extends BaseTool {
   }
 }
 
-/**
- * Tool for deleting a file
- */
 export class DeleteFileTool extends BaseTool {
   override name = 'delete_file';
   override type = 'function';
   override needsApproval = true;
+  override replay = 'unsafe' as const;
   override description = 'Delete a file from the local filesystem. BE CAREFUL with this tool.';
 
   override paramSchema = DeleteFileInputSchema;

@@ -23,27 +23,23 @@ describe('renderer reference caches', () => {
       state: 'input-available',
       input: {},
     };
-    const memory = { type: 'data-memory-retrieval', data: { query: 'before', results: [] } };
     const usage = { type: 'data-token-usage', data: { inputTokens: 10 } };
-    const message = { parts: [text, tool, memory, usage] };
+    const message = { parts: [text, tool, usage] };
     const first = getReferenceSummaries(message);
     const tokens = getTokenUsageSummary(message);
     text.text += ' delta';
     const next = getReferenceSummaries({ ...message });
-    for (const key of ['tool', 'skill', 'memory', 'affect'] as const)
-      expect(next[key]).toBe(first[key]);
+    for (const key of ['tool', 'skill'] as const) expect(next[key]).toBe(first[key]);
     expect(getTokenUsageSummary({ ...message })).toBe(tokens);
     tool.toolName = 'write_file';
     expect(getReferenceSummaries(message).tool.names).toEqual(['write_file']);
-    memory.data = { query: 'after', results: [] };
-    expect(getReferenceSummaries(message).memory.query).toBe('after');
     usage.data = { inputTokens: 20 };
     expect(getTokenUsageSummary(message).inputTokens).toBe(20);
     message.parts.splice(1, 1);
     expect(getReferenceSummaries(message).tool.callCount).toBe(0);
   });
 
-  it('refreshes selected/loaded skills and affect when their payload sources change', () => {
+  it('refreshes selected/loaded skills when their payload sources change', () => {
     const skill = {
       type: 'data-skill-usage',
       data: { mode: 'manual', skills: [{ id: 'planner', name: 'Planner', description: 'before' }] },
@@ -55,8 +51,7 @@ describe('renderer reference caches', () => {
       state: 'output-available',
       output: { id: 'planner', name: 'Planner', content: 'instructions', truncated: false },
     };
-    const affect = { type: 'data-affect-signal', data: { label: 'joy', confidence: 0.5 } };
-    const message = { parts: [skill, loaded, affect] };
+    const message = { parts: [skill, loaded] };
     const before = getReferenceSummaries(message);
     expect(before.skill.items[0].description).toBe('before');
     skill.data = {
@@ -64,11 +59,8 @@ describe('renderer reference caches', () => {
       skills: [{ id: 'planner', name: 'Planner', description: 'after' }],
     };
     loaded.output = { ...loaded.output, name: 'Updated planner' };
-    affect.data = { ...affect.data, confidence: 0.9 };
     const after = getReferenceSummaries({ ...message });
     expect(after.skill.items[0]).toMatchObject({ name: 'Updated planner', description: 'after' });
-    expect(after.affect.confidence).toBe(0.9);
-    expect(after.affect).not.toBe(before.affect);
   });
 
   it('invalidates only the subscribed tool key, including reset and recreation', () => {

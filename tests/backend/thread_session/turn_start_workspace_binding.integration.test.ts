@@ -4,15 +4,18 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createModelMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const prepareChatTurnMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
     ...actual,
-    createModel: createModelMock,
-    disposeLanguageModel: vi.fn(),
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
     getModelGenerationSettings: vi.fn(() => ({})),
     resolveModelCapability: async () => ({
@@ -30,14 +33,8 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 }));
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
-  // session_loop now consumes these three as named imports; the factory must
-  // provide them or module linking fails even when the preparer is mocked out.
   getAssistantProfileContextMessage: () => '',
-  retrieveRelevantContinuity: () => null,
-  onMessagePersisted: async () => undefined,
   getCompanion: () => ({
-    setChatPolicy: vi.fn(),
-    setAffect: vi.fn(),
     beginThinking: vi.fn(),
     endThinking: vi.fn(),
     clearConversationPreview: vi.fn(),
@@ -47,27 +44,25 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
 }));
 
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { getChatThread } from '@iki/backend/db/chat_thread';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
 
 const memory = {
-  onMessagePersisted: vi.fn(),
   injectMemoryIntoMessages: vi.fn((messages: unknown[]) => messages),
   getAffectContextMessage: () => '',
 };
 
-// D30 boundary: the turn keeps the workspace it STARTED in. A workspace
-// switch that lands while the turn is still preparing must not redirect this
-// turn's tools — preparation awaits (memory retrieval, context assembly) are
-// exactly where a user switch races the binding. The binding must therefore
-// be snapshotted at admission, before the first preparation await.
 describe('stream binds the turn workspace at admission', () => {
   let root: string;
   let conversation: ReturnType<typeof createChatPersistence>;
@@ -89,14 +84,10 @@ describe('stream binds the turn workspace at admission', () => {
   };
 
   beforeEach(async () => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(legacyTurnHarness);
+    setTurnHarnessFallback(piTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-turn-start-workspace-'));
     initializeDatabase({ dbPath: path.join(root, 'binding.db') });
+    seedTurnProvider({ providerId: 'provider_primary', model: 'test-model' });
     const a = path.join(root, 'a');
     const b = path.join(root, 'b');
     await fs.mkdir(a);
@@ -105,9 +96,6 @@ describe('stream binds the turn workspace at admission', () => {
     addWorkspace({ id: 'workspace_wt_binding', path: b, name: 'b' });
     conversation = createChatPersistence({
       memory: memory as never,
-      // platform is module-mocked above; the real continuity hook is not
-      // under test here, so the port gets a no-op double.
-      onContinuityMessagePersisted: async () => undefined,
     });
     conversation.createThread({
       id: 'thread_binding',
@@ -115,10 +103,21 @@ describe('stream binds the turn workspace at admission', () => {
       metadata: '{"mode":"work"}',
     });
     defaultToolRegistry.register(new WriteFileTool().toAgentTool());
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall('write_file', { path: 'binding.txt', content: 'binding' }, { id: 'call_binding' }),
-        fauxText('done'),
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: 'write_file',
+            args: { path: 'binding.txt', content: 'binding' },
+            id: 'call_binding',
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'done' },
+          { kind: 'done', reason: 'stop' },
+        ],
       ])
     );
     prepareChatTurnMock.mockResolvedValue(preparedTurn);
@@ -147,8 +146,6 @@ describe('stream binds the turn workspace at admission', () => {
     const a = path.join(root, 'a');
     const b = path.join(root, 'b');
 
-    // Hold preparation open so the workspace switch lands mid-turn, before
-    // the harness ever runs.
     let release!: () => void;
     const gate = new Promise<void>(resolve => {
       release = resolve;
@@ -158,15 +155,18 @@ describe('stream binds the turn workspace at admission', () => {
       return preparedTurn;
     });
 
-    const turn = streaming.stream({ id: 71, send: vi.fn() }, {
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'test-model',
-      threadId: 'thread_binding',
-      approvalPolicy: 'never',
-      messages: [{ id: 'msg_binding', role: 'user', content: 'write the file' }],
-      tools: ['write_file'],
-    });
+    const turn = streaming.stream(
+      { id: 71, send: vi.fn() },
+      {
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'test-model',
+        threadId: 'thread_binding',
+        approvalPolicy: 'never',
+        messages: [{ id: 'msg_binding', role: 'user', content: 'write the file' }],
+        tools: ['write_file'],
+      }
+    );
     await vi.waitFor(() => expect(prepareChatTurnMock).toHaveBeenCalled());
 
     conversation.updateThread('thread_binding', { workspace_id: 'workspace_wt_binding' });
@@ -175,8 +175,6 @@ describe('stream binds the turn workspace at admission', () => {
     release();
     expect(await turn).toMatchObject({ success: true });
 
-    // The write executed where the turn started — not where the thread points
-    // now. The next turn (and the UI) see the new selection; this turn does not.
     expect(await fs.readFile(path.join(a, 'binding.txt'), 'utf8')).toBe('binding');
     await expect(fs.stat(path.join(b, 'binding.txt'))).rejects.toThrow();
   });

@@ -20,13 +20,10 @@ vi.mock('electron', () => {
 });
 
 vi.mock('@iki/backend/db/awaiters', () => ({
-  addAwaiterWakeEvent: vi.fn(),
   getAwaiter: vi.fn(),
   listDueAwaiters: vi.fn(),
   updateAwaiter: vi.fn(),
   updateAwaiterIfStatus: vi.fn(() => ({ changes: 1 })),
-  // The scheduler reclaims stale `waking` rows (wakes whose holder died)
-  // before each pass, so this suite must stub it too.
   reclaimStaleWakingAwaiters: vi.fn(() => 0),
 }));
 
@@ -104,9 +101,6 @@ describe('runAwaiterWake', () => {
   const listDueAwaitersMock = vi.mocked(awaitersDb.listDueAwaiters);
   const updateAwaiterMock = vi.mocked(awaitersDb.updateAwaiter);
   const updateAwaiterIfStatusMock = vi.mocked(awaitersDb.updateAwaiterIfStatus);
-  const addAwaiterWakeEventMock = vi.mocked(awaitersDb.addAwaiterWakeEvent);
-  // The scheduler reclaims stale `waking` rows (dead wakes) before each pass;
-  // this suite drives the scheduler, so the reclaim must be stubbed.
   const reclaimStaleWakingAwaitersMock = vi.mocked(awaitersDb.reclaimStaleWakingAwaiters);
   const touchChatThreadMock = vi.mocked(chatThreadDb.touchChatThread);
   const deliverBridgeThreadMessageMock = vi.mocked(deliverBridgeThreadMessage);
@@ -151,14 +145,10 @@ describe('runAwaiterWake', () => {
     const result = await runAwaiterWake('awaiter_1');
 
     expect(result).toEqual({ success: true, runId: 'run_wake_1' });
-    // The wake CLAIM is a conditional update (armed -> waking) so two
-    // schedulers sharing the database cannot both win.
     expect(updateAwaiterIfStatusMock.mock.calls[0]?.[1]).toBe('armed');
     expect(updateAwaiterIfStatusMock.mock.calls[0]?.[2]).toEqual({
       status: 'waking',
       last_error: null,
-      // Clearing the slot is what keeps the row out of the next due query
-      // while this wake is still awaiting the model.
       next_wake_at: null,
     });
     expect(updateAwaiterIfStatusMock).toHaveBeenCalledWith('awaiter_1', 'waking', {
@@ -195,13 +185,6 @@ describe('runAwaiterWake', () => {
       threadId: 'thread_1',
       text: expect.stringContaining('Wake complete.'),
     });
-    expect(addAwaiterWakeEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        awaiter_id: 'awaiter_1',
-        run_id: 'run_wake_1',
-        outcome: 'success',
-      })
-    );
 
     const messageMetaRaw = chatServiceMock.createMessage.mock.calls.at(-1)?.[0]?.metadata;
     const messageMeta = messageMetaRaw ? JSON.parse(messageMetaRaw) : null;
@@ -256,14 +239,6 @@ describe('runAwaiterWake', () => {
         next_wake_at: null,
       })
     );
-    expect(addAwaiterWakeEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        awaiter_id: 'awaiter_1',
-        run_id: 'run_failed_1',
-        outcome: 'error',
-        error: 'Boom',
-      })
-    );
 
     const messageMetaRaw = chatServiceMock.createMessage.mock.calls.at(-1)?.[0]?.metadata;
     const messageMeta = messageMetaRaw ? JSON.parse(messageMetaRaw) : null;
@@ -301,13 +276,6 @@ describe('runAwaiterWake', () => {
         status: 'failed',
         last_error: 'Target thread is unavailable',
         next_wake_at: null,
-      })
-    );
-    expect(addAwaiterWakeEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        awaiter_id: 'awaiter_1',
-        outcome: 'error',
-        error: 'Target thread is unavailable',
       })
     );
     expect(chatServiceMock.send).not.toHaveBeenCalled();
@@ -372,9 +340,6 @@ describe('runAwaiterWake', () => {
       text: 'Wake complete.',
       runId: 'run_wake_rearmed',
     });
-    // The CLAIM succeeds (this scheduler owns the wake); only the FINISHING
-    // conditional update reports 0 changes, meaning the row was re-armed while
-    // the wake was in flight and its new state must not be clobbered.
     updateAwaiterIfStatusMock
       .mockReturnValueOnce({ changes: 1 } as { changes: number })
       .mockReturnValue({ changes: 0 } as { changes: number });
@@ -388,13 +353,6 @@ describe('runAwaiterWake', () => {
       last_error: null,
       next_wake_at: null,
     });
-    expect(addAwaiterWakeEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        awaiter_id: 'awaiter_1',
-        outcome: 'success',
-        run_id: 'run_wake_rearmed',
-      })
-    );
     expect(chatServiceMock.createMessage).toHaveBeenCalled();
     expect(sendMock).toHaveBeenCalledWith(
       'awaiters:push',
@@ -428,7 +386,6 @@ describe('runAwaiterWake', () => {
       error: 'Awaiter no longer exists',
       runId: 'run_wake_deleted',
     });
-    expect(addAwaiterWakeEventMock).not.toHaveBeenCalled();
     expect(chatServiceMock.createMessage).not.toHaveBeenCalled();
     expect(sendMock).not.toHaveBeenCalled();
   });

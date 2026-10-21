@@ -24,17 +24,6 @@ describe('message_parts', () => {
           skills: [{ id: 'user:planner', name: 'Planner' }],
         },
         {
-          type: 'memory-retrieval',
-          query: 'constraints',
-          results: [{ id: 'mem_1', summary: 'Prefer durable abstractions.' }],
-        },
-        {
-          type: 'affect-signal',
-          source: 'history',
-          label: 'anger',
-          confidence: 0.4,
-        },
-        {
           type: 'token-usage',
           inputTokens: 320,
           maxInputTokens: 128000,
@@ -43,7 +32,7 @@ describe('message_parts', () => {
         {
           type: 'context-report',
           totalEstimatedTokens: 320,
-          blocks: [{ kind: 'memory', status: 'included' }],
+          blocks: [{ kind: 'skills', status: 'included' }],
         },
       ].map(part => normalizeChatUiMetadataPart(part))
     ).toEqual([
@@ -52,21 +41,6 @@ describe('message_parts', () => {
         data: {
           mode: 'auto',
           skills: [{ id: 'user:planner', name: 'Planner' }],
-        },
-      },
-      {
-        type: 'data-memory-retrieval',
-        data: {
-          query: 'constraints',
-          results: [{ id: 'mem_1', summary: 'Prefer durable abstractions.' }],
-        },
-      },
-      {
-        type: 'data-affect-signal',
-        data: {
-          source: 'history',
-          label: 'anger',
-          confidence: 0.4,
         },
       },
       {
@@ -81,7 +55,7 @@ describe('message_parts', () => {
         type: 'data-context-report',
         data: {
           totalEstimatedTokens: 320,
-          blocks: [{ kind: 'memory', status: 'included' }],
+          blocks: [{ kind: 'skills', status: 'included' }],
         },
       },
     ]);
@@ -89,20 +63,30 @@ describe('message_parts', () => {
 
   it('keeps canonical metadata parts canonical through the boundary normalizer', () => {
     const part = normalizeChatUiMetadataPart({
-      type: 'data-memory-retrieval',
-      data: {
-        query: 'constraints',
-        results: [{ id: 'mem_1', summary: 'Prefer durable abstractions.' }],
-      },
+      type: 'data-token-usage',
+      data: { inputTokens: 320, maxInputTokens: 128000 },
     });
 
     expect(part).toEqual({
-      type: 'data-memory-retrieval',
-      data: {
+      type: 'data-token-usage',
+      data: { inputTokens: 320, maxInputTokens: 128000 },
+    });
+  });
+
+  it('drops metadata parts whose subsystem is gone instead of resurrecting them', () => {
+    expect(
+      normalizeChatUiMetadataPart({
+        type: 'memory-retrieval',
         query: 'constraints',
         results: [{ id: 'mem_1', summary: 'Prefer durable abstractions.' }],
-      },
-    });
+      })
+    ).toBeNull();
+    expect(
+      normalizeChatUiMetadataPart({
+        type: 'data-affect-signal',
+        data: { source: 'history', label: 'anger', confidence: 0.4 },
+      })
+    ).toBeNull();
   });
 
   it('extracts transcript text from text parts only', () => {
@@ -117,7 +101,7 @@ describe('message_parts', () => {
           state: 'output-available',
           output: { results: [] },
         },
-        { type: 'data-memory-retrieval', data: { results: [{ summary: 'hidden' }] } },
+        { type: 'data-skill-usage', data: { skills: [{ id: 's', name: 'hidden' }] } },
         { type: 'text', text: 'Beta' },
       ])
     ).toBe('Alpha Beta');

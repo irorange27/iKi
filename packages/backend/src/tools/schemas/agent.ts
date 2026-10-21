@@ -8,17 +8,12 @@ import {
   uiSchema,
 } from './shared';
 
-// Defined here but consumed by the output schemas in ./outputs.
 export const agentUsedToolOutputSchema = z
   .object({
     name: z.string().optional(),
     callCount: z.number().optional(),
   })
   .passthrough();
-
-// ---------------------------------------------------------------------------
-// Agent (sub-agent) tool schemas
-// ---------------------------------------------------------------------------
 
 const agentToolInputShape = {
   task: z

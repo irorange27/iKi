@@ -23,10 +23,6 @@ import {
 
 const event = (type: string, payload: unknown) => ({ type, version: 1, payload });
 
-// The stream's revision is the concurrency contract: a writer basing its
-// decision on revision N commits only while the head is still N — two
-// writers on the same revision cannot both append, and a conflict writes
-// nothing (acceptance item 8's mechanism).
 describe('session_events store', () => {
   let dataDir = '';
 
@@ -50,7 +46,6 @@ describe('session_events store', () => {
       ])
     ).toBe(3);
 
-    // Stale expectation: the head moved on, nothing is written.
     expect(appendSessionEvents('thread_rev', 1, [event('input_accepted', { messageId: 'late' })])).toBeNull();
     expect(getSessionEventRevision('thread_rev')).toBe(3);
     expect(getSessionEvents('thread_rev').map(e => e.type)).toEqual([
@@ -60,7 +55,6 @@ describe('session_events store', () => {
     ]);
     expect(getSessionEvents('thread_rev').map(e => e.revision)).toEqual([1, 2, 3]);
 
-    // Re-reading and retrying with the fresh revision succeeds.
     const head = getSessionEventRevision('thread_rev');
     expect(appendSessionEvents('thread_rev', head, [event('input_accepted', { messageId: 'm2' })])).toBe(4);
   });

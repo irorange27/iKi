@@ -99,7 +99,7 @@ const resolveGitHubRepository = (
     const repository = parseGitHubRepository(parsed.repository);
     if (repository) return repository;
   } catch {
-    // Fall back to the canonical release repository below.
+    /* empty: error is not actionable here */
   }
 
   return parseDefaultGitHubRepository();

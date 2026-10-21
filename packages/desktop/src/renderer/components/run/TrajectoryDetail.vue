@@ -294,7 +294,6 @@ const saveNote = () => {
   const note = noteDraft.value;
   const existing = stepLabels.value.filter(item => item.label === 'note');
   return changeLabels(async (runId, stepId) => {
-    // Create before removing the old note: a failed write must not destroy it.
     if (note.trim())
       await electronAPI.chat.runs.eval.addLabel({ runId, stepId, label: 'note', note });
     for (const item of existing) await remove(item.id);

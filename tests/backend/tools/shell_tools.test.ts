@@ -30,8 +30,6 @@ function buildChild() {
 describe('shell tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Stub setTimeout to be a no-op so timeout timers don't fire and kill the mock child.
-    // Tests control the close/error events manually.
     vi.stubGlobal('setTimeout', vi.fn(() => ({} as ReturnType<typeof setTimeout>)));
   });
 
@@ -41,7 +39,6 @@ describe('shell tool', () => {
     expect(tool.needsApproval).toBe(true);
     expect(tool.approvalMode).toBe('always');
   });
-
 
   it('cancels the process without retrying the command', async () => {
     const child = buildChild();
@@ -69,7 +66,6 @@ describe('shell tool', () => {
     spawnMock.mockReturnValue(child);
 
     const resultPromise = newTool().handler({ command: 'echo hello', timeout: 30000 });
-    // Let the async handler advance past resolveShellWorkingDirectory and register event listeners
     await Promise.resolve();
     child.stdout.emit('data', 'hello\n');
     child.stderr.emit('data', '');
@@ -96,7 +92,6 @@ describe('shell tool', () => {
   });
 
   it('strips null bytes from the command before spawning', async () => {
-    // Null bytes can be used to bypass shell escaping in certain contexts.
     const child = buildChild();
     spawnMock.mockReturnValue(child);
 
@@ -117,7 +112,6 @@ describe('shell tool', () => {
   });
 
   it('caps the timeout at a safe maximum', async () => {
-    // Replace the global stub with a spy so we can inspect setTimeout arguments.
     const setTimeoutSpy = vi.fn(() => ({} as ReturnType<typeof setTimeout>));
     vi.stubGlobal('setTimeout', setTimeoutSpy);
 
@@ -130,7 +124,6 @@ describe('shell tool', () => {
     child.emit('close', 0);
     await resultPromise;
 
-    // The timeout passed to setTimeout should be capped at MAX_SHELL_TIMEOUT_MS.
     const timeoutArg = setTimeoutSpy.mock.calls.find(
       ([, ms]: [unknown, number]) => typeof ms === 'number'
     )?.[1] as number | undefined;

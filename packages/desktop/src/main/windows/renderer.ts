@@ -21,8 +21,6 @@ export const getRendererDevServerUrl = (): string =>
   );
 
 export const getRendererProdHtmlPath = (): string =>
-  // When bundled by electron-forge/plugin-vite, the main process runs from `.vite/build`.
-  // The renderer build output is placed under `.vite/renderer/<name>/index.html`.
   path.join(__dirname, '../renderer/main_window/index.html');
 
 const DEV_SERVER_WAIT_TIMEOUT_MS = 5000;

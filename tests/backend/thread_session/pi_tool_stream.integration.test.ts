@@ -1,75 +1,54 @@
 // @vitest-environment node
 
-/**
- * Switch item 3a (issue #114): a real tool turn under the never-approve
- * policy streams end to end through the real streaming entry, the real turn
- * driver, the real Pi adapter and a real registered tool, against the
- * scripted SSE server. Proven at the consumer boundary:
- *   - the tool executes exactly once with the scripted args, mid-turn;
- *   - the UI sees the tool-call event BEFORE the result and the text deltas;
- *   - shown text === committed text (D22);
- *   - the run row completes and usage lands on the total-prompt convention;
- *   - the second model request carries the tool result;
- *   - the AI SDK is never constructed (routing proof).
- * Regression: an `openai` provider under the same policy keeps the AI SDK
- * harness — Pi never sees the request.
- * Switch item 3c (issue #118): an AUTONOMOUS tool turn chains a handoff into
- * a fresh Pi batch — the supply survives the chained harness rebuild.
- */
-
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-const createModelMock = vi.hoisted(() => vi.fn());
-
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
     ...actual,
-    createModel: createModelMock,
-    disposeLanguageModel: vi.fn(),
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
     getModelGenerationSettings: vi.fn(() => ({})),
-    injectReasoningContentIntoMessages: vi.fn((messages: unknown[]) => messages),
   };
 });
 
 vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
   createChatTurnPreparer: () => ({
-    prepareChatTurn: vi.fn(async (options: { messages: Array<{ parts: Array<{ text: string }> }>; tools?: string[] }) => {
-      const prompt = options.messages[0]?.parts[0]?.text ?? 'probe';
-      return {
-        report: { totalEstimatedTokens: 1, blocks: [] },
-        usedSkills: [],
-        selectedSkillIds: [],
-        skillMode: 'manual' as const,
-        finalMessages: [{ role: 'user' as const, content: prompt }],
-        history: [] as unknown[],
-        prompt,
-        guardActive: false,
-        requireApproval: false,
-        autoApproveToolRequests: false,
-        affectSignal: null,
-        interventionPolicy: null,
-        guardedTools: [...(options.tools ?? [])],
-        enableTools: (options.tools?.length ?? 0) > 0,
-        maxInputTokens: 98000,
-        maxOutputTokens: 2000,
-      };
-    }),
+    prepareChatTurn: vi.fn(
+      async (options: {
+        messages: Array<{ parts: Array<{ text: string }> }>;
+        tools?: string[];
+      }) => {
+        const prompt = options.messages[0]?.parts[0]?.text ?? 'probe';
+        return {
+          report: { totalEstimatedTokens: 1, blocks: [] },
+          usedSkills: [],
+          selectedSkillIds: [],
+          skillMode: 'manual' as const,
+          finalMessages: [{ role: 'user' as const, content: prompt }],
+          history: [] as unknown[],
+          prompt,
+          guardActive: false,
+          requireApproval: false,
+          autoApproveToolRequests: false,
+          affectSignal: null,
+          interventionPolicy: null,
+          guardedTools: [...(options.tools ?? [])],
+          enableTools: (options.tools?.length ?? 0) > 0,
+          maxInputTokens: 98000,
+          maxOutputTokens: 2000,
+        };
+      }
+    ),
   }),
 }));
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
   getAssistantProfileContextMessage: (): string => '',
-  retrieveRelevantContinuity: (): null => null,
-  onMessagePersisted: async (): Promise<void> => undefined,
   getCompanion: () => ({
-    setChatPolicy: vi.fn(),
-    setAffect: vi.fn(),
     beginThinking: vi.fn(),
     endThinking: vi.fn(),
     clearConversationPreview: vi.fn(),
@@ -90,15 +69,21 @@ import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { exportRunTrajectory } from '@iki/backend/thread_session/atif_export';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { z } from 'zod';
-import { createScriptedPiServer, sse, type ScriptedPiServer } from '../pi_candidate/helpers/scripted_pi_server';
+import {
+  createScriptedPiServer,
+  sse,
+  type ScriptedPiServer,
+} from '../pi_candidate/helpers/scripted_pi_server';
 
 let root: string;
 let server: ScriptedPiServer;
 let conversation: ReturnType<typeof createChatPersistence>;
-const usageEvents: Array<{ source?: string; usage?: { inputTokens?: number; cacheReadTokens?: number } }> = [];
+const usageEvents: Array<{
+  source?: string;
+  usage?: { inputTokens?: number; cacheReadTokens?: number };
+}> = [];
 const executions: string[] = [];
 
 const TOOL_NAME = 'pi_tool_probe';
@@ -135,9 +120,16 @@ const buildStreaming = (approvalsOverride?: {
     getThreadTitle: () => 'Pi tool stream',
   });
 
-const chunksOf = (target: { send: (channel: string, payload: unknown) => void }, type: string): Array<Record<string, unknown>> => {
-  const calls = (target.send as ReturnType<typeof vi.fn>).mock.calls as Array<[string, Record<string, unknown>]>;
-  return calls.filter(call => call[0] === 'chat:ui-chunk' && call[1]?.type === type).map(call => call[1]);
+const chunksOf = (
+  target: { send: (channel: string, payload: unknown) => void },
+  type: string
+): Array<Record<string, unknown>> => {
+  const calls = (target.send as ReturnType<typeof vi.fn>).mock.calls as Array<
+    [string, Record<string, unknown>]
+  >;
+  return calls
+    .filter(call => call[0] === 'chat:ui-chunk' && call[1]?.type === type)
+    .map(call => call[1]);
 };
 
 const publishedText = (target: { send: (channel: string, payload: unknown) => void }): string =>
@@ -151,9 +143,16 @@ const committedText = (threadId: string): string =>
     .map(e => (e.payload as { text: string }).text)
     .join('');
 
-const lastRunStatus = (target: { send: (channel: string, payload: unknown) => void }): string | undefined => {
-  const calls = (target.send as ReturnType<typeof vi.fn>).mock.calls as Array<[string, { status?: string }]>;
-  return calls.filter(call => call[0] === 'chat:run-status').map(call => call[1]?.status).at(-1);
+const lastRunStatus = (target: {
+  send: (channel: string, payload: unknown) => void;
+}): string | undefined => {
+  const calls = (target.send as ReturnType<typeof vi.fn>).mock.calls as Array<
+    [string, { status?: string }]
+  >;
+  return calls
+    .filter(call => call[0] === 'chat:run-status')
+    .map(call => call[1]?.status)
+    .at(-1);
 };
 
 beforeAll(async () => {
@@ -172,10 +171,6 @@ beforeAll(async () => {
   addProvider({
     id: 'provider_sdk_tool_regress',
     name: 'Formerly SDK-pinned tool provider (now Pi-served)',
-    // `openai` would ask for the Responses dialect (the scripted server speaks
-    // completions); the dialect mapping has its own coverage in
-    // factory_pi_generation.test.ts. What this case asserts is that a provider
-    // type the selector used to EXCLUDE now rides Pi.
     type: 'deepseek',
     api_key: 'key-sdk',
     models: '["sdk-model"]',
@@ -196,7 +191,6 @@ beforeAll(async () => {
   );
   conversation = createChatPersistence({
     memory: {} as never,
-    onContinuityMessagePersisted: async (): Promise<void> => undefined,
   });
   conversation.createThread({ id: 'thread_pi_tool_stream' });
   conversation.createThread({ id: 'thread_sdk_tool_regress' });
@@ -254,44 +248,33 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     });
     expect(result).toMatchObject({ success: true });
 
-    // The tool executed exactly once, mid-turn, with the scripted args.
     expect(executions).toEqual(['/probe.txt']);
 
-    // The UI saw the tool call BEFORE its result, then the answer streamed.
     const toolCalls = chunksOf(target, 'tool-input-available');
     const toolResults = chunksOf(target, 'tool-output-available');
     expect(toolCalls[0]).toMatchObject({ toolName: TOOL_NAME, input: { path: '/probe.txt' } });
-    expect((toolResults[0] as { output?: { type?: string; value?: string } }).output).toMatchObject({
-      type: 'text',
-      value: 'contents of /probe.txt',
-    });
+    expect((toolResults[0] as { output?: { type?: string; value?: string } }).output).toMatchObject(
+      {
+        type: 'text',
+        value: 'contents of /probe.txt',
+      }
+    );
 
-    // Shown text === committed text (D22).
     const shown = publishedText(target);
     expect(shown).toBe('reading the file says hi');
     expect(committedText('thread_pi_tool_stream')).toBe(shown);
 
-    // The run row completed; usage is the per-step CUMULATIVE on the
-    // total-prompt convention (30 + 100 billed inputs; 60 cached on step 2).
     expect(lastRunStatus(target)).toBe('completed');
     const usage = usageEvents.find(event => event.source === 'chat.stream');
     expect(usage?.usage).toMatchObject({ inputTokens: 130, cacheReadTokens: 60 });
 
-    // The second model request carried the tool result on the wire.
     const secondWire = JSON.stringify(server.getWire('read the tool probe file', 1).messages);
     expect(secondWire).toContain('contents of /probe.txt');
 
-    // Routing proof: the AI SDK was never constructed; both calls rode Pi.
-    expect(createModelMock).not.toHaveBeenCalled();
     expect(server.countRequests('read the tool probe file')).toBe(2);
   }, 30000);
 
   it('exports the Pi tool observation into the trajectory', async () => {
-    // The Pi harness records a completed inference whose content carries only
-    // the assistant parts — the tool RESULT is a separate tool-result audit
-    // step. The ATIF projection must join them: the trajectory is the export
-    // surface other tools replay from, and a call without its observation is
-    // not a replayable trajectory.
     server.setScriptSequence('trajectory the probe file', [
       {
         chunks: [
@@ -300,7 +283,10 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
         ],
       },
       {
-        chunks: [sse.delta('the file says hi'), sse.finish('stop', { prompt_tokens: 40, completion_tokens: 10, total_tokens: 50 })],
+        chunks: [
+          sse.delta('the file says hi'),
+          sse.finish('stop', { prompt_tokens: 40, completion_tokens: 10, total_tokens: 50 }),
+        ],
       },
     ]);
 
@@ -313,16 +299,16 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       threadId: 'thread_pi_tool_stream',
       approvalPolicy: 'never',
       messages: [
-        { id: 'msg_pi_traj', role: 'user', parts: [{ type: 'text', text: 'trajectory the probe file' }] },
+        {
+          id: 'msg_pi_traj',
+          role: 'user',
+          parts: [{ type: 'text', text: 'trajectory the probe file' }],
+        },
       ],
       tools: [TOOL_NAME],
     });
     expect(result).toMatchObject({ success: true });
     expect(lastRunStatus(target)).toBe('completed');
-    // Routing proof: this must ride Pi, whose inference records carry no
-    // result parts. On the AI SDK harness the observation would come from the
-    // inference itself and the case would pass without exercising the join.
-    expect(createModelMock).not.toHaveBeenCalled();
 
     const run = agentRunDb
       .listAgentRunsByThread('thread_pi_tool_stream')
@@ -344,7 +330,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
   }, 30000);
 
   it('full cycle: an always-policy turn pauses, the approval decides, the resume completes on Pi', async () => {
-    // The REAL approval module, wired like the service does.
     const coordinator = createThreadStreamCoordinator();
     const chatApprovals = createChatApproval({
       streams: {
@@ -392,13 +377,15 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       threadId: 'thread_pi_tool_stream',
       approvalPolicy: 'always',
       messages: [
-        { id: 'msg_pi_guarded', role: 'user', parts: [{ type: 'text', text: 'guarded tool probe' }] },
+        {
+          id: 'msg_pi_guarded',
+          role: 'user',
+          parts: [{ type: 'text', text: 'guarded tool probe' }],
+        },
       ],
       tools: [TOOL_NAME],
     });
 
-    // The turn PAUSED: awaiting-approval, the tool NOT executed, the
-    // approval request surfaced on the UI.
     expect(first).toMatchObject({ success: true, awaitingApproval: true });
     expect(executions.slice(executionsBefore)).toHaveLength(0);
     const approvalRequests = chunksOf(target, 'tool-approval-request') as Array<{
@@ -408,8 +395,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(lastRunStatus(target)).toBe('blocked');
     expect(server.countRequests('guarded tool probe')).toBe(1);
 
-    // The user approves: the resume runs on Pi — the tool executes exactly
-    // once, the second request carries the result, the run completes.
     const decision = await chatApprovals.approveTool(
       target,
       approvalRequests[0]!.approvalId!,
@@ -422,15 +407,8 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(server.countRequests('guarded tool probe')).toBe(2);
     const secondWire = JSON.stringify(server.getWire('guarded tool probe', 1).messages);
     expect(secondWire).toContain('contents of /guarded.txt');
-    // Supply discriminator: the turn rode Pi (compat default for unknown
-    // baseUrls is the newer max-token field; the AI SDK path sends
-    // max_tokens instead).
     expect(server.getWire('guarded tool probe', 0).max_completion_tokens).toBe(2000);
-    // The resumed segment runs with notifyRunStatus off (waiter parity with
-    // the AI SDK resume) — the target's last status stays 'blocked'; the
-    // completion is proven by the continuation text on the wire.
     expect(publishedText(target)).toContain('approved and done');
-    // shown ⊆ committed across the pause boundary.
     expect(committedText('thread_pi_tool_stream')).toContain(publishedText(target));
   }, 40000);
 
@@ -438,7 +416,11 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     server.setScriptSequence('hand the task over', [
       {
         chunks: [
-          sse.toolCallDelta('call_h', 'handoff', '{"summary":"done enough","next_steps":"rest","reason":"other"}'),
+          sse.toolCallDelta(
+            'call_h',
+            'handoff',
+            '{"summary":"done enough","next_steps":"rest","reason":"other"}'
+          ),
           sse.finish('tool_calls', { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }),
         ],
       },
@@ -454,18 +436,19 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       threadId: 'thread_pi_tool_stream',
       approvalPolicy: 'never',
       messages: [
-        { id: 'msg_pi_handoff', role: 'user', parts: [{ type: 'text', text: 'hand the task over' }] },
+        {
+          id: 'msg_pi_handoff',
+          role: 'user',
+          parts: [{ type: 'text', text: 'hand the task over' }],
+        },
       ],
       tools: [TOOL_NAME, 'handoff'], // handoff is a grant, not an injected one
     });
     expect(result).toMatchObject({ success: true });
 
-    // stopWhen parity: the turn ENDS at the handoff step — no second model
-    // call happens even though the step budget would allow one.
     expect(server.countRequests('hand the task over')).toBe(1);
     expect(lastRunStatus(target)).toBe('completed');
 
-    // The driver projects its own handoff event from the executed call.
     const handoffEvents = chunksOf(target, 'tool-input-available').filter(
       chunk => (chunk as { toolName?: string }).toolName === 'handoff'
     );
@@ -475,13 +458,9 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
   }, 30000);
 
   it('serves a formerly SDK-pinned provider through Pi under the same never policy', async () => {
-    // Contract change: static-factory provider types used to stay on the AI SDK
-    // harness. They are admitted to the single Pi supply now, so the tool turn
-    // must reach the scripted server and the AI SDK model must not be built.
     server.setScriptSequence('read the sdk probe file', [
       {
         chunks: [
-          // Arguments stream as fragments, matching the Pi wire shape.
           sse.toolCallDelta('call_sdk', TOOL_NAME, '{"path":'),
           sse.toolCallDelta(null, null, '"/sdk.txt"}'),
           sse.finish('tool_calls', { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }),
@@ -517,18 +496,13 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     });
     expect(result).toMatchObject({ success: true });
 
-    // The tool ran, and it ran on the Pi supply.
     expect(executions.slice(executionsBefore)).toEqual(['/sdk.txt']);
     expect(publishedText(target)).toContain('pi tool answer');
     expect(lastRunStatus(target)).toBe('completed');
-    expect(createModelMock).not.toHaveBeenCalled();
     expect(server.totalRequests()).toBe(requestsBefore + 2);
   }, 30000);
 
   it('chains a handoff into a fresh Pi batch in autonomous mode (3c: supply survives the rebuild)', async () => {
-    // Batch 1 calls the handoff tool; the chained batch 2 resumes from the
-    // fresh [HANDOFF CONTEXT] history — its sole user message is the
-    // next-steps text, so the scripted server keys it separately.
     server.setScriptSequence('pass the baton', [
       {
         chunks: [
@@ -567,15 +541,9 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     });
     expect(result).toMatchObject({ success: true });
 
-    // The chain ran batch 2 ON PI: both requests hit the scripted server and
-    // the AI SDK was never constructed. Before 3c the chained harness was
-    // rebuilt on the AI SDK — batch 2 never arrives there.
     expect(server.countRequests('pass the baton')).toBe(1);
     expect(server.countRequests('finish phase two')).toBe(1);
-    expect(createModelMock).not.toHaveBeenCalled();
 
-    // Fresh history: batch 2's sole user message is the next-steps text;
-    // batch 1's transcript is gone. The handoff context rides the request.
     const chainedWire = server.getWire('finish phase two', 0);
     const chainedMessages = chainedWire.messages as Array<{ role?: string; content?: unknown }>;
     expect(chainedMessages.filter(m => m.role === 'user')).toHaveLength(1);
@@ -583,7 +551,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     expect(JSON.stringify(chainedWire.messages)).not.toContain('pass the baton');
     expect(JSON.stringify(chainedWire)).toContain('phase one done');
 
-    // The driver projected its handoff event; both text and run completed.
     const handoffEvents = chunksOf(target, 'tool-input-available').filter(
       chunk => (chunk as { toolName?: string }).toolName === 'handoff'
     );
@@ -595,7 +562,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
   }, 30000);
 
   it('autonomous pause → approve → resumed Pi segment chains a handoff into a fresh Pi batch (3c composite)', async () => {
-    // The REAL approval module, wired like the service does.
     const coordinator = createThreadStreamCoordinator();
     const chatApprovals = createChatApproval({
       streams: {
@@ -609,9 +575,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       usage: { recordUsageEvent: () => undefined },
     });
 
-    // Batch 1 pauses on the always policy; the resumed segment executes the
-    // approved call, calls again (handoff), and the chained batch resumes
-    // from the fresh handoff history — its own script key.
     server.setScriptSequence('chained guard probe', [
       {
         chunks: [
@@ -659,7 +622,11 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       approvalPolicy: 'always',
       autonomous: { maxIterations: 3, continuePrompt: 'continue' },
       messages: [
-        { id: 'msg_pi_chain_guard', role: 'user', parts: [{ type: 'text', text: 'chained guard probe' }] },
+        {
+          id: 'msg_pi_chain_guard',
+          role: 'user',
+          parts: [{ type: 'text', text: 'chained guard probe' }],
+        },
       ],
       tools: [TOOL_NAME],
     });
@@ -678,17 +645,10 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     );
     expect(decision).toMatchObject({ success: true });
 
-    // The approved call executed EXACTLY once on the resumed Pi segment, the
-    // continuation called the model again (handoff), and the chained batch
-    // rebuilt ON PI — the AI SDK was never constructed across pause, resume
-    // and chain rebuild.
     expect(executions.slice(executionsBefore)).toEqual(['/chained.txt']);
     expect(server.countRequests('chained guard probe')).toBe(2);
     expect(server.countRequests('wrap up loose ends')).toBe(1);
-    expect(createModelMock).not.toHaveBeenCalled();
 
-    // The chained batch rides the fresh handoff history: sole user message
-    // is the next-steps text, the paused transcript is gone.
     const chainedWire = server.getWire('wrap up loose ends', 0);
     const chainedMessages = chainedWire.messages as Array<{ role?: string; content?: unknown }>;
     expect(chainedMessages.filter(m => m.role === 'user')).toHaveLength(1);
@@ -702,7 +662,6 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
       input: expect.objectContaining({ summary: 'resumed work done' }),
     });
     expect(publishedText(target)).toContain('loose ends wrapped');
-    // shown ⊆ committed across the pause, resume and chain boundaries.
     expect(committedText('thread_pi_tool_stream')).toContain(publishedText(target));
   }, 40000);
 });

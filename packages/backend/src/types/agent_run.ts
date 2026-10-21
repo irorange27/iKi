@@ -14,7 +14,6 @@ export type AgentRunStatus =
   | 'failed'
   | 'cancelled';
 
-/** A finished background run (proactive task / awaiter wake) surfaced for review. */
 export type ReviewQueueItem = {
   runId: string;
   kind: AgentRunKind;
@@ -40,16 +39,6 @@ export type AgentRunStepType =
 
 export type AgentRunStepStatus = 'started' | 'completed' | 'failed';
 
-export type AgentRunCheckpointReason =
-  | 'step-completed'
-  | 'approval-requested'
-  | 'approval-answered'
-  | 'child-run-spawned'
-  | 'run-completed'
-  | 'run-cancelled'
-  | 'run-failed'
-  | 'periodic';
-
 export type AgentRunInput = {
   prompt?: string;
   messages?: unknown[];
@@ -57,7 +46,6 @@ export type AgentRunInput = {
 };
 
 export type AgentRunWorkingState = {
-  modelMessages: unknown[];
   accumulatedText: string;
   pendingApprovalIds: string[];
   lastStepIndex: number;
@@ -67,6 +55,8 @@ export type AgentRunOutput = {
   text?: string;
   finishReason?: string;
   usage?: Record<string, unknown>;
+
+  pendingToolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
 };
 
 export type AgentRunError = {
@@ -109,19 +99,9 @@ export interface AgentRunStep {
   finishedAt?: string | null;
 }
 
-export interface AgentRunCheckpoint {
-  id: string;
-  runId: string;
-  stepIndex: number;
-  reason: AgentRunCheckpointReason;
-  snapshot: AgentRun;
-  createdAt: string;
-}
-
 export interface AgentRunTrace {
   run: AgentRun;
   steps: AgentRunStep[];
-  latestCheckpoint?: AgentRunCheckpoint | null;
   children: AgentRun[];
 }
 

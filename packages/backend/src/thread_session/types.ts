@@ -1,11 +1,5 @@
-import type {
-  SkillUsageEntry,
-  TokenUsagePartData,
-} from '@iki/backend/message/message_parts';
-import type { AffectSignal } from '@iki/backend/types/affect';
+import type { SkillUsageEntry, TokenUsagePartData } from '@iki/backend/message/message_parts';
 
-// The message-type aliases live with the message codecs (message/); this
-// module keeps the turn transport's own types.
 export type {
   ChatInputMessage,
   ChatTransportMessage,
@@ -66,7 +60,6 @@ export type RunStatusEvent = {
   timestamp: string;
 };
 
-/** The durable assistant-message projection built from a turn's UI chunk log. */
 export type PersistedTurnMessage = {
   id: string;
   role: 'assistant';
@@ -78,31 +71,11 @@ export type UiChunkEmitter = {
   emitTextDelta: (delta: string) => void;
   emitReasoningDelta: (delta: string) => void;
   emitToolEvent: (event: ChatStreamEvent) => void;
-  emitSkillUsage: (payload: {
-    mode?: 'manual' | 'auto';
-    skills: SkillUsageEntry[];
-  }) => void;
-  emitMemoryRetrieval: (payload: {
-    query: string;
-    results: Array<Record<string, unknown>>;
-  }) => void;
-  emitAffectSignal: (payload: AffectSignal) => void;
+  emitSkillUsage: (payload: { mode?: 'manual' | 'auto'; skills: SkillUsageEntry[] }) => void;
   emitTokenUsage: (payload: TokenUsagePartData) => void;
-  /**
-   * Reduce the turn's chunk log into the durable assistant message. `seedParts`
-   * continues an approval-resumed message: the pre-pause parts are the
-   * reduction starting point, matching how the renderer's AI SDK client keeps
-   * one accumulated message across the resume. Returns null when the turn
-   * never started a message.
-   */
-  buildPersistedMessage: (
-    seedParts?: unknown[]
-  ) => Promise<PersistedTurnMessage | null>;
-  /**
-   * Close the open text/reasoning parts without terminating the channel —
-   * the durable projection needs closed parts while the session-log record
-   * and persist that follow still need a live error channel.
-   */
+
+  buildPersistedMessage: (seedParts?: unknown[]) => Promise<PersistedTurnMessage | null>;
+
   settleParts: () => void;
   finish: () => void;
   abort: () => void;

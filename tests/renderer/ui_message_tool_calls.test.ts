@@ -28,23 +28,6 @@ describe('ui_message_tool_calls', () => {
     expect(title).toBe('Check the current working directory.');
   });
 
-  it('uses a stable execution-plan title for todo tool cards', () => {
-    const title = getToolTitle({
-      type: 'tool-result',
-      toolCallId: 'call_todo',
-      toolName: 'todo',
-      state: 'output-available',
-      input: {
-        items: [{ id: '1', text: 'Inspect current code', status: 'in_progress' }],
-      },
-      output: {
-        items: [{ id: '1', text: 'Inspect current code', status: 'in_progress' }],
-      },
-    });
-
-    expect(title).toBe('Execution Plan');
-  });
-
   it('uses the delegated task text as the card title for agent tool cards', () => {
     const title = getToolTitle({
       type: 'tool-call',
@@ -153,16 +136,12 @@ describe('ui_message_tool_calls', () => {
         'Tool call was waiting for approval when the app restarted; it never executed.',
     };
 
-    // Always-visible meta-row text (the awaiting-forever / silent-failure fix).
     expect(getToolErrorText(interruptedPart)).toContain('never executed');
-    // The Output section falls back to the reason for embedded views.
     expect(getToolOutputForDisplay(interruptedPart)).toContain('never executed');
 
-    // Non-error parts never leak an errorText-styled meta entry.
     expect(
       getToolErrorText({ ...interruptedPart, state: 'output-available', output: 'ok' })
     ).toBe('');
-    // Error state without a recorded reason degrades to no text.
     expect(getToolErrorText({ ...interruptedPart, errorText: '   ' })).toBe('');
     expect(getToolOutputForDisplay({ ...interruptedPart, errorText: '   ' })).toBeUndefined();
   });

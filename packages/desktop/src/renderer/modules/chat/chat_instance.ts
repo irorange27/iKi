@@ -1,5 +1,6 @@
-import { computed, ref } from 'vue';
-import { AbstractChat, type ChatState, type ChatStatus } from 'ai';
+import { computed, ref, shallowRef } from 'vue';
+import type { UiChatStatus } from '@iki/backend/message/ui_protocol';
+import { IkiChat, type ChatStateAdapter } from './iki_chat';
 
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import { isObjectRecord } from '@iki/backend/utils/guards';
@@ -12,8 +13,6 @@ import { createChatMessageStore, type ChatMessageStore } from './chat_message_st
 
 const chatInstanceLogger = createLogger({ module: 'chat_instance' });
 
-class IkiChat extends AbstractChat<ChatUiMessage> {}
-
 const hasRenderableContent = (message: ChatUiMessage | undefined): boolean => {
   if (!message || !Array.isArray(message.parts)) return false;
   return message.parts.some(part => {
@@ -23,20 +22,14 @@ const hasRenderableContent = (message: ChatUiMessage | undefined): boolean => {
   });
 };
 
-/**
- * Reactive ChatState with in-place array mutations: the renderer message
- * store holds a reference to the same array, so the SDK's message swaps are
- * spliced rather than reassigned. Every mutation triggers Vue reactivity
- * through the shared ref.
- */
 export const createReactiveChatState = (
   onWrite: (message: ChatUiMessage) => void
-): { state: ChatState<ChatUiMessage>; messagesArray: ChatUiMessage[] } => {
-  const messagesRef = ref<ChatUiMessage[]>([]);
-  const statusRef = ref<ChatStatus>('ready');
+): { state: ChatStateAdapter; messagesArray: ChatUiMessage[] } => {
+  const messagesRef = shallowRef<ChatUiMessage[]>([]);
+  const statusRef = ref<UiChatStatus>('ready');
   const errorRef = ref<Error | undefined>(undefined);
 
-  const state: ChatState<ChatUiMessage> = {
+  const state: ChatStateAdapter = {
     get status() {
       return statusRef.value;
     },
@@ -64,10 +57,6 @@ export const createReactiveChatState = (
     },
     replaceMessage: (index, message) => {
       if (index < 0 || index >= messagesRef.value.length) return;
-      // Tripwire for the streaming-render regression class: writing the
-      // identical reference back keeps prop-driven children shallow-equal and
-      // their computeds stale (empty chat bubbles). Only a fresh clone per
-      // write re-renders; warn loudly if that invariant regresses.
       if (messagesRef.value[index] === message) {
         chatInstanceLogger.event({
           level: 'warn',
@@ -77,15 +66,10 @@ export const createReactiveChatState = (
             'Identical message reference written back; prop-driven message components will not re-render.',
         });
       }
-      // The SDK passes the same accumulating raw object every write and mutates
-      // its parts off-proxy, so splicing that reference back in leaves the
-      // child component's props identical and its segments computed stale.
-      // A fresh shallow clone per write gives Vue a new reactive proxy to
-      // invalidate on; the parts array itself is still the SDK's live state.
       messagesRef.value.splice(index, 1, { ...message });
       onWrite(message);
     },
-    snapshot: <T>(thing: T): T => thing,
+    snapshot: (thing: ChatUiMessage[]): ChatUiMessage[] => thing,
   };
 
   return { state, messagesArray: messagesRef.value };
@@ -93,11 +77,6 @@ export const createReactiveChatState = (
 
 export type ChatInstance = ReturnType<typeof createChatInstance>;
 
-/**
- * Composition root of the renderer chat runtime: the SDK chat instance over
- * the IPC transport, the message-store view, persistence hooks, and the
- * approval controller. One per window; created once by the chat view.
- */
 export const createChatInstance = (deps: {
   electronAPI: Pick<ElectronApi, 'chat'>;
   generateId: () => string;
@@ -108,8 +87,6 @@ export const createChatInstance = (deps: {
   }) => Promise<void> | void;
   onStreamActivity?: () => void;
 }) => {
-  // Turn output is durably persisted by the backend conversation seam
-  // (thread_session/turn_persistence.ts) — the renderer is a view.
   const transport: IpcChatTransport = createIpcChatTransport({
     electronAPI: deps.electronAPI,
   });
@@ -125,6 +102,7 @@ export const createChatInstance = (deps: {
     generateId: deps.generateId,
     transport,
     state,
+    chatId: 'iki-chat',
     onError: error => {
       chatInstanceLogger.event({
         level: 'error',
@@ -132,8 +110,6 @@ export const createChatInstance = (deps: {
         outcome: 'failed',
         message: error.message,
         data: {
-          // Reducer failures are state-dependent: dump the fed chunk
-          // sequence and the current message part states alongside.
           chunk_traces: transport.getRecentTraces(),
           message_parts: messageStore.messages.map(message => ({
             id: message.id,
@@ -157,8 +133,6 @@ export const createChatInstance = (deps: {
         return;
       }
 
-      // Title generation hooks the stream settle (the durable record is the
-      // backend's concern and does not gate the sidebar title).
       if (isError || isAbort) return;
       const threadId = transport.getBoundThreadId() || deps.getCurrentThreadId();
       if (!threadId) return;
@@ -183,7 +157,7 @@ export const createChatInstance = (deps: {
     chat,
     transport,
     messageStore,
-    status: computed<ChatStatus>(() => state.status),
+    status: computed<UiChatStatus>(() => state.status),
     error: computed<Error | undefined>(() => state.error),
     activeAssistantMessageId,
     isApprovalProcessing: approvals.isApprovalProcessing,

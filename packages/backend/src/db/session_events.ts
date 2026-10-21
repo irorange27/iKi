@@ -1,18 +1,5 @@
 import { getDb } from './database';
 
-/**
- * The Session log's storage: one append-only event stream per conversation
- * (thread). Events are business facts — what was accepted, what was decided,
- * how a turn started and ended — written once with a per-stream revision and
- * never updated. Rebuildable projections (chat history, run audit) derive
- * from this stream; they are not independent authorities.
- *
- * Concurrency: appendSessionEvents checks the stream's current revision
- * against the caller's expectation inside the insert transaction. Two
- * writers basing decisions on the same revision cannot both commit — the
- * loser gets null and must re-read the stream before judging again.
- */
-
 export type StoredSessionEvent = {
   revision: number;
   type: string;
@@ -57,8 +44,6 @@ export const getSessionEvents = (
   }));
 };
 
-/** Remove a thread's stream — conversation deletion must take its log with
- *  it (the table has no FK cascade; payloads are plaintext). */
 export const deleteSessionEvents = (threadId: string): void => {
   getDb().prepare('DELETE FROM session_events WHERE thread_id = ?').run(threadId);
 };
@@ -76,16 +61,6 @@ export type NewSessionEvent = {
   payload: unknown;
 };
 
-/**
- * Assign consecutive revisions at the current head and insert. NOT its own
- * transaction: a caller that must land the append together with another write
- * (history truncation deletes rows in the SAME transaction) calls this inside
- * its own `db.transaction(...)` — an append that could commit on its own
- * would let one side of a boundary land without the other. The head read and
- * the inserts run on the caller's connection, so the enclosing transaction is
- * what makes them atomic; BEGIN IMMEDIATE in the wrapper already holds the
- * write lock.
- */
 export const insertSessionEventsAtHead = (
   threadId: string,
   events: NewSessionEvent[]
@@ -106,13 +81,6 @@ export const insertSessionEventsAtHead = (
   return revision;
 };
 
-/**
- * Append events to a thread's stream. `expectedRevision` is the revision the
- * caller based its decision on (0 for an empty stream); the write commits
- * only while that still holds, assigning consecutive revisions inside one
- * transaction. Returns the new head revision, or null when another writer
- * moved the stream first — nothing is written on conflict.
- */
 const append = (
   threadId: string,
   expectedRevision: number | null,
@@ -135,7 +103,45 @@ export const appendSessionEvents = (
   events: NewSessionEvent[]
 ) => append(threadId, expectedRevision, events);
 
-/** Observations already happened: append at the current head atomically.
- * Only decisions derived from a read snapshot need expected-revision CAS. */
 export const appendSessionFacts = (threadId: string, events: NewSessionEvent[]): number =>
   append(threadId, null, events)!;
+
+export const findMessageEvent = (
+  messageId: string,
+  threadId?: string
+): { threadId: string; payload: unknown } | null => {
+  const needle = messageId.trim();
+  if (!needle) return null;
+  const like = `%${needle.replace(/[%_]/g, ch => `\\${ch}`)}%`;
+  const sql = threadId
+    ? `SELECT thread_id, payload FROM session_events
+        WHERE thread_id = ? AND type IN ('input_accepted','model_output_committed')
+          AND payload LIKE ? ORDER BY revision DESC LIMIT 20`
+    : `SELECT thread_id, payload FROM session_events
+        WHERE type IN ('input_accepted','model_output_committed')
+          AND payload LIKE ? ORDER BY revision DESC LIMIT 20`;
+  const rows = (
+    threadId
+      ? getDb().prepare(sql).all(threadId, like)
+      : getDb().prepare(sql).all(like)
+  ) as Array<{ thread_id: string; payload: string }>;
+
+  for (const row of rows) {
+    try {
+      const payload = JSON.parse(row.payload) as { message?: { id?: unknown } };
+      if (payload?.message?.id === needle) {
+        return { threadId: row.thread_id, payload };
+      }
+    } catch {
+    // Intentionally ignored: the caller cannot act on it.
+  }
+  }
+  return null;
+};
+
+export const MESSAGE_EVENT_TYPES = {
+  INPUT_ACCEPTED: 'input_accepted',
+  MODEL_OUTPUT_COMMITTED: 'model_output_committed',
+} as const;
+
+export const SESSION_EVENT_VERSION = 1;

@@ -19,8 +19,6 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
     ...actual,
     generateChatWithModelMessages: generateChatWithModelMessagesMock,
     getModelGenerationSettings: getModelGenerationSettingsMock,
-    // buildPromptContext (ai_sdk_runtime) composes the runtime's system from
-    // this — the persona comes from the RUNTIME's own join, not the factory.
     resolvePersonaPrompt: resolvePersonaPromptMock,
   };
 });
@@ -59,18 +57,12 @@ describe('SimplePromptTextGenerator', () => {
 
     await expect(generator.generate('hello')).resolves.toEqual({ response: 'generated text' });
 
-    // The runtimes own their request shape: the composed system prompt (the
-    // runtime's own persona join + its system prompt) rides as the EXACT
-    // override — the factory's persona-led join is not applied ON TOP. The
-    // direct AI SDK construction is gone; the factory decides the supply.
-    // (The file-level factory mock only replaces the entry — a leftover
-    // `createModel` import would throw here.)
     expect(generateChatWithModelMessagesMock).toHaveBeenCalledTimes(1);
     const options = generateChatWithModelMessagesMock.mock.calls[0][0] as Record<string, unknown>;
     expect(options.providerType).toBe('openai');
     expect(options.modelId).toBe('gpt-4o-mini');
-    expect(options.systemPromptOverride).toContain('system prompt');
-    expect(options.systemPromptOverride).toContain('persona prompt');
+    expect(options.auxSystemInstruction).toContain('system prompt');
+    expect(options.auxSystemInstruction).toContain('persona prompt');
     expect(options.temperature).toBe(0.4);
     expect(options.maxOutputTokens).toBe(256);
     expect(options.messages).toEqual([{ role: 'user', content: 'hello' }]);
@@ -94,11 +86,8 @@ describe('SimplePromptTextGenerator', () => {
     const options = generateChatWithModelMessagesMock.mock.calls[0][0] as Record<string, unknown>;
     expect(options.threadId).toBe('thread_1');
     expect(options.abortSignal).toBe(controller.signal);
-    // loadAgentConfig's default temperature (0.1) flows through — configured
-    // values win, defaults fill in.
     expect(options.temperature).toBe(0.1);
     expect(options.providerOptions).toBeUndefined();
-    // loadAgentConfig's default maxTokens (2000) flows through as well.
     expect(options.maxOutputTokens).toBe(2000);
   });
 

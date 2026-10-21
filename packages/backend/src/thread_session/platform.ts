@@ -1,4 +1,4 @@
-import type { ChatServicePlatformDeps, ChatCompanionBridge, ContinuityRetrievalPayload } from '@iki/backend/chat_platform';
+import type { ChatServicePlatformDeps, ChatCompanionBridge } from '@iki/backend/chat_platform';
 import { noopCompanionBridge } from '@iki/backend/chat_platform';
 
 let _platform: ChatServicePlatformDeps = { companion: noopCompanionBridge };
@@ -13,16 +13,6 @@ export const setChatServicePlatformDeps = (deps: ChatServicePlatformDeps): void 
 export const getChatServicePlatformDeps = (): ChatServicePlatformDeps => _platform;
 
 export const getCompanion = (): ChatCompanionBridge => _platform.companion ?? noopCompanionBridge;
-
-export const getAssistantProfileContextMessage = (): string =>
-  _platform.getAssistantProfileContextMessage?.() ?? '';
-
-export const retrieveRelevantContinuity = (query: string): ContinuityRetrievalPayload | null =>
-  _platform.retrieveRelevantContinuity?.(query) ?? null;
-
-export const onMessagePersisted = async (params: { threadId: string; messageId: string; messageJson: string }): Promise<void> => {
-  await _platform.onMessagePersisted?.(params);
-};
 
 export const getAutoPinnedSkillIds = (threadId: string): string[] =>
   _platform.getAutoPinnedSkillIds?.(threadId) ?? [];

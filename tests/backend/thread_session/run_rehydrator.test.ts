@@ -93,11 +93,9 @@ describe('deriveResumeStreamOptions', () => {
       kind: 'handoff-resume',
       parentRunId: 'run_1',
       metadata: { source: 'resume', originalRunId: 'run_1' },
-      autonomous: { maxIterations: 10, continuePrompt: 'Continue.' },
+      continuePrompt: 'Continue.',
     });
 
-    // Regression: the pre-rehydrator inline assembly dropped these fields,
-    // degrading resumed turns to legacy approval flags.
     expect(options.approvalPolicy).toBe('trustWorkspace');
     expect(options.requireApproval).toBe(false);
     expect(options.maxIterations).toBe(12);
@@ -114,7 +112,7 @@ describe('deriveResumeStreamOptions', () => {
       rootRunId: 'run_1',
       metadata: { source: 'resume', originalRunId: 'run_1' },
     });
-    expect(options.autonomous).toEqual({ maxIterations: 10, continuePrompt: 'Continue.' });
+    expect(options.autonomous).toBeUndefined();
   });
 
   it('omits optional fields the run does not carry', () => {
@@ -184,9 +182,6 @@ describe('journaledExchangePairs: an unknown effect is not continuable', () => {
   };
 
   it('refuses when an execution started but its result was never recorded', () => {
-    // The owner started the effect (a real write is now possible) and the
-    // process died before recording the result. Silently dropping it lets the
-    // retry re-issue the call — and re-issue means the effect may run twice.
     const events = [
       fact(1, 'approval_requested', { approvalId: binding.approvalId, runId: 'run_dead_1', toolName: 'write_file', toolCallId: binding.toolCallId, args: binding.args }),
       fact(2, 'tool_execution_prepared', { binding, decision: 'approved' }),
@@ -221,8 +216,6 @@ describe('journaledExchangePairs: an unknown effect is not continuable', () => {
   });
 
   it('still replays an approval that never started: nothing happened, so nothing to reconcile', () => {
-    // Requested and admitted but never STARTED — the effect never ran, so the
-    // model legitimately re-asks and the current no-pair behavior is right.
     const events = [
       fact(1, 'approval_requested', { approvalId: binding.approvalId, runId: 'run_dead_1', toolName: 'write_file', toolCallId: binding.toolCallId, args: binding.args }),
       fact(2, 'tool_execution_prepared', { binding, decision: 'approved' }),

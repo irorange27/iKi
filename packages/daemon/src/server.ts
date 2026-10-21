@@ -7,6 +7,10 @@ import { createRequire } from 'node:module';
 import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
+import {
+  finalizeHarnessTurn,
+  finalizeTurnFailure,
+} from '@iki/backend/thread_session/turn_driver';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { registerStandardTools } from '@iki/backend/tools';
@@ -41,12 +45,6 @@ const ensureUserDataDir = () => {
   return userDataPath;
 };
 
-// The port/host files are a best-effort handshake: the desktop process reads
-// them to discover an already-running daemon, and its reader swallows every
-// error. Writing them must never be able to take the process down — an
-// unwritable userData dir (a sandboxed/TCC-restricted launch, or a read-only
-// volume) used to throw here from inside the listen callback, which surfaced
-// as an uncaught exception and killed the app.
 const writeOptionalFile = (
   filePath: string,
   contents: string,
@@ -91,6 +89,10 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
         createRunTracker: createAgentRunTracker,
         getConversationToolModel: getToolModel,
         createHarness: startPiTurnHarness,
+        finalize: {
+          finalizeFailure: finalizeTurnFailure,
+          finalizeSuccess: finalizeHarnessTurn,
+        },
       },
     });
     const mcpManager = getMcpManager();

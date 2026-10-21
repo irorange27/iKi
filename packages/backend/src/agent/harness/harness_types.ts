@@ -1,10 +1,14 @@
-import type { LanguageModel, ModelMessage } from 'ai';
+import type { ModelMessage } from '@iki/backend/message/model_history';
 
 import type { AgentStep, ModelInferenceRecord } from '@iki/backend/agent/agent_step';
-import type { AgentTool, AgentUsage, ToolApprovalRequest, AgentResult, AgentTurnPerf } from '@iki/backend/agent/types';
+import type {
+  AgentTool,
+  AgentUsage,
+  ToolApprovalRequest,
+  AgentResult,
+  AgentTurnPerf,
+} from '@iki/backend/agent/types';
 import type { ApprovalPolicy } from './tool_resolver';
-
-// ── Harness configuration ─────────────────────────────────────────────
 
 export type HarnessConfig = {
   providerType: string;
@@ -14,27 +18,19 @@ export type HarnessConfig = {
   enableTools: boolean;
   enabledToolNames: string[];
   availableSkillIds: string[];
-  guardActive: boolean;
-  /** Whether guard requires explicit tool approval. Defaults to guardActive. */
   requireApproval?: boolean;
-  /** Bypass approval for tools when user has opted in globally. */
+
   autoApproveToolRequests?: boolean;
-  /** ADR 005: session/turn-level approval policy. Overrides guard flags. */
+
   approvalPolicy?: ApprovalPolicy;
   maxIterations: number;
   maxOutputTokens?: number;
   maxInputTokens?: number;
-  /** Reasoning-effort override forwarded to the provider call (e.g. 'low' | 'medium' | 'high'). */
+
   reasoningEffort?: string;
   threadId?: string;
-  /** Inject a custom model (FauxModelProvider in tests). */
-  modelFactory?: (providerType: string, modelId: string, providerId: string) => LanguageModel;
 };
 
-// ── Turn input / output ───────────────────────────────────────────────
-
-/** One inline tool execution to journal (issue #145). The composition root
- * binds threadId + the fact writer; the harness supplies the execution. */
 export type InlineExecutionRecord = {
   runId: string;
   toolCallId: string;
@@ -46,18 +42,13 @@ export type InlineExecutionRecord = {
 export type TurnInput = {
   prompt: string;
   history?: ModelMessage[];
-  /** Pre-resolved tools (used by DelegatedAgentTool). */
+
   toolsOverride?: AgentTool[];
-  /** The executing run's identity (issue #145): the driver injects the
-   * tracker id so inline tool executions journal under the run the
-   * effect-aware retry attributes them to; the delegated-agent tool passes
-   * its child tracker id (its recorder stays unwired — ledgered in #145). */
+
   runId?: string;
-  /** The inline-execution fact port (issue #145): R5 keeps the fact writer
-   * in thread_session, so it reaches the harnesses as an injected port —
-   * same shape as onInference. Absent → no journaling. */
+
   recordInlineExecution?: (execution: InlineExecutionRecord) => void;
-  /** Persistable model facts are returned to the orchestration owner. */
+
   onInference?: (record: ModelInferenceRecord) => void;
   abortSignal?: AbortSignal;
 };
@@ -65,13 +56,15 @@ export type TurnInput = {
 export type TurnOutput = {
   text: string;
   usage?: AgentUsage;
-  /** Billed input of the final SDK step — the real context size the model last saw. */
+
   lastStepInputTokens?: number;
-  /** Wall-clock perf metrics measured by the runner (llm/tool time, TTFT, steps). */
+
   perf?: AgentTurnPerf;
-  /** Estimated tokens of the resolved tool schemas sent with the request. */
+
   toolSchemaTokens?: { builtin: number; mcp: number };
   toolCalls?: AgentResult['toolCalls'];
+
+  pendingToolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
   requiresApproval: boolean;
   finishReason?: string;
   toolApprovalRequests?: ToolApprovalRequest[];
@@ -82,19 +75,11 @@ export type TurnOutput = {
   };
 };
 
-// ── Turn event ────────────────────────────────────────────────────────
+export type TurnEvent = { event: 'step'; step: AgentStep } | { event: 'done'; output: TurnOutput };
 
-/** Each yield is either an AgentStep to forward, or the final result. */
-export type TurnEvent =
-  | { event: 'step'; step: AgentStep }
-  | { event: 'done'; output: TurnOutput };
-
-/**
- * The structural harness surface the TurnDriver consumes. AgentHarness
- * satisfies it; switch-item harnesses (the Pi text harness today) implement
- * it directly — the driver must not know which supply served the turn.
- */
 export type TurnDriverHarness = {
   turn(input: TurnInput): AsyncGenerator<TurnEvent, void>;
   getHistory(): ModelMessage[];
 };
+
+export const TERMINAL_TOOL_NAMES = new Set(['handoff']);

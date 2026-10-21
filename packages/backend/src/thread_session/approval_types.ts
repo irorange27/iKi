@@ -1,16 +1,9 @@
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
 import type { AgentRunKind } from '@iki/backend/types/agent_run';
 import type { ToolApprovalRequest } from '@iki/backend/agent';
 import type { ExecutionPlan } from './execution_plan';
 import type { ChatStreamTarget } from './types';
 
-/**
- * The durable recovery handle for an approval pause: the paused turn's
- * ExecutionPlan plus the identities needed to continue it. The plan rides
- * along verbatim — the resumed execution must run under the same supply,
- * tool selection, policy, budgets and turn-start world (D30) as the paused
- * one, never a re-derivation from current config.
- */
 export type ApprovalRecoveryContext = {
   plan: ExecutionPlan;
   sessionId: string;
@@ -63,12 +56,6 @@ export const createApprovalRecoveryContext = (params: {
   };
 };
 
-/** Re-identify a plan for a child run (approval resume / handoff) without
- *  touching its supply, tool selection, policy, budgets or world binding.
- *  `adoptRunId` is deliberately NOT carried over: a re-identified child
- *  always executes under its own identity — carrying the parent's adopted
- *  queued-row id would make the resume re-claim a row that is no longer
- *  claimable (it is `blocked`, not `queued`), stranding the decision. */
 export const reidentifyPlan = (
   plan: ExecutionPlan,
   identity: {

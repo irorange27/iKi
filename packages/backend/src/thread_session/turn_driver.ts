@@ -1,10 +1,10 @@
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
 
 import { addTurnPerf, type AgentStep, type AgentTurnPerf } from '@iki/backend/agent';
 import type { ConversationPreview } from '@iki/backend/types/companion';
 import { traceChatTurn } from '@iki/backend/observability/langfuse';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
-import type { TurnDriverHarness } from '../agent/harness';
+import type { TurnDriverHarness, TurnOutput } from '../agent/harness';
 import type { AgentRunTracker } from './run_tracker';
 import { createAgentRunTracker } from './run_tracker';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
@@ -14,6 +14,7 @@ import { planToRunTrackerParams } from './execution_plan';
 import { selectTurnHarness } from './turn_supply_selection';
 import {
   MODEL_TEXT_COMMITTED,
+  recordFailureTerminalEvent,
   recordSessionEvents,
   STEERING_INPUT_ACCEPTED,
   SESSION_EVENT_VERSION,
@@ -30,19 +31,26 @@ import type { AgentRunStatus } from '@iki/backend/types/agent_run';
 
 type TurnDriverResultBase = {
   response?: string;
+
+  text?: string;
   usage?: import('@iki/backend/agent').AgentResult['usage'];
-  /** Billed input of the final SDK step — the real context size the model last saw. */
+
   lastStepInputTokens?: number;
-  /** Perf metrics accumulated across all batches of the turn. */
+
   perf?: AgentTurnPerf;
-  /** Estimated tokens of the resolved tool schemas (from the harness turn). */
+
   toolSchemaTokens?: { builtin: number; mcp: number };
+
+  pendingToolCalls?: import('../agent/runners/pi_agent_loop').PiLoopToolCall[];
 };
 
 type HandoffResult = { summary: string; nextSteps: string; reason: string };
 
+type HarnessTurnResult = import('@iki/backend/agent').AgentResult & {
+  pendingToolCalls?: TurnOutput['pendingToolCalls'];
+};
+
 export type TurnDriverResult =
-  | (TurnDriverResultBase & { outcome: 'continuing' })
   | (TurnDriverResultBase & { outcome: 'completed' })
   | (TurnDriverResultBase & { outcome: 'budget-exhausted' })
   | (TurnDriverResultBase & { outcome: 'awaiting-approval' })
@@ -50,58 +58,39 @@ export type TurnDriverResult =
   | (TurnDriverResultBase & { outcome: 'partial-failure' })
   | (TurnDriverResultBase & { outcome: 'handoff'; handoff: HandoffResult });
 
-/**
- * Mutable per-stream state the turn driver carries across batches. The caller
- * builds it after turn preparation and reads the final values for finalize
- * and cleanup.
- */
 type TurnDriverState = {
-  /** Structural surface (AgentHarness or a switch-item harness) — the driver
-   * must not know which supply served the turn. */
+
   harness: TurnDriverHarness;
   runTracker: AgentRunTracker;
   approvalContext?: ApprovalRecoveryContext;
   streamHistory: ModelMessage[];
   streamPrompt: string;
-  /**
-   * The turn-start workspace binding (D30), shared across every batch of the
-   * turn — including handoff-resumed harnesses — so a mid-turn workspace
-   * switch never redirects this turn's tools.
-   */
+
   workspaceSelectionBox?: { selection: unknown };
   accumulatedResponse: string;
   batchIndex: number;
   handoffChain: number;
   turnHadToolCalls: boolean;
   isAwaitingApproval: boolean;
+
+  lastFacts: TurnDriverResultBase;
 };
 
 export type TurnDriverDeps = {
   target: ChatStreamTarget;
-  /** The typed definition of this execution (see execution_plan.ts). */
+
   plan: ExecutionPlan;
   streamState: ActiveStreamState;
   uiChunkEmitter: UiChunkEmitter;
   notifyRunStatus: () => void;
   drainSteerMessages: () => string[];
-  /** Conversation-preview projection (companion UI). Entries without a
-   *  visible subscriber (send, approval resume) turn it off. */
+
   conversationPreview?: boolean;
-  /** Called after each completed tool execution so the durable assistant
-   *  record carries mid-turn tool progress (crash recovery relies on it). */
+
   onToolActivity?: () => void;
-  /**
-   * Called when the executing run identity changes mid-turn (a handoff chain
-   * swaps the tracker). The caller re-keys its live-execution registration so
-   * cancellation keeps naming the run that is actually executing.
-   */
+
   onRunIdChanged?: (runId: string) => void;
-  /**
-   * Aliases a delegated child run onto the execution running it (the child
-   * inherits this execution's abort signal). Passed through to the tool
-   * runtime context so a cancel naming the child reaches this execution,
-   * resolved per execution rather than through a process-global hook.
-   */
+
   registerChildRunAlias?: (parentRunId: string, childRunId: string) => () => void;
   approvals: {
     ensurePendingApprovalSession: (
@@ -124,8 +113,9 @@ export type TurnDriverSetup = Pick<
 export type TurnDriverHandle = {
   run: () => Promise<TurnDriverResult | undefined>;
   getRunTracker: () => AgentRunTracker;
-  /** The harness the final batch ran on (differs from the setup's after a
-   *  handoff chain) — the entry's history sync must read this one. */
+
+  getLastFacts: () => TurnDriverResultBase;
+
   getHarness: () => TurnDriverHarness;
   getAccumulatedResponse: () => string;
   getBatchCount: () => number;
@@ -136,12 +126,6 @@ export type TurnDriverHandle = {
 const MAX_AUTONOMOUS_BATCHES = 50;
 const MAX_HANDOFF_CHAIN = 5;
 
-/**
- * How long streamed text may stay in the commit buffer before it is written
- * to the session log and only then published (D22: shown ⊆ committed). The
- * batch granularity trades display latency for write frequency — the draft
- * leaves it to measurement, this is the initial value.
- */
 const TEXT_COMMIT_INTERVAL_MS = 250;
 
 export const runFailureFromError = (error: unknown, message: string) => ({
@@ -157,87 +141,288 @@ export const runFailureFromError = (error: unknown, message: string) => ({
       : {}),
 });
 
-/**
- * The event-side twin of finalizeRunForOutcome: the terminal fact the
- * session log records for a driver outcome — undefined for an approval
- * pause (not terminal; its continuation records its own facts). The run row
- * and the event are two projections of one outcome — adding an outcome
- * changes both switches.
- */
-export const terminalFactForOutcome = (
-  result: TurnDriverResult
-): { status: AgentRunStatus; finishReason?: string; errorText?: string } | undefined => {
-  if (result.outcome === 'awaiting-approval') return undefined;
-  if (result.outcome === 'partial-failure') {
-    return {
-      status: 'failed',
-      errorText: 'Autonomous iteration failed; partial progress saved.',
-    };
-  }
-  if (result.outcome === 'cancelled') return { status: 'cancelled' };
-  if (result.outcome === 'handoff' || result.outcome === 'budget-exhausted') {
-    return { status: 'completed', finishReason: result.outcome };
-  }
-  return { status: 'completed' };
+type TurnOutcomeSpec = {
+
+  runStatus: AgentRunStatus;
+
+  finishReason?: string;
+
+  errorText?: string;
+  retryable?: boolean;
+
+  terminal?: { eventKind: 'completed' | 'failed' | 'cancelled'; status: AgentRunStatus };
+
+  text?: (text: string, handoff: HandoffResult | undefined) => string | undefined;
 };
 
-/**
- * The authoritative terminal-outcome mapping: one place decides what each
- * TurnDriverResult outcome means for the run row. Every entry that runs
- * the driver finalizes through this — adding a terminal outcome means
- * changing this switch and the per-transport projection adapters, not each
- * entry's private finalize code.
- */
-export const finalizeRunForOutcome = (
-  tracker: AgentRunTracker,
-  result: TurnDriverResult,
-  params: { text?: string; notify?: () => void } = {}
+const asOptionalText = (text: string): string | undefined => (text ? text : undefined);
+
+const handoffText = (text: string, handoff: HandoffResult | undefined): string | undefined =>
+  ((text ? text + '\n\n' : '') +
+    `[Handoff] ${handoff?.summary ?? ''}\n\nNext steps: ${handoff?.nextSteps ?? ''}`).trim() ||
+  undefined;
+
+export const TURN_OUTCOMES: Record<TurnDriverResult['outcome'], TurnOutcomeSpec> = {
+  completed: {
+    runStatus: 'completed',
+    finishReason: 'completed',
+    terminal: { eventKind: 'completed', status: 'completed' },
+    text: asOptionalText,
+  },
+  'budget-exhausted': {
+
+    runStatus: 'completed',
+    finishReason: 'budget-exhausted',
+    terminal: { eventKind: 'completed', status: 'completed' },
+    text: asOptionalText,
+  },
+  handoff: {
+    runStatus: 'completed',
+    finishReason: 'handoff',
+    terminal: { eventKind: 'completed', status: 'completed' },
+    text: handoffText,
+  },
+  'awaiting-approval': {
+
+    runStatus: 'blocked',
+    finishReason: 'approval-requested',
+    text: asOptionalText,
+  },
+  cancelled: {
+    runStatus: 'cancelled',
+    finishReason: 'cancelled',
+    terminal: { eventKind: 'cancelled', status: 'cancelled' },
+    text: asOptionalText,
+  },
+  'partial-failure': {
+    runStatus: 'failed',
+    finishReason: 'partial-failure',
+    errorText: 'Autonomous iteration failed; partial progress saved.',
+    retryable: true,
+    terminal: {
+      eventKind: 'failed',
+      status: 'failed',
+    },
+  },
+};
+
+export type TurnFailureSpec = {
+  status: 'failed';
+  errorText: string;
+  code?: string;
+  retryable?: boolean;
+};
+
+export type TerminalRunTracker = Pick<
+  AgentRunTracker,
+  'id' | 'getRun' | 'markCompleted' | 'markBlocked' | 'markFailed' | 'markCancelled'
+>;
+
+export type FinalizeTurnParams = {
+  tracker: TerminalRunTracker;
+  outcome: TurnDriverResult['outcome'];
+
+  text?: string;
+  usage?: import('@iki/backend/agent').AgentResult['usage'];
+
+  handoff?: HandoffResult;
+
+  pendingToolCalls?: TurnOutput['pendingToolCalls'];
+
+  threadId?: string;
+
+  transport: string;
+
+  onlyIfRunning?: boolean;
+
+  skipRow?: boolean;
+
+  loudGuard?: boolean;
+
+  committed?: {
+    messageId: string;
+    message: never;
+  };
+  notify?: () => void;
+};
+
+const projectTurnOutcome = (
+  outcome: TurnDriverResult['outcome'],
+  text: string,
+  handoff: HandoffResult | undefined
+): {
+  spec: TurnOutcomeSpec;
+  text: string | undefined;
+  terminalFact?: {
+    status: AgentRunStatus;
+    finishReason?: string;
+    errorText?: string;
+  };
+  eventKind?: 'completed' | 'failed' | 'cancelled';
+} => {
+  const spec = TURN_OUTCOMES[outcome];
+  const projected = spec.text?.(text, handoff);
+  const terminalFact = spec.terminal
+    ? {
+        status: spec.terminal.status,
+        ...(spec.finishReason ? { finishReason: spec.finishReason } : {}),
+        ...(spec.errorText ? { errorText: spec.errorText } : {}),
+      }
+    : undefined;
+  return { spec, text: projected, ...(terminalFact ? { terminalFact } : {}), eventKind: spec.terminal?.eventKind };
+};
+
+export const finalizeTurn = (params: FinalizeTurnParams): void => {
+  const { tracker, outcome, transport } = params;
+  const projection = projectTurnOutcome(outcome, params.text ?? '', params.handoff);
+  const { spec } = projection;
+  const status = tracker.getRun().status;
+  const writable = !params.skipRow && (!params.onlyIfRunning || status === 'running');
+
+  if (params.threadId && projection.terminalFact && projection.eventKind) {
+    const record = params.loudGuard ? recordFailureTerminalEvent : recordSessionEvents;
+    record(
+      params.threadId,
+      turnFactsToEvents({
+        ...(params.committed
+          ? {
+              committed: {
+                runId: tracker.id,
+                messageId: params.committed.messageId,
+                message: params.committed.message,
+                transport,
+              },
+            }
+          : {}),
+        terminal: { runId: tracker.id, ...projection.terminalFact },
+      })
+    );
+  }
+
+  if (writable) {
+    if (spec.runStatus === 'completed') {
+      tracker.markCompleted({
+        ...(projection.text ? { text: projection.text } : {}),
+        ...(params.usage ? { usage: { ...params.usage } } : {}),
+        ...(spec.finishReason ? { finishReason: spec.finishReason } : {}),
+        ...(params.pendingToolCalls && params.pendingToolCalls.length > 0
+          ? { pendingToolCalls: params.pendingToolCalls }
+          : {}),
+      });
+    } else if (spec.runStatus === 'blocked') {
+      tracker.markBlocked({
+        ...(projection.text ? { text: projection.text } : {}),
+        ...(params.usage ? { usage: { ...params.usage } } : {}),
+        ...(spec.finishReason ? { finishReason: spec.finishReason } : {}),
+      });
+    } else if (spec.runStatus === 'cancelled') {
+      tracker.markCancelled({ ...(projection.text ? { text: projection.text } : {}) });
+    } else {
+      tracker.markFailed({
+        message: spec.errorText ?? 'Turn failed.',
+        ...(spec.retryable !== undefined ? { retryable: spec.retryable } : {}),
+      });
+    }
+  }
+
+  params.notify?.();
+};
+
+export const finalizeTurnFailure = (
+  params: Omit<FinalizeTurnParams, 'outcome'> & { failure: TurnFailureSpec }
 ): void => {
-  const text = params.text ?? result.response;
-  if (result.outcome === 'cancelled') {
-    tracker.markCancelled({ ...(text ? { text } : {}) });
-  } else if (result.outcome === 'partial-failure') {
+  const { tracker, failure, transport } = params;
+  if (!params.skipRow) {
     tracker.markFailed({
-      message: 'Autonomous iteration failed; partial progress saved.',
-      retryable: true,
+      message: failure.errorText,
+      ...(failure.code ? { code: failure.code } : {}),
+      ...(failure.retryable !== undefined ? { retryable: failure.retryable } : {}),
+
+      ...(typeof params.text === 'string' && params.text.length > 0
+        ? { text: params.text }
+        : {}),
     });
-  } else if (result.outcome === 'awaiting-approval') {
-    tracker.markBlocked({
-      ...(text ? { text } : {}),
-      usage: result.usage ? { ...result.usage } : undefined,
-    });
-  } else if (result.outcome === 'handoff') {
-    const handoffResponse =
-      (text ? text + '\n\n' : '') +
-      `[Handoff] ${result.handoff.summary}\n\nNext steps: ${result.handoff.nextSteps}`;
-    tracker.markCompleted({
-      text: handoffResponse.trim() || undefined,
-      usage: result.usage ? { ...result.usage } : undefined,
-      finishReason: 'handoff',
-    });
-  } else {
-    tracker.markCompleted({
-      ...(text ? { text } : {}),
-      usage: result.usage ? { ...result.usage } : undefined,
-      finishReason: result.outcome === 'budget-exhausted' ? 'budget-exhausted' : 'completed',
-    });
+  }
+  if (params.threadId) {
+    const record = params.loudGuard ? recordFailureTerminalEvent : recordSessionEvents;
+    record(
+      params.threadId,
+      turnFactsToEvents({
+        ...(params.committed
+          ? {
+              committed: {
+                runId: tracker.id,
+                messageId: params.committed.messageId,
+                message: params.committed.message,
+                transport,
+              },
+            }
+          : {}),
+        terminal: {
+          runId: tracker.id,
+          status: failure.status,
+          errorText: failure.errorText,
+        },
+      })
+    );
   }
   params.notify?.();
 };
 
-/**
- * The turn driver (ADR 004): one harness.turn() per batch — steer restart,
- * approval blocking, handoff chaining, and batch-boundary auto-compaction.
- * Mutates `state` in place; the caller owns catch/finally and run
- * finalization.
- */
+export const finalizeHarnessTurn = (params: {
+  tracker: TerminalRunTracker;
+  output: { text: string; usage?: import('@iki/backend/agent').AgentResult['usage']; finishReason?: string };
+  transport: string;
+}): void => {
+  const outcome: TurnDriverResult['outcome'] =
+    params.output.finishReason === 'tool-calls' ? 'budget-exhausted' : 'completed';
+  finalizeTurn({
+    tracker: params.tracker,
+    outcome,
+    text: params.output.text,
+    ...(params.output.usage ? { usage: params.output.usage } : {}),
+    transport: params.transport,
+  });
+};
+
+export const finalizeTurnCancelled = (
+  params: Omit<FinalizeTurnParams, 'outcome'> & { keepRowStatus?: AgentRunStatus }
+): void => {
+  const { tracker, transport } = params;
+  if (!params.skipRow && !params.keepRowStatus) {
+    tracker.markCancelled({ ...(params.text ? { text: params.text } : {}) });
+  }
+  if (params.threadId) {
+    const record = params.loudGuard ? recordFailureTerminalEvent : recordSessionEvents;
+    record(
+      params.threadId,
+      turnFactsToEvents({
+        ...(params.committed
+          ? {
+              committed: {
+                runId: tracker.id,
+                messageId: params.committed.messageId,
+                message: params.committed.message,
+                transport,
+              },
+            }
+          : {}),
+        terminal: { runId: tracker.id, status: 'cancelled' },
+      })
+    );
+  }
+  params.notify?.();
+};
+
 const runTurnBatches = async (
   state: TurnDriverState,
   deps: TurnDriverDeps,
 ): Promise<TurnDriverResult | undefined> => {
   const { target, plan, streamState, uiChunkEmitter } = deps;
   const threadId = plan.threadId;
-  const autonomousMode = Boolean(plan.autonomous && plan.autonomous.maxIterations > 1);
+
+  const batch = plan.budget.batch;
+  const autonomousMode = Boolean(batch && batch.max > 1);
   const previewEnabled = deps.conversationPreview !== false;
   let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let previewText = '';
@@ -264,13 +449,6 @@ const runTurnBatches = async (
     }, 300);
   };
 
-  // ── Text commit gate (D22) ──────────────────────────────────────────
-  // Streamed text lands in a buffer first; a flush writes it to the session
-  // log and only then publishes the chunks to the subscriber. Shown text is
-  // therefore always already committed. Flushes fire at segment boundaries
-  // (tool/approval/handoff steps), on the interval, and before the turn's
-  // result returns — a crash can lose at most the unpublished buffer tail,
-  // never anything the subscriber saw.
   let pendingText = '';
   let pendingTextSeq = 0;
   let lastTextFlushAt = Date.now();
@@ -278,9 +456,7 @@ const runTurnBatches = async (
     if (!pendingText) return;
     const text = pendingText;
     lastTextFlushAt = Date.now();
-    // A failed commit ends execution; an unpublished buffer cannot survive
-    // a successful turn's teardown. The gate keeps its own error contract:
-    // the withheld text rides the error so the UI can offer it.
+
     try {
       recordSessionEvents(threadId, [
         {
@@ -306,15 +482,13 @@ const runTurnBatches = async (
     if (Date.now() - lastTextFlushAt >= TEXT_COMMIT_INTERVAL_MS) flushCommittedText();
   };
 
-  /** Project AgentStep facts into the UI stream event shape. */
   const forwardAgentStep = (step: AgentStep) => {
-    // Reasoning streams into its own reasoning part (live "thinking" block);
-    // only `kind: 'text'` deltas belong to the answer text.
+
     if (step.type === 'message_update' && step.kind === 'reasoning') {
       uiChunkEmitter.emitReasoningDelta(step.text);
       return;
     }
-    // Emit text deltas via the dedicated ui chunk emitter path
+
     if (step.type === 'message_update') {
       bufferStreamedText(step.text);
       if (step.kind === 'text') {
@@ -324,11 +498,8 @@ const runTurnBatches = async (
       return;
     }
 
-    // Segment boundary: everything buffered is committed and published
-    // before a non-text fact (tool, approval, handoff) hits the stream.
     flushCommittedText();
 
-    // Convert AgentStep to the typed UI projection event.
     let event: ChatStreamEvent | null = null;
 
     if (step.type === 'tool_execution_start') {
@@ -410,8 +581,8 @@ const runTurnBatches = async (
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      // Run agent via harness — for-await consumes TurnEvent stream
-      let agentResult: import('@iki/backend/agent').AgentResult | undefined;
+
+      let agentResult: HarnessTurnResult | undefined;
       let cancelled = false;
       let steered = false;
 
@@ -468,6 +639,9 @@ const runTurnBatches = async (
                     return {
                       response: output.text,
                       toolCalls: output.toolCalls,
+                      ...(output.pendingToolCalls && output.pendingToolCalls.length > 0
+                        ? { pendingToolCalls: output.pendingToolCalls }
+                        : {}),
                       toolApprovalRequests: output.toolApprovalRequests,
                       usage: output.usage,
                       ...(output.lastStepInputTokens != null
@@ -480,7 +654,10 @@ const runTurnBatches = async (
                       iterations: 0,
                       requiresApproval: output.requiresApproval,
                       finishReason: output.finishReason,
-                    } as import('@iki/backend/agent').AgentResult;
+                      ...(output.pendingToolCalls
+                        ? { pendingToolCalls: output.pendingToolCalls }
+                        : {}),
+                    } as HarnessTurnResult;
                   }
                 }
                 return undefined;
@@ -514,16 +691,10 @@ const runTurnBatches = async (
             drained.length === 1
               ? drained[0]
               : drained.join('\n\n---\n\n');
-          // The steering input is a business fact like any other accepted
-          // input: recording it keeps the session log the authority for what
-          // the human asked for, so a recovery replay reconstructs the same
-          // conversation the live turn saw (audit H6).
+
           const steeringPayload: SteeringInputAcceptedPayload = {
             runId: state.runTracker.id,
-            // Distinct from the assistant message id: the assistant's
-            // MODEL_OUTPUT_COMMITTED fact carries its own id, and reusing it
-            // here would let that later fact overwrite this message in the
-            // rebuilt conversation — losing the steer again.
+
             messageId: `steer_${state.runTracker.id}_${state.batchIndex}`,
             batchIndex: state.batchIndex,
             text: steerPrompt,
@@ -554,9 +725,7 @@ const runTurnBatches = async (
         accumulatedPerf = addTurnPerf(accumulatedPerf, agentResult.perf);
       }
 
-      // Check for approval requests in result
       if (agentResult?.requiresApproval && agentResult.toolApprovalRequests?.length) {
-        state.runTracker.syncModelMessages(state.harness.getHistory() ?? state.streamHistory);
         deps.approvals.registerApprovalBatch(agentResult.toolApprovalRequests, {
           target,
           history: state.harness.getHistory() ?? state.streamHistory,
@@ -579,10 +748,13 @@ const runTurnBatches = async (
             : {}),
         };
         state.isAwaitingApproval = true;
+        state.lastFacts = {
+          text: state.accumulatedResponse || agentResult.response,
+          ...(agentResult.usage ? { usage: agentResult.usage } : {}),
+        };
         break;
       }
 
-      // Build stream result from agent result
       const handoff = agentResult?.toolCalls?.find(
         tc => tc.toolName === 'handoff'
       );
@@ -599,6 +771,9 @@ const runTurnBatches = async (
         ...(agentResult?.toolSchemaTokens
           ? { toolSchemaTokens: agentResult.toolSchemaTokens }
           : {}),
+        ...(agentResult?.pendingToolCalls && agentResult.pendingToolCalls.length > 0
+          ? { pendingToolCalls: agentResult.pendingToolCalls }
+          : {}),
       };
       if (handoff) {
         const args = handoff.args as Record<string, unknown>;
@@ -612,9 +787,10 @@ const runTurnBatches = async (
           },
         };
       } else {
+
         streamResult = {
           ...resultBase,
-          outcome: agentResult?.finishReason === 'tool-calls' ? 'continuing' : 'completed',
+          outcome: agentResult?.finishReason === 'tool-calls' ? 'budget-exhausted' : 'completed',
         };
       }
 
@@ -629,8 +805,6 @@ const runTurnBatches = async (
       }
       previewText = '';
 
-      state.runTracker.syncModelMessages(state.harness.getHistory() ?? state.streamHistory);
-
       if (
         streamResult.outcome === 'cancelled' ||
         streamResult.outcome === 'awaiting-approval' ||
@@ -639,9 +813,7 @@ const runTurnBatches = async (
       ) break;
 
       if (streamResult.outcome === 'handoff') {
-        // Defensive: the runner yields the handoff step after the stream
-        // loop, so the buffer is empty here today — the flush keeps the
-        // runId-at-flush invariant local instead of pinned to that order.
+
         flushCommittedText();
         const handoffText =
           (streamResult.response ? streamResult.response + '\n\n' : '') +
@@ -650,24 +822,25 @@ const runTurnBatches = async (
           ? state.accumulatedResponse + '\n\n---\n\n' + handoffText
           : handoffText;
 
-        state.runTracker.markCompleted({
-          text: handoffText.trim() || undefined,
-          usage: streamResult.usage ? { ...streamResult.usage } : undefined,
-          finishReason: 'handoff',
-        });
-        deps.notifyRunStatus();
-
         state.handoffChain++;
-        if (state.handoffChain >= MAX_HANDOFF_CHAIN || !autonomousMode) break;
-
         const parentRunId = state.runTracker.id;
-        // The segment swap is a lifecycle change, and the run row is only one
-        // projection of it. Without these facts the replay reads the parent as
-        // still running and the chained segment as a turn with a defaulted
-        // kind — two projections of one turn disagreeing.
-        recordSessionEvents(threadId, turnFactsToEvents({
-          terminal: { runId: parentRunId, status: 'completed', finishReason: 'handoff' },
-        }));
+        const chainContinues = state.handoffChain < MAX_HANDOFF_CHAIN && autonomousMode;
+
+        finalizeTurn({
+          tracker: state.runTracker,
+          outcome: 'handoff',
+          text: handoffText,
+          ...(streamResult.usage ? { usage: streamResult.usage } : {}),
+          handoff: streamResult.handoff,
+          ...(chainContinues ? { threadId } : {}),
+          transport: plan.transport,
+          notify: deps.notifyRunStatus,
+        });
+
+        if (!chainContinues) {
+
+          break;
+        }
 
         state.runTracker = createAgentRunTracker(
           planToRunTrackerParams(
@@ -678,7 +851,6 @@ const runTurnBatches = async (
                 messages: [],
               },
               working: {
-                modelMessages: [],
                 accumulatedText: '',
                 pendingApprovalIds: [],
                 lastStepIndex: 0,
@@ -695,12 +867,9 @@ const runTurnBatches = async (
           )
         );
         streamState.runId = state.runTracker.id;
-        // The live-execution index follows the chain: a cancel naming the
-        // chained segment must reach the same execution, not a dead parent.
+
         deps.onRunIdChanged?.(state.runTracker.id);
-        // The chained segment's start is the same kind of lifecycle fact the
-        // entries write for a fresh turn. Without it a terminal-only record
-        // would materialize this turn with a defaulted kind.
+
         recordSessionEvents(threadId, turnFactsToEvents({
           started: {
             runId: state.runTracker.id,
@@ -709,10 +878,6 @@ const runTurnBatches = async (
           },
         }));
 
-        // The chained batch resumes with a fresh [HANDOFF CONTEXT] history —
-        // built BEFORE the harness so the supply selection gates against the
-        // history the new harness will actually receive (switch item 3c: one
-        // selection point decides every batch — no mid-chain supply flip).
         state.streamHistory = [
           {
             role: 'system',
@@ -732,27 +897,30 @@ const runTurnBatches = async (
         state.streamPrompt = streamResult.handoff.nextSteps || 'Continue the work from the handoff summary.';
         continue;
       }
-      if (!autonomousMode) break;
+
+      state.lastFacts = {
+        text: state.accumulatedResponse || streamResult.response,
+        ...(streamResult.usage ? { usage: streamResult.usage } : {}),
+        ...(streamResult.pendingToolCalls && streamResult.pendingToolCalls.length > 0
+          ? { pendingToolCalls: streamResult.pendingToolCalls }
+          : {}),
+      };
+
+      if (!autonomousMode || streamResult.outcome !== 'budget-exhausted') break;
 
       state.batchIndex++;
-      if (state.batchIndex >= Math.min(
-        MAX_AUTONOMOUS_BATCHES,
-        plan.autonomous?.maxIterations ?? MAX_AUTONOMOUS_BATCHES,
-      )) break;
+      if (state.batchIndex >= Math.min(MAX_AUTONOMOUS_BATCHES, batch?.max ?? MAX_AUTONOMOUS_BATCHES)) {
+
+        break;
+      }
 
       state.streamHistory = state.harness.getHistory();
-      state.streamPrompt = plan.autonomous?.continuePrompt || 'Continue with the next step.';
+      state.streamPrompt = batch?.continuePrompt || 'Continue with the next step.';
     }
 
-    if (streamResult?.outcome === 'continuing') {
-      streamResult = { ...streamResult, outcome: 'budget-exhausted' };
-    }
     return streamResult;
   } finally {
-    // Error paths (provider failure, cancellation) exit through here with
-    // text still buffered. Flushing keeps the invariant on the failure path:
-    // whatever gets published around the error was committed first, and the
-    // log covers the subscriber's final view.
+
     if (previewDebounceTimer) {
       clearTimeout(previewDebounceTimer);
       previewDebounceTimer = null;
@@ -772,10 +940,12 @@ export const createTurnDriver = (
     handoffChain: 0,
     turnHadToolCalls: false,
     isAwaitingApproval: false,
+    lastFacts: {},
   };
   return {
     run: () => runTurnBatches(state, deps),
     getRunTracker: () => state.runTracker,
+    getLastFacts: () => state.lastFacts,
     getHarness: () => state.harness,
     getAccumulatedResponse: () => state.accumulatedResponse,
     getBatchCount: () => state.batchIndex,

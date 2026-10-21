@@ -338,7 +338,7 @@ const downloadWhisperModelFromUrl = async (
     try {
       await fs.unlink(tempPath);
     } catch {
-      // ignore cleanup errors
+      /* empty: error is not actionable here */
     }
     throw error;
   }
@@ -481,7 +481,7 @@ export const downloadWhisperNodeModel = async (
       try {
         await fs.unlink(modelPath);
       } catch {
-        // ignore delete errors
+        /* empty: error is not actionable here */
       }
     } else {
       onProgress?.({ model: modelName, stage: 'done', message: 'Model ready' });
@@ -603,20 +603,20 @@ export const transcribeWithWhisperNode = async (
     try {
       await fs.unlink(inputPath);
     } catch {
-      // ignore
+      /* empty: error is not actionable here */
     }
     if (wavPath) {
       try {
         await fs.unlink(wavPath);
       } catch {
-        // ignore
+        /* empty: error is not actionable here */
       }
     }
     if (outputPath) {
       try {
         await fs.unlink(`${outputPath}.txt`);
       } catch {
-        // ignore
+        /* empty: error is not actionable here */
       }
     }
   }

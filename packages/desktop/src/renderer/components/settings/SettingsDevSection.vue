@@ -39,8 +39,6 @@ const restart = async () => {
   if (restarting.value) return;
   restarting.value = true;
   try {
-    // The process exits inside this call; the button only stays disabled so a
-    // double click cannot queue two relaunches if the quit is slow.
     await electronAPI.dev.restartApp();
   } catch {
     restarting.value = false;

@@ -1,15 +1,8 @@
 // @vitest-environment node
 
-/**
- * Switch item 3a (issue #114): the Pi tool turn harness's contract — loop
- * events mapped 1:1 onto the TurnDriver protocol, inline execution through
- * the real registry (unknown names become error results), ModelMessage
- * mirror shape, terminal mapping (stop / tool-calls), and the never-approve
- * gate the routing relies on. Model call and executor are scripted doubles.
- */
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '@iki/backend/message/model_history';
 import { z } from 'zod';
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
@@ -102,7 +95,6 @@ const scriptedModelCall = (
       stream.push({ type: 'text_delta', contentIndex: 0, delta, partial: finalMessage() } as AssistantMessageEvent);
     }
     stream.push({ type: 'done', reason: 'stop', message: finalMessage({ content: step.content, ...(step.usage ? { usage: { input: step.usage.input ?? 0, output: step.usage.output ?? 0, cacheRead: step.usage.cacheRead ?? 0, cacheWrite: 0, reasoning: 0, totalTokens: step.usage.totalTokens ?? 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: step.costUsd ?? 0 } } } : {}) }) });
-    // The PiToolModelCall contract: a live delta stream + the final promise.
     return {
       events: (async function* () {
         for await (const event of stream) {
@@ -178,6 +170,29 @@ describe('pi tool turn harness (switch item 3a)', () => {
     }
   });
 
+  it('appends the injected step reminder to a later request without duplicating it', async () => {
+    const scripted = scriptedModelCall([
+      { content: [toolCallBlock('call_1', 'probe_read', { path: '/a.txt' })] },
+      { content: [toolCallBlock('call_2', 'probe_read', { path: '/b.txt' })] },
+      { content: [textBlock('done')], deltas: ['done'] },
+    ]);
+    const counts: number[] = [];
+    const modelCall: PiToolModelCall = (_config, request) => {
+      counts.push(JSON.stringify(request.messages).match(/Reminder probe\./g)?.length ?? 0);
+      return scripted(_config, request as never);
+    };
+    const harness = new PiToolTurnHarness(harnessConfig(), {
+      modelCall,
+      stepReminder: steps => (steps.length >= 1 ? '<reminder>Reminder probe.</reminder>' : undefined),
+    });
+
+    await collect(harness, { prompt: 'probe' });
+
+    expect(counts[0]).toBe(0);
+    expect(counts.at(-1)).toBe(1);
+    expect(Math.max(...counts)).toBe(1);
+  });
+
   it('runs a tool step chain: live deltas, tool events around the effect, terminal mapping', async () => {
     const modelCall = scriptedModelCall([
       { content: [textBlock('reading '), toolCallBlock('call_1', 'probe_read', { path: '/a.txt' })], deltas: ['reading '], usage: { input: 0, output: 0, totalTokens: 0 } },
@@ -216,17 +231,11 @@ describe('pi tool turn harness (switch item 3a)', () => {
         result: { type: 'text', value: 'body of /a.txt' },
       },
     ]);
-    // Total-prompt convention: 80 = 20 + 60 cached.
     expect(done.output.usage).toMatchObject({ inputTokens: 80, outputTokens: 4 });
     expect(done.output.perf).toMatchObject({ toolCalls: 1, steps: 2 });
   });
 
   it('carries the catalog-derived cost through to the turn usage', async () => {
-    // The D35 cost term: Pi's calculateCost fills usage.cost.total per call
-    // from the model's catalog rates, and mapBuckets must land it on
-    // estimatedCostUsd. Before that wiring this was hardcoded 0 — a silent
-    // regression there (or a future refactor dropping the term) is invisible
-    // to every other assertion in this suite.
     const modelCall = scriptedModelCall([
       { content: [toolCallBlock('call_cost', 'probe_read', { path: '/a.txt' })], usage: { input: 1000, output: 500, totalTokens: 1500 }, costUsd: 0.0105 },
       { content: [textBlock('done')], usage: { input: 20, output: 4, totalTokens: 24 }, costUsd: 0.0006 },
@@ -237,9 +246,7 @@ describe('pi tool turn harness (switch item 3a)', () => {
     const done = events.at(-1);
     assert(done && done.event === 'done');
 
-    // 0.0105 + 0.0006 — the per-call costs are summed, not last-write-wins.
     expect(done.output.usage.estimatedCostUsd).toBeCloseTo(0.0111, 10);
-    // Unpriced models keep 0 (the pre-D35 default), never NaN.
     expect(done.output.usage.inputTokens).toBe(1020);
   });
 
@@ -255,8 +262,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
     const history = harness.getHistory();
     expect(history).toHaveLength(4);
     expect(history[0]).toEqual({ role: 'user', content: 'probe' });
-    // ONE assistant entry carrying the tool call (the B1 shape); this step
-    // streamed no text, so the entry is the tool call alone.
     expect(history[1]).toEqual({
       role: 'assistant',
       content: [
@@ -278,10 +283,8 @@ describe('pi tool turn harness (switch item 3a)', () => {
       role: 'assistant',
       content: [{ type: 'text', text: 'done' }],
     });
-    // The second request's transcript carried the assistant + tool result.
     expect(modelCall.requests).toHaveLength(2);
     expect(modelCall.requests[1].messages.map(m => m.role)).toEqual(['user', 'assistant', 'toolResult']);
-    // The wire carried the projected tool schemas.
     expect(modelCall.requests[0].tools?.map(t => t.name)).toContain('probe_read');
     expect(modelCall.requests[0].systemPrompt).toContain('persona prompt');
   });
@@ -309,8 +312,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
   });
 
   it('maps thinking deltas to reasoning and thinking blocks to reasoning parts', async () => {
-    // The scripted stream has no thinking events; the thinking block on the
-    // final message still mirrors as a reasoning part.
     const modelCall = scriptedModelCall([
       {
         content: [{ type: 'thinking' as const, thinking: 'pondering' }, textBlock('answer')],
@@ -339,7 +340,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
     assert(done && done.event === 'done');
     expect(done.output.finishReason).toBe('tool-calls');
     expect(done.output.toolCalls).toHaveLength(1);
-    // The tool RAN (harness semantics) — the driver reports budget-exhausted.
     expect(stepEvents(events).filter(s => s.type === 'tool_execution_end')).toHaveLength(1);
   });
 
@@ -377,7 +377,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
     const byId = new Map(ends.map(e => [e.toolCallId, e]));
     expect(byId.get('call_ok')?.outcome).toBe('success');
     expect(handled).toEqual(['/real.txt']);
-    // Unknown names are error results, never a crash.
     expect(byId.get('call_ghost')?.outcome).toBe('error');
     expect(byId.get('call_ghost')?.output?.value).toContain('Unknown tool');
   });
@@ -402,7 +401,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
     const second = onInference.mock.calls[1][0];
     expect(second.finishReason).toBe('stop');
     expect(second.usage).toMatchObject({ inputTokens: 80 });
-    // The second step's snapshot includes the first step's exchange.
     expect(second.messages.map((m: ModelMessage) => m.role)).toEqual(['user', 'assistant', 'tool']);
   });
 
@@ -426,7 +424,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
 
     const done = events.at(-1);
     assert(done && done.event === 'done');
-    // The driver's handoff branch reads the executed call from here.
     expect(done.output.toolCalls).toEqual([
       {
         toolName: 'handoff',
@@ -435,8 +432,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
       },
     ]);
     expect(modelCall.requests).toHaveLength(1);
-    // The mirror still records the exchange: assistant with the call, then
-    // the tool result (the loop stops right after the terminal step).
     const history = harness.getHistory();
     expect(history[1]).toMatchObject({ role: 'assistant' });
     expect(history.at(-1)).toEqual({
@@ -462,18 +457,11 @@ describe('pi tool turn harness (switch item 3a)', () => {
     const events = await collect(harness, { prompt: 'probe' });
     const done = events.at(-1);
     assert(done && done.event === 'done');
-    // Cumulative usage sums (500+... plus 90+10), but the occupancy signal
-    // is the FINAL request's billed input (90 + 10 cached).
     expect(done.output.usage.inputTokens).toBe(600);
     expect(done.output.lastStepInputTokens).toBe(100);
   });
 
   it('recovery notes join the mirror before the next assistant entry and ride the sent snapshot', async () => {
-    // Attempt 1 fails transiently; the wrapper retries; the mirror must show
-    // the note between the first exchange and the second assistant entry.
-    // A wrapper-signaled recovery note (mirroring what withPiRetry does on a
-    // retried step): the turn succeeds, and the note must sit between the
-    // user input and the assistant entry in the stored trajectory.
     const modelCall: PiToolModelCall = (_config, request) => {
       request.onRecoveryNote?.('note: retrying after 503');
       return {
@@ -493,17 +481,10 @@ describe('pi tool turn harness (switch item 3a)', () => {
     const history = harness.getHistory();
     expect(history[1]).toEqual({ role: 'user', content: expect.stringContaining('note: retrying') });
     expect(history[2]).toMatchObject({ role: 'assistant' });
-    // This single call sent only the user input (the note was signaled
-    // mid-call; a real retried step's note rides the NEXT request).
     expect(onInference.mock.calls[0][0].messages.map((m: ModelMessage) => m.role)).toEqual(['user']);
   });
 
   it('honours toolsOverride as the capability bound (delegation) and still refuses pre-aborted signals', async () => {
-    // Contract change: this used to THROW on toolsOverride, which pinned
-    // delegated subagents to the AI SDK harness. With every turn on the Pi
-    // supply there is no other executor to pin them to, so the harness accepts
-    // the caller's tool set — resolution is skipped and the override IS the
-    // bound. Delegation hands over a pre-filtered, approval-free set.
     const modelCall = scriptedModelCall([
       { content: [toolCallBlock('call_ov', 'probe_read', { path: '/ov.txt' })] },
       { content: [textBlock('done')] },
@@ -521,7 +502,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
         } as never,
       ],
     });
-    // The overridden tool was offered to the model and its call executed.
     const sentTools = (modelCall.requests[0] as { tools?: Array<{ name: string }> }).tools ?? [];
     expect(sentTools.map(tool => tool.name)).toContain('probe_read');
     const observations = JSON.stringify(stepEvents(events));
@@ -556,15 +536,12 @@ describe('pi tool turn harness (switch item 3a)', () => {
       toolCallId: 'call_a',
       toolCall: { toolName: 'probe_read', args: { path: '/guarded.txt' } },
     });
-    // No execution events: nothing ran before the decision.
     expect(steps.filter(s => s.type === 'tool_execution_start')).toHaveLength(0);
 
     const done = events.at(-1);
     assert(done && done.event === 'done');
     expect(done.output.requiresApproval).toBe(true);
     expect(done.output.toolApprovalRequests).toEqual(approvalStep.requests);
-    // The mirror holds the assistant entry with the tool call — the paused
-    // shape the resume pairs the decision against.
     expect(harness.getHistory().at(-1)).toMatchObject({ role: 'assistant' });
     expect(modelCall.requests).toHaveLength(1);
   });
@@ -592,8 +569,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
           prepare: address => prepared.push(address.approvalId),
           executeApproved: async (address, port) => {
             assert(address.approvalId === 'ap_1');
-            // The owner's port executes RAW (the owner wraps the result) —
-            // record at this seam: the resume path bypasses deps.executeTool.
             const value = (await port.execute('probe_read', { path: '/r.txt' })) as string;
             executed.push({ toolName: 'probe_read', args: { path: '/r.txt' }, value });
             return {
@@ -625,7 +600,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
     expect(done.output.requiresApproval).toBe(false);
     expect(done.output.finishReason).toBe('stop');
 
-    // Mirror: user, assistant(tool-call), tool(result), assistant(final).
     const history = harness.getHistory();
     expect(history).toHaveLength(4);
     expect(history[1]).toMatchObject({ role: 'assistant' });
@@ -634,7 +608,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
       role: 'assistant',
       content: [{ type: 'text', text: 'continuing after approval' }],
     });
-    // The continuation request carried the tool result on the wire.
     expect(modelCall.requests[0].messages.map(m => m.role)).toEqual(['user', 'assistant', 'toolResult']);
   });
 
@@ -675,7 +648,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
     expect(end.output?.type).toBe('execution-denied');
     const done = events.at(-1);
     assert(done && done.event === 'done');
-    // The streamed delta is the shown text (parity with the runner).
     expect(done.output.text).toBe('understood');
   });
 
@@ -711,8 +683,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
     assert(firstDone && firstDone.event === 'done');
     expect(firstDone.output.text).toBe('first answer');
 
-    // The steer-restart / batch-continuation shape: the driver passes the
-    // live history plus the appended input with an EMPTY prompt.
     const steerInput: ModelMessage = { role: 'user', content: '[STEERING INPUT] go left' };
     const second = await collect(harness, {
       prompt: '',
@@ -722,8 +692,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
     assert(secondDone && secondDone.event === 'done');
     expect(secondDone.output.text).toBe('second answer');
 
-    // The second request carried the full first-turn transcript plus the
-    // steer entry — nothing lost across turns, no empty user message.
     const secondRequest = modelCall.requests[1]!;
     expect(secondRequest.messages.map(m => m.role)).toEqual(['user', 'assistant', 'user']);
     expect(JSON.stringify(secondRequest.messages[1])).toContain('first answer');
@@ -774,7 +742,6 @@ describe('withPiRetry (the production wrapper)', () => {
     expect(deltas.join('')).toBe('recovered ');
     expect(result.stopReason).toBe('stop');
     expect(notes).toHaveLength(1);
-    // The note persisted onto the LIVE transcript.
     expect((request.messages as Array<{ content: string }>)[1].content).toContain('encountered an error');
   }, 15000);
 
@@ -783,8 +750,6 @@ describe('withPiRetry (the production wrapper)', () => {
       attemptFrom([{ stopReason: 'error', errorMessage: 'Provider finish_reason: content_filter' }]),
       baseRequest()
     );
-    // Refusals ARE retryable (runner parity) — the refusal surfaces only
-    // after the retry budget exhausts.
     await expect(final).rejects.toBeInstanceOf(RefusalError);
   }, 15000);
 
@@ -883,9 +848,6 @@ describe('withPiRetry (the production wrapper)', () => {
       onOverflow
     );
     const result = await final;
-    // The transient budget was EXHAUSTED (3 retries) before the overflow;
-    // only the reset lets the post-rescue rate-limit failure retry. Delete
-    // `attemptIndex = 0` and this fails terminal at attempt 5.
     expect(result.stopReason).toBe('stop');
     expect(onOverflow).toHaveBeenCalledTimes(1);
     expect(onNote).toHaveBeenCalledTimes(4);

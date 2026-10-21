@@ -90,7 +90,6 @@ export const useConfigEffects = () => {
     if (typeof media.addEventListener === 'function') {
       media.addEventListener('change', handleMediaChange);
     } else if (typeof media.addListener === 'function') {
-      // Legacy Electron/Chromium fallback.
       media.addListener(legacyMediaChangeListener);
     }
   });

@@ -1,13 +1,5 @@
 // @vitest-environment node
 
-/**
- * Switch item 3c (issue #118): the supply-selection contract at its single
- * point. The Pi supply layer serves text-only turns and tool turns in EVERY
- * mode — autonomous batch continuation and handoff chains included — and the
- * approval-resume selection test admits autonomous paused plans, or a pause
- * would flip the supply mid-turn. Out-of-domain history and static-factory
- * providers keep the AI SDK harness.
- */
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,7 +10,6 @@ import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { toModelInputMessages } from '@iki/backend/message/ui_messages';
 import { projectHistoryToPiContext } from '@iki/backend/provider/llm/pi_adapter';
 import { addProvider } from '@iki/backend/db/providers';
-import { AgentHarness } from '@iki/backend/agent/harness';
 import { PiTextTurnHarness } from '@iki/backend/agent/runners/pi_text_turn_harness';
 import { PiToolTurnHarness } from '@iki/backend/agent/runners/pi_tool_turn_harness';
 import {
@@ -70,7 +61,7 @@ const plan = (overrides: Partial<ExecutionPlan>): ExecutionPlan =>
     guardActive: false,
     requireApproval: false,
     autoApproveToolRequests: false,
-    maxIterations: 8,
+    budget: { step: 8 },
     contextTokens: 1,
     skillMode: 'manual' as const,
     kind: 'chat-turn' as const,
@@ -84,7 +75,7 @@ const history = [{ role: 'user' as const, content: 'probe' }];
 describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
   it('serves an autonomous tool turn with the Pi tool harness (was AI SDK before 3c)', () => {
     const harness = selectTurnHarness(
-      plan({ autonomous: { maxIterations: 3, continuePrompt: 'continue' } }),
+      plan({ budget: { step: 8, batch: { max: 3, continuePrompt: 'continue' } } }),
       history
     );
     expect(harness).toBeInstanceOf(PiToolTurnHarness);
@@ -98,38 +89,28 @@ describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
     const autonomous = plan({
       enableTools: false,
       enabledTools: [],
-      autonomous: { maxIterations: 2 },
+      budget: { step: 8, batch: { max: 2 } },
     });
     expect(selectTurnHarness(autonomous, history)).toBeInstanceOf(PiTextTurnHarness);
   });
 
   it('serves a static-factory provider on the Pi harness in autonomous mode', () => {
-    // Contract change: `STATIC_PROVIDER_MODEL_FACTORIES[type]` used to exclude
-    // openai/anthropic/minimax/deepseek from the Pi supply, so the harness
-    // selector kept them on `AgentHarness`. Pi now drives those dialects
-    // (resolveProviderApi), so the selector admits them — one supply for every
-    // provider, which is what "no long-term double-driving" requires.
     const harness = selectTurnHarness(
       plan({
         providerType: 'openai',
         providerId: 'provider_sdk_supply',
         model: 'sdk-model',
-        autonomous: { maxIterations: 3 },
+        budget: { step: 8, batch: { max: 3 } },
       }),
       history
     );
-    expect(harness).not.toBeInstanceOf(AgentHarness);
+    expect(harness).toBeInstanceOf(PiToolTurnHarness);
   });
 
   it('REFUSES out-of-domain history instead of silently re-routing (the projection domain gate)', () => {
-    // Contract change: this used to return the AI SDK harness, which meant the
-    // user's turn ran on a different executor than the one under test and the
-    // only trace was a log line. A refusal is now terminal and names the part
-    // the projection cannot represent — the domain should grow to cover it,
-    // not be worked around at runtime.
     expect(() =>
       selectTurnHarness(
-        plan({ autonomous: { maxIterations: 3 } }),
+        plan({ budget: { step: 8, batch: { max: 3 } } }),
         [
           {
             role: 'assistant',
@@ -145,11 +126,9 @@ describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
       )
     ).toThrow(PiSupplyRefusedError);
 
-    // The message must say WHAT could not be projected and that nothing was
-    // sent, so the failure is actionable rather than a generic turn error.
     expect(() =>
       selectTurnHarness(
-        plan({ autonomous: { maxIterations: 3 } }),
+        plan({ budget: { step: 8, batch: { max: 3 } } }),
         [
           {
             role: 'assistant',
@@ -166,7 +145,7 @@ describe('selectTurnHarness (switch item 3c: autonomous turns on Pi)', () => {
 describe('pausedPlanRunsOnPiToolSupply (switch item 3c: autonomous resumes stay on Pi)', () => {
   it('admits an autonomous paused plan (was excluded before 3c)', () => {
     expect(
-      pausedPlanRunsOnPiToolSupply(plan({ autonomous: { maxIterations: 3 } }), history)
+      pausedPlanRunsOnPiToolSupply(plan({ budget: { step: 8, batch: { max: 3 } } }), history)
     ).toBe(true);
   });
 
@@ -184,15 +163,6 @@ describe('pausedPlanRunsOnPiToolSupply (switch item 3c: autonomous resumes stay 
   });
 
   it('admits a restart-recovered replay history — the pairing stamps strip to the Pi wire domain (issue #133)', async () => {
-    // What rebuildThreadViewFromEvents → toModelInputMessages(repair:false)
-    // yields for a paused turn: the assistant partial carries the live
-    // approval-request pair. piDomainResumeHistory strips those stamps (the
-    // live mirror never carried them — the pause registers
-    // harness.getHistory()), so a RESTART-recovered resume of a Pi-paused
-    // turn answers the selection identically to the live path and resumes on
-    // the Pi harness. This flips the supply flip documented at the ADR 008
-    // F2 review; a genuinely out-of-domain part (tool-approval-response)
-    // still refuses — pinned in the fresh-selection test above.
     const recoveredHistory = await toModelInputMessages(
       [
         {
@@ -224,11 +194,6 @@ describe('pausedPlanRunsOnPiToolSupply (switch item 3c: autonomous resumes stay 
   });
 
   it('keeps the projection itself refusing tool-approval-request — the strip is the only sanctioned normalization', () => {
-    // Bypasses the converter AND the resume-path strip on purpose: the
-    // projection-level contract is that a request part reaching it throws.
-    // Only piDomainResumeHistory strips them, upstream of the resume gate —
-    // a future "symmetric" widening of that strip would silence the flipped
-    // selection pin above, so the throw is pinned directly.
     const stampedModelHistory = [
       { role: 'user' as const, content: 'probe' },
       {

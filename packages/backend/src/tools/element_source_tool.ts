@@ -4,12 +4,6 @@ import { BaseTool } from '@iki/backend/tools/base';
 import type { DevToolsResolveRequest, DevToolsSourceResult } from '@iki/backend/types/devtools';
 import { ElementSourceInputSchema } from './schemas';
 
-/**
- * The desktop main process owns the renderer probe (`window.electronAPI`).
- * The tool runs in an agent context that may live in the daemon, which has no
- * windows at all, so the resolver is injected at registration instead of
- * imported — backend must not reach into desktop.
- */
 export type ElementSourceResolver = (
   request: DevToolsResolveRequest
 ) => Promise<DevToolsSourceResult> | DevToolsSourceResult;
@@ -31,6 +25,8 @@ export class ElementSourceTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+
+  override replay = 'safe' as const;
   override description =
     'Locate the source file that renders a UI element in the running app window — the "I see it on screen, where is the code?" step. Use `selected` after the user clicks the element in the app (or after opening DevTools with F12 and clicking it), `hovered` for the element under the pointer, `selector` with a CSS selector, or `point` with the `x`/`y` viewport pixel of something you can see in a screenshot. Returns the Vue component chain (component name + source file path), the owning .vue file, and often the line. Read that file before editing; do not guess a path.';
 

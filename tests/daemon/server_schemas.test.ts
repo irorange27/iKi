@@ -30,8 +30,6 @@ describe('daemon server schemas', () => {
       scopes: [
         'chat:read',
         'chat:write',
-        'memory:read',
-        'memory:write',
         'tools:run',
         'tools:approve',
         'mcp:read',
@@ -42,41 +40,29 @@ describe('daemon server schemas', () => {
   });
 
   it('accepts a workspace binding on thread create and rejects a non-string value', () => {
-    // A headless client must be able to bind a thread to its workspace at
-    // create time (dogfood §A step 4) instead of reaching into SQLite.
     expect(
       parseChatThreadCreatePayload({ title: 'Dogfood', workspace_id: ' ws-dogfood ' })
     ).toEqual({ title: 'Dogfood', workspace_id: 'ws-dogfood' });
 
-    // Omitted and explicit-null both mean "no binding", and the omitted case
-    // must not invent the key — the desktop path keeps the payload it sent.
     expect(parseChatThreadCreatePayload({ title: 'Chat' })).toEqual({ title: 'Chat' });
     expect(parseChatThreadCreatePayload({ workspace_id: null })).toEqual({
       workspace_id: null,
     });
 
-    // A wrong type used to be dropped silently, yielding an unbound thread
-    // whose file/shell tools then refuse to run with no explanation.
     expect(() => parseChatThreadCreatePayload({ workspace_id: 123 })).toThrow();
     expect(() => parseChatThreadCreatePayload({ workspace_id: '   ' })).toThrow();
   });
 
   it('accepts a workspace binding on thread create and rejects a non-string value', () => {
-    // A headless client must be able to bind a thread to its workspace at
-    // create time (dogfood §A step 4) instead of reaching into SQLite.
     expect(
       parseChatThreadCreatePayload({ title: 'Dogfood', workspace_id: ' ws-dogfood ' })
     ).toEqual({ title: 'Dogfood', workspace_id: 'ws-dogfood' });
 
-    // Omitted and explicit-null both mean "no binding", and the omitted case
-    // must not invent the key — the desktop path keeps the payload it sent.
     expect(parseChatThreadCreatePayload({ title: 'Chat' })).toEqual({ title: 'Chat' });
     expect(parseChatThreadCreatePayload({ workspace_id: null })).toEqual({
       workspace_id: null,
     });
 
-    // A wrong type used to be dropped silently, yielding an unbound thread
-    // whose file/shell tools then refuse to run with no explanation.
     expect(() => parseChatThreadCreatePayload({ workspace_id: 123 })).toThrow();
     expect(() => parseChatThreadCreatePayload({ workspace_id: '   ' })).toThrow();
   });
@@ -91,9 +77,7 @@ describe('daemon server schemas', () => {
         skillIds: ['skill_1'],
         skillMode: 'manual',
         experimental_context: {
-          affect_mode: 'explicit_policy',
           context_mode: 'benchmark_clean',
-          await_realtime_affect: true,
         },
       })
     ).toEqual({
@@ -106,9 +90,7 @@ describe('daemon server schemas', () => {
       skillIds: ['skill_1'],
       skillMode: 'manual',
       experimentalContext: {
-        affectMode: 'explicit_policy',
         contextMode: 'benchmark_clean',
-        awaitRealtimeAffect: true,
       },
     });
 

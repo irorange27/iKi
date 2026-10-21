@@ -7,9 +7,6 @@ import {
   type SessionPerfStats,
 } from '../modules/chat/ui_message_references';
 
-// Array length covers SDK pushes/removals; store revision covers edits and
-// same-length history replacements. Usage tick is emitted after SDK application.
-// Do not subscribe the aggregation to text-delta message replacements.
 export const useChatUsage = (
   getMessages: () => ChatUiMessage[],
   getRevision: () => number,
@@ -24,8 +21,6 @@ export const useChatUsage = (
     );
 
   const latestAssistantTokenUsage = computed<TokenUsageSummary | null>(previous => {
-    // Dependency on the usage-chunk tick: live usage parts mutate a message in
-    // place and would otherwise not re-run this scan.
     void usageChunkTick.value;
     void getRevision();
     void getMessages().length;
@@ -43,8 +38,6 @@ export const useChatUsage = (
     return null;
   });
 
-  // Session-cumulative perf stats for the bar under the composer. Message
-  // parts carry per-turn usage, so this survives reloads for free.
   const sessionPerfStats = computed<SessionPerfStats | null>(previous => {
     void usageChunkTick.value;
     void getRevision();

@@ -1,4 +1,5 @@
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
+import { rebuildResumeHistoryFromEvents } from './run_rehydrator';
 import type { ChatInputMessage } from './types';
 
 export type HandoffDetails = {
@@ -22,7 +23,10 @@ const findLatestHandoffArgs = (
         (part as Record<string, unknown>).type === 'tool-call' &&
         (part as Record<string, unknown>).toolName === 'handoff'
       ) {
-        const args = (part as Record<string, unknown>).args as Record<string, unknown> | undefined;
+
+        const args =
+          ((part as Record<string, unknown>).input as Record<string, unknown> | undefined) ??
+          ((part as Record<string, unknown>).args as Record<string, unknown> | undefined);
         return args ?? {};
       }
     }
@@ -30,19 +34,15 @@ const findLatestHandoffArgs = (
   return null;
 };
 
-/**
- * Rebuilds history/prompt for a handoff-resume run from the parent run's stored
- * model messages: a [HANDOFF CONTEXT] system message on top of the parent's
- * transcript, followed by the current thread's history.
- */
-export const buildHandoffResumeContext = (params: {
-  parentRun: { working?: { modelMessages?: unknown } } | null | undefined;
+export const buildHandoffResumeContext = async (params: {
+  threadId: string | null | undefined;
   preparedHistory: ChatInputMessage[];
   preparedPrompt: string;
-}): { history: ModelMessage[]; prompt: string } | null => {
-  const resumedMessages = Array.isArray(params.parentRun?.working?.modelMessages)
-    ? (params.parentRun!.working!.modelMessages as ModelMessage[])
-    : [];
+}): Promise<{ history: ModelMessage[]; prompt: string } | null> => {
+  const threadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
+  if (!threadId) return null;
+  const replayed = await rebuildResumeHistoryFromEvents(threadId);
+  const resumedMessages = replayed?.history ?? [];
   if (resumedMessages.length === 0) return null;
 
   const args = findLatestHandoffArgs(resumedMessages) ?? {};
@@ -83,7 +83,6 @@ export const buildHandoffResumeContext = (params: {
   };
 };
 
-/** System message shown to a fresh harness instance continuing after a handoff. */
 export const buildFreshHandoffSystemMessage = (handoff: HandoffDetails): string =>
   [
     '[HANDOFF CONTEXT] You are a fresh agent instance continuing work handed off from a previous agent.',

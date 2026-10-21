@@ -59,12 +59,6 @@ export const getToolCallApprovalsBySession = (
 export const getActiveToolCallApprovalsBySession = (sessionId: string): ToolCallApproval[] =>
   getToolCallApprovalsBySession(sessionId, ACTIVE_APPROVAL_STATES);
 
-/**
- * Expires the still-pending approvals owned by the given runs (startup
- * recovery killed those runs, so their approval cards can never be answered).
- * Recorded as a system rejection with an explicit reason — same shape as the
- * approval-timeout path. Returns the approvals that were expired.
- */
 export const expirePendingToolCallApprovalsByRunIds = (runIds: string[]): ToolCallApproval[] => {
   if (runIds.length === 0) return [];
   const placeholders = runIds.map(() => '?').join(', ');

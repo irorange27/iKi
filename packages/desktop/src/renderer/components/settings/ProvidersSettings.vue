@@ -133,9 +133,6 @@ const {
   updateEditingProviderTypeSelection,
 } = useProvidersSettings();
 
-// The settings window's footer Save writes AppConfig only. Providers are a
-// separate store, so the footer would otherwise drop a dirty provider draft
-// while showing "All changes saved". Expose a flush so the footer can ask.
 const PROVIDER_DRAFT_FLUSH_EVENT = 'iki:providers:flush-draft';
 const PROVIDER_DRAFT_DIRTY_EVENT = 'iki:providers:draft-dirty';
 
@@ -143,8 +140,6 @@ const emitDraftDirty = (dirty: boolean) => {
   window.dispatchEvent(new CustomEvent(PROVIDER_DRAFT_DIRTY_EVENT, { detail: { dirty } }));
 };
 
-// The settings footer's status indicator reads this to stop claiming
-// "All changes saved" while a provider draft is unsaved.
 watch(isSelectedProviderDirty, dirty => {
   emitDraftDirty(dirty);
 });

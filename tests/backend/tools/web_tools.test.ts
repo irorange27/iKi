@@ -4,7 +4,6 @@ const { getAppConfigMock } = vi.hoisted(() => ({
   getAppConfigMock: vi.fn(),
 }));
 
-// Avoid importing Electron-backed sqlite config in unit tests.
 vi.mock('@iki/backend/db/database', () => ({
   getConfig: vi.fn(() => null),
 }));
@@ -136,7 +135,6 @@ describe('WebSearchTool', () => {
           throw new DOMException('This operation was aborted', 'AbortError');
         }
         if (url.includes('duckduckgo.com')) {
-          // Simulate an abort (typical when we hit a network timeout).
           throw new DOMException('This operation was aborted', 'AbortError');
         }
         if (url.includes('bing.com')) {

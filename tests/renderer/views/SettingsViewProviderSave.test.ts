@@ -79,24 +79,18 @@ describe('SettingsView footer save and provider drafts', () => {
 
     const wrapper = await mountSettings();
 
-    // Dirty the provider draft by toggling a model off.
     await wrapper.find('.provider-models-toggle').trigger('click');
     await flushPromises();
     await wrapper.find('.model-toggle input').setValue(false);
     await flushPromises();
 
-    // The header must not claim everything is saved.
     expect(wrapper.text()).toContain('Unsaved');
 
-    // Target the FOOTER's Save specifically — there is a second Save inside the
-    // provider card, and clicking that one would prove nothing about the footer.
     const footerSave = wrapper.find('.settings-footer .footer-actions .primary');
     expect(footerSave.exists()).toBe(true);
     await footerSave.trigger('click');
     await flushPromises();
 
-    // The footer's Save is what the user believes covers the whole page, so it
-    // must have persisted the provider change.
     expect(update).toHaveBeenCalledTimes(1);
     const [, payload] = update.mock.calls[0];
     expect(JSON.parse(payload.models as string)).toEqual([]);

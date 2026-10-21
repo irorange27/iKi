@@ -1,10 +1,4 @@
-/**
- * The E1 candidate: a minimal Pi-AI supply adapter plus the contract edges it
- * must satisfy inside iKi (issue #96). Test-only — nothing here is imported by
- * production code. The loop is deliberately thin: it owns history assembly,
- * request budget and fact commits (the parts the migration hands to iKi), and
- * delegates protocol/stream/tool-call parsing to Pi.
- */
+
 import { stream as openaiCompletionsStream } from '@earendil-works/pi-ai/api/openai-completions';
 import { normalizeContext, type AssistantMessage } from '@earendil-works/pi-ai';
 import type { ScriptedPiServer } from './scripted_pi_server';
@@ -38,24 +32,19 @@ export const createScriptedModel = (port: number): ScriptedPiModel => ({
 export type CandidateTurnResult = {
   final: AssistantMessage;
   events: string[];
-  /** Requests issued by THIS turn — the caller-owned budget counter. */
+  
   attempts: number;
 };
 
 export type CandidateTool = {
   name: string;
   description: string;
-  /** Plain JSON Schema — projected by iKi's real BaseTool.parameters. */
+  
   parameters: Record<string, unknown>;
 };
 
 export class BudgetExceededError extends Error {}
 
-/**
- * One model call. The transcript is assembled by the CALLER (the candidate
- * loop's owner role) — Pi projects it for the wire but never accumulates
- * history behind our back.
- */
 export const callModel = async (
   model: ScriptedPiModel,
   context: { systemPrompt: string; messages: unknown[]; tools?: CandidateTool[] },
@@ -65,8 +54,6 @@ export const callModel = async (
     model,
     normalizeContext({
       systemPrompt: context.systemPrompt,
-      // Pi Message shapes are structurally satisfied by the caller-assembled
-      // transcript; the adapter layer is the designated projection point.
       messages: context.messages as never,
       tools: context.tools as never,
     }),
@@ -82,10 +69,6 @@ export const callModel = async (
   return { final: await resultPromise, events, deltas };
 };
 
-/**
- * A bounded turn: model calls within an explicit request budget, assembling
- * history exactly once per call from what the caller passes in.
- */
 export const runBoundedCall = async (
   model: ScriptedPiModel,
   context: { systemPrompt: string; messages: unknown[]; tools?: CandidateTool[] },
@@ -100,13 +83,11 @@ export const runBoundedCall = async (
   return { final, events, attempts: budget.used };
 };
 
-/** Extract the first tool call from an assistant message, if any. */
 export const firstToolCall = (final: AssistantMessage) =>
   final.content.find(block => block.type === 'toolCall') as
     | { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> }
     | undefined;
 
-/** Extract concatenated text content. */
 export const textOf = (final: AssistantMessage): string =>
   final.content
     .filter((block): block is { type: 'text'; text: string } => block.type === 'text')

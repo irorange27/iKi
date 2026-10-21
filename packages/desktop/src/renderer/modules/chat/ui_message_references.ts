@@ -1,23 +1,15 @@
 import type { ChatUiMessage, SkillUsageEntry } from '@iki/backend/message/message_parts';
-// The composition summary types live in types/ (renderer-legal); turn_prep/
-// context_types only re-exports them and pulls the server-side context graph
-// into the renderer's module closure, so import the canonical source.
 import type {
   ContextCompositionCategory,
   ContextCompositionSummary,
 } from '@iki/backend/types/context_composition';
-import { isAffectLabel, type AffectLabel } from '@iki/backend/types/affect';
 import { normalizeModelCapabilityLimits } from '@iki/backend/utils/provider_models';
 import { normalizeWhitespace } from '@iki/backend/utils/text';
 import { translate } from '../../i18n';
 
 import {
-  getAffectSignalPartData,
-  getMemoryPartData,
   getSkillUsagePartData,
   getTokenUsagePartData,
-  isAffectSignalPart,
-  isMemoryPart,
   isObjectRecord,
   isSkillUsagePart,
   isTokenUsagePart,
@@ -28,7 +20,6 @@ import {
   getToolName,
   getToolInput,
   getToolOutput,
-  isTranscriptHiddenToolPart,
   isToolPart,
   normalizeToolNameKey,
 } from './ui_message_tool_calls';
@@ -58,37 +49,6 @@ export type SkillReferenceSummary = {
   selectedOnlyItems: SkillReferenceItem[];
 };
 
-export type MemoryReferenceItem = {
-  id?: string;
-  summary: string;
-  score: number | null;
-  updatedAt: string;
-  tags: string[];
-  sourceMessageCount: number | null;
-};
-
-export type MemoryReferenceSummary = {
-  query: string;
-  items: MemoryReferenceItem[];
-};
-
-export type AffectReferenceSummary = {
-  source: 'history' | 'realtime' | '';
-  guardActive: boolean;
-  label: AffectLabel | '';
-  confidence: number | null;
-  valence: number | null;
-  arousal: number | null;
-  sampleCount: number | null;
-  windowSize: number | null;
-  ageMinutes: number | null;
-  windowMinutes: number | null;
-  emotions: Array<{
-    label: AffectLabel;
-    score: number;
-  }>;
-};
-
 export type TokenUsageSummary = {
   inputTokens: number | null;
   outputTokens: number | null;
@@ -97,21 +57,21 @@ export type TokenUsageSummary = {
   cacheWriteTokens: number | null;
   reasoningTokens: number | null;
   estimatedCostUsd: number | null;
-  /** Billed input of the final SDK step — the real context size the model last saw (null on legacy messages). */
+  
   lastStepInputTokens: number | null;
   maxInputTokens: number | null;
   maxOutputTokens: number | null;
   model: string;
   providerType: string;
   providerId: string;
-  /** Turn perf metrics — null on messages produced before instrumentation. */
+  
   llmMs: number | null;
   toolMs: number | null;
   firstTokenMs: number | null;
   firstTokenSamples: number | null;
   steps: number | null;
   toolCalls: number | null;
-  /** Estimated per-category context assembly breakdown — null on legacy messages. */
+  
   contextComposition: ContextCompositionSummary | null;
 };
 
@@ -121,10 +81,6 @@ export type ContextCompositionRow = {
   percent: number;
 };
 
-/**
- * Normalized category rows for the context-usage panel: shares of the locally
- * estimated assembled context, largest first, zero categories dropped.
- */
 export const buildContextCompositionRows = (
   summary: TokenUsageSummary | null
 ): ContextCompositionRow[] => {
@@ -155,7 +111,6 @@ export type ContextUsageIndicator = {
   tooltip: string;
 };
 
-/** Session-cumulative perf stats aggregated across a thread's assistant messages. */
 export type SessionPerfStats = {
   rounds: number;
   steps: number;
@@ -178,41 +133,6 @@ export type SessionPerfStats = {
 const getMessageParts = (message: unknown): unknown[] =>
   isObjectRecord(message) && Array.isArray(message.parts) ? message.parts : [];
 
-const parseStringArray = (value: unknown): string[] => {
-  if (Array.isArray(value)) {
-    return value
-      .filter((entry): entry is string => typeof entry === 'string')
-      .map(entry => normalizeWhitespace(entry))
-      .filter(Boolean);
-  }
-
-  if (typeof value === 'string' && value.trim()) {
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) {
-        return parsed
-          .filter((entry): entry is string => typeof entry === 'string')
-          .map(entry => normalizeWhitespace(entry))
-          .filter(Boolean);
-      }
-    } catch {
-      return [normalizeWhitespace(value)];
-    }
-  }
-
-  return [];
-};
-
-const getSourceMessageCount = (entry: Record<string, unknown>): number | null => {
-  const directCount = entry.sourceMessageCount;
-  if (typeof directCount === 'number' && Number.isFinite(directCount) && directCount > 0) {
-    return Math.trunc(directCount);
-  }
-
-  const ids = parseStringArray(entry.source_message_ids);
-  return ids.length > 0 ? ids.length : null;
-};
-
 const toScore = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim()) {
@@ -231,28 +151,6 @@ const formatSkillSourceLabel = (value: unknown): SkillReferenceItem['sourceLabel
 const normalizeSkillSource = (value: unknown): SkillReferenceItem['source'] => {
   if (value === 'user' || value === 'codex') return value;
   return '';
-};
-
-const normalizeAffectScores = (
-  value: unknown
-): Array<{
-  label: AffectLabel;
-  score: number;
-}> => {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .filter(
-      (entry): entry is { label: AffectLabel; score: number } =>
-        isObjectRecord(entry) &&
-        isAffectLabel(entry.label) &&
-        typeof entry.score === 'number' &&
-        Number.isFinite(entry.score)
-    )
-    .map(entry => ({
-      label: entry.label,
-      score: Math.min(1, Math.max(0, entry.score)),
-    }));
 };
 
 const normalizeSkillItems = (rawSkills: unknown): SkillReferenceItem[] => {
@@ -293,7 +191,6 @@ const buildToolReferenceSummary = (message: ChatUiMessage | unknown): ToolRefere
 
   for (const part of parts) {
     if (!isToolPart(part)) continue;
-    if (isTranscriptHiddenToolPart(part)) continue;
 
     const toolCallId = getToolCallIdFromPart(part);
     const toolName = normalizeWhitespace(getToolName(part));
@@ -398,81 +295,6 @@ const buildSkillReferenceSummary = (message: ChatUiMessage | unknown): SkillRefe
   };
 };
 
-const buildMemoryReferenceSummary = (message: ChatUiMessage | unknown): MemoryReferenceSummary => {
-  const parts = getMessageParts(message);
-  const memoryPart = parts.find(part => isMemoryPart(part));
-
-  if (!memoryPart) {
-    return {
-      query: '',
-      items: [],
-    };
-  }
-
-  const memoryData = getMemoryPartData(memoryPart);
-  const rawResults = Array.isArray(memoryData?.results) ? memoryData.results : [];
-  const items = rawResults
-    .filter(
-      (entry): entry is Record<string, unknown> =>
-        isObjectRecord(entry) &&
-        typeof entry.summary === 'string' &&
-        entry.summary.trim().length > 0
-    )
-    .map(entry => ({
-      ...(typeof entry.id === 'string' && entry.id.trim() ? { id: entry.id.trim() } : {}),
-      summary: normalizeWhitespace(entry.summary as string),
-      score: toScore(entry.score),
-      updatedAt: typeof entry.updated_at === 'string' ? entry.updated_at : '',
-      tags: parseStringArray(entry.tags),
-      sourceMessageCount: getSourceMessageCount(entry),
-    }));
-
-  return {
-    query: typeof memoryData?.query === 'string' ? normalizeWhitespace(memoryData.query) : '',
-    items,
-  };
-};
-
-const buildAffectReferenceSummary = (message: ChatUiMessage | unknown): AffectReferenceSummary => {
-  const parts = getMessageParts(message);
-  const affectPart = parts.find(part => isAffectSignalPart(part));
-
-  if (!affectPart) {
-    return {
-      source: '',
-      guardActive: false,
-      label: '',
-      confidence: null,
-      valence: null,
-      arousal: null,
-      sampleCount: null,
-      windowSize: null,
-      ageMinutes: null,
-      windowMinutes: null,
-      emotions: [],
-    };
-  }
-
-  const affectData = getAffectSignalPartData(affectPart);
-
-  return {
-    source:
-      affectData?.source === 'history' || affectData?.source === 'realtime'
-        ? affectData.source
-        : '',
-    guardActive: affectData?.guardActive === true,
-    label: isAffectLabel(affectData?.label) ? affectData.label : '',
-    confidence: toScore(affectData?.confidence),
-    valence: toScore(affectData?.valence),
-    arousal: toScore(affectData?.arousal),
-    sampleCount: toScore(affectData?.sampleCount),
-    windowSize: toScore(affectData?.windowSize),
-    ageMinutes: toScore(affectData?.ageMinutes),
-    windowMinutes: toScore(affectData?.windowMinutes),
-    emotions: normalizeAffectScores(affectData?.emotions),
-  };
-};
-
 const buildTokenUsageSummary = (message: ChatUiMessage | unknown): TokenUsageSummary => {
   const parts = getMessageParts(message);
   const usagePart = parts.find(part => isTokenUsagePart(part));
@@ -530,8 +352,6 @@ const buildTokenUsageSummary = (message: ChatUiMessage | unknown): TokenUsageSum
   };
 };
 
-// SDK writes mutate parts off-proxy. Cache against the relevant payload sources,
-// never just the message/parts identity; text deltas do not change these sources.
 type SummaryCache<T> = WeakMap<object, { sources: unknown[]; value: T }>;
 const reuseSummary = <T>(
   cache: SummaryCache<T>,
@@ -553,8 +373,6 @@ const reuseSummary = <T>(
 };
 const toolSummaryCache: SummaryCache<ToolReferenceSummary> = new WeakMap();
 const skillSummaryCache: SummaryCache<SkillReferenceSummary> = new WeakMap();
-const memorySummaryCache: SummaryCache<MemoryReferenceSummary> = new WeakMap();
-const affectSummaryCache: SummaryCache<AffectReferenceSummary> = new WeakMap();
 const selectedSkillSummaryCache: SummaryCache<
   Pick<SkillReferenceSummary, 'mode' | 'selectedItems'>
 > = new WeakMap();
@@ -564,8 +382,6 @@ export const getReferenceSummaries = (message: unknown) => {
   const parts = getMessageParts(message);
   const tools: unknown[] = [];
   const skills: unknown[] = [];
-  const memories: unknown[] = [];
-  const affects: unknown[] = [];
   const toolSources: unknown[] = [];
   const skillSources: unknown[] = [];
   for (const part of parts) {
@@ -579,10 +395,6 @@ export const getReferenceSummaries = (message: unknown) => {
     } else if (isSkillUsagePart(part)) {
       skills.push(part);
       skillSources.push(getSkillUsagePartData(part));
-    } else if (isMemoryPart(part)) {
-      memories.push(part);
-    } else if (isAffectSignalPart(part)) {
-      affects.push(part);
     }
   }
   return {
@@ -591,12 +403,6 @@ export const getReferenceSummaries = (message: unknown) => {
     ),
     skill: reuseSummary(skillSummaryCache, parts, skillSources, () =>
       buildSkillReferenceSummary({ parts: skills })
-    ),
-    memory: reuseSummary(memorySummaryCache, parts, memories.map(getMemoryPartData), () =>
-      buildMemoryReferenceSummary({ parts: memories })
-    ),
-    affect: reuseSummary(affectSummaryCache, parts, affects.map(getAffectSignalPartData), () =>
-      buildAffectReferenceSummary({ parts: affects })
     ),
   };
 };
@@ -609,10 +415,6 @@ export const getSelectedSkillReferenceSummary = (message: unknown) => {
     buildSelectedSkillReferenceSummary({ parts: part ? [part] : [] })
   );
 };
-export const getMemoryReferenceSummary = (message: unknown) =>
-  getReferenceSummaries(message).memory;
-export const getAffectReferenceSummary = (message: unknown) =>
-  getReferenceSummaries(message).affect;
 export const getTokenUsageSummary = (message: unknown): TokenUsageSummary => {
   const parts = getMessageParts(message);
   const part = parts.find(isTokenUsagePart);
@@ -635,11 +437,6 @@ const hasUsageData = (summary: TokenUsageSummary): boolean =>
   summary.steps !== null ||
   summary.toolCalls !== null;
 
-/**
- * Aggregate a thread's assistant messages into session-cumulative perf stats.
- * Returns null when no message carries a token-usage part (e.g. a thread
- * created before per-turn usage emission existed).
- */
 export const buildSessionPerfStats = (
   messages: readonly unknown[]
 ): SessionPerfStats | null => {
@@ -706,8 +503,6 @@ export const buildTokenUsageIndicator = (
     return null;
   }
 
-  // Older multi-step records only have the sum of every request's input. That
-  // cannot describe context occupancy, so avoid presenting it as one request.
   if (
     summary.lastStepInputTokens === null &&
     summary.steps !== null &&
@@ -716,11 +511,6 @@ export const buildTokenUsageIndicator = (
     return null;
   }
 
-  // Occupancy is the final SDK step's billed input — the context size the
-  // model actually saw. The turn-level inputTokens sums every step's re-send
-  // (billing), which for multi-step turns is a multiple of the window and
-  // meaningless as occupancy. Legacy single-step messages can use the turn
-  // total because only one inference contributed to it.
   const occupancyTokens = summary.lastStepInputTokens ?? summary.inputTokens;
   const usedTokens = Math.max(0, Math.trunc(occupancyTokens));
   const budgetTokens = normalizeModelCapabilityLimits({
@@ -777,8 +567,6 @@ export const buildTokenUsageIndicator = (
 };
 
 export const hasReferenceSummary = (message: ChatUiMessage | unknown): boolean => {
-  const { tool, skill, memory, affect } = getReferenceSummaries(message);
-  return (
-    tool.callCount > 0 || skill.items.length > 0 || memory.items.length > 0 || Boolean(affect.label)
-  );
+  const { tool, skill } = getReferenceSummaries(message);
+  return tool.callCount > 0 || skill.items.length > 0;
 };

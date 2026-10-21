@@ -493,14 +493,14 @@ export const useSettingsTasksSection = (params: {
         }
       }) ?? (() => undefined);
   } catch {
-    // Ignore missing tasks IPC when running older builds.
+    /* empty: error is not actionable here */
   }
 
   onUnmounted(() => {
     try {
       removeTaskPushListener();
     } catch {
-      // ignore
+      /* empty: error is not actionable here */
     }
   });
 

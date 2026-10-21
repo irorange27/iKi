@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { UIMessage } from 'ai';
+import type { ChatUiMessage as UIMessage } from '@iki/backend/message/message_parts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 
@@ -15,7 +15,6 @@ const createUserMessage = (): UIMessage =>
 
 const mountChatMessageItem = (message = createUserMessage(), attachTo = false) =>
   mount(ChatMessageItem, {
-    // Focus assertions need a connected tree; detached VTU roots drop focus().
     attachTo: attachTo ? document.body : undefined,
     props: {
       message,

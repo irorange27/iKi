@@ -84,6 +84,7 @@ type ModuleLogger = {
 type RuntimeLoggingConfig = {
   enabled: boolean;
   level: StructuredLogLevel;
+  console: boolean;
 };
 
 const SCHEMA_VERSION = 1 as const;
@@ -110,10 +111,11 @@ let baseContext: LogContext = {
 const runtimeConfig: RuntimeLoggingConfig = {
   enabled: !isTestEnvironment(),
   level: normalizeLogLevel(process.env.LOG_LEVEL) || 'debug',
+  console: true,
 };
 
 let sinkLogger: winston.Logger | null = null;
-let configuredLogDirectory: string | null | undefined;
+let sinkTransportsKey: string | null = null;
 
 function isTestEnvironment(): boolean {
   return process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
@@ -320,8 +322,8 @@ function resolveLogDirectory(): string | null {
       fs.mkdirSync(candidate, { recursive: true });
       return candidate;
     } catch {
-      // try the next fallback
-    }
+    // Intentionally ignored: the caller cannot act on it.
+  }
   }
 
   return null;
@@ -383,17 +385,21 @@ function ensureSinkTransports(): winston.Logger {
   const logger = getSinkLogger();
   logger.level = runtimeConfig.level;
   const logDirectory = resolveLogDirectory();
-  if (configuredLogDirectory === logDirectory && logger.transports.length > 0) {
+
+  const transportsKey = `${logDirectory ?? ''}|${runtimeConfig.console ? 'console' : 'quiet'}`;
+  if (sinkTransportsKey === transportsKey && logger.transports.length > 0) {
     return logger;
   }
 
   logger.clear();
-  logger.add(buildConsoleTransport());
+  if (runtimeConfig.console) {
+    logger.add(buildConsoleTransport());
+  }
   if (logDirectory) {
     logger.add(buildFileTransport(path.join(logDirectory, 'combined.log')));
     logger.add(buildFileTransport(path.join(logDirectory, 'error.log'), 'error'));
   }
-  configuredLogDirectory = logDirectory;
+  sinkTransportsKey = transportsKey;
   return logger;
 }
 
@@ -581,6 +587,10 @@ export function setLogLevel(level: string): void {
   runtimeConfig.level = normalized;
   const winstonLogger = getSinkLogger();
   winstonLogger.level = normalized;
+}
+
+export function setConsoleLoggingEnabled(enabled: boolean): void {
+  runtimeConfig.console = Boolean(enabled);
 }
 
 export function applyAppLoggingConfig(

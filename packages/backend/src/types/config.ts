@@ -130,13 +130,13 @@ export interface AppConfig {
     autoApproveToolRequests: boolean;
   };
   ui: {
-    fontSize: number; // 10-32px
+    fontSize: number;
     density: 'compact' | 'comfortable' | 'spacious';
-    chatContentPadding: number; // 8-40px
-    composerPadding: number; // 4-24px
-    messageBubblePaddingX: number; // 8-28px
-    messageBubblePaddingY: number; // 6-20px
-    messageGap: number; // 8-32px
+    chatContentPadding: number;
+    composerPadding: number;
+    messageBubblePaddingX: number;
+    messageBubblePaddingY: number;
+    messageGap: number;
     companion: {
       enabled: boolean;
       alwaysOnTop: boolean;
@@ -173,8 +173,8 @@ export interface AppConfig {
     logLevel: 'debug' | 'info' | 'warn' | 'error';
   };
   keybindings: {
-    sendMessage: string; // e.g. "Enter"
-    openSettings: string; // e.g. "Cmd+," or "Ctrl+,"
+    sendMessage: string;
+    openSettings: string;
   };
   chat: {
     composer: {
@@ -182,53 +182,11 @@ export interface AppConfig {
       preferredModel: string;
     };
   };
-  memory: {
+
+  context: {
     enabled: boolean;
-    autoSummarize: boolean;
-    maxRetrievalCount: number;
-    similarThreshold: number;
-    embeddingModel: {
-      providerId: string;
-      providerType: string;
-      model: string;
-    };
-    context: {
-      enabled: boolean;
-      recentMessageCount: number;
-      maxRecentTokens: number;
-      maxMessageTokens: number;
-      maxIdentityTokens: number;
-      summaryTriggerMessages: number;
-      summaryRecentMessages: number;
-      maxSummaryTokens: number;
-      maxMemoryTokens: number;
-      maxSkillTokens: number;
-    };
-    emotion: {
-      enabled: boolean;
-      injectToSystemPrompt: boolean;
-      realtimeAnalysis: boolean;
-      minConfidence: number;
-      minSampleCount: number;
-      windowSize: number;
-      halfLifeMinutes: number;
-      maxAgeMinutes: number;
-      includeNeutral: boolean;
-      toolGuard: {
-        enabled: boolean;
-        minConfidence: number;
-        minArousal: number;
-        maxValence: number;
-        requireApproval: boolean;
-        disableAutoTools: boolean;
-      };
-    };
-  };
-  continuity: {
-    enabled: boolean;
-    autoCaptureExplicitFacts: boolean;
-    injectToSystemPrompt: boolean;
-    maxRetrievedItems: number;
+    maxIdentityTokens: number;
+    maxSkillTokens: number;
   };
   speech: {
     enabled: boolean;
@@ -271,15 +229,4 @@ export interface AppConfig {
     };
   };
   workflowOptimization: WorkflowOptimizationConfig;
-  agent: {
-    enabled: boolean;
-    systemPrompt: string;
-    providerType: string;
-    model: string;
-    temperature: number;
-    maxTokens: number;
-    maxIterations: number;
-    enableTools: boolean;
-    enableMemory: boolean;
-  };
 }

@@ -30,15 +30,11 @@ const TEST_TOOL_NAMES = [
   'mcp_beta_unsafe',
   'manual_only',
   'agent',
-  'todo',
+  'plan',
   'list_awaiters',
   'read_awaiter',
   'write_awaiter',
   'delete_awaiter',
-  'list_todo_lists',
-  'read_todo_list',
-  'write_todo_list',
-  'delete_todo_list',
   'list_proactive_tasks',
   'read_proactive_task',
   'write_proactive_task',
@@ -172,25 +168,15 @@ describe('resolveToolNames', () => {
     ]);
   });
 
-  it('includes todo planning and todo-list tools in auto mode for normal chat turns', async () => {
-    registerTool({ name: 'todo', source: { kind: 'builtin' } });
-    registerTool({ name: 'list_todo_lists', source: { kind: 'builtin' } });
-    registerTool({ name: 'read_todo_list', source: { kind: 'builtin' } });
-    registerTool({ name: 'write_todo_list', source: { kind: 'builtin' } });
-    registerTool({ name: 'delete_todo_list', source: { kind: 'builtin' } });
+  it('includes the plan tool in auto mode for normal chat turns', async () => {
+    registerTool({ name: 'plan', source: { kind: 'builtin' } });
 
     const result = await resolveToolNames({
       inputMessages: [],
     });
 
     expect(result.mode).toBe('auto');
-    expect(result.resolvedTools).toEqual([
-      'todo',
-      'list_todo_lists',
-      'read_todo_list',
-      'write_todo_list',
-      'delete_todo_list',
-    ]);
+    expect(result.resolvedTools).toEqual(['plan']);
   });
 
   it('includes proactive task management tools in auto mode for task-management turns', async () => {
@@ -240,37 +226,6 @@ describe('resolveToolNames', () => {
 
     expect(result.mode).toBe('auto');
     expect(result.resolvedTools).toEqual([]);
-  });
-
-  it('drops todo from overeager auto selections for simple requests', async () => {
-    selectToolsWithAgentMock.mockResolvedValue(['todo', 'shell']);
-    registerTool({ name: 'todo', source: { kind: 'builtin' } });
-    registerTool({ name: 'shell', source: { kind: 'builtin' } });
-
-    const result = await resolveToolNames({
-      inputMessages: [{ role: 'user', content: 'What time is it right now?' }],
-    });
-
-    expect(result.mode).toBe('auto');
-    expect(result.resolvedTools).toEqual(['shell']);
-  });
-
-  it('keeps todo for clearly substantial multi-step work even with a small tool set', async () => {
-    selectToolsWithAgentMock.mockResolvedValue(['todo', 'shell']);
-    registerTool({ name: 'todo', source: { kind: 'builtin' } });
-    registerTool({ name: 'shell', source: { kind: 'builtin' } });
-
-    const result = await resolveToolNames({
-      inputMessages: [
-        {
-          role: 'user',
-          content: 'Inspect the repo, implement the fix, and run checks before you finish.',
-        },
-      ],
-    });
-
-    expect(result.mode).toBe('auto');
-    expect(result.resolvedTools).toEqual(['todo', 'shell']);
   });
 
   it('keeps agent for delegated source-comparison work when an approval-free sibling tool is selected', async () => {

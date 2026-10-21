@@ -14,15 +14,6 @@ import { THREAD_WORKTREE_WORKSPACE_PREFIX } from './worktree_ids';
 
 export { THREAD_WORKTREE_WORKSPACE_PREFIX };
 
-/**
- * Git worktree isolation (Codex-style): a thread can work in its own worktree
- * checkout on a dedicated branch, so agent edits never touch the user's local
- * checkout. The worktree is registered as a regular (temporary, hidden)
- * workspace row with the id prefix `workspace_wt_`, and the thread is assigned
- * to it — tools then operate inside the worktree through the normal workspace
- * path-boundary enforcement.
- */
-
 const WORKTREE_ROOT_DIR = 'thread-worktrees';
 
 const GIT_TIMEOUT_MS = 30_000;
@@ -73,10 +64,6 @@ const normalizeWorkspaceIdInput = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-/**
- * Create (or reuse) a git worktree for the thread based on the given repo
- * workspace, register it as a workspace row, and assign the thread to it.
- */
 export const createThreadWorktree = async (
   threadId: string,
   repoWorkspaceId?: string | null
@@ -133,8 +120,7 @@ export const createThreadWorktree = async (
     try {
       await runGit(['worktree', 'add', '-b', branch, worktreePath], repoWorkspace.path);
     } catch {
-      // Branch already exists (e.g. a previous worktree was removed without
-      // pruning) — attach the worktree to the existing branch instead.
+
       await runGit(['worktree', 'add', worktreePath, branch], repoWorkspace.path);
     }
   } catch (error) {
@@ -167,12 +153,6 @@ export const createThreadWorktree = async (
   };
 };
 
-/**
- * Detach the thread's worktree: unassign the thread, remove the checkout
- * (refuses when it holds uncommitted changes unless `force`), and drop the
- * workspace row. The worktree branch is intentionally kept so committed work
- * can be merged later.
- */
 export const removeThreadWorktree = async (
   threadId: string,
   options?: { force?: boolean }
@@ -194,8 +174,7 @@ export const removeThreadWorktree = async (
   }
 
   try {
-    // git resolves worktree registrations through the repo, so run inside the
-    // worktree checkout itself.
+
     await runGit(
       options?.force
         ? ['worktree', 'remove', '--force', '--force', workspace.path]
@@ -216,14 +195,6 @@ export const removeThreadWorktree = async (
   return { ok: true, removed: true };
 };
 
-/**
- * Merge the thread's worktree branch back into the repo's checked-out branch
- * (Codex-style "check out the agent's changes locally"):
- * 1. the user's main checkout must be clean (uncommitted changes abort);
- * 2. `git merge` runs in the main checkout;
- * 3. on conflicts the merge is aborted so the main checkout stays untouched;
- * 4. the worktree itself is left in place — removeThreadWorktree cleans up.
- */
 export const mergeThreadWorktree = async (
   threadId: string
 ): Promise<ThreadWorktreeMergeResult> => {
@@ -238,7 +209,6 @@ export const mergeThreadWorktree = async (
     return { ok: false, error: 'This thread has no isolated worktree.' };
   }
 
-  // Resolve the main checkout from inside the worktree (git knows its parent).
   let mainWorktreePath: string;
   try {
     const gitCommonDir = await runGit(
@@ -255,8 +225,6 @@ export const mergeThreadWorktree = async (
 
   const branch = getWorktreeBranch(normalizedThreadId);
 
-  // The merge target must be clean — merging into a dirty checkout could mix
-  // the user's uncommitted work with the agent's changes.
   try {
     const dirty = await runGit(['status', '--porcelain'], mainWorktreePath);
     if (dirty.trim()) {
@@ -276,7 +244,7 @@ export const mergeThreadWorktree = async (
   try {
     await runGit(['merge', branch], mainWorktreePath);
   } catch (error) {
-    // Conflicts or a failed merge: abort so the main checkout stays untouched.
+
     await runGit(['merge', '--abort'], mainWorktreePath).catch((): undefined => undefined);
     return {
       ok: false,

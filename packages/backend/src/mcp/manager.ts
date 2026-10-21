@@ -566,8 +566,8 @@ export class McpManager extends EventEmitter {
     try {
       await existing.transport.close();
     } catch {
-      // ignore
-    }
+    // Intentionally ignored: the caller cannot act on it.
+  }
 
     this.connections.delete(id);
     this.resetServerTools(id);

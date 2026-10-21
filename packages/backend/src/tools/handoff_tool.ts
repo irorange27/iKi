@@ -20,6 +20,8 @@ export class HandoffTool extends BaseTool<typeof HandoffInputSchema> {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+
+  override replay = 'unsafe' as const;
   override description =
     'Hand off the current task to another agent instance. Call this tool when you cannot or should not continue — for example when the task is too large for one session, you are approaching context limits, or the user asked to pause. Provide a clear summary of what was done and what remains so the next agent can pick up seamlessly.';
   override paramSchema = HandoffInputSchema;

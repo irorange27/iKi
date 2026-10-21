@@ -17,10 +17,6 @@ const personalSkillIdInputFields = {
     .describe('Exact personal skill id, for example "user:planner" or "user:team/planner"'),
 };
 
-// ---------------------------------------------------------------------------
-// Load skill (harness-level skill activation) schemas
-// ---------------------------------------------------------------------------
-
 export const LoadSkillInputSchema = z.object({
   id: loadSkillInputFields.id,
   description: toolCallDescriptionField,
@@ -32,10 +28,6 @@ const loadSkillInputShape = {
 };
 
 export const LoadSkillInputSchemaUi = uiSchema(loadSkillInputShape);
-
-// ---------------------------------------------------------------------------
-// Personal Skills schemas
-// ---------------------------------------------------------------------------
 
 const listPersonalSkillsInputShape = {
   query: z.string().trim().describe('Optional search text for matching personal skills').optional(),

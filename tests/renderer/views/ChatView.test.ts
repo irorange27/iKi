@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import type { UIMessage } from 'ai';
+import type { ChatUiMessage as UIMessage } from '@iki/backend/message/message_parts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
@@ -37,7 +37,6 @@ const {
   getMcpServerLabelMock,
   configStoreState,
   useChatStreamingMock,
-  useChatThreadTodoPlanMock,
   useToolMetadataMock,
   useChatViewLifecycleMock,
   useConfigStoreMock,
@@ -125,7 +124,6 @@ const {
   };
 
   const useChatStreamingMock = vi.fn();
-  const useChatThreadTodoPlanMock = vi.fn();
   const useToolMetadataMock = vi.fn();
   const useChatViewLifecycleMock = vi.fn();
   const useConfigStoreMock = vi.fn(() => configStoreState);
@@ -162,8 +160,7 @@ const {
     getMcpServerLabelMock,
     configStoreState,
     useChatStreamingMock,
-    useChatThreadTodoPlanMock,
-    useToolMetadataMock,
+      useToolMetadataMock,
     useChatViewLifecycleMock,
     useConfigStoreMock,
     getTokenUsageSummaryMock,
@@ -180,9 +177,6 @@ vi.mock('../../../packages/desktop/src/renderer/composables/useChatStreaming', (
   useChatStreaming: useChatStreamingMock,
 }));
 
-vi.mock('../../../packages/desktop/src/renderer/composables/useChatThreadTodoPlan', () => ({
-  useChatThreadTodoPlan: useChatThreadTodoPlanMock,
-}));
 
 vi.mock('../../../packages/desktop/src/renderer/composables/useToolMetadata', () => ({
   useToolMetadata: useToolMetadataMock,
@@ -243,7 +237,6 @@ const ChatInputStub = defineComponent({
     isIncognito: { type: Boolean, default: false },
     selectedWorkspaceId: { type: String, default: null },
     latestTokenUsage: { type: Object, default: null },
-    todoPlan: { type: Object, default: null },
     prepareMessageSend: { type: Function, default: null },
     submitTurn: { type: Function, default: null },
   },
@@ -285,12 +278,10 @@ const mountChatView = async () => {
 
   const pinia = createPinia();
   setActivePinia(pinia);
-  // ChatView reads the sidebar singleton (collapsed-state header clearance);
-  // tests bypass App.vue, so seed it here.
   const { createSidebar } = await import(
     '../../../packages/desktop/src/renderer/composables/useSidebar'
   );
-  createSidebar();
+  const sidebar = createSidebar();
   const threadSession = useThreadSessionStore();
   threadSession.currentThread = currentThreadRef.value as never;
   threadSession.currentModel = currentModelRef.value;
@@ -315,7 +306,7 @@ const mountChatView = async () => {
   });
 
   await flushPromises();
-  return wrapper;
+  return Object.assign(wrapper, { sidebar });
 };
 
 describe('ChatView', () => {
@@ -348,7 +339,6 @@ describe('ChatView', () => {
     openSkillReferenceMock.mockReset();
     getMcpServerLabelMock.mockReset();
     useChatStreamingMock.mockReset();
-    useChatThreadTodoPlanMock.mockReset();
     useToolMetadataMock.mockReset();
     useChatViewLifecycleMock.mockReset();
     getTokenUsageSummaryMock.mockReset();
@@ -383,13 +373,6 @@ describe('ChatView', () => {
       loadToolSources: loadToolSourcesMock,
       getMcpServerLabel: getMcpServerLabelMock,
       openSkillReference: openSkillReferenceMock,
-    }));
-
-    useChatThreadTodoPlanMock.mockImplementation(() => ({
-      activeTodoPlan: { value: null, __v_isRef: true as const },
-      handleChatChunk: vi.fn(),
-      refreshTodoPlan: vi.fn(async () => undefined),
-      todoPlan: { value: null, __v_isRef: true as const },
     }));
 
     getTokenUsageSummaryMock.mockImplementation(() => ({ inputTokens: null }));
@@ -582,30 +565,6 @@ describe('ChatView', () => {
     });
   });
 
-  it('passes the active thread todo plan down to the composer region', async () => {
-    const activePlan = {
-      thread_id: 'thread_1',
-      items: [
-        { id: '1', text: 'Inspect state', status: 'completed' as const },
-        { id: '2', text: 'Implement UI card', status: 'in_progress' as const },
-      ],
-      created_at: '2026-03-30T00:00:00.000Z',
-      updated_at: '2026-03-30T00:01:00.000Z',
-    };
-
-    useChatThreadTodoPlanMock.mockImplementation(() => ({
-      activeTodoPlan: { value: activePlan, __v_isRef: true as const },
-      handleChatChunk: vi.fn(),
-      refreshTodoPlan: vi.fn(async () => undefined),
-      todoPlan: { value: activePlan, __v_isRef: true as const },
-    }));
-
-    const wrapper = await mountChatView();
-    const chatInput = wrapper.findComponent(ChatInputStub);
-
-    expect(chatInput.props('todoPlan')).toEqual(activePlan);
-  });
-
   it('hydrates the composer when the welcome flow emits a starter prompt', async () => {
     showWelcomeRef.value = true;
 
@@ -673,5 +632,39 @@ describe('ChatView', () => {
     expect(wrapper.find('.thread-origin-banner').text()).toContain(
       'not delivered back to the external channel'
     );
+  });
+
+  it('reopens a collapsed sidebar from the header control', async () => {
+    const wrapper = await mountChatView();
+    wrapper.sidebar.collapse();
+    await flushPromises();
+
+    const toggle = wrapper
+      .findAll('button')
+      .find(button => button.attributes('aria-label') === 'Toggle sidebar');
+    expect(toggle, 'collapsed header must offer a sidebar toggle').toBeTruthy();
+
+    await toggle!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.sidebar.isCollapsed.value).toBe(false);
+    expect(handleNewChatMock).not.toHaveBeenCalled();
+  });
+
+  it('creates a new chat from the header control while collapsed', async () => {
+    const wrapper = await mountChatView();
+    wrapper.sidebar.collapse();
+    await flushPromises();
+
+    const newChat = wrapper
+      .findAll('button')
+      .find(button => button.attributes('aria-label') === 'New chat');
+    expect(newChat, 'collapsed header must offer a new-chat control').toBeTruthy();
+
+    await newChat!.trigger('click');
+    await flushPromises();
+
+    expect(handleNewChatMock).toHaveBeenCalledTimes(1);
+    expect(wrapper.sidebar.isCollapsed.value).toBe(true);
   });
 });

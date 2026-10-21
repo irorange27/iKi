@@ -1,25 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  createAnthropicMock,
-  createDeepSeekMock,
   createLoggerMock,
-  createMinimaxMock,
-  createOpenAICompatibleMock,
-  createOpenAIMock,
   ensureThreadWorkspaceSelectionMock,
   fetchWithTimeoutMock,
-  generateTextMock,
   getProviderMock,
   getProvidersMock,
   getPersonaPromptMock,
   getToolRuntimeContextMock,
   getUserDataPathMock,
   listMcpServersMock,
-  streamTextMock,
 } = vi.hoisted(() => ({
-  createAnthropicMock: vi.fn(),
-  createDeepSeekMock: vi.fn(),
   createLoggerMock: vi.fn(() => ({
     error: vi.fn(),
     warn: vi.fn(),
@@ -27,45 +18,14 @@ const {
     debug: vi.fn(),
     event: vi.fn(),
   })),
-  createMinimaxMock: vi.fn(),
-  createOpenAICompatibleMock: vi.fn(),
-  createOpenAIMock: vi.fn(),
   ensureThreadWorkspaceSelectionMock: vi.fn(() => null),
   fetchWithTimeoutMock: vi.fn(),
-  generateTextMock: vi.fn(),
   getProviderMock: vi.fn(() => null),
   getProvidersMock: vi.fn(),
   getPersonaPromptMock: vi.fn(),
   getToolRuntimeContextMock: vi.fn(() => ({})),
   getUserDataPathMock: vi.fn(() => '/tmp/iki-user-data'),
   listMcpServersMock: vi.fn(() => []),
-  streamTextMock: vi.fn(),
-}));
-
-vi.mock('ai', () => ({
-  generateText: generateTextMock,
-  smoothStream: vi.fn(),
-  streamText: streamTextMock,
-}));
-
-vi.mock('@ai-sdk/openai', () => ({
-  createOpenAI: createOpenAIMock,
-}));
-
-vi.mock('@ai-sdk/anthropic', () => ({
-  createAnthropic: createAnthropicMock,
-}));
-
-vi.mock('@ai-sdk/deepseek', () => ({
-  createDeepSeek: createDeepSeekMock,
-}));
-
-vi.mock('@ai-sdk/openai-compatible', () => ({
-  createOpenAICompatible: createOpenAICompatibleMock,
-}));
-
-vi.mock('@ai-sdk/minimax', () => ({
-  createMiniMax: createMinimaxMock,
 }));
 
 vi.mock('@iki/backend/db/providers', () => ({
@@ -102,8 +62,6 @@ vi.mock('@iki/backend/utils/runtime_context', () => ({
 }));
 
 import {
-  createModel,
-  disposeLanguageModel,
   resolvePiModelCapability,
   fetchModelCapabilityFromDev,
   getModelCallSettings,
@@ -119,15 +77,6 @@ const createAsyncIterable = <T>(values: T[]) =>
       yield value;
     }
   })();
-
-const createMockLanguageModel = (provider = 'anthropic') => ({
-  specificationVersion: 'v3' as const,
-  provider,
-  modelId: 'claude-sonnet-4-5',
-  supportedUrls: {},
-  doGenerate: vi.fn(),
-  doStream: vi.fn(),
-});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -146,161 +95,9 @@ beforeEach(() => {
   listMcpServersMock.mockReturnValue([]);
   getToolRuntimeContextMock.mockReturnValue({});
   getPersonaPromptMock.mockReturnValue('persona prompt');
-  createOpenAIMock.mockReturnValue(() => 'mock-model');
 });
 
 describe('llm factory', () => {
-  it('instantiates OpenAI models through the OpenAI provider adapter', () => {
-    const modelFactory = vi.fn(() => 'openai-model');
-    createOpenAIMock.mockReturnValue(modelFactory);
-    getProvidersMock.mockReturnValue([
-      {
-        id: 'provider_openai',
-        type: 'openai',
-        enabled: true,
-        api_key: 'sk-live',
-        base_url: 'https://api.openai.com/v1',
-        models: JSON.stringify(['gpt-4.1']),
-      },
-    ]);
-
-    expect(createModel('openai', 'gpt-4.1')).toBe('openai-model');
-    expect(createOpenAIMock).toHaveBeenCalledWith({
-      apiKey: 'sk-live',
-      baseURL: 'https://api.openai.com/v1',
-    });
-    expect(modelFactory).toHaveBeenCalledWith('gpt-4.1');
-    expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
-  });
-
-  it('instantiates Anthropic models through the Anthropic provider adapter', () => {
-    const anthropicModel = createMockLanguageModel();
-    const modelFactory = vi.fn(() => anthropicModel);
-    createAnthropicMock.mockReturnValue(modelFactory);
-    getProvidersMock.mockReturnValue([
-      {
-        id: 'provider_anthropic',
-        type: 'anthropic',
-        enabled: true,
-        api_key: 'sk-ant',
-        base_url: 'https://api.anthropic.com/v1',
-        models: JSON.stringify(['claude-sonnet-4-5']),
-      },
-    ]);
-
-    expect(createModel('anthropic', 'claude-sonnet-4-5')).toBe(anthropicModel);
-    expect(createAnthropicMock).toHaveBeenCalledWith({
-      apiKey: 'sk-ant',
-      baseURL: 'https://api.anthropic.com/v1',
-    });
-    expect(modelFactory).toHaveBeenCalledWith('claude-sonnet-4-5');
-    expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
-  });
-
-  it('instantiates MiniMax models through the MiniMax provider adapter', () => {
-    const minimaxModel = createMockLanguageModel('minimax.messages');
-    const modelFactory = vi.fn(() => minimaxModel);
-    createMinimaxMock.mockReturnValue(modelFactory);
-    getProvidersMock.mockReturnValue([
-      {
-        id: 'provider_minimax',
-        type: 'minimax',
-        enabled: true,
-        api_key: 'sk-mini',
-        base_url: '',
-        models: JSON.stringify(['MiniMax-M2']),
-      },
-    ]);
-
-    expect(createModel('minimax', 'MiniMax-M2')).toBe(minimaxModel);
-    expect(createMinimaxMock).toHaveBeenCalledWith({
-      apiKey: 'sk-mini',
-      baseURL: 'https://api.minimax.io/anthropic/v1',
-    });
-    expect(modelFactory).toHaveBeenCalledWith('MiniMax-M2');
-    expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
-  });
-
-  it('routes custom response-api providers through the OpenAI responses adapter', () => {
-    const responsesModel = 'responses-model';
-    const responsesFactory = Object.assign(
-      vi.fn(() => 'unused-chat-model'),
-      {
-        responses: vi.fn(() => responsesModel),
-      }
-    );
-    createOpenAIMock.mockReturnValue(responsesFactory as never);
-    getProvidersMock.mockReturnValue([
-      {
-        id: 'custom_gateway',
-        type: 'openai-compatible',
-        enabled: true,
-        api_key: 'sk-gateway',
-        base_url: 'https://gateway.example.com/v1',
-        models: JSON.stringify(['gpt-4.1']),
-        is_response_api: true,
-      },
-    ]);
-
-    expect(createModel('openai-compatible', 'gpt-4.1')).toBe(responsesModel);
-    expect(createOpenAIMock).toHaveBeenCalledWith({
-      name: 'openai-compatible',
-      apiKey: 'sk-gateway',
-      baseURL: 'https://gateway.example.com/v1',
-    });
-    expect(responsesFactory.responses).toHaveBeenCalledWith('gpt-4.1');
-    expect(createOpenAICompatibleMock).not.toHaveBeenCalled();
-  });
-
-  it('passes structured output support into OpenAI-compatible language model creation', () => {
-    const languageModel = 'compatible-language-model';
-    const compatibleFactory = Object.assign(
-      vi.fn(() => 'unused-compatible-model'),
-      {
-        languageModel: vi.fn(() => languageModel),
-      }
-    );
-    createOpenAICompatibleMock.mockReturnValue(compatibleFactory as never);
-    getProvidersMock.mockReturnValue([
-      {
-        id: 'custom_gateway',
-        type: 'openai-compatible',
-        enabled: true,
-        api_key: 'sk-gateway',
-        base_url: 'https://gateway.example.com/v1',
-        models: JSON.stringify(['gpt-5.4']),
-        model_options: JSON.stringify({
-          'gpt-5.4': {
-            supportsStructuredOutputs: true,
-          },
-        }),
-      },
-    ]);
-
-    expect(createModel('openai-compatible', 'gpt-5.4')).toBe(languageModel);
-    expect(compatibleFactory.languageModel).toHaveBeenCalledWith('gpt-5.4', {
-      supportsStructuredOutputs: true,
-    });
-  });
-
-  it('rejects invalid anthropic adapter results at the runtime boundary', () => {
-    createAnthropicMock.mockReturnValue(() => ({ provider: 'anthropic' }));
-    getProvidersMock.mockReturnValue([
-      {
-        id: 'provider_anthropic',
-        type: 'anthropic',
-        enabled: true,
-        api_key: 'sk-ant',
-        base_url: 'https://api.anthropic.com/v1',
-        models: JSON.stringify(['claude-sonnet-4-5']),
-      },
-    ]);
-
-    expect(() => createModel('anthropic', 'claude-sonnet-4-5')).toThrow(
-      'Anthropic provider returned an invalid language model'
-    );
-  });
-
   it('resolves model capabilities from a refreshed models.dev cache', async () => {
     fetchWithTimeoutMock.mockResolvedValue(
       new Response(
@@ -405,9 +202,6 @@ describe('llm factory', () => {
   });
 
   it('resolvePiModelCapability: catalog modality/cost/window, and the stored-limit clamp', async () => {
-    // The D35 bridge, pinned at the factory boundary (the three Pi call sites
-    // consume this). A regression in any term here is invisible to the
-    // harnesses' own suites because they inject scripted models.
     resetModelsDevCatalogCacheForTests();
     fetchWithTimeoutMock.mockResolvedValue(
       new Response(
@@ -432,9 +226,6 @@ describe('llm factory', () => {
       { id: 'p_anthropic', type: 'anthropic', enabled: true, api_key: 'k', base_url: 'https://x/v1', models: '["claude-sonnet-4-5"]', model_options: '{}' },
     ]);
 
-    // Prime the cached snapshot explicitly. The read path itself is
-    // synchronous off the snapshot by design (a model call never waits on
-    // the network) — that is exactly what resolvePiModelCapability consumes.
     await refreshModelsDevCatalog();
 
     expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'claude-sonnet-4-5' })).toEqual({
@@ -444,9 +235,6 @@ describe('llm factory', () => {
       cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
     });
 
-    // A stored maxInputTokens TIGHTER than the catalog window wins: the
-    // budget uses the tighter number, so the Pi model must not advertise the
-    // larger one.
     getProvidersMock.mockReturnValue([
       {
         id: 'p_anthropic',
@@ -462,14 +250,8 @@ describe('llm factory', () => {
       contextWindow: 4096,
     });
 
-    // Unknown model: no catalog record and no stored options → null, and the
-    // callers fall back to their documented defaults (128000 / zero cost).
     expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'no-such-model' })).toBeNull();
 
-    // Cold cache (catalog unreachable / not yet fetched): the STORED options
-    // still produce a capability — only the catalog-derived terms
-    // (modalities, cost) drop out, so a Pi call degrades to
-    // text-only/zero-cost rather than to nothing.
     resetModelsDevCatalogCacheForTests();
     expect(resolvePiModelCapability({ providerType: 'anthropic', modelId: 'claude-sonnet-4-5' })).toEqual({
       contextWindow: 4096,
@@ -678,7 +460,6 @@ describe('llm factory', () => {
       },
     });
 
-    // An explicit 'none' override keeps temperature and disables effort.
     expect(
       getModelGenerationSettings({
         providerType: 'openai',

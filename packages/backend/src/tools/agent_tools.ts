@@ -7,6 +7,7 @@ import type { AgentResult, AgentTool, AgentUsage } from '@iki/backend/agent/type
 import type { TurnDriverHarness, TurnHarnessAssembly } from '@iki/backend/agent/harness';
 import type { AgentStep, ModelInferenceRecord } from '@iki/backend/agent/agent_step';
 import type {
+  AgentRun,
   AgentRunInput,
   AgentRunKind,
   AgentRunWorkingState,
@@ -49,29 +50,61 @@ type DelegatedAgentRunTracker = {
   id: string;
   recordModelStep: (record: ModelInferenceRecord) => void;
   recordAgentStep: (step: AgentStep) => void;
-  syncModelMessages: (messages: unknown[]) => unknown;
-  markCompleted: (params: {
-    text?: string;
-    finishReason?: string;
-    usage?: AgentUsage;
-  }) => unknown;
-  markFailed: (error: { message: string; code?: string; retryable?: boolean }) => unknown;
+
+  terminal: TerminalRunTracker;
 };
 
-/**
- * Backend pieces the delegated-agent tool needs at execution time, injected at
- * registration so tools/ stays below orchestration and persistence.
- */
+export type TerminalRunTracker = {
+  id: string;
+  getRun: () => AgentRun;
+  markCompleted: (params: DelegateRunFinalizeParams) => AgentRun;
+  markBlocked: (params: DelegateRunFinalizeParams) => AgentRun;
+  markFailed: (params: DelegateRunFailureParams) => AgentRun;
+  markCancelled: (params?: { text?: string }) => AgentRun;
+};
+
+type DelegateRunFinalizeParams = {
+  text?: string;
+  finishReason?: string;
+  usage?: Record<string, unknown>;
+  pendingApprovalIds?: string[];
+  pendingToolCalls?: unknown[];
+};
+
+type DelegateRunFailureParams = { message: string; code?: string; retryable?: boolean; text?: string };
+
+export type DelegatedFinalizePort = {
+
+  finalizeFailure: (params: {
+    tracker: unknown;
+    failure: { status: 'failed'; errorText: string; code?: string; retryable?: boolean };
+    transport: string;
+  }) => void;
+
+  finalizeSuccess: (params: {
+    tracker: unknown;
+    output: { text: string; usage?: unknown; finishReason?: string };
+    transport: string;
+  }) => void;
+};
+
 export type DelegatedAgentRuntime = {
-  createRunTracker: (params: DelegatedAgentRunTrackerParams) => DelegatedAgentRunTracker;
+
+  createRunTracker: (params: DelegatedAgentRunTrackerParams) => {
+    id: string;
+    getRun: TerminalRunTracker['getRun'];
+    recordModelStep: (record: ModelInferenceRecord) => void;
+    recordAgentStep: (step: AgentStep) => void;
+    markCompleted: TerminalRunTracker['markCompleted'];
+    markBlocked: TerminalRunTracker['markBlocked'];
+    markFailed: TerminalRunTracker['markFailed'];
+    markCancelled: TerminalRunTracker['markCancelled'];
+  };
   getConversationToolModel: () => ToolModelConfig | null;
-  /**
-   * Builds the SUBAGENT's executor. Narrowed to `TurnDriverHarness` (turn +
-   * getHistory) so the tool does not care which supply serves the child — the
-   * composition root picks, exactly as it does for a parent turn. It used to
-   * name `AgentHarness`, which pinned delegation to the AI SDK.
-   */
+
   createHarness: (assembly: TurnHarnessAssembly) => TurnDriverHarness;
+
+  finalize: DelegatedFinalizePort;
 };
 
 let delegatedAgentRuntime: DelegatedAgentRuntime | null = null;
@@ -116,17 +149,6 @@ const normalizeToolNames = (input: unknown): string[] => {
   return normalized;
 };
 
-/**
- * May this tool run without a human deciding on each call?
- *
- * Reads the tool's OWN declaration, never the live `needsApproval` decision.
- * Under an explicit askRisky/trustWorkspace policy the resolver replaces
- * `needsApproval` with a per-call function on EVERY tool, so asking it here
- * made every candidate look approval-gated and emptied the delegable set —
- * which is why delegation was unusable in the product's default configuration.
- * Session policy still governs the child's own execution; this only decides
- * what a subagent may inherit.
- */
 const isApprovalFreeTool = (
   tool: Pick<AgentTool, 'declaredNeedsApproval' | 'approvalMode'>
 ): boolean => tool.approvalMode !== 'always' && tool.declaredNeedsApproval !== true;
@@ -168,11 +190,7 @@ const buildDelegationPrompt = (
   toolNames: string[],
   scratchpadPath: string
 ): string => {
-  const sections = [
-    '<delegated_subtask>',
-    args.task.trim(),
-    '</delegated_subtask>',
-  ];
+  const sections = ['<delegated_subtask>', args.task.trim(), '</delegated_subtask>'];
 
   const context = args.context?.trim();
   if (context) {
@@ -264,8 +282,6 @@ const resolveDelegableTools = (
         );
       }
 
-      // Same reason as the auto path below: the child cannot answer an
-      // approval, and the declaration check above already admitted this tool.
       resolved.push({ ...tool, needsApproval: false });
     }
 
@@ -278,35 +294,13 @@ const resolveDelegableTools = (
       isApprovalFreeTool(tool) &&
       (!policy.allowedTools || policy.allowedTools.has(tool.name))
   );
-  // A turn that exposes NO tools is a legitimate tool-free delegation and is
-  // left alone. The surprise is the other shape: tools exist, yet none is
-  // delegable. Returning [] there built the child with `enabledTools: []`, so
-  // it ran, answered without tooling and reported nothing (issue #170).
-  //
-  // State the causes as the NEGATION of the filter below rather than as a
-  // census: an available tool is delegable only when it is approval-free
-  // (`needsApproval` explicitly false/undefined), its `approvalMode` is not
-  // 'always', it is not `agent` itself (recursion), and the subagent type
-  // permits it. So the set empties whenever, for every candidate, one of those
-  // fails — most often because the tool genuinely asks for approval, which
-  // covers a static `needsApproval: true` (write/edit/delete tools), an
-  // `approvalMode` of 'always' (shell, skill, proactive-task and awaiter
-  // tools; MCP servers under defaultApprovalMode 'always'), and a per-call
-  // `needsApproval` function installed by an explicit askRisky/trustWorkspace
-  // policy. The other two are an allow-list that covers no candidate, and a
-  // parent exposing only `agent`.
-  // Naming tools explicitly never reaches here: that path fails earlier, per
-  // tool, at the allow-list and approval checks.
 
   if (toolMap.size > 0 && delegable.length === 0) {
     throw new Error(
-      'No tool is delegable to the subagent: none of this turn\'s available tools is approval-free for this subagent type. Either the tools themselves require an approval decision, or this subagent type may not use them. Narrow the task to one without tools, or pass tools: [] for a tool-free subagent.'
+      "No tool is delegable to the subagent: none of this turn's available tools is approval-free for this subagent type. Either the tools themselves require an approval decision, or this subagent type may not use them. Narrow the task to one without tools, or pass tools: [] for a tool-free subagent."
     );
   }
-  // The child has no approval surface, so strip the parent's per-call decision
-  // from the tools it inherits. Selection above already proved every one of
-  // them declares itself approval-free; leaving the parent's function in place
-  // would let a policy the child cannot satisfy pause it mid-task.
+
   return delegable.map(tool => ({ ...tool, needsApproval: false }));
 };
 
@@ -318,8 +312,7 @@ const summarizeUsedTools = (
 ): Array<{ name: string; callCount: number }> => {
   const counts = new Map<string, number>();
   for (const toolCall of toolCalls ?? []) {
-    const toolName =
-      typeof toolCall?.toolName === 'string' ? toolCall.toolName.trim() : '';
+    const toolName = typeof toolCall?.toolName === 'string' ? toolCall.toolName.trim() : '';
     if (!toolName) continue;
     counts.set(toolName, (counts.get(toolName) ?? 0) + 1);
   }
@@ -339,8 +332,10 @@ export class DelegatedAgentTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+
+  override replay = 'unsafe' as const;
   override description =
-    'Delegate a bounded investigation, review, or synthesis subtask to a fresh subagent scratchpad. Best for side work such as comparing sources, scanning directory structure, or producing focused findings. The delegated run inherits only the current turn\'s approval-free tools and cannot recursively spawn more agents. Pick subagent_type deliberately: explorer is a read-only research agent (safe for investigation), general carries the full approval-free tool set.';
+    "Delegate a bounded investigation, review, or synthesis subtask to a fresh subagent scratchpad. Best for side work such as comparing sources, scanning directory structure, or producing focused findings. The delegated run inherits only the current turn's approval-free tools and cannot recursively spawn more agents. Pick subagent_type deliberately: explorer is a read-only research agent (safe for investigation), general carries the full approval-free tool set.";
   override paramSchema = AgentToolInputSchema;
   override outputSchema = zodSchemaToJsonSchema(AgentToolOutputSchema, {
     title: 'agent_output',
@@ -358,9 +353,11 @@ export class DelegatedAgentTool extends BaseTool {
     const delegatedTools = resolveDelegableTools(args.tools, subagentType);
     const delegatedToolNames = delegatedTools.map(tool => tool.name);
 
-    // Create scratchpad directory for intermediate subagent findings
     const scratchpadBase = path.join(os.tmpdir(), 'iki-scratch');
-    const scratchpadPath = path.join(scratchpadBase, `agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    const scratchpadPath = path.join(
+      scratchpadBase,
+      `agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    );
     await fs.mkdir(scratchpadPath, { recursive: true });
 
     const typePrompt = SUBAGENT_TYPE_POLICY[subagentType].prompt;
@@ -388,19 +385,13 @@ export class DelegatedAgentTool extends BaseTool {
       enableTools: delegatedTools.length > 0,
       enabledToolNames: [],
       availableSkillIds: runtimeContext.availableSkillIds ?? [],
-      guardActive: false,
-      // The child inherits ALREADY-SELECTED approval-free tools (see
-      // isApprovalFreeTool), and it has no UI to answer a card. Without an
-      // explicit policy it fell back to legacy flags, where a tool carrying a
-      // per-call `needsApproval` function could still pause the child on an
-      // approval nobody can grant. 'never' states what the selection already
-      // guarantees: every inherited call needs no human decision.
+
       approvalPolicy: 'never',
       maxIterations: resolvedMaxIterations,
       maxOutputTokens: resolvedMaxTokens,
     });
 
-    const runTracker = requireDelegatedAgentRuntime().createRunTracker({
+    const createdTracker = requireDelegatedAgentRuntime().createRunTracker({
       kind: 'delegated-agent',
       threadId: runtimeContext.threadId,
       parentRunId: runtimeContext.runId,
@@ -421,12 +412,16 @@ export class DelegatedAgentTool extends BaseTool {
         },
       },
       working: {
-        modelMessages: [],
         accumulatedText: '',
         pendingApprovalIds: [],
         lastStepIndex: 0,
       },
     });
+
+    const runTracker = {
+      ...createdTracker,
+      terminal: createdTracker as unknown as TerminalRunTracker,
+    };
     runtimeContext.runTracker?.recordChildRun({
       childRunId: runTracker.id,
       childKind: 'delegated-agent',
@@ -442,10 +437,6 @@ export class DelegatedAgentTool extends BaseTool {
       },
     });
 
-    // The child runs inside this tool call — there is no second executing
-    // unit. Aliasing it onto the parent is what lets a cancel naming the
-    // child reach the execution that is actually running, instead of
-    // refusing a run that is executing right here.
     const disposeChildAlias = getToolRuntimeContext().registerChildRunAlias?.(
       runtimeContext.runId ?? '',
       runTracker.id
@@ -476,10 +467,16 @@ export class DelegatedAgentTool extends BaseTool {
         }
       );
       if (!turnOutput) throw new Error('Delegated agent produced no output');
-      runTracker.syncModelMessages(harness.getHistory());
+
     } catch (error) {
-      runTracker.markFailed({
-        message: error instanceof Error ? error.message : String(error),
+
+      requireDelegatedAgentRuntime().finalize.finalizeFailure({
+        tracker: runTracker.terminal,
+        failure: {
+          status: 'failed',
+          errorText: error instanceof Error ? error.message : String(error),
+        },
+        transport: 'delegated-agent',
       });
       throw error;
     } finally {
@@ -497,21 +494,25 @@ export class DelegatedAgentTool extends BaseTool {
             )
         )
       );
-      runTracker.markFailed({
-        message: `Delegated subagent requested approval-gated tools (${formatToolNameList(toolNames)}), which are not supported inside the agent tool.`,
+      requireDelegatedAgentRuntime().finalize.finalizeFailure({
+        tracker: runTracker.terminal,
+        failure: {
+          status: 'failed',
+          errorText: `Delegated subagent requested approval-gated tools (${formatToolNameList(toolNames)}), which are not supported inside the agent tool.`,
+        },
+        transport: 'delegated-agent',
       });
       throw new Error(
         `Delegated subagent requested approval-gated tools (${formatToolNameList(toolNames)}), which are not supported inside the agent tool. Run that step directly from the parent agent instead.`
       );
     }
 
-    runTracker.markCompleted({
-      text: turnOutput.text,
-      ...(turnOutput.usage ? { usage: turnOutput.usage } : {}),
-      finishReason: 'completed',
+    requireDelegatedAgentRuntime().finalize.finalizeSuccess({
+      tracker: runTracker.terminal,
+      output: turnOutput,
+      transport: 'delegated-agent',
     });
 
-    // Scan scratchpad for intermediate findings
     let scratchpadFiles: Array<{ name: string; size: number; content?: string }> = [];
     try {
       const entries = await fs.readdir(scratchpadPath, { withFileTypes: true });
@@ -526,8 +527,8 @@ export class DelegatedAgentTool extends BaseTool {
           const stat = await fs.stat(filePath);
           file.size = stat.size;
         } catch {
-          // ignore stat failure
-        }
+    // Intentionally ignored: the caller cannot act on it.
+  }
         try {
           const content = await fs.readFile(filePath, 'utf-8');
           file.content =
@@ -535,18 +536,18 @@ export class DelegatedAgentTool extends BaseTool {
               ? content.slice(0, SCRATCHPAD_MAX_CONTENT_BYTES) + '\n... [truncated]'
               : content;
         } catch {
-          // binary or unreadable — skip content
-        }
+    // Intentionally ignored: the caller cannot act on it.
+  }
       }
     } catch {
-      // scratchpad may not exist or be empty
-    }
+    // Intentionally ignored: the caller cannot act on it.
+  }
 
     const hasScratchpad = scratchpadFiles.length > 0;
 
     return {
       response: turnOutput.text,
-      iterations: 0, // ponytail: harness doesn't expose iterations; consumers only need response
+      iterations: 0,
       toolCallCount: turnOutput.toolCalls?.length ?? 0,
       usedTools: summarizeUsedTools(turnOutput.toolCalls),
       model: {

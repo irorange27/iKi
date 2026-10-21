@@ -8,13 +8,6 @@ const retryLogger = createLogger({ module: 'tool_retry' });
 
 const MAX_BACKOFF_MS = 2000;
 
-/**
- * Wrap a handler function with exponential-backoff retry logic.
- *
- * Returns the handler unchanged if maxRetries is 0.
- * Retries only on errors that pass the retryable predicate (defaulting to
- * `isRetryableError` from the shared error utilities).
- */
 export function withRetry<P extends unknown[], R>(
   handler: (...args: P) => Promise<R>,
   config: ToolRetryConfig

@@ -1,11 +1,3 @@
-// The second face of issue #152. `initializeDatabase({ dbPath })` sets the
-// per-open override and then early-returned the EXISTING handle when one was
-// open — so an explicit path was silently ignored if a previous open was
-// still live. A caller that opens a fresh file per test then wrote into the
-// previous file's database, which after that file was removed surfaced as
-// SQLite's `attempt to write a readonly database`. That is the intermittent
-// failure in inline_execution_facts.integration.test.ts (seen on CI, and
-// reproduced locally in 1 of 2 full-suite runs).
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -51,8 +43,6 @@ describe('initializeDatabase honours an explicit path', () => {
     addProvider(providerRow('provider_first'));
     expect(getProviders().map(p => p.id)).toEqual(['provider_first']);
 
-    // A second explicit open must REALLY open the second file. Before the fix
-    // it returned the first handle, so this row landed in first.db.
     initializeDatabase({ dbPath: second });
     addProvider(providerRow('provider_second'));
 

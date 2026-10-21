@@ -2,16 +2,22 @@ import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import started from 'electron-squirrel-startup';
 import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
-import { applyAppLoggingConfig, createLogger, setBaseLogContext } from '@iki/backend/logger';
+import {
+  applyAppLoggingConfig,
+  createLogger,
+  setBaseLogContext,
+  setConsoleLoggingEnabled,
+} from '@iki/backend/logger';
 import { registerStandardTools } from '@iki/backend/tools';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getMcpManager } from '@iki/backend/mcp';
-import {
-  initLangfuseTracing,
-  shutdownLangfuseTracing,
-} from '@iki/backend/observability/langfuse';
+import { initLangfuseTracing, shutdownLangfuseTracing } from '@iki/backend/observability/langfuse';
 import { setHostFetch, setPlatformInfo } from '@iki/backend/platform';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
+import {
+  finalizeHarnessTurn,
+  finalizeTurnFailure,
+} from '@iki/backend/thread_session/turn_driver';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { resolveElement } from './main/services/devtools/element_source';
 import { startDaemonServer } from '@iki/daemon/server';
@@ -38,6 +44,10 @@ const appLogger = createLogger({ module: 'app' });
 
 setBaseLogContext({ process: isDaemonMode ? 'daemon' : 'main' });
 
+if (!isDaemonMode) {
+  setConsoleLoggingEnabled(false);
+}
+
 wirePlatformContext();
 setHostFetch(electronFetchWithTimeout);
 initLangfuseTracing();
@@ -46,7 +56,7 @@ const syncLoggingConfig = () => {
   try {
     applyAppLoggingConfig(getAppConfig());
   } catch {
-    // Fall back to env/default logger config until app config becomes available.
+    /* empty: error is not actionable here */
   }
 };
 
@@ -61,7 +71,7 @@ const updatePlatformDisplayScale = () => {
     const scale = screen.getPrimaryDisplay().scaleFactor;
     setPlatformInfo({ displayScale: scale });
   } catch {
-    // ignore
+    /* empty: error is not actionable here */
   }
 };
 
@@ -129,30 +139,25 @@ if (isDaemonMode) {
     updatePlatformTheme();
   });
 
-  // Register standard tools + IPC handlers on startup.
   registerStandardTools({
-    // The renderer probe lives here, not in backend: the daemon has no windows.
     elementSourceResolver: request => resolveElement(request),
     delegatedAgentRuntime: {
       createRunTracker: createAgentRunTracker,
       getConversationToolModel: getToolModel,
-      // Delegation runs on the same supply as a parent turn. The Pi tool
-      // harness honours `toolsOverride`, so the child inherits exactly the
-      // approval-free tool set the delegation selected.
       createHarness: startPiTurnHarness,
+      finalize: {
+        finalizeFailure: finalizeTurnFailure,
+        finalizeSuccess: finalizeHarnessTurn,
+      },
     },
   });
   void getMcpManager().initialize();
   registerMainIpc();
 
-  // Handle creating/removing shortcuts on Windows when installing/uninstalling.
   if (started) {
     app.quit();
   }
 
-  // This method will be called when Electron has finished
-  // initialization and is ready to create browser windows.
-  // Some APIs can only be used after this event occurs.
   app.on('ready', () => {
     syncLoggingConfig();
     appLogger.event({
@@ -164,9 +169,6 @@ if (isDaemonMode) {
         platform: process.platform,
       },
     });
-    // Install before the first window so F12 / Cmd+Shift+I works from the
-    // first paint, in dev and packaged builds alike, and within settings and
-    // companion windows too.
     installApplicationMenu();
     startBackgroundRuntime();
     startAppUpdateService(getAppConfig());
@@ -188,9 +190,6 @@ if (isDaemonMode) {
     void shutdownLangfuseTracing();
   });
 
-  // Quit when all windows are closed, except on macOS. There, it's common
-  // for applications and their menu bar to stay active until the user quits
-  // explicitly with Cmd + Q.
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
       app.quit();
@@ -198,8 +197,6 @@ if (isDaemonMode) {
   });
 
   app.on('activate', () => {
-    // On OS X it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
       syncCompanionWindowToConfig(getAppConfig());

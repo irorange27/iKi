@@ -67,18 +67,12 @@ type ModelsDevModelRecord = {
   reasoning?: unknown;
   supportsReasoning?: unknown;
   supports_reasoning?: unknown;
-  /** The catalog's REAL vision signal: a modalities.input array containing
-   * 'image'. The flat vision/supportsVision keys the older readers looked for
-   * do not exist in models.dev (checked across all 9048 records), so vision
-   * rides the same modality list that drives Pi's model.input. */
+
   modalities?: unknown;
   vision?: unknown;
   supportsVision?: unknown;
   supports_vision?: unknown;
-  /** USD per million tokens. Ratios already (OpenAI's gpt-5 = 1.25 means
-   * $1.25 per 1M input tokens), so the consumer multiplies by tokens/1e6.
-   * cache_read/cache_write are optional in the catalog; audio tiers and
-   * `tiers[]` context-size tiers are out of scope. */
+
   cost?: unknown;
 };
 
@@ -99,13 +93,9 @@ export type ModelCapability = {
   supportsToolCalls: boolean | null;
   supportsReasoning: boolean | null;
   supportsVision?: boolean | null;
-  /** Catalog modality names for this model ('text' | 'image' | 'pdf' ...).
-   * Models.dev-only: stored provider options can override the vision FLAG
-   * but there is no modality list to store. Absent for provider/default
-   * sources. */
+
   modalities?: string[];
-  /** USD per million tokens from the catalog's cost record. Absent for
-   * provider/default sources — only models.dev prices a model. */
+
   costPerMillionTokens?: { input: number; output: number; cacheRead: number; cacheWrite: number };
   source: 'models.dev' | 'provider' | 'default';
 };
@@ -115,19 +105,10 @@ export type ModelCapabilityLimits = Pick<
   'contextWindow' | 'maxInputTokens' | 'maxOutputTokens'
 >;
 
-// Fallback assumption for models with no catalog/provider data (custom
-// openai-compatible endpoints, or while the models.dev catalog is
-// unreachable). Stored provider/model options always win over this default.
 export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 1_000_000;
 
-/**
- * Hard per-request output caps enforced by provider APIs. A stored model
- * override above the cap (e.g. copying the context window into max output
- * tokens) makes every request fail with HTTP 400, so clamp it during
- * capability resolution. Values are documented API limits, not context sizes.
- */
 const PROVIDER_MAX_OUTPUT_TOKEN_CAPS: Partial<Record<string, number>> = {
-  // DeepSeek rejects max_tokens outside [1, 393216].
+
   deepseek: 393_216,
 };
 
@@ -198,10 +179,6 @@ const getLimitRecord = (model: ModelsDevModelRecord): ModelsDevLimitRecord | nul
   return null;
 };
 
-/** Vision support read from the catalog's real shape: `modalities.input`
- * is an array of modality names and 'image' is the one that matters.
- * Returns null when the record carries no usable modality list, so the
- * legacy flat keys and the unknown-model default still apply. */
 const modalitiesIncludeImage = (modalities: unknown): boolean | null => {
   const record = asRecord(modalities);
   const input = Array.isArray(record?.input) ? record!.input : Array.isArray(modalities) ? modalities : null;
@@ -213,8 +190,6 @@ const modalitiesIncludeImage = (modalities: unknown): boolean | null => {
   return normalized.some(value => value.trim().toLowerCase() === 'image');
 };
 
-/** The catalog's modality names, in record order. Returns null when the
- * record carries no usable list. */
 const readModalityList = (modalities: unknown): string[] | null => {
   const record = asRecord(modalities);
   const input = Array.isArray(record?.input) ? record!.input : Array.isArray(modalities) ? modalities : null;
@@ -233,13 +208,6 @@ const readNonNegativeNumber = (value: unknown): number | null => {
   return value;
 };
 
-/**
- * models.dev `cost` record → per-million-token rates. Only the four buckets
- * the usage projection reads; missing keys become 0 so the consumer's
- * buckets stay integers. Returns null when the model has no cost record at
- * all (5% of catalog models), so callers can distinguish "free" from
- * "unpriced" — the unpriced case keeps cost at 0.
- */
 const readModelCostPerMillionTokens = (
   cost: unknown
 ): { input: number; output: number; cacheRead: number; cacheWrite: number } | null => {
@@ -539,12 +507,7 @@ export const mergeModelCapability = (
     supportsToolCalls: providerCapability.supportsToolCalls ?? baseCapability.supportsToolCalls,
     supportsReasoning: providerCapability.supportsReasoning ?? baseCapability.supportsReasoning,
     ...(supportsVision !== undefined ? { supportsVision } : {}),
-    // Modalities/cost have no stored-options counterpart: only the catalog
-    // carries them, so they ride the base record unchanged. A stored
-    // supportsVision override flips the FLAG the renderer reads, but the
-    // Pi model still sees the catalog's modality list — that mismatch is
-    // the documented residual of "vision is a flag in settings, a list in
-    // the catalog" (the renderer warning is the only consumer today).
+
     ...(baseCapability.modalities ? { modalities: baseCapability.modalities } : {}),
     ...(baseCapability.costPerMillionTokens
       ? { costPerMillionTokens: baseCapability.costPerMillionTokens }
@@ -569,10 +532,7 @@ export const normalizeModelCapabilityLimits = (
   return {
     contextWindow,
     maxInputTokens: maxInputTokens ?? contextWindow,
-    // Unknown stays unknown: a guessed output cap is sent to the provider as a
-    // hard max_tokens and rejects the whole request when it exceeds the real
-    // limit (the 384K guess broke every custom provider). The model's own
-    // default is the only value that is always valid, so send nothing.
+
     maxOutputTokens: normalizePositiveInteger(limits?.maxOutputTokens) ?? null,
   };
 };
@@ -609,9 +569,7 @@ export const ensureModelCapability = (
     modelId: trimmedModelId,
     displayName: trimmedModelId,
     ...normalizedLimits,
-    // Unknown models are assumed to be modern multimodal reasoners: the UI
-    // offers image input and reasoning controls by default, and catalog or
-    // provider data still overrides these when it exists.
+
     supportsToolCalls: true,
     supportsReasoning: true,
     supportsVision: true,

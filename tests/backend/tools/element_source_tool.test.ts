@@ -8,8 +8,6 @@ import type { DevToolsResolveRequest } from '@iki/backend/types/devtools';
 
 const run = async (input: Record<string, unknown>) => {
   const tool = new ElementSourceTool();
-  // BaseTool.handler is the validated entry point; calling it directly keeps
-  // the test about routing/answers, not about the registry.
   return (tool as unknown as { handler: (value: unknown) => Promise<unknown> }).handler(input);
 };
 
@@ -51,8 +49,6 @@ describe('element_source tool', () => {
     expect(result.reason).toContain('click the element in the app window first');
   });
 
-  // Coordinates are the mode that survives a restart or an app nobody clicked
-  // in: a screenshot the model can see is enough to name the file behind it.
   it('addresses a viewport point for the resolver', async () => {
     const seen: DevToolsResolveRequest[] = [];
     setElementSourceResolver(request => {
@@ -85,9 +81,6 @@ describe('element_source tool', () => {
     });
   });
 
-  // The model only sees what the JSON Schema says, so a target it cannot name
-  // is a mode that does not exist as far as the agent is concerned. `parameters`
-  // is the getter `defaultToolRegistry.getToolDefinitions()` hands to the SDK.
   it('exposes every targeting mode in the model-facing schema', () => {
     const tool = new ElementSourceTool();
     const json = tool.parameters as {

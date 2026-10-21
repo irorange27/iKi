@@ -9,28 +9,36 @@ import { migration as baseline } from './001_baseline';
 import { migration as renameChatToolApprovals } from './002_rename_chat_tool_approvals';
 import { migration as approvalSessionWorkspaceSelection } from './003_approval_session_workspace_selection';
 import { migration as approvalSessionPlan } from './004_approval_session_plan';
+import { migration as dropMemoryAndAffect } from './005_drop_memory_and_affect';
+import { migration as dropThreadContext } from './006_drop_thread_context';
+import { migration as dropDeadTables } from './007_drop_dead_tables';
+import { migration as dropClipboardSnapshots } from './008_drop_clipboard_snapshots';
+import { migration as indexConversationReadPaths } from './009_index_conversation_read_paths';
+import { migration as dropChatMessages } from './010_drop_chat_messages';
+import { migration as dropContinuity } from './011_drop_continuity';
+import { migration as dropIdentityProfiles } from './012_drop_identity_profiles';
+import { migration as dropAwaiterWakeEvents } from './013_drop_awaiter_wake_events';
+import { migration as dropTodoTables } from './014_drop_todo_tables';
 
-// Forward-only migrations after the baseline. Add new ones above 001 in name
-// order (002_*, 003_*, …) — runMigrations sorts by name. Tables introduced
-// after the squash are bootstrap-created in database.ts (initCoreTables), not
-// by migrations: post-baseline migrations must not emit CREATE TABLE.
 export const registeredMigrations: Migration[] = [
   baseline,
   renameChatToolApprovals,
   approvalSessionWorkspaceSelection,
   approvalSessionPlan,
+  dropMemoryAndAffect,
+  dropThreadContext,
+  dropDeadTables,
+  dropClipboardSnapshots,
+  indexConversationReadPaths,
+  dropChatMessages,
+  dropContinuity,
+  dropIdentityProfiles,
+  dropAwaiterWakeEvents,
+  dropTodoTables,
 ];
 
 export const initializeMigrations = (db: SqliteDatabase) => {
-  // Databases created before the migration squash already carry the full
-  // schema: detect any pre-existing user table and mark the baseline as
-  // applied so they open unchanged. Fresh databases run the baseline to
-  // create the schema from scratch. config/providers/migrations are excluded
-  // because database.ts bootstrap-creates them before migrations run.
-  // hasPreBaselineSchema detection must ignore every table initCoreTables
-  // bootstrap-creates (config, providers, thread_run_locks, session_events,
-  // migrations) or a fresh database gets misread as pre-squash and skips the
-  // baseline.
+
   const hasPreBaselineSchema = Boolean(
     db
       .prepare(
@@ -40,7 +48,7 @@ export const initializeMigrations = (db: SqliteDatabase) => {
   );
 
   if (hasPreBaselineSchema && !isMigrationExecuted(db, baseline.name)) {
-    runMigrations(db, []); // ensures the migrations bookkeeping table exists
+    runMigrations(db, []);
     markMigrationExecuted(db, baseline.name);
   }
 

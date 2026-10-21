@@ -1,17 +1,19 @@
 import { createLogger } from '@iki/backend/logger';
-import type { ModelMessage, ToolApprovalResponse } from 'ai';
+import type { ModelMessage, ToolApprovalResponse } from '@iki/backend/message/model_history';
 
-import { appendApprovalResponsesToHistory } from '../provider/ai_sdk_runtime';
-import { cloneModelMessages, rehydrateHarness, type TurnDriverHarness } from '../agent/harness';
+import { cloneModelMessages, type TurnDriverHarness } from '../agent/harness';
 import { resumeHistoryFromReplay } from './run_rehydrator';
 import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
-import { pausedPlanRunsOnPiToolSupply, piDomainResumeHistory } from './turn_supply_selection';
+import {
+  pausedPlanRunsOnPiToolSupply,
+  piDomainResumeHistory,
+  PiSupplyRefusedError,
+} from './turn_supply_selection';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import { createPrefixedId } from '../utils/id';
 import type { ToolCallApprovalDecision } from '@iki/backend/types/tool_call_approval';
 import { getErrorMessage } from '@iki/backend/utils/errors';
-import type { ChatMemory } from './memory';
 import type { ApprovalRecoveryContext } from './approval_types';
 import { reidentifyPlan } from './approval_types';
 import type { ExecutionPlan } from './execution_plan';
@@ -29,31 +31,22 @@ import {
 } from './session_log';
 import {
   createTurnDriver,
-  finalizeRunForOutcome,
+  finalizeTurn,
+  finalizeTurnCancelled,
+  finalizeTurnFailure,
   runFailureFromError,
-  terminalFactForOutcome,
 } from './turn_driver';
 import { parseStoredWorkspaceSelection } from '../workspaces/thread_workspace';
 import { deriveRunTurnPlan } from './run_rehydrator';
 import { executeApprovedTool, prepareToolExecution } from './tool_execution';
 export { executeApprovedTool, prepareToolExecution } from './tool_execution';
-import {
-  loadPersistedAssistantParts,
-  persistAssistantTurnMessage,
-} from './turn_persistence';
-import {
-  createAgentRunTracker,
-  rehydrateAgentRunTracker,
-} from './run_tracker';
+import { loadPersistedAssistantParts, persistAssistantTurnMessage } from './turn_persistence';
+import { createAgentRunTracker, rehydrateAgentRunTracker } from './run_tracker';
 import type { ActiveStreamState, ChatStreamTarget } from './types';
 import { createUiChunkEmitter } from './ui_stream';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
 
-// Persisted plan snapshots go through the versioned codec (see
-// execution_plan_codec.ts): unknown versions or structurally invalid
-// payloads fall back to the legacy per-column derivation rather than
-// fabricating an execution configuration.
 const parseStoredPlan = parseExecutionPlan;
 
 type PendingApprovalSession = {
@@ -71,14 +64,16 @@ const parseStringArray = (value: string | null | undefined): string[] => {
   try {
     const parsed = JSON.parse(value);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+    return parsed.filter(
+      (entry): entry is string => typeof entry === 'string' && entry.trim().length > 0
+    );
   } catch {
     return [];
   }
 };
 
 export const createChatApproval = (deps: {
-  /** Session-less stream registry access (owned by the stream coordinator). */
+
   streams: {
     tryAcquireThreadRun: (
       threadId?: string,
@@ -87,18 +82,13 @@ export const createChatApproval = (deps: {
     peek: (senderId: number) => ActiveStreamState | undefined;
     attach: (senderId: number, streamState: ActiveStreamState) => void;
     detach: (senderId: number, streamState: ActiveStreamState) => void;
-    /**
-     * Register the resumed continuation under its run so a cancel naming that
-     * run reaches this execution (a resumed stream has no session membership).
-     * Optional so unit doubles stay small; the composition root wires it.
-     */
+
     registerExecution?: (execution: {
       cancel: (reason: string) => void;
       runId?: string | null;
     }) => { setRunId: (runId: string | null) => void; dispose: () => void };
     registerChildRunAlias: (parentRunId: string, childRunId: string) => () => void;
   };
-  memory: ChatMemory;
   conversation: {
     upsertTurnMessage: (input: unknown) => unknown;
   };
@@ -132,7 +122,11 @@ export const createChatApproval = (deps: {
     session.timeouts.clear();
   };
 
-  const scheduleApprovalTimeout = (approvalId: string, session: PendingApprovalSession, delay = APPROVAL_TIMEOUT_MS) => {
+  const scheduleApprovalTimeout = (
+    approvalId: string,
+    session: PendingApprovalSession,
+    delay = APPROVAL_TIMEOUT_MS
+  ) => {
     if (!session.timeouts || session.timeouts.has(approvalId)) return;
     const timeoutId = setTimeout(() => {
       if (session.collectedApprovalResponses.has(approvalId)) return;
@@ -149,9 +143,13 @@ export const createChatApproval = (deps: {
             scheduleApprovalTimeout(approvalId, session, 1000);
           }
         })
-        .catch(error => createLogger({ module: 'chat_approval' }).event({
-          level: 'error', event: 'approval.timeout.failed', error,
-        }));
+        .catch(error =>
+          createLogger({ module: 'chat_approval' }).event({
+            level: 'error',
+            event: 'approval.timeout.failed',
+            error,
+          })
+        );
     }, delay);
     session.timeouts.set(approvalId, timeoutId);
   };
@@ -211,13 +209,9 @@ export const createChatApproval = (deps: {
 
     if (session.recoveryContext) {
       const recoveryContext = session.recoveryContext;
-      // The plan is the authority; the per-column fields are its persisted
-      // projection (legacy readers and the legacy recovery path read them).
+
       const plan = recoveryContext.plan;
-      // Session log: each pending approval is a business fact, recorded
-      // BEFORE the rows that gate execution — a crash between the two leaves
-      // a requested fact without a pending row (resume refuses: safe
-      // direction), never a pending row the replay cannot see (ADR 008).
+
       if (plan.threadId) {
         recordSessionEvents(
           plan.threadId,
@@ -247,17 +241,13 @@ export const createChatApproval = (deps: {
         system_prompt: plan.systemPrompt,
         max_input_tokens: plan.maxInputTokens ?? null,
         max_output_tokens: plan.maxOutputTokens ?? null,
-        max_iterations: plan.maxIterations ?? null,
+        max_iterations: plan.budget.step ?? null,
         enabled_tools: JSON.stringify(plan.enabledTools),
         available_skill_ids: JSON.stringify(plan.availableSkillIds),
-        // Turn-start workspace binding (D30): the resumed execution must
-        // rebind this world, not the thread's current selection.
+
         workspace_selection:
-          plan.workspaceSelection !== undefined
-            ? JSON.stringify(plan.workspaceSelection)
-            : null,
-        // The full plan snapshot: a restart-recovered resume restores every
-        // field from this instead of the lossy per-column derivation.
+          plan.workspaceSelection !== undefined ? JSON.stringify(plan.workspaceSelection) : null,
+
         plan_json: serializeExecutionPlan(plan),
       });
 
@@ -345,38 +335,19 @@ export const createChatApproval = (deps: {
           .filter(Boolean)
       )
     );
-    const storedRunId = typeof approvalSession.run_id === 'string' ? approvalSession.run_id.trim() : '';
+    const storedRunId =
+      typeof approvalSession.run_id === 'string' ? approvalSession.run_id.trim() : '';
     const activeApprovalIds = activeApprovals.map(record => record.approval_id);
 
     const threadId = approvalSession.thread_id ?? null;
     if (!threadId) return null;
 
-    // Event-first (ADR 008 F2): the recovery history is rebuilt from the
-    // session log replay — run.working and chat_messages are projections and
-    // no longer read as authority here. The replay must also know the pending
-    // approvals as facts: an approval the log never recorded is not
-    // resumable, because a replay-only world could not explain what the user
-    // would be approving. Memory context rides the same seam the old
-    // chat_messages fallback used (persisted context, no fresh retrieval) —
-    // the replay, like that fallback, starts from persisted UI facts and
-    // lacks the request-side messages the run mirror used to carry.
-    // `runSnapshot` below survives only for the legacy-plan derivation of
-    // pre-plan_json rows.
     const replay = rebuildThreadViewFromEvents(threadId);
     const replayApprovalIds = new Set(replay.approvals.map(approval => approval.approvalId));
     const unrecordedApprovals = activeApprovalIds.filter(id => !replayApprovalIds.has(id));
-    // Shared recovery-input owner (F3); the approval gate above is
-    // approval-specific and stays here. Keep non-terminal tool parts intact:
-    // the pending approval-request is live state the resumed harness must
-    // pair with the user's approval response — repairing it to an
-    // interruption result makes the response reference an unknown approvalId
-    // and the resume is rejected. Memory context rides the persisted seam
-    // (skipRetrieval): this path bypasses the preparer, so it injects itself.
+
     const replayHistory = await resumeHistoryFromReplay(replay);
-    // The tail input fact's system prompts lead the recovered history
-    // (issue #139): a paused TASK turn's agent prompt rides the input fact —
-    // the replay's message list alone would resume it under the wrong
-    // persona. Chat pauses see an empty array and keep the old shape.
+
     const replayWithSystem = replayHistory
       ? [
           ...replay.inputSystemPrompts.map(
@@ -386,13 +357,7 @@ export const createChatApproval = (deps: {
         ]
       : null;
     const inputMessages =
-      unrecordedApprovals.length === 0 && replayWithSystem
-        ? await deps.memory.injectMemoryIntoMessages(
-            replayWithSystem,
-            threadId,
-            { skipRetrieval: true }
-          )
-        : null;
+      unrecordedApprovals.length === 0 && replayWithSystem ? replayWithSystem : null;
     if (!inputMessages || inputMessages.length === 0) {
       createLogger({ module: 'chat_approval' }).event({
         level: 'warn',
@@ -409,7 +374,10 @@ export const createChatApproval = (deps: {
       return null;
     }
 
-    const parsedPlan = parseStoredPlan(approvalSession.plan_json);
+    const replayPlan = storedRunId
+      ? replay.turns.find(turn => turn.runId === storedRunId)?.plan
+      : undefined;
+    const parsedPlan = replayPlan ?? parseStoredPlan(approvalSession.plan_json);
     const runSnapshot = !parsedPlan && storedRunId ? agentRunDb.getAgentRun(storedRunId) : null;
     const derivedPlan = deriveRunTurnPlan(runSnapshot, {
       providerType: approvalSession.provider_type,
@@ -424,12 +392,12 @@ export const createChatApproval = (deps: {
       derivedPlan.enabledTools.length > 0
         ? derivedPlan.enabledTools
         : Array.from(
-          new Set(
-            [...fallbackToolNames, ...activeApprovals.map(record => record.tool_name ?? '')]
-              .map(toolName => (typeof toolName === 'string' ? toolName.trim() : ''))
-              .filter(Boolean)
-          )
-        );
+            new Set(
+              [...fallbackToolNames, ...activeApprovals.map(record => record.tool_name ?? '')]
+                .map(toolName => (typeof toolName === 'string' ? toolName.trim() : ''))
+                .filter(Boolean)
+            )
+          );
 
     const pendingApprovalIds = new Set(activeApprovals.map(record => record.approval_id));
     const collectedApprovalResponses = new Map<string, ToolApprovalResponse>();
@@ -448,29 +416,33 @@ export const createChatApproval = (deps: {
       });
     }
 
-    // Legacy rows: the plan is rebuilt from the run row layered over the
-    // approval-session columns. Fields the columns never stored stay unset —
-    // rows written after the plan_json column persist the exact plan.
     const plan: ExecutionPlan = parsedPlan ?? {
       providerType: derivedPlan.providerType,
       ...(derivedPlan.providerId ? { providerId: derivedPlan.providerId } : {}),
       model: derivedPlan.model,
-      // The legacy resume re-enables the tool path so a resumed turn can keep
-      // executing, but the resolver no longer rides tools in behind an empty
-      // selection: `enabledTools` is exactly what the legacy row carried. A
-      // legacy row whose list is empty therefore resolves zero tools, which
-      // is fail-closed — the resumed turn answers without tooling.
+
       enableTools: true,
       enabledTools: resolvedToolNames,
       availableSkillIds: derivedPlan.availableSkillIds,
-      guardActive: false,
       requireApproval: derivedPlan.requireApproval ?? true,
       autoApproveToolRequests: false,
       ...(derivedPlan.approvalPolicy ? { approvalPolicy: derivedPlan.approvalPolicy } : {}),
-      maxIterations: derivedPlan.maxIterations,
-      // The run row may carry config the legacy columns never stored.
+
+      budget: {
+        step: derivedPlan.maxIterations,
+        ...(derivedPlan.autonomous
+          ? {
+              batch: {
+                max: derivedPlan.autonomous.maxIterations,
+                ...(derivedPlan.autonomous.continuePrompt
+                  ? { continuePrompt: derivedPlan.autonomous.continuePrompt }
+                  : {}),
+              },
+            }
+          : {}),
+      },
+
       ...(derivedPlan.reasoningEffort ? { reasoningEffort: derivedPlan.reasoningEffort } : {}),
-      ...(derivedPlan.autonomous ? { autonomous: derivedPlan.autonomous } : {}),
       ...(typeof approvalSession.max_input_tokens === 'number'
         ? { maxInputTokens: approvalSession.max_input_tokens }
         : {}),
@@ -535,14 +507,14 @@ export const createChatApproval = (deps: {
       };
     }
 
-    // Ensure the resumed stream emits UI chunks to the window that initiated the approval.
     session.target = target;
 
     const approvalResponse: ToolApprovalResponse = {
       type: 'tool-approval-response',
       approvalId,
       approved,
-      reason: reason ?? (approved ? 'User approved tool execution.' : 'User rejected tool execution.'),
+      reason:
+        reason ?? (approved ? 'User approved tool execution.' : 'User rejected tool execution.'),
     };
 
     const recordApprovalResponse = () => {
@@ -556,12 +528,6 @@ export const createChatApproval = (deps: {
       });
     };
 
-    // Session log: the decision is a business fact, recorded BEFORE the
-    // decision row applies it — a write failure or crash between the two
-    // leaves a requested fact without an applied decision (a retried decision
-    // walks the full path again), never an applied decision the replay cannot
-    // see. Authorization reads the row, so the resume still refuses the
-    // event-without-row shape: safe direction (ADR 008).
     const decidedThreadId =
       session.recoveryContext?.plan.threadId ??
       (() => {
@@ -588,7 +554,7 @@ export const createChatApproval = (deps: {
 
     if (session.collectedApprovalResponses.has(approvalId)) {
       const existing = session.collectedApprovalResponses.get(approvalId);
-      // Idempotent: if the same decision was already recorded, treat as success
+
       if (existing && existing.approved === approved) {
         recordApprovalResponse();
         return { success: true };
@@ -617,25 +583,17 @@ export const createChatApproval = (deps: {
       };
     }
 
-    // Pi resume admission (switch item 3b): admit the decided calls into the
-    // owner's execution record BEFORE the legacy consume marks the rows —
-    // a consumed row without execution evidence is 'unknown' by the owner's
-    // contract, and the Pi resume must execute them. Right-to-act v2:
-    // authorization (every call decided) + atomic admission, then consume.
     const piResumeAdmission = (() => {
       const pausedPlan = session.recoveryContext?.plan;
       const pausedHistory = cloneModelMessages(session.history ?? []);
       if (!pausedPlan?.threadId || !pausedPlanRunsOnPiToolSupply(pausedPlan, pausedHistory)) {
         return undefined;
       }
-      // The guard covers command building AND admission: any failure
-      // releases the just-collected decision so retrying the approval
-      // re-attempts the resume instead of stalling in the idempotent branch.
+
       try {
         const commands = Array.from(session.pendingApprovalIds).flatMap((approvalId: string) => {
           const row = toolCallApprovalDb.getToolCallApproval(approvalId);
-          // A row without its execution binding would leave the assistant's
-          // tool call unanswered on the resumed wire — corruption, not a skip.
+
           if (!row?.tool_call_id || !row.tool_name) {
             throw new Error(`Approval row ${approvalId} is missing its execution binding.`);
           }
@@ -658,22 +616,14 @@ export const createChatApproval = (deps: {
       }
     })();
 
-    // The resumed execution runs under the paused turn's plan, re-identified
-    // as its own child run — never a re-derivation from current config.
-    // Constructed BEFORE the legacy consume below: nothing here depends on
-    // the consumed rows, and the resume-started fact must reach the session
-    // log before the rows that make a retry impossible are written.
-    const resumeMessageId =
-      session.recoveryContext?.sessionId ?? createPrefixedId('assistant');
+    const resumeMessageId = session.recoveryContext?.sessionId ?? createPrefixedId('assistant');
     const streamState: ActiveStreamState = {
       cancelled: false,
       stoppedByUser: false,
       abortController: new AbortController(),
     };
     if (executionAbort) {
-      // The lease hook was registered synchronously with admission; wire it
-      // to this execution's controller as soon as one exists. A loss that
-      // already fired during the recovery awaits replays onto the controller.
+
       executionAbort.current = () => {
         streamState.cancelled = true;
         streamState.abortController.abort('thread-lease-lost');
@@ -702,7 +652,6 @@ export const createChatApproval = (deps: {
               messages: session.history ?? [],
             },
             working: {
-              modelMessages: session.history ?? [],
               accumulatedText: '',
               pendingApprovalIds: Array.from(session.pendingApprovalIds).filter(
                 id => !session.collectedApprovalResponses.has(id)
@@ -719,49 +668,43 @@ export const createChatApproval = (deps: {
         )
       : null;
     if (resumePlan?.threadId && resumeRunTracker) {
-      // The parent's terminal half is written only while the parent row is
-      // still mid-flight. `markResumed` refuses a terminal → completed
-      // transition, so a parent already finalized (a cancel or reclaim raced
-      // in) must not be told it completed — the log and the row would then
-      // disagree in the direction this change exists to fix.
+
       const parentStatus = baseApprovalContext?.runId
         ? rehydrateAgentRunTracker(baseApprovalContext.runId)?.getRun().status
         : undefined;
       const parentStillResumable =
         parentStatus === 'running' || parentStatus === 'blocked' || parentStatus === 'queued';
-      // Session log: the continuation is its own run under the paused plan, and
-      // the parent segment ends with it — recorded together, BEFORE the
-      // consume and the parent's markResumed, so one atomic write carries both
-      // halves of the swap. Failure releases the just-collected decision (a
-      // retry re-walks the full path; its decided fact re-records idempotently)
-      // and fails the child row, so neither the flow nor the run row can strand
-      // running.
+
       try {
-        recordSessionEvents(resumePlan.threadId, turnFactsToEvents({
-          ...(baseApprovalContext?.runId && parentStillResumable
-            ? {
-                terminal: {
-                  runId: baseApprovalContext.runId,
-                  status: 'completed' as const,
-                  finishReason: 'approval-resumed',
-                },
-              }
-            : {}),
-          started: { runId: resumeRunTracker.id, kind: resumePlan.kind, plan: resumePlan },
-        }));
+        recordSessionEvents(
+          resumePlan.threadId,
+          turnFactsToEvents({
+            ...(baseApprovalContext?.runId && parentStillResumable
+              ? {
+                  terminal: {
+                    runId: baseApprovalContext.runId,
+                    status: 'completed' as const,
+                    finishReason: 'approval-resumed',
+                  },
+                }
+              : {}),
+            started: { runId: resumeRunTracker.id, kind: resumePlan.kind, plan: resumePlan },
+          })
+        );
       } catch (error) {
         session.collectedApprovalResponses.delete(approvalId);
-        resumeRunTracker.markFailed(runFailureFromError(error, getErrorMessage(error)));
-        // The abandoned child's started fact must not dangle as running in
-        // the replay: startup reclamation only revisits running/blocked rows,
-        // so this terminal event is the only thing that heals the stream.
-        recordFailureTerminalEvent(resumePlan.threadId, turnFactsToEvents({
-          terminal: {
-            runId: resumeRunTracker.id,
+
+        finalizeTurnFailure({
+          tracker: resumeRunTracker,
+          failure: {
             status: 'failed',
             errorText: getErrorMessage(error),
+            retryable: true,
           },
-        }));
+          threadId: resumePlan.threadId,
+          transport: 'approval-resume',
+          loudGuard: true,
+        });
         throw error;
       }
     }
@@ -795,8 +738,7 @@ export const createChatApproval = (deps: {
       : undefined;
     streamState.runId = resumeRunTracker?.id;
     deps.streams.attach(resumedSenderId, streamState);
-    // The resumed continuation executes its own run with no stream session;
-    // registering it by run id is what lets a cancel reach it.
+
     const execution = deps.streams.registerExecution?.({
       runId: resumeRunTracker?.id ?? null,
       cancel: reason => {
@@ -805,68 +747,48 @@ export const createChatApproval = (deps: {
       },
     });
     let isAwaitingApproval = false;
-    // Set once the driver exists; the catch path must consult the driver's
-    // CURRENT tracker (a handoff chain swaps it mid-turn).
+
     let driverHandle: ReturnType<typeof createTurnDriver> | null = null;
 
     try {
       const ctx = nextApprovalContext ?? session.recoveryContext;
       if (!ctx || !resumeRunTracker) {
-        throw new Error('Approval resume requires the paused turn\'s recovery context');
+        throw new Error("Approval resume requires the paused turn's recovery context");
       }
 
-      // Supply selection (switch item 3b): a paused PI tool turn resumes on
-      // the Pi harness — the decided calls were admitted into the owner's
-      // execution record before the legacy consume (piResumeAdmission), the
-      // owner's prepare here is an idempotent no-op, and executeApprovedTool
-      // proceeds on the recorded facts. The AI SDK path keeps its
-      // approval-response-part replay. guardActive stays off either way: the
-      // plan's tool selection is already the guarded, post-preparation
-      // result, and re-guarding could shrink it mid-turn.
       const resumesOnPi = Boolean(piResumeAdmission);
-      const approvalHarness: TurnDriverHarness = resumesOnPi
-        ? new PiToolTurnHarness(planToHarnessConfig(ctx.plan, { guardActive: false }), {
-            resume: {
-              commands: piResumeAdmission!.commands,
-              owner: {
-                prepare: address => prepareToolExecution(address),
-                executeApproved: (address, port) =>
-                  executeApprovedTool(address, {
-                    signal: port.signal ?? new AbortController().signal,
-                    execute: async (toolName, args) =>
-                      (await port.execute(toolName, args)) as unknown,
-                  }),
-              },
-            },
-          })
-        : rehydrateHarness(planToHarnessConfig(ctx.plan, { guardActive: false }));
 
-      // Build the wire history. The Pi resume consumes the paused history in
-      // the Pi wire domain — piDomainResumeHistory strips the replay's
-      // pairing stamps (issue #133); its projection refuses approval parts
-      // and the owner pairs the decisions from the resume commands. The AI
-      // SDK replay keeps the stamped history and appends the collected
-      // responses for pairing.
-      const responses = Array.from(session.collectedApprovalResponses.values());
-      let streamHistory = resumesOnPi
-        ? piDomainResumeHistory(cloneModelMessages(session.history ?? []))
-        : cloneModelMessages(session.history ?? []);
-      if (!resumesOnPi && responses.length > 0) {
-        streamHistory = appendApprovalResponsesToHistory(
-          streamHistory,
-          responses.map(r => ({
-            type: 'tool-approval-response' as const,
-            approvalId: r.approvalId,
-            approved: r.approved,
-            ...(r.reason ? { reason: r.reason } : {}),
-          }))
+      if (!piResumeAdmission) {
+        throw new PiSupplyRefusedError(
+          'the paused turn no longer matches an admissible provider plan (its provider row may have been removed or disabled)',
+          'config',
+          {
+            providerType: ctx.plan.providerType,
+            providerId: ctx.plan.providerId ?? null,
+            model: ctx.plan.model,
+          }
         );
       }
+      const approvalHarness: TurnDriverHarness = new PiToolTurnHarness(
+        planToHarnessConfig(ctx.plan),
+        {
+          resume: {
+            commands: piResumeAdmission.commands,
+            owner: {
+              prepare: address => prepareToolExecution(address),
+              executeApproved: (address, port) =>
+                executeApprovedTool(address, {
+                  signal: port.signal ?? new AbortController().signal,
+                  execute: async (toolName, args) =>
+                    (await port.execute(toolName, args)) as unknown,
+                }),
+            },
+          },
+        }
+      );
 
-      // Mid-turn durable progress: a crash during a long resumed segment must
-      // leave the executed tool results in the persisted UI history for the
-      // fallback recovery branch. Seeded, or the write would replace the
-      // row's pre-pause parts with the continuation segment alone.
+      const streamHistory = piDomainResumeHistory(cloneModelMessages(session.history ?? []));
+
       const persistResumeProgress = () => {
         const threadId = baseApprovalContext?.plan.threadId;
         if (!threadId) return;
@@ -874,15 +796,16 @@ export const createChatApproval = (deps: {
           .buildPersistedMessage(loadPersistedAssistantParts(uiChunkEmitter.messageId))
           .then(persisted =>
             persisted
-              ? persistAssistantTurnMessage(deps.conversation, threadId, persisted, 'stream-progress')
+              ? persistAssistantTurnMessage(
+                  deps.conversation,
+                  threadId,
+                  persisted,
+                  'stream-progress'
+                )
               : undefined
           );
       };
 
-      // The continuation rides the same turn driver as streaming — same step
-      // projection, approval registration and finalize contracts. The attach
-      // stays session-less: stoppable and run-cancellable, deliberately not
-      // steerable (the steer queue does not survive the pause yet).
       const driver = createTurnDriver(
         {
           harness: approvalHarness,
@@ -903,9 +826,7 @@ export const createChatApproval = (deps: {
           drainSteerMessages: () => [],
           conversationPreview: false,
           onToolActivity: persistResumeProgress,
-          // A resumed autonomous turn can chain a handoff: the index must
-          // follow the chained segment, or a cancel naming it finds nothing
-          // (and the `running` row reads as uncancellable).
+
           onRunIdChanged: runId => execution?.setRunId(runId),
           registerChildRunAlias: deps.streams.registerChildRunAlias,
           approvals: {
@@ -931,10 +852,7 @@ export const createChatApproval = (deps: {
         uiChunkEmitter.finish();
       }
 
-      // The driver's CURRENT tracker/harness: a handoff chain finalizes the
-      // child segment, not the completed parent.
       const finalTracker = driver.getRunTracker();
-      finalTracker.syncModelMessages(driver.getHarness().getHistory() ?? session.history ?? []);
       if (streamResult.outcome !== 'cancelled' && nextApprovalContext) {
         deps.usage.recordUsageEvent({
           threadId: nextApprovalContext.plan.threadId,
@@ -949,65 +867,52 @@ export const createChatApproval = (deps: {
           },
         });
       }
-      // Event-first (ADR 008 F1): the continuation's facts reach the session
-      // log BEFORE the run row finalizes — a write failure fails the resume
-      // through the catch below while the row is still non-terminal.
+
+      let persistedContinuation:
+        | Awaited<ReturnType<typeof uiChunkEmitter.buildPersistedMessage>>
+        | undefined;
       if (baseApprovalContext?.plan.threadId) {
-        // Seed the reduction with the already-persisted pre-pause parts so the
-        // accumulated message stays whole across the pause, then upsert.
-        const persisted = await uiChunkEmitter.buildPersistedMessage(
+
+        persistedContinuation = await uiChunkEmitter.buildPersistedMessage(
           loadPersistedAssistantParts(uiChunkEmitter.messageId)
         );
-        // Session log: the continuation's committed output; a re-pause is not
-        // terminal (its next continuation records its own facts). The
-        // terminal fact mirrors finalizeRunForOutcome's outcome mapping (the
-        // event-side twin; undefined for a re-pause).
-        const terminal = terminalFactForOutcome(streamResult);
-        recordSessionEvents(
-          baseApprovalContext.plan.threadId,
-          turnFactsToEvents({
-            ...(persisted
-              ? {
-                  committed: {
-                    runId: driver.getRunTracker().id,
-                    messageId: persisted.id,
-                    message: persisted as never,
-                    transport: 'approval-resume',
-                  },
-                }
-              : {}),
-            ...(terminal
-              ? {
-                  terminal: {
-                    runId: driver.getRunTracker().id,
-                    status: terminal.status,
-                    ...(terminal.finishReason ? { finishReason: terminal.finishReason } : {}),
-                    ...(terminal.errorText ? { errorText: terminal.errorText } : {}),
-                  },
-                }
-              : {}),
-          })
-        );
-        if (persisted) {
+        if (persistedContinuation) {
           await persistAssistantTurnMessage(
             deps.conversation,
             baseApprovalContext.plan.threadId,
-            persisted,
+            persistedContinuation,
             'approval-resume'
           );
         }
       }
-      finalizeRunForOutcome(driver.getRunTracker(), streamResult, {
-        text: driver.getAccumulatedResponse() || streamResult.response,
+      const continuationText = driver.getAccumulatedResponse() || streamResult.response;
+      finalizeTurn({
+        tracker: driver.getRunTracker(),
+        outcome: streamResult.outcome,
+        text: continuationText,
+        ...(streamResult.usage ? { usage: streamResult.usage } : {}),
+        ...(streamResult.outcome === 'handoff' ? { handoff: streamResult.handoff } : {}),
+        ...(baseApprovalContext?.plan.threadId
+          ? { threadId: baseApprovalContext.plan.threadId }
+          : {}),
+        transport: 'approval-resume',
+        ...(persistedContinuation
+          ? {
+              committed: {
+                messageId: persistedContinuation.id,
+                message: persistedContinuation as never,
+              },
+            }
+          : {}),
       });
       return {
         success: true,
         awaitingApproval: isAwaitingApproval,
         stopped: streamState.stoppedByUser,
-        // Exposed as the approve-result wire payload (the continuation reply
-        // is already durably persisted by the backend turn-persistence seam
-        // above, under the same assistant message id).
-        ...(session.recoveryContext?.plan.threadId ? { threadId: session.recoveryContext.plan.threadId } : {}),
+
+        ...(session.recoveryContext?.plan.threadId
+          ? { threadId: session.recoveryContext.plan.threadId }
+          : {}),
         ...(streamResult.response ? { text: streamResult.response } : {}),
       };
     } catch (error: unknown) {
@@ -1015,27 +920,37 @@ export const createChatApproval = (deps: {
       const failingTracker = driverHandle?.getRunTracker() ?? resumeRunTracker;
       if (streamState.cancelled) {
         uiChunkEmitter.abort();
-        if (failingTracker && failingTracker.getRun().status === 'running') {
-          failingTracker.markCancelled();
-        }
-        const cancelledThreadId = failingTracker?.getRun().threadId;
-        if (cancelledThreadId) {
-          // The cancellation is a terminal fact — the replay must not show
-          // this continuation running forever (flip-ledger gap closed in F4).
-          recordFailureTerminalEvent(cancelledThreadId, turnFactsToEvents({
-            terminal: { runId: failingTracker.id, status: 'cancelled' },
-          }));
+        if (failingTracker) {
+
+          finalizeTurnCancelled({
+            tracker: failingTracker,
+            ...(failingTracker.getRun().threadId
+              ? { threadId: failingTracker.getRun().threadId as string }
+              : {}),
+            transport: 'approval-resume',
+            skipRow: failingTracker.getRun().status !== 'running',
+            loudGuard: true,
+          });
         }
         return { success: true, stopped: streamState.stoppedByUser };
       }
-      if (failingTracker && failingTracker.getRun().status === 'running') {
-        failingTracker.markFailed(runFailureFromError(error, message));
-      }
-      const failedThreadId = failingTracker?.getRun().threadId;
-      if (failedThreadId) {
-        recordFailureTerminalEvent(failedThreadId, turnFactsToEvents({
-          terminal: { runId: failingTracker.id, status: 'failed', errorText: message },
-        }));
+      if (failingTracker) {
+        const retry = runFailureFromError(error, message);
+        finalizeTurnFailure({
+          tracker: failingTracker,
+          failure: {
+            status: 'failed',
+            errorText: message,
+            ...(retry.code ? { code: retry.code } : {}),
+            ...(typeof retry.retryable === 'boolean' ? { retryable: retry.retryable } : {}),
+          },
+          ...(failingTracker.getRun().threadId
+            ? { threadId: failingTracker.getRun().threadId as string }
+            : {}),
+          transport: 'approval-resume',
+          skipRow: failingTracker.getRun().status !== 'running',
+          loudGuard: true,
+        });
       }
       uiChunkEmitter.error(message);
       return { success: false, error: message };
@@ -1057,13 +972,11 @@ export const createChatApproval = (deps: {
   ) => {
     const pending = pendingApprovalSessions.get(approvalId);
     const record = toolCallApprovalDb.getToolCallApproval(approvalId);
-    const storedSession = record ? toolCallApprovalDb.getToolCallApprovalSession(record.session_id) : null;
+    const storedSession = record
+      ? toolCallApprovalDb.getToolCallApprovalSession(record.session_id)
+      : null;
     const threadId = pending?.recoveryContext?.plan.threadId ?? storedSession?.thread_id;
-    // The execution abort hook is registered synchronously with admission so
-    // a lease loss during the async resume-recovery below still reaches the
-    // resumed execution once its controller exists. `lost` records a loss
-    // that fired before the wiring (the holder is the only cross-await state
-    // here), so the wiring can replay it instead of silently dropping it.
+
     const executionAbort: { current: (() => void) | null; lost: boolean } = {
       current: null,
       lost: false,
@@ -1104,8 +1017,7 @@ export const createChatApproval = (deps: {
       }
     }
     const expired = toolCallApprovalDb.expirePendingToolCallApprovalsByRunIds([normalizedRunId]);
-    // Session log: the run's cancellation is a system decision on each of its
-    // pending approvals — replay must not keep them pending forever.
+
     const expiredThreadId = expired
       .map(record => record.session_id)
       .filter((sessionId): sessionId is string => Boolean(sessionId))

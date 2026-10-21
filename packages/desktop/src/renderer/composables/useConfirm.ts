@@ -1,12 +1,12 @@
 import { readonly, ref } from 'vue';
 
 export interface ConfirmOptions {
-  /** Main message body; rendered pre-line so multi-line strings keep their shape. */
+  
   message: string;
   title?: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  /** Renders the confirm button in the destructive style. */
+  
   danger?: boolean;
 }
 
@@ -22,11 +22,6 @@ const settle = (confirmed: boolean) => {
   resolve?.(confirmed);
 };
 
-/**
- * Promise-based in-app confirmation, replacing window.confirm which renders an
- * unstylable native dialog inside Electron. Opening a new dialog while one is
- * pending resolves the previous one as cancelled.
- */
 export const confirmAction = (options: ConfirmOptions): Promise<boolean> => {
   settle(false);
   dialogOptions.value = options;
@@ -36,7 +31,6 @@ export const confirmAction = (options: ConfirmOptions): Promise<boolean> => {
   });
 };
 
-/** Binds the singleton dialog state for the single <ConfirmDialog /> host. */
 export const useConfirmDialog = () => ({
   visible: readonly(visible),
   options: readonly(dialogOptions),

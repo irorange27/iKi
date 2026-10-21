@@ -16,12 +16,9 @@ export const useConfigStore = defineStore('config', {
   }),
 
   actions: {
-    // 初始化：从主进程获取动态配置
     async initialize() {
-      // 1. Fetch latest config
       try {
         const saved = await configService.get();
-        // 合并配置，防止字段缺失
         this.config = mergeConfigWithDefaults(saved as Partial<AppConfig>);
       } catch (error) {
         configStoreLogger.event({
@@ -34,9 +31,7 @@ export const useConfigStore = defineStore('config', {
         });
       }
 
-      // 2. Setup listeners (once)
       if (!this.initialized) {
-        // Listen for config updates from main process
         configService.onUpdated((newConfig: AppConfig) => {
           this.config = mergeConfigWithDefaults(newConfig);
         });
@@ -46,15 +41,12 @@ export const useConfigStore = defineStore('config', {
     },
 
     async saveConfig() {
-      // De-proxy config before sending to IPC
       const rawConfig = clonePlainData(this.config);
       await configService.set(rawConfig);
     },
 
     updateUi<K extends keyof AppConfig['ui']>(key: K, value: AppConfig['ui'][K]) {
       this.config.ui[key] = value;
-      // NOTE: persistence is handled by useAppConfig composable's debouncedSave().
-      // Callers that bypass the composable must trigger save themselves.
     },
     updateGeneral<K extends keyof AppConfig['general']>(key: K, value: AppConfig['general'][K]) {
       this.config.general[key] = value;

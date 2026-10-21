@@ -89,8 +89,8 @@ export const updateChatThread = (id: string, thread: Partial<ChatThread>) => {
   if (!fields) return null;
 
   const stmt = getDb().prepare(`
-        UPDATE chat_threads 
-        SET ${fields}, updated_at = @updated_at 
+        UPDATE chat_threads
+        SET ${fields}, updated_at = @updated_at
         WHERE id = @id
     `);
 
@@ -115,9 +115,7 @@ export const touchChatThread = (id: string) => {
 };
 
 export const deleteChatThread = (id: string) => {
-  // Messages will be deleted automatically due to CASCADE; the session log
-  // has no FK — its stream is removed explicitly so a deleted conversation
-  // leaves no orphaned plaintext payloads.
+
   deleteSessionEvents(id);
   return getDb().prepare('DELETE FROM chat_threads WHERE id = ?').run(id);
 };

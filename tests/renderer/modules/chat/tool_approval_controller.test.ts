@@ -42,9 +42,6 @@ describe('tool_approval_controller', () => {
         approved
       );
 
-      // The repeat-approval segment carries the next tool part + card on a
-      // stream with no terminal chunk; it must be closed and consumed or the
-      // turn stalls on an unread stream (the awaiting-forever regression).
       expect(transport.closeFollowUpStream).toHaveBeenCalledTimes(1);
       expect(chat.resumeStream).toHaveBeenCalledTimes(1);
       expect(chat.addToolApprovalResponse).toHaveBeenCalledWith(

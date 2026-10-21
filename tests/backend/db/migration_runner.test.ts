@@ -61,8 +61,6 @@ const { dbState, execMock, prepareMock } = vi.hoisted(() => {
 import type { SqliteDatabase } from '@iki/backend/db/sqlite';
 import { getExecutedMigrations, runMigration } from '@iki/backend/db/migration/runner';
 
-// The runner takes the handle as a parameter (issue #91), so the fake is
-// passed in directly instead of mocking the database singleton module.
 const makeFakeDb = (): SqliteDatabase =>
   ({
     exec: execMock,

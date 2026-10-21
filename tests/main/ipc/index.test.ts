@@ -15,7 +15,6 @@ const { registerMocks, callOrder } = vi.hoisted(() => {
       registerConfigIpc: namedRegister('config'),
       registerProvidersIpc: namedRegister('providers'),
       registerMcpIpc: namedRegister('mcp'),
-      registerMemoryIpc: namedRegister('memory'),
       registerWorkspacesIpc: namedRegister('workspaces'),
       registerPromptAppsIpc: namedRegister('prompt_apps'),
       registerToolModelIpc: namedRegister('tool_model'),
@@ -46,9 +45,6 @@ vi.mock('../../../packages/desktop/src/main/ipc/providers', () => ({
 }));
 vi.mock('../../../packages/desktop/src/main/ipc/mcp', () => ({
   registerMcpIpc: registerMocks.registerMcpIpc,
-}));
-vi.mock('../../../packages/desktop/src/main/ipc/memory', () => ({
-  registerMemoryIpc: registerMocks.registerMemoryIpc,
 }));
 vi.mock('../../../packages/desktop/src/main/ipc/workspaces', () => ({
   registerWorkspacesIpc: registerMocks.registerWorkspacesIpc,
@@ -106,7 +102,6 @@ describe('main IPC registration', () => {
       'updater',
       'providers',
       'mcp',
-      'memory',
       'workspaces',
       'prompt_apps',
       'tool_model',

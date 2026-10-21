@@ -1,5 +1,5 @@
 import { getDb } from './database';
-import type { Awaiter, AwaiterWakeEvent } from '@iki/backend/types/awaiters';
+import type { Awaiter } from '@iki/backend/types/awaiters';
 import { toIsoNow } from '@iki/backend/utils/text';
 import { buildSetClause } from './utils';
 
@@ -163,17 +163,6 @@ export const updateAwaiter = (id: string, updates: Partial<Awaiter>) => {
     .run(params);
 };
 
-/**
- * Reclaim awaiters stuck in `waking` whose holder stopped heartbeating.
- *
- * The wake claim is `armed -> waking` (a conditional UPDATE, so two schedulers
- * cannot both win). A process that dies mid-wake leaves the row `waking` with
- * no recovery pass, and because the claim refuses `waking` those rows would
- * never wake again. This is that recovery: a `waking` row whose `updated_at`
- * is older than the cutoff belonged to a holder that stopped reporting, so it
- * goes back to `armed` with its slot restored, and the next tick claims it
- * normally.
- */
 export const reclaimStaleWakingAwaiters = (staleBefore: string): number => {
   const now = toIsoNow();
   const result = getDb()
@@ -231,52 +220,3 @@ export const deleteAwaiter = (id: string) =>
 
 export const deleteAwaitersByThread = (threadId: string) =>
   getDb().prepare('DELETE FROM awaiters WHERE thread_id = ?').run(threadId);
-
-export const addAwaiterWakeEvent = (
-  event: Omit<AwaiterWakeEvent, 'created_at'> & { created_at?: string }
-): AwaiterWakeEvent => {
-  const createdAt = event.created_at || toIsoNow();
-
-  getDb()
-    .prepare(
-      `
-      INSERT INTO awaiter_wake_events (
-        id,
-        awaiter_id,
-        run_id,
-        trigger_fired_at,
-        trigger_snapshot_json,
-        outcome,
-        error,
-        created_at
-      ) VALUES (
-        @id,
-        @awaiter_id,
-        @run_id,
-        @trigger_fired_at,
-        @trigger_snapshot_json,
-        @outcome,
-        @error,
-        @created_at
-      )
-    `
-    )
-    .run({
-      id: event.id,
-      awaiter_id: event.awaiter_id,
-      run_id: event.run_id ?? null,
-      trigger_fired_at: event.trigger_fired_at,
-      trigger_snapshot_json: event.trigger_snapshot_json ?? null,
-      outcome: event.outcome,
-      error: event.error ?? null,
-      created_at: createdAt,
-    });
-
-  return {
-    ...event,
-    run_id: event.run_id ?? null,
-    trigger_snapshot_json: event.trigger_snapshot_json ?? null,
-    error: event.error ?? null,
-    created_at: createdAt,
-  };
-};

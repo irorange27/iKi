@@ -60,10 +60,6 @@ const proactiveTaskScheduleInputSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
-// ---------------------------------------------------------------------------
-// Proactive Tasks schemas
-// ---------------------------------------------------------------------------
-
 const listProactiveTasksInputShape = {
   query: z.string().trim().describe('Optional search text for matching proactive tasks').optional(),
   limit: z

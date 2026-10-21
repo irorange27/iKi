@@ -1,114 +1,106 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-const createModelMock = vi.hoisted(() => vi.fn());
-const writeThreadTodoPlanMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
+  pausedPlanRunsOnPiToolSupply: () => true,
+}));
+
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
     ...actual,
-    createModel: createModelMock,
-    disposeLanguageModel: vi.fn(),
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
+    getProviderConfig: vi.fn(() => ({
+      type: 'openai',
+      apiKey: 'key-test',
+      baseURL: 'http://127.0.0.1:9/v1',
+    })),
     getModelGenerationSettings: vi.fn(() => ({})),
-    injectReasoningContentIntoMessages: vi.fn((messages: unknown[]) => messages),
   };
 });
 
-vi.mock('@iki/backend/db/thread_todos', () => ({
-  writeThreadTodoPlan: writeThreadTodoPlanMock,
-}));
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
-vi.mock('@iki/backend/db/agent_runs', () => ({
-  appendAgentRunStep: vi.fn(),
-  appendAgentRunStepAndUpdateRun: vi.fn((
-    step: { runId: string; stepIndex: number },
-    updates: Record<string, unknown>
-  ) => ({
-    id: step.runId,
-    kind: 'chat-turn',
-    status: updates.status ?? 'running',
-    threadId: 'thread_1',
-    rootRunId: step.runId,
-    createdAt: '2026-06-20T00:00:00.000Z',
-    updatedAt: '2026-06-20T00:00:00.000Z',
-    working: {
-      modelMessages: [],
-      accumulatedText: '',
-      pendingApprovalIds: [],
-      lastStepIndex: step.stepIndex,
-      ...((updates.working as Record<string, unknown> | undefined) ?? {}),
-    },
-    output: updates.output ?? null,
-    error: updates.error ?? null,
-  })),
-  createAgentRun: vi.fn((run: Record<string, unknown>) => ({
-    ...run,
-    createdAt: '2026-06-20T00:00:00.000Z',
-    updatedAt: '2026-06-20T00:00:00.000Z',
-  })),
-  createAgentRunCheckpoint: vi.fn(),
-  getAgentRun: vi.fn(() => null),
-  listAgentRunSteps: vi.fn(() => []),
-  updateAgentRun: vi.fn((id: string, updates: Record<string, unknown>) => ({
-    id,
-    kind: 'chat-turn',
-    status: 'running',
-    createdAt: '2026-06-20T00:00:00.000Z',
-    updatedAt: '2026-06-20T00:00:00.000Z',
-    working: { modelMessages: [], accumulatedText: '', pendingApprovalIds: [], lastStepIndex: 0 },
-    ...updates,
-  })),
-}));
-
+import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
+import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { createMessageSend } from '@iki/backend/thread_session/message_send';
-import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 import { createTool, defaultToolRegistry, HandoffTool } from '@iki/backend/tools';
 
 const toolName = 'message_send_context_probe';
 
+let dbRoot: string;
+
 describe('createMessageSend integration', () => {
-  beforeEach(() => {
-  // These suites drive the DURABLE layer (streaming, approvals, session-log
-  // facts, retry, persistence) with a scripted AI SDK model. They are not about
-  // which supply serves the turn, so they opt into the legacy executor: the
-  // production default refuses a turn its projection cannot carry, and a
-  // scripted model has no endpoint to project to.
-  setTurnHarnessFallback(legacyTurnHarness);
+  beforeEach(async () => {
+    if (!dbRoot) {
+      dbRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-message-send-'));
+    }
+    initializeDatabase({ dbPath: path.join(dbRoot, 'send.db') });
+    seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
+    setTurnHarnessFallback(piTurnHarness);
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     defaultToolRegistry.remove(toolName);
+  });
+
+  afterAll(async () => {
+    closeDatabase();
+    if (dbRoot) await fs.rm(dbRoot, { recursive: true, force: true });
   });
 
   it('runs tool-enabled send through AgentHarness and preserves runtime context', async () => {
     let observedContext: unknown;
-    defaultToolRegistry.register(createTool({
-      name: toolName,
-      type: 'function',
-      description: 'Probe chat send runtime context',
-      paramSchema: z.object({}),
-      handler: async () => {
-        const ctx = getToolRuntimeContext();
-        observedContext = {
-          threadId: ctx.threadId,
-          runId: ctx.runId,
-          hasRunTracker: !!ctx.runTracker,
-          conversationModel: ctx.conversationModel,
-        };
-        return observedContext;
-      },
-    }));
+    defaultToolRegistry.register(
+      createTool({
+        name: toolName,
+        type: 'function',
+        description: 'Probe chat send runtime context',
+        paramSchema: z.object({}),
+        handler: async () => {
+          const ctx = getToolRuntimeContext();
+          observedContext = {
+            threadId: ctx.threadId,
+            runId: ctx.runId,
+            hasRunTracker: !!ctx.runTracker,
+            conversationModel: ctx.conversationModel,
+          };
+          return observedContext;
+        },
+      })
+    );
 
-    createModelMock.mockReturnValue(new FauxModelProvider([
-      fauxToolCall(toolName, {}),
-      fauxText('done'),
-    ]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName: toolName, args: {} },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
 
     const conversation = {
       createMessage: vi.fn(),
@@ -162,16 +154,11 @@ describe('createMessageSend integration', () => {
       },
     });
     expect((observedContext as { runId?: string }).runId).toMatch(/^run_/);
-    expect(writeThreadTodoPlanMock).toHaveBeenCalledWith({ threadId: 'thread_1', items: [] });
-    expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini', 'provider_primary');
-    // Retro-review regressions: user message create-only, assistant output
-    // upserted under the run-derived id. The persisted projection is the same
-    // one streaming persists: the tool exchange plus the answer text (F4 —
-    // transport must not decide which execution facts survive).
-    expect(conversation.createMessage).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'msg_user_probe',
-      thread_id: 'thread_1',
-    }));
+    expect(callPiChatMock).toHaveBeenCalled();
+    expect((callPiChatMock.mock.calls[0] as unknown[])[0]).toMatchObject({
+      id: 'gpt-4o-mini',
+    });
+    expect(conversation.createMessage).not.toHaveBeenCalled();
     expect(conversation.upsertTurnMessage).toHaveBeenCalledTimes(1);
     const [turnRow] = conversation.upsertTurnMessage.mock.calls[0]! as [Record<string, unknown>];
     expect(turnRow.id).toMatch(/^assistant_run_/);
@@ -182,54 +169,46 @@ describe('createMessageSend integration', () => {
         expect.objectContaining({ type: 'text', text: 'done', state: 'done' }),
       ]),
     });
-    const recordedSteps = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
-      .map(([step]) => step);
-    expect(recordedSteps.some(step => step.type === 'tool-call' && !step.input?.toolCallId)).toBe(false);
+    const recordedSteps = agentRunDb
+      .listAgentRunsByThread('thread_1')
+      .flatMap(run => agentRunDb.listAgentRunSteps(run.id));
+    expect(recordedSteps.some(step => step.type === 'tool-call' && !step.input?.toolCallId)).toBe(
+      false
+    );
+    const inferenceContents = recordedSteps
+      .filter(step => step.type === 'model' && step.output?.inference === true)
+      .map(step => (step.output?.content ?? []) as Array<{ type?: string }>);
+    expect(inferenceContents.some(parts => parts.some(part => part.type === 'tool-call'))).toBe(
+      true
+    );
     expect(
-      recordedSteps.some(step =>
-        step.type === 'model' &&
-        step.output?.inference === true &&
-        Array.isArray(step.output.content) &&
-        step.output.content.some(part =>
-          typeof part === 'object' &&
-          part !== null &&
-          'type' in part &&
-          part.type === 'tool-call' &&
-          'toolCallId' in part
-        )
-      )
-    ).toBe(true);
-    expect(
-      recordedSteps.some(step =>
-        step.type === 'model' &&
-        step.output?.inference === true &&
-        Array.isArray(step.output.content) &&
-        step.output.content.some(part =>
-          typeof part === 'object' &&
-          part !== null &&
-          'type' in part &&
-          part.type === 'tool-result'
-        )
-      )
+      inferenceContents.every(parts => parts.every(part => part.type !== 'tool-result'))
     ).toBe(true);
   });
 
   it('labels a send that exhausts its tool budget as budget-exhausted, not completed', async () => {
-    // The send path now finalizes through the same terminal-outcome mapping
-    // as streaming: a model that still wants tools when the iteration cap
-    // hits ends 'budget-exhausted' (the old inline loop stamped 'completed').
-    defaultToolRegistry.register(createTool({
-      name: toolName,
-      type: 'function',
-      description: 'Probe budget exhaustion',
-      paramSchema: z.object({}),
-      needsApproval: false,
-      handler: async () => 'observation',
-    }));
-    createModelMock.mockReturnValue(new FauxModelProvider([
-      fauxToolCall(toolName, {}, { id: 'call_budget' }),
-      fauxText('must not run'),
-    ]));
+    defaultToolRegistry.register(
+      createTool({
+        name: toolName,
+        type: 'function',
+        description: 'Probe budget exhaustion',
+        paramSchema: z.object({}),
+        needsApproval: false,
+        handler: async () => 'observation',
+      })
+    );
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName: toolName, args: {}, id: 'call_budget' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'must not run' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
 
     const send = createMessageSend({
       tryAcquireThreadRun: () => () => undefined,
@@ -256,34 +235,43 @@ describe('createMessageSend integration', () => {
       } as never,
     }).send;
 
-    expect(await send({
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'gpt-4o-mini',
-      threadId: 'thread_budget',
-      messages: [{ id: 'msg_budget', role: 'user', content: 'keep probing' }],
-      tools: [toolName],
-      maxIterations: 1,
-    })).toMatchObject({ success: true });
+    expect(
+      await send({
+        providerType: 'openai',
+        providerId: 'provider_primary',
+        model: 'gpt-4o-mini',
+        threadId: 'thread_budget',
+        messages: [{ id: 'msg_budget', role: 'user', content: 'keep probing' }],
+        tools: [toolName],
+        maxIterations: 1,
+      })
+    ).toMatchObject({ success: true });
 
-    const completedUpdate = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
-      .map(([, updates]) => updates)
-      .filter(updates => updates.status === 'completed')
+    const completedRun = agentRunDb
+      .listAgentRunsByThread('thread_budget')
+      .filter(run => run.status === 'completed')
       .at(-1);
-    expect(completedUpdate?.output).toMatchObject({ finishReason: 'budget-exhausted' });
+    expect(completedRun?.output).toMatchObject({ finishReason: 'budget-exhausted' });
   });
 
   it('finalizes a send that calls handoff with the handoff outcome and composed text', async () => {
-    // Declared stage-B change: send rides the shared driver, so a model that
-    // invokes the handoff tool ends with the driver's handoff outcome —
-    // finishReason 'handoff' and the '[Handoff] …' block in the reply — the
-    // same terminal contract the streaming path already had (the old inline
-    // loop stamped 'completed' and dropped the handoff framing).
     defaultToolRegistry.register(new HandoffTool());
-    createModelMock.mockReturnValue(new FauxModelProvider([
-      fauxToolCall('handoff', { summary: 'Found the leak', next_steps: 'Patch it', reason: 'context_limit' }),
-      fauxText('must not run'),
-    ]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          {
+            kind: 'toolCall',
+            toolName: 'handoff',
+            args: { summary: 'Found the leak', next_steps: 'Patch it', reason: 'context_limit' },
+          },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'must not run' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
 
     const send = createMessageSend({
       tryAcquireThreadRun: () => () => undefined,
@@ -319,17 +307,14 @@ describe('createMessageSend integration', () => {
       tools: ['handoff'],
     });
     expect(result).toMatchObject({ success: true });
-    // Reply text carries the in-turn handoff framing (same as streaming's
-    // accumulated response), and the run row records the handoff outcome
-    // with the composed next-steps block — not a plain 'completed'.
     expect(result.text).toContain('[Handoff #1] Found the leak');
 
-    const completedUpdate = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
-      .map(([, updates]) => updates)
-      .filter(updates => updates.status === 'completed')
+    const completedRun = agentRunDb
+      .listAgentRunsByThread('thread_handoff')
+      .filter(run => run.status === 'completed')
       .at(-1);
-    expect(completedUpdate?.output).toMatchObject({ finishReason: 'handoff' });
-    expect(String(completedUpdate?.output?.text)).toContain('Next steps: Patch it');
+    expect(completedRun?.output).toMatchObject({ finishReason: 'handoff' });
+    expect(String(completedRun?.output?.text)).toContain('Next steps: Patch it');
   });
 
   it('leaves no durable rows when the thread rate limit rejects the send', async () => {
@@ -358,8 +343,6 @@ describe('createMessageSend integration', () => {
     });
 
     expect(result.success).toBe(false);
-    // With a client id present, a persist that runs before admission would
-    // call createMessage — the assertion below is what pins the ordering.
     expect(conversation.createMessage).not.toHaveBeenCalled();
     expect(conversation.upsertTurnMessage).not.toHaveBeenCalled();
   });

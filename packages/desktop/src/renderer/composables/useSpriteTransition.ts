@@ -1,10 +1,5 @@
 import { ref, readonly } from 'vue';
 
-/**
- * Dual-layer cross-fade sprite transition.
- * Inspired by Shinsekai's CrossFadeSprite: two overlapping layers,
- * new fades in while old fades out, then old takes over the new content.
- */
 export function useSpriteTransition(defaultSrc = '') {
   const FADE_MS = 300;
 
@@ -32,7 +27,6 @@ export function useSpriteTransition(defaultSrc = '') {
     newSrc.value = src;
     phase.value = 'fading';
 
-    // Trigger cross-fade on next frame so the browser registers newSrc
     requestAnimationFrame(() => {
       oldOpacity.value = 0;
       newOpacity.value = 1;

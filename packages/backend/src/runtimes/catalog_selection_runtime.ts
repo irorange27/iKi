@@ -21,17 +21,7 @@ export type CatalogSelectionRequest<T> = {
 };
 
 export interface CatalogSelectionRuntime {
-  /**
-   * Resolves a selection, or `null` when the selection could not be made
-   * (no tool model, empty transcript, or the auxiliary call failed).
-   *
-   * The distinction from `[]` is load-bearing: `[]` means "the selector ran
-   * and deliberately chose nothing", while `null` means "no selection
-   * exists". Callers fall back to their full catalog on `null` and honour `[]`
-   * as an explicit empty pick. Collapsing both to `[]` previously left a
-   * failed selector silently shrinking the tool set to the one tool a caller
-   * appends by hand.
-   */
+
   run<T>(request: CatalogSelectionRequest<T>): Promise<string[] | null>;
 }
 
@@ -84,7 +74,7 @@ export const tryParseJson = (raw: string): unknown => {
   try {
     return JSON.parse(candidate);
   } catch {
-    // continue
+    // Intentionally ignored: the caller cannot act on it.
   }
 
   const objStart = candidate.indexOf('{');
@@ -94,8 +84,8 @@ export const tryParseJson = (raw: string): unknown => {
     try {
       return JSON.parse(slice);
     } catch {
-      // continue
-    }
+    // Intentionally ignored: the caller cannot act on it.
+  }
   }
 
   const arrayStart = candidate.indexOf('[');

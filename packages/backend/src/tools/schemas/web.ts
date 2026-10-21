@@ -15,10 +15,6 @@ const fetchInputFields = {
     .describe('Maximum number of characters to return from fetched content'),
 };
 
-// ---------------------------------------------------------------------------
-// Web tool schemas
-// ---------------------------------------------------------------------------
-
 const webToolInputShape = {
   query: webInputFields.query,
   limit: webInputFields.limit.optional().default(DEFAULT_SEARCH_RESULT_LIMIT),
@@ -27,10 +23,6 @@ const webToolInputShape = {
 
 export const WebToolInputSchema = z.object(webToolInputShape);
 export const WebToolInputSchemaUi = uiSchema(webToolInputShape);
-
-// ---------------------------------------------------------------------------
-// Fetch tool schemas
-// ---------------------------------------------------------------------------
 
 const fetchToolInputShape = {
   url: fetchInputFields.url,

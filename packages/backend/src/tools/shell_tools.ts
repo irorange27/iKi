@@ -92,6 +92,8 @@ export class ShellExecutionTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = true;
+
+  override replay = 'unsafe' as const;
   override approvalMode = 'always' as const;
   override description =
     'Execute a shell command inside the conversation workspace. Commands can be cancelled; output is returned when the process exits. ' +

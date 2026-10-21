@@ -8,10 +8,6 @@ const shellInputFields = {
   timeout: z.number().describe('Command timeout in milliseconds'),
 };
 
-// ---------------------------------------------------------------------------
-// Shell tool schemas
-// ---------------------------------------------------------------------------
-
 const shellToolInputShape = {
   command: shellInputFields.command,
   cwd: shellInputFields.cwd.optional(),

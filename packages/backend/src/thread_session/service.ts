@@ -3,7 +3,6 @@ import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
 import { noopPlatformDeps } from '@iki/backend/chat_platform';
 import type { ChatStreamTarget } from './types';
 import { createChatApproval } from './approval';
-import { createChatMemory } from './memory';
 import { createChatPersistence } from '../turn_prep/persistence';
 import { createChatRuns } from './runs';
 import { truncateAfterMessage } from './history_truncation';
@@ -15,12 +14,15 @@ import {
   tryAcquireCrossProcessThreadRun,
 } from '@iki/backend/db/thread_run_locks';
 import { createChatUsage } from './usage';
-import { setChatServicePlatformDeps, onMessagePersisted } from './platform';
+import { setChatServicePlatformDeps } from './platform';
 import { deriveResumeStreamOptions, rebuildResumeHistoryFromEvents } from './run_rehydrator';
 import type { AgentRun, AgentRunKind } from '@iki/backend/types/agent_run';
 import { getErrorMessage } from '@iki/backend/utils/errors';
-import type { ModelMessage } from 'ai';
-import { buildThreadMarkdown, parseStoredMessageForExport } from '../message/thread_markdown_export';
+import type { ModelMessage } from '../message/model_history';
+import {
+  buildThreadMarkdown,
+  parseStoredMessageForExport,
+} from '../message/thread_markdown_export';
 import { searchThreadContent } from '../message/thread_content_search';
 
 export type { ChatStreamTarget } from './types';
@@ -29,18 +31,13 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   const deps = platformDeps ?? noopPlatformDeps;
   setChatServicePlatformDeps(deps);
 
-  const memory = createChatMemory();
   const usage = createChatUsage();
-  // The SQLite lease extends per-thread admission across processes sharing
-  // this database (desktop window + headless daemon both enter here).
+
   const streamCoordinator = createThreadStreamCoordinator({
     crossProcessThreadRun: (threadId, options) =>
       tryAcquireCrossProcessThreadRun(threadId, { onLeaseLost: options.onLeaseLost }),
   });
-  const persistence = createChatPersistence({
-    memory,
-    onContinuityMessagePersisted: onMessagePersisted,
-  });
+  const persistence = createChatPersistence();
   const approvals = createChatApproval({
     streams: {
       tryAcquireThreadRun: streamCoordinator.tryAcquireThreadRun,
@@ -50,7 +47,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       registerExecution: streamCoordinator.registerExecution,
       registerChildRunAlias: streamCoordinator.registerChildRunAlias,
     },
-    memory,
     conversation: persistence,
     usage: {
       recordUsageEvent: usage.recordUsageEvent,
@@ -65,7 +61,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   const eval_ = createChatEval({ exportTrace: deps.exportTrace });
   const streaming = createChatStreaming({
     streamCoordinator,
-    memory,
     conversation: persistence,
     getThreadTitle: (id: string) => persistence.getThread(id)?.title,
     usage: {
@@ -78,29 +73,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     },
   });
 
-  // ADR 008 F3: the recovery history comes from the session log replay —
-  // the run row's input copy is no longer read as authority. The re-run
-  // targets the ORIGINAL task: the dead attempts' committed output is
-  // excluded (see deadTaskChainRunIds below — the whole dead task chain,
-  // never a succeeded or blocked run). Facts stay in the log; display and
-  // replay show the whole story. A run whose log has no usable history — or
-  // whose replay does not end with the recorded task (a user message) —
-  // refuses loudly BEFORE any successor row is created. Kind admission is
-  // per caller: retry opens the wake/task send kinds whose id-less sends
-  // record input facts (issue #139); resumeRun stays chat-turn-only — a
-  // blocked task row recovers via the approval flow or re-scheduling, not a
-  // handoff-resume that would bypass the approval gate. Continuation kinds
-  // (handoff-resume, approval-resume) and delegated-agent (its own harness,
-  // no send facts) refuse everywhere.
-  // The dead attempts of a run's task (issue #141, the F3 ledger's
-  // consecutive-failure attribution): the retried run itself, its
-  // failed/cancelled ancestors (each retry's parent — a succeeded ancestor
-  // like an awaiter-wake's origin run is real history, a blocked one is live
-  // approval state; neither is ever excluded), and the failed/cancelled
-  // descendants (a succeeded descendant's output is real history the user
-  // saw — excluding it would re-run the task past it and duplicate its
-  // effects). An earlier failure's committed text must not stand between the
-  // task and the retry: stacked failures brick the retry surface otherwise.
   const deadTaskChainRunIds = (run: AgentRun): string[] => {
     const chain = new Set<string>([run.id]);
     const isDead = (row: AgentRun | null) =>
@@ -130,7 +102,8 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     run: AgentRun,
     admittedKinds: readonly AgentRunKind[]
   ): Promise<
-    { history: ModelMessage[]; systemPrompts: string[] } | { refusal: { success: false; error: string } }
+    | { history: ModelMessage[]; systemPrompts: string[] }
+    | { refusal: { success: false; error: string } }
   > => {
     if (!run.threadId) return { refusal: { success: false, error: 'Run has no thread ID' } };
     if (!admittedKinds.includes(run.kind)) {
@@ -146,16 +119,11 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     try {
       recovered = await rebuildResumeHistoryFromEvents(run.threadId, excludeRunIds);
     } catch (error) {
-      // The recovery-input owner throws when a journaled effect of the dead
-      // chain cannot be represented from the log (#143) — a refusal, not an
-      // exception past the IPC boundary.
+
       return { refusal: { success: false, error: getErrorMessage(error) } };
     }
     const last = recovered?.history[recovered.history.length - 1];
-    // A tool tail is a CONTINUATION (#143): the recovery history carries the
-    // dead chain's journaled exchange pairs after the task input, and the
-    // resumed turn runs with an empty prompt over existing history. A plain
-    // assistant tail is still no task to re-run.
+
     const tailIsRecoverable =
       last?.role === 'user' || (recovered?.continuation === true && last?.role === 'tool');
     if (!recovered || recovered.history.length === 0 || !tailIsRecoverable) {
@@ -166,13 +134,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
         },
       };
     }
-    // Attribution join (#139 review): when the tail input fact carries the
-    // run it was accepted for, the retried run must be that run or its
-    // descendant — otherwise the replay's tail is a LATER send's task and
-    // the re-run would execute it under this run's plan (the silent
-    // wrong-task re-run the gate exists to prevent, in a retry-after-resend
-    // interleaving). Facts without a runId (chat sends, pre-#139 rows) skip
-    // the join; their tail semantics are the F3 contract.
+
     if (recovered.inputRunId) {
       const ancestry = new Set<string>([run.id]);
       let ancestor = run.parentRunId ? agentRunDb.getAgentRun(run.parentRunId) : null;
@@ -211,8 +173,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
         deriveResumeStreamOptions(run, {
           kind: 'chat-turn',
           parentRunId: run.parentRunId ?? undefined,
-          // The queued row IS the executing identity: claim it instead of
-          // spawning a third run id beside a never-claimed queued record.
+
           adoptRunId: run.id,
           metadata: {
             source: 'execute-queued',
@@ -223,7 +184,8 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
         })
       );
       return { success: true, ...(result as Record<string, unknown>) };
-    }    const result = await streaming.stream(
+    }
+    const result = await streaming.stream(
       target,
       deriveResumeStreamOptions(run, {
         kind: 'handoff-resume',
@@ -234,12 +196,8 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
           blockedAt: run.updatedAt,
           ...(run.working.lastStepIndex > 0 ? { resumeFromStep: run.working.lastStepIndex } : {}),
         },
-        autonomous: run.working.pendingApprovalIds.length > 0
-          ? {
-              maxIterations: 10,
-              continuePrompt: 'Continue the work that was interrupted.',
-            }
-          : undefined,
+
+        continuePrompt: 'Continue the work that was interrupted.',
         inputMessages: recovered.history,
         systemPrompts: recovered.systemPrompts,
       })
@@ -254,15 +212,11 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
   ): Promise<{ success: boolean; error?: string; newRunId?: string }> => {
     const original = agentRunDb.getAgentRun(runId);
     if (!original) return { success: false, error: 'Run not found' };
-    // The retryRun status gate, checked before the history refusal so a
-    // non-retryable run reports the status, not the missing facts.
+
     if (original.status !== 'failed' && original.status !== 'cancelled') {
       return { success: false, error: `Cannot retry a run with status ${original.status}` };
     }
 
-    // Refuse before the queued successor row exists — no orphan retry rows.
-    // The wake/task send kinds are admitted here (issue #139): their id-less
-    // sends record input facts, so the retry re-runs the recorded TASK.
     const recovered = await resumeHistoryOrRefusal(original, [
       'chat-turn',
       'proactive-task',
@@ -283,12 +237,10 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     const result = await streaming.stream(
       target,
       deriveResumeStreamOptions(newRun, {
-        // The retry keeps the original's kind: the successor row, the plan
-        // and the turn_started fact must attribute the re-run to the same
-        // kind the task entered with (issue #139).
+
         kind: original.kind,
         parentRunId: runId,
-        // The queued retry row is adopted as the executing identity.
+
         adoptRunId: retryResult.newRunId,
         metadata: {
           source: 'retry',
@@ -299,7 +251,11 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       })
     );
 
-    return { success: true, newRunId: retryResult.newRunId, ...(result as Record<string, unknown>) };
+    return {
+      success: true,
+      newRunId: retryResult.newRunId,
+      ...(result as Record<string, unknown>),
+    };
   };
 
   const exportThreadMarkdown = async (
@@ -338,8 +294,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     retryAndExecute,
     exportThreadMarkdown,
     searchThreadContent,
-    // User-driven history rewrite (edit/resend truncate): the ONE backend
-    // owner — rows and their session-log fact land in one transaction.
+
     truncateAfterMessage,
   };
 };

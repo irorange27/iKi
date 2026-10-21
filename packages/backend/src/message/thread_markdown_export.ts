@@ -1,11 +1,5 @@
 import { extractTextFromMessageParts, isObjectRecord } from './message_parts';
 
-/**
- * User-readable thread export (Codex-style share/export): the conversation as
- * plain markdown. Tool internals are intentionally omitted — only the visible
- * user/assistant text is exported.
- */
-
 export type ThreadMarkdownExportMessage = {
   role: string;
   parts: unknown;
@@ -51,7 +45,6 @@ export const buildThreadMarkdown = (input: ThreadMarkdownExportInput): string =>
   return lines.join('\n');
 };
 
-/** Parse a persisted chat_messages row (`message` JSON column) for export. */
 export const parseStoredMessageForExport = (messageJson: unknown): ThreadMarkdownExportMessage | null => {
   if (typeof messageJson !== 'string' || !messageJson.trim()) return null;
   try {

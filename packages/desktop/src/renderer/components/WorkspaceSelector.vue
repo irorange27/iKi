@@ -37,16 +37,6 @@ import { useI18n } from '../i18n';
 import { getOptionalElectronAPI } from '../services/electron_api';
 import { useThreadSessionStore } from '../store/thread_session';
 
-/**
- * Workspace picker at the top-left of the chat column, outside the composer.
- *
- * It states where tools will run, and it is the only thing that can say so
- * before a message exists: a chat with no workspace tells the model it has a
- * working directory while file and shell tools have nowhere to run.
- *
- * Selecting with no active thread stages the choice (thread creation picks it
- * up); with a thread it rebinds that thread immediately.
- */
 const { t } = useI18n();
 const electronAPI = getOptionalElectronAPI();
 const threadSession = useThreadSessionStore();
@@ -74,7 +64,7 @@ const pickWorkspace = async () => {
     }
     selectWorkspace(picked.id);
   } catch {
-    // A cancelled or failed native dialog leaves the previous choice intact.
+    /* empty: error is not actionable here */
   } finally {
     isPicking.value = false;
   }

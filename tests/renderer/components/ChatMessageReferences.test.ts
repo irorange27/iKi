@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
-import type { UIMessage } from 'ai';
+import type { ChatUiMessage as UIMessage } from '@iki/backend/message/message_parts';
 
 import ChatMessageReferences from '../../../packages/desktop/src/renderer/components/chat/ChatMessageReferences.vue';
 
@@ -46,22 +46,6 @@ const createMessage = (): UIMessage =>
         },
       },
       {
-        type: 'data-memory-retrieval',
-        data: {
-          query: 'project constraints',
-          results: [{ id: 'mem_1', summary: 'Long-term maintainability matters.' }],
-        },
-      },
-      {
-        type: 'data-affect-signal',
-        data: {
-          source: 'realtime',
-          label: 'anger',
-          confidence: 0.82,
-          guardActive: true,
-        },
-      },
-      {
         type: 'data-token-usage',
         data: {
           inputTokens: 640,
@@ -93,53 +77,19 @@ describe('ChatMessageReferences', () => {
 
     const summaryItems = wrapper.findAll('.reference-summary-item');
 
-    expect(summaryItems).toHaveLength(4);
+    expect(summaryItems).toHaveLength(2);
     expect(wrapper.findAll('button.reference-summary-item')).toHaveLength(0);
     expect(wrapper.find('.reference-panel').exists()).toBe(false);
     expect(wrapper.text()).toContain('1 skills');
     expect(wrapper.text()).toContain('1 tool');
-    expect(wrapper.text()).toContain('1 memories');
-    expect(wrapper.text()).toContain('affect');
-    expect(summaryItems[2].attributes('title')).toContain('Tools: web');
-    expect(summaryItems[3].attributes('title')).toContain('Loaded skills: Planner');
-    expect(summaryItems[3].attributes('title')).toContain(
-      'Selected not loaded: openai-docs'
-    );
+    expect(summaryItems[0].attributes('title')).toContain('Tools: web');
+    expect(summaryItems[1].attributes('title')).toContain('Loaded skills: Planner');
+    expect(summaryItems[1].attributes('title')).toContain('Selected not loaded: openai-docs');
 
-    await summaryItems[3].trigger('click');
+    await summaryItems[1].trigger('click');
 
     expect(wrapper.find('.reference-panel').exists()).toBe(false);
     expect(wrapper.emitted('open-skill')).toBeUndefined();
-  });
-
-  it('hides the tool summary when only transcript-hidden todo planner calls exist', () => {
-    const wrapper = mount(ChatMessageReferences, {
-      props: {
-        message: {
-          id: 'assistant_2',
-          role: 'assistant',
-          parts: [
-            {
-              type: 'tool-result',
-              toolCallId: 'call_todo_1',
-              toolName: 'todo',
-              state: 'output-available',
-              output: { items: [{ id: '1', text: 'Inspect current code', status: 'completed' }] },
-            },
-            {
-              type: 'tool-result',
-              toolCallId: 'call_todo_2',
-              toolName: 'todo',
-              state: 'output-available',
-              output: { items: [{ id: '2', text: 'Implement fix', status: 'in_progress' }] },
-            },
-          ],
-        } as unknown as UIMessage,
-      },
-    });
-
-    expect(wrapper.text()).not.toContain('tools');
-    expect(wrapper.findAll('.reference-summary-item')).toHaveLength(0);
   });
 
   it('does not render a reference summary when token usage is the only assistant metadata', () => {

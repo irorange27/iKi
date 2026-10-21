@@ -4,8 +4,6 @@ import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import type { Provider } from '@iki/backend/types/provider';
 
 const {
-  createModelMock,
-  disposeLanguageModelMock,
   generateChatWithModelMessagesMock,
   generateTextMock,
   getAppConfigMock,
@@ -13,8 +11,6 @@ const {
   getModelCallSettingsMock,
   getProvidersMock,
 } = vi.hoisted(() => ({
-  createModelMock: vi.fn(),
-  disposeLanguageModelMock: vi.fn(),
   generateChatWithModelMessagesMock: vi.fn(),
   generateTextMock: vi.fn(),
   getAppConfigMock: vi.fn(),
@@ -28,9 +24,7 @@ vi.mock('ai', () => ({
 }));
 
 vi.mock('@iki/backend/provider/llm/factory', () => ({
-  createModel: createModelMock,
   generateChatWithModelMessages: generateChatWithModelMessagesMock,
-  disposeLanguageModel: disposeLanguageModelMock,
   resolvePersonaPrompt: resolvePersonaPromptMock,
   getModelCallSettings: getModelCallSettingsMock,
 }));
@@ -75,7 +69,6 @@ const buildProvider = (
 
 beforeEach(() => {
   vi.clearAllMocks();
-  createModelMock.mockReturnValue('mock-model');
   getModelCallSettingsMock.mockReturnValue({});
   generateTextMock.mockResolvedValue({ text: 'OK' });
   generateChatWithModelMessagesMock.mockResolvedValue({
@@ -177,11 +170,6 @@ describe('tool model provider', () => {
       model: 'deepseek-chat',
     });
 
-    // Regression: this probe used to build the model itself and call
-    // generateText directly. That made it exercise a DIFFERENT supply than the
-    // auxiliary calls it exists to validate — on a Pi-eligible provider the
-    // probe ran the AI SDK path while the real calls ran Pi, so a green "Test"
-    // said nothing about the route actually in use. One supply decision.
     expect(generateChatWithModelMessagesMock).toHaveBeenCalledWith(
       expect.objectContaining({
         providerType: 'deepseek',
@@ -191,7 +179,6 @@ describe('tool model provider', () => {
         maxOutputTokens: 8,
       })
     );
-    expect(createModelMock).not.toHaveBeenCalled();
     expect(generateTextMock).not.toHaveBeenCalled();
   });
 

@@ -64,17 +64,11 @@ describe('structured console formatter', () => {
       }
     );
 
-    // timestamp: cyan
     expect(line).toContain('\u001B[36m[15:42:08.142]\u001B[0m');
-    // level: yellow
     expect(line).toContain('\u001B[33m[WARN]\u001B[0m');
-    // scope: green
     expect(line).toContain('\u001B[32m[main/settings_window]\u001B[0m');
-    // event: bold
     expect(line).toContain('\u001B[1mwindow.closed\u001B[0m');
-    // outcome: yellow (started)
     expect(line).toContain('\u001B[33mstarted\u001B[0m');
-    // message: default (no color)
     expect(line).toContain('Settings window closed');
   });
 

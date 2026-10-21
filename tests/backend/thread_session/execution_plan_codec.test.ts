@@ -16,7 +16,7 @@ const validPlan: ExecutionPlan = {
   guardActive: false,
   requireApproval: false,
   autoApproveToolRequests: false,
-  maxIterations: 20,
+  budget: { step: 20 },
   systemPrompt: 'system prompt',
   skillMode: 'manual',
   kind: 'chat-turn',
@@ -25,9 +25,6 @@ const validPlan: ExecutionPlan = {
   threadId: 'thread_1',
 };
 
-// Persisted plan snapshots are versioned data: the codec is the single
-// encode/decode pair, unknown versions and structurally invalid payloads
-// fail closed (null) so callers take their declared legacy fallback.
 describe('execution plan codec', () => {
   it('round-trips a plan through the versioned envelope', () => {
     const stored = serializeExecutionPlan(validPlan);
@@ -47,7 +44,9 @@ describe('execution plan codec', () => {
   it('fails closed on plans missing harness-consumed fields', () => {
     const broken = { ...validPlan, enableTools: undefined } as unknown as ExecutionPlan;
     expect(parseExecutionPlan(serializeExecutionPlan(broken))).toBeNull();
-    const noBudget = { ...validPlan, maxIterations: Number.NaN };
+    const noBudget = { ...validPlan, budget: { step: Number.NaN } };
     expect(parseExecutionPlan(serializeExecutionPlan(noBudget))).toBeNull();
+    const missingBudget = { ...validPlan, budget: undefined } as unknown as ExecutionPlan;
+    expect(parseExecutionPlan(serializeExecutionPlan(missingBudget))).toBeNull();
   });
 });

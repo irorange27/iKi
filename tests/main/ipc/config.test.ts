@@ -545,7 +545,6 @@ describe('config IPC', () => {
     const send2 = vi.fn();
     const send3 = vi.fn();
 
-    // send2 simulates a destroyed webContents where .send() throws
     send2.mockImplementation(() => {
       throw new Error('Object has been destroyed');
     });

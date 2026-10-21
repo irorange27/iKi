@@ -1,14 +1,4 @@
-/**
- * Element → source bridge (main process). One call answers "which file
- * renders the element I am looking at?".
- *
- * Two paths, because a DOM node only has a *built-script* position through
- * CDP's `DOM.getNodeForLocation`, which `executeJavaScript` cannot reach:
- * - `probeElement` (in-app, no CDP): the owning `.vue` file plus the component
- *   chain — enough to open the right file.
- * - `resolveExact` (driven from CDP with a (line, column) it measured): map
- *   that position through the renderer's sourcemap to the original file:line.
- */
+
 import { BrowserWindow, app, webContents as webContentsRegistry } from 'electron';
 import path from 'node:path';
 
@@ -30,15 +20,8 @@ export type ProbeRequest = Pick<
   'target' | 'selector' | 'point' | 'webContentsId'
 >;
 
-/**
- * Repo root, only meaningful for a dev checkout. A packaged build has no
- * `.vue` files on disk, so the exact path refuses instead of pointing at a
- * line inside the asar.
- */
 export const resolveRepoRoot = (): string | null => {
   if (app.isPackaged) return null;
-  // Forge's Vite plugin runs the main process from packages/desktop/.vite/build:
-  // two levels up is packages/desktop, two more is the repo root.
   return path.resolve(app.getAppPath(), '../../../..');
 };
 
@@ -60,21 +43,12 @@ const installRecorder = async (contents: Electron.WebContents): Promise<void> =>
   try {
     await contents.executeJavaScript(buildInstallRecorderExpression(), true);
   } catch {
-    // A window that is still loading cannot record; the probe reports why it
-    // found nothing rather than this throwing.
+    /* empty: error is not actionable here */
   }
 };
 
 const recorderArmedWindows = new WeakSet<Electron.WebContents>();
 
-/**
- * Arm the click/hover recorder as soon as a window can run it, instead of only
- * on the first probe. Installed on every load (a reload or an HMR full reload
- * replaces the document, and with it the recorded element and the listeners),
- * so the click the user made *before* asking is the one `selected` answers with
- * — otherwise the very first probe always reports "nothing recorded yet" and
- * the click that prompted the question is gone.
- */
 export const armElementRecorder = (): void => {
   app.on('web-contents-created', (_event, contents) => {
     if (contents.getType() !== 'window') return;
@@ -91,7 +65,6 @@ export const armElementRecorder = (): void => {
   });
 };
 
-/** Run the page-side probe and tag the answer with the window it came from. */
 export const probeElement = async (
   contents: Electron.WebContents,
   request: ProbeRequest

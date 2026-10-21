@@ -1,7 +1,3 @@
-// Vitest 4's happy-dom environment does not populate globalThis.localStorage,
-// but renderer composables read it directly. Install an in-memory fake when
-// missing so per-file renderer tests get isolation for free (each setup run
-// is fresh).
 
 const storage = new Map<string, string>();
 

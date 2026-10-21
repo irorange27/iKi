@@ -59,7 +59,7 @@ export const useChatViewLifecycle = (deps: {
           runSafe(() => deps.handleTaskPush(payload));
         }) ?? (() => undefined);
     } catch {
-      // Ignore missing tasks IPC in older builds.
+      /* empty: error is not actionable here */
     }
 
     try {
@@ -69,7 +69,7 @@ export const useChatViewLifecycle = (deps: {
           runSafe(() => deps.handleAwaiterPush(payload));
         }) ?? (() => undefined);
     } catch {
-      // Ignore missing awaiter IPC in older builds.
+      /* empty: error is not actionable here */
     }
   });
 
@@ -77,12 +77,12 @@ export const useChatViewLifecycle = (deps: {
     try {
       removeTaskPushListener();
     } catch {
-      // ignore
+      /* empty: error is not actionable here */
     }
     try {
       removeAwaiterPushListener();
     } catch {
-      // ignore
+      /* empty: error is not actionable here */
     }
   });
 };

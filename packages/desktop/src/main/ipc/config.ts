@@ -453,7 +453,6 @@ export const registerConfigIpc = (): void => {
   if (configIpcRegistered) return;
   configIpcRegistered = true;
 
-  // Keep migration colocated with config bootstrap so main.ts doesn't have to manage it.
   migrateLegacyConfig();
 
   ipcMain.handle('config:get', () => {
@@ -509,7 +508,7 @@ export const registerConfigIpc = (): void => {
       try {
         win.webContents.send('config:updated', normalized);
       } catch {
-        // window may have been destroyed since enumeration
+        /* empty: error is not actionable here */
       }
     }
 

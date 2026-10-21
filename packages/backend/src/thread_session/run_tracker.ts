@@ -8,19 +8,23 @@ import {
   updateAgentRun,
 } from '@iki/backend/db/agent_runs';
 import { claimQueuedAgentRun } from '@iki/backend/db/agent_runs';
+import {
+  MESSAGE_EVENT_TYPES,
+  appendSessionFacts,
+  getSessionEvents,
+} from '@iki/backend/db/session_events';
 import { hasLiveThreadRunLease } from '@iki/backend/db/thread_run_locks';
-import { getChatMessages, updateChatMessage } from '@iki/backend/db/chat_message';
 import { expirePendingToolCallApprovalsByRunIds, getToolCallApprovalSession } from '@iki/backend/db/tool_call_approval';
-import type { ToolCallApproval } from '@iki/backend/types/tool_call_approval';
 import {
   APPROVAL_DECIDED,
+  APPROVAL_REQUESTED,
   recordFailureTerminalEvent,
   SESSION_EVENT_VERSION,
   turnFactsToEvents,
 } from './session_log';
 import type { DynamicToolPart } from '@iki/backend/message/tool_parts';
 import {
-  interruptedToolPartErrorText,
+  APPROVAL_PENDING_INTERRUPTED_ERROR_TEXT,
   isObjectRecord,
   isTerminalDynamicToolPart,
   toInterruptedToolPart,
@@ -57,12 +61,7 @@ type CreateAgentRunTrackerParams = {
   availableSkillIds: string[];
   input: AgentRunInput;
   working: AgentRunWorkingState;
-  /**
-   * Adopt an existing (already claimed) run row instead of creating a new id —
-   * a queued resume or retry executes IN the queued identity. The row's own
-   * fields are authoritative; the descriptive params above are ignored.
-   * Claim via `claimQueuedAgentRun` first.
-   */
+
   adoptExistingRunId?: string;
 };
 
@@ -70,6 +69,8 @@ type FinalizeRunParams = {
   text?: string;
   finishReason?: string;
   usage?: Record<string, unknown>;
+
+  pendingToolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
 };
 
 type BlockRunParams = FinalizeRunParams & {
@@ -101,6 +102,9 @@ const buildOutput = (params: FinalizeRunParams): AgentRunOutput | null => {
     ...(typeof params.text === 'string' ? { text: params.text } : {}),
     ...(typeof params.finishReason === 'string' ? { finishReason: params.finishReason } : {}),
     ...(params.usage && typeof params.usage === 'object' ? { usage: params.usage } : {}),
+    ...(Array.isArray(params.pendingToolCalls) && params.pendingToolCalls.length > 0
+      ? { pendingToolCalls: params.pendingToolCalls }
+      : {}),
   };
   return Object.keys(output).length > 0 ? output : null;
 };
@@ -119,7 +123,6 @@ export type AgentRunTracker = {
   id: string;
   getRun: () => AgentRun;
   recordModelStep: (record: ModelInferenceRecord) => void;
-  syncModelMessages: (messages: unknown[]) => AgentRun;
   recordAgentStep: (step: AgentStep) => void;
   recordApprovalResponse: (params: {
     approvalId: string;
@@ -138,7 +141,7 @@ export type AgentRunTracker = {
   markCompleted: (params: FinalizeRunParams) => AgentRun;
   markBlocked: (params: BlockRunParams) => AgentRun;
   markFailed: (params: FailRunParams) => AgentRun;
-  /** Conditional recovery finalize (see appendStepIfStatus). */
+
   markFailedIfStatus: (
     expectedStatuses: readonly AgentRunStatus[],
     params: FailRunParams
@@ -197,14 +200,6 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
     return step;
   };
 
-  /**
-   * Recovery-only conditional finalize: the step and terminal run update are
-   * written only while the run row is still in one of `expectedStatuses`.
-   * Returns null (nothing written) when another writer finalized or reclaimed
-   * the run first. The transition guard checks `expectedStatuses` statically
-   * — not the in-memory `currentRun`, which a concurrent finalizer may have
-   * made stale between listing and this call; the DB claim is the real gate.
-   */
   const appendStepIfStatus = (
     params: Parameters<typeof appendStep>[0],
     updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>,
@@ -279,15 +274,6 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
           usage: record.usage,
         },
       });
-    },
-    syncModelMessages: messages => {
-      persist({
-        working: {
-          ...currentRun.working,
-          modelMessages: Array.isArray(messages) ? structuredClone(messages) : [],
-        },
-      });
-      return currentRun;
     },
     recordAgentStep: step => {
       if (step.type === 'tool_execution_start') {
@@ -586,7 +572,7 @@ export type RunRecoveryResult = {
   totalRuns: number;
   expiredApprovals: number;
   interruptedToolParts: number;
-  /** Stuck runs left untouched because their thread lease is still alive. */
+
   skippedLiveLease: number;
 };
 
@@ -597,10 +583,6 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
   let blockedRuns = 0;
   let skippedLiveLease = 0;
 
-  // Recovery may only take over executions whose run right is gone. A stuck
-  // row whose thread lease is unexpired can belong to another live process
-  // sharing this database — reclaiming it (or its approvals/UI rows) would
-  // corrupt a run that is still executing.
   const reclaimable = runs.filter(run => {
     if (run.threadId && hasLiveThreadRunLease(run.threadId)) {
       skippedLiveLease += 1;
@@ -613,10 +595,7 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
   const expiredApprovalRecords =
     runIds.length > 0 ? expirePendingToolCallApprovalsByRunIds(runIds) : [];
   const expiredApprovals = expiredApprovalRecords.length;
-  // Session log: the reclamation is a system decision on each expired
-  // approval — replay must not keep them pending forever. The run rows above
-  // already recorded their own terminal facts. Each record's own session row
-  // decides which thread's stream carries it.
+
   for (const record of expiredApprovalRecords) {
     const sessionId = record.session_id;
     const threadId = sessionId
@@ -639,41 +618,84 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
   const threadIds = Array.from(
     new Set(reclaimable.map(run => run.threadId).filter((id): id is string => typeof id === 'string'))
   );
+
+  // A run interrupted while an approval was pending leaves its tool call with no
+  // committed part at all: the crash happened before MODEL_OUTPUT_COMMITTED, so the
+  // transcript would otherwise show the assistant text and then nothing. The call
+  // is recoverable from the APPROVAL_REQUESTED event that named it. Commit one
+  // terminal error per such call, appended as a superseding MODEL_OUTPUT_COMMITTED
+  // so the log stays append-only and the projection picks the newest commit.
   let interruptedToolParts = 0;
   for (const threadId of threadIds) {
-    for (const messageRow of getChatMessages(threadId)) {
-      if (!messageRow.message.includes('"dynamic-tool"')) continue;
-      let parsed: { parts?: unknown[] } | null = null;
-      try {
-        parsed = JSON.parse(messageRow.message);
-      } catch {
-        continue;
-      }
-      if (!Array.isArray(parsed?.parts)) continue;
-
-      let changed = false;
-      const parts = parsed.parts.map(part => {
-        if (!isObjectRecord(part) || part.type !== 'dynamic-tool') return part;
-        if (isTerminalDynamicToolPart(part)) return part;
-        changed = true;
-        interruptedToolParts += 1;
-        return toInterruptedToolPart(
-          part as unknown as DynamicToolPart,
-          interruptedToolPartErrorText(part as unknown as DynamicToolPart)
-        );
+    const rejected = new Map<string, { toolCallId: string; toolName: string; args: unknown }>();
+    for (const event of getSessionEvents(threadId, [APPROVAL_REQUESTED])) {
+      const payload = event.payload as {
+        sessionId?: unknown;
+        toolCallId?: unknown;
+        toolName?: unknown;
+        args?: unknown;
+      };
+      if (typeof payload?.sessionId !== 'string' || typeof payload.toolCallId !== 'string') continue;
+      rejected.set(`${payload.sessionId}::${payload.toolCallId}`, {
+        toolCallId: payload.toolCallId,
+        toolName: typeof payload.toolName === 'string' ? payload.toolName : 'tool',
+        args: payload.args,
       });
-      if (changed) {
-        updateChatMessage(messageRow.id, {
-          message: JSON.stringify({ ...parsed, parts }),
-        });
-      }
+    }
+    if (rejected.size === 0) continue;
+
+    const committed = new Map<string, { messageId: string; message: Record<string, unknown> }>();
+    for (const event of getSessionEvents(threadId, [MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED])) {
+      const payload = event.payload as { messageId?: unknown; message?: unknown };
+      if (typeof payload?.messageId !== 'string' || !isObjectRecord(payload.message)) continue;
+      committed.set(payload.messageId, { messageId: payload.messageId, message: payload.message });
+    }
+
+    for (const [key, call] of rejected) {
+      const sessionId = key.split('::')[0];
+      const target = committed.get(sessionId);
+      if (!target) continue;
+      const parts = Array.isArray(target.message.parts) ? target.message.parts : [];
+      const alreadyTerminal = parts.some(
+        part =>
+          isObjectRecord(part) &&
+          part.type === 'dynamic-tool' &&
+          (part as { toolCallId?: unknown }).toolCallId === call.toolCallId &&
+          isTerminalDynamicToolPart(part as unknown as DynamicToolPart)
+      );
+      if (alreadyTerminal) continue;
+
+      interruptedToolParts += 1;
+      appendSessionFacts(threadId, [
+        {
+          type: MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED,
+          version: SESSION_EVENT_VERSION,
+          payload: {
+            runId: '',
+            messageId: target.messageId,
+            message: {
+              ...target.message,
+              parts: [
+                ...parts,
+                toInterruptedToolPart(
+                  {
+                    type: 'dynamic-tool',
+                    toolCallId: call.toolCallId,
+                    toolName: call.toolName,
+                    state: 'approval-requested',
+                    input: call.args ?? {},
+                  } as unknown as DynamicToolPart,
+                  APPROVAL_PENDING_INTERRUPTED_ERROR_TEXT
+                ),
+              ],
+            },
+            transport: 'stream',
+          },
+        },
+      ]);
     }
   }
 
-  // Reconcile approval and UI records before making the Run terminal. If any
-  // reconciliation fails, the next startup still finds the Run as stuck and
-  // can retry the remaining work. The terminal write is conditional: a run
-  // that reached a terminal state in between is left as-is.
   for (const run of reclaimable) {
     const tracker = rehydrateAgentRunTracker(run.id);
     if (!tracker) continue;
@@ -696,11 +718,7 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
     } else {
       blockedRuns += 1;
     }
-    // Session log: the reclamation is the turn's terminal fact — replay must
-    // show it failed, not running forever. Only recorded once this process
-    // actually took the run (owner-aware: a live lease in another process
-    // means their run, their log, untouched). Loud-guarded: recovery must
-    // continue over the remaining reclaimable runs (ADR 008 F1).
+
     if (run.threadId) {
       recordFailureTerminalEvent(run.threadId, turnFactsToEvents({
         terminal: {

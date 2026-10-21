@@ -1,4 +1,8 @@
-import type { AgentRunInput, AgentRunKind, AgentRunWorkingState } from '@iki/backend/types/agent_run';
+import type {
+  AgentRunInput,
+  AgentRunKind,
+  AgentRunWorkingState,
+} from '@iki/backend/types/agent_run';
 import type { ApprovalPolicy } from '../agent/harness/tool_resolver';
 import type { HarnessConfig } from '../agent/harness/harness_types';
 import type { ThreadWorkspaceSelection } from '../workspaces/thread_workspace';
@@ -11,61 +15,46 @@ import {
 } from './constants';
 import type { ChatTurnOptions, PreparedChatTurn } from '../turn_prep/turn_preparer';
 
-/**
- * The typed definition of one turn execution. Every public entry (stream,
- * send, approval resume, retry, queued resume) derives the same projections
- * from this one object — harness config, run-row identity/metadata, and the
- * approval recovery context — instead of re-assembling the same fields at
- * each call site. Resumed turns read the persisted version of the plan: the
- * run row (via run_rehydrator) and, for approval recovery, the approval
- * session row.
- */
 export type ExecutionPlan = {
-  // Supply
+
   providerType: string;
   providerId?: string;
   model: string;
-  // Tool & approval behavior (the guarded, post-preparation selection)
+
   enableTools: boolean;
   enabledTools: string[];
   availableSkillIds: string[];
-  guardActive: boolean;
   requireApproval: boolean;
   autoApproveToolRequests: boolean;
   approvalPolicy?: ApprovalPolicy;
-  maxIterations: number;
-  // Budgets
+
+  budget: {
+    step: number;
+    batch?: { max: number; continuePrompt?: string };
+  };
+
   maxInputTokens?: number;
   maxOutputTokens?: number;
   reasoningEffort?: string;
-  // Autonomous batching (ADR 004)
-  autonomous?: { maxIterations: number; continuePrompt?: string };
-  // Turn-start world binding (D30): tools and later-approved actions run
-  // where the turn started, never where the thread points mid-turn.
+
   workspaceSelection?: ThreadWorkspaceSelection | null;
-  // Request shape
+
   systemPrompt: string;
   contextTokens?: number;
   skillMode: 'manual' | 'auto';
-  // Run identity
+
   threadId?: string;
   kind: AgentRunKind;
   parentRunId?: string;
   rootRunId?: string;
-  /** Execute inside this already-claimed run row (queued resume / retry). */
+
   adoptRunId?: string;
-  /** Extra metadata the caller carried in runConfig. */
+
   runMetadata: Record<string, unknown>;
-  /** Transport surface the execution rides (provenance, not behavior). */
+
   transport: 'stream' | 'send' | 'approval-resume';
 };
 
-/**
- * The single assembly point for fresh turns. The caller resolves the
- * turn-start workspace binding when the turn starts for it (for stream/send:
- * at admission, before preparation awaits) and hands it in — assembly never
- * re-resolves a world that a mid-prepare switch would change.
- */
 export const assembleExecutionPlan = (params: {
   options: ChatTurnOptions;
   preparedTurn: PreparedChatTurn;
@@ -81,11 +70,22 @@ export const assembleExecutionPlan = (params: {
     enableTools: preparedTurn.enableTools,
     enabledTools: [...preparedTurn.guardedTools],
     availableSkillIds: [...preparedTurn.selectedSkillIds],
-    guardActive: preparedTurn.guardActive,
     requireApproval: preparedTurn.requireApproval,
     autoApproveToolRequests: preparedTurn.autoApproveToolRequests,
     ...(approvalPolicy ? { approvalPolicy } : {}),
-    maxIterations: resolveToolCallMaxIterations(options.maxIterations),
+    budget: {
+      step: resolveToolCallMaxIterations(options.maxIterations),
+      ...(options.autonomous
+        ? {
+            batch: {
+              max: options.autonomous.maxIterations,
+              ...(options.autonomous.continuePrompt
+                ? { continuePrompt: options.autonomous.continuePrompt }
+                : {}),
+            },
+          }
+        : {}),
+    },
     ...(typeof preparedTurn.maxInputTokens === 'number'
       ? { maxInputTokens: preparedTurn.maxInputTokens }
       : {}),
@@ -93,7 +93,6 @@ export const assembleExecutionPlan = (params: {
       ? { maxOutputTokens: preparedTurn.maxOutputTokens }
       : {}),
     ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
-    ...(options.autonomous ? { autonomous: { ...options.autonomous } } : {}),
     workspaceSelection,
     systemPrompt: [
       preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : NO_TOOLS_SYSTEM_PROMPT,
@@ -113,10 +112,9 @@ export const assembleExecutionPlan = (params: {
   };
 };
 
-/** The harness reads its whole config from the plan. */
 export const planToHarnessConfig = (
   plan: ExecutionPlan,
-  overrides?: Partial<Pick<HarnessConfig, 'modelFactory' | 'guardActive'>>
+  overrides?: Partial<Pick<HarnessConfig, 'requireApproval'>>
 ): HarnessConfig => ({
   providerType: plan.providerType,
   ...(plan.providerId ? { providerId: plan.providerId } : {}),
@@ -125,23 +123,16 @@ export const planToHarnessConfig = (
   enableTools: plan.enableTools,
   enabledToolNames: plan.enabledTools,
   availableSkillIds: plan.availableSkillIds,
-  guardActive: overrides?.guardActive ?? plan.guardActive,
   requireApproval: plan.requireApproval,
   autoApproveToolRequests: plan.autoApproveToolRequests,
   ...(plan.approvalPolicy ? { approvalPolicy: plan.approvalPolicy } : {}),
-  maxIterations: plan.maxIterations,
+  maxIterations: plan.budget.step,
   ...(typeof plan.maxOutputTokens === 'number' ? { maxOutputTokens: plan.maxOutputTokens } : {}),
   ...(typeof plan.maxInputTokens === 'number' ? { maxInputTokens: plan.maxInputTokens } : {}),
   ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
   ...(plan.threadId ? { threadId: plan.threadId } : {}),
-  ...(overrides?.modelFactory ? { modelFactory: overrides.modelFactory } : {}),
 });
 
-/**
- * The run row is the persisted version of the plan: identity, supply, tool
- * selection and the metadata block are written from the plan (plus per-entry
- * extras), so resume paths can rebuild the same plan from the row alone.
- */
 export const planToRunTrackerParams = (
   plan: ExecutionPlan,
   params: {
@@ -168,20 +159,25 @@ export const planToRunTrackerParams = (
       transport: plan.transport,
       ...(plan.approvalPolicy ? { approvalPolicy: plan.approvalPolicy } : {}),
       requireApproval: plan.requireApproval,
-      // Persisted so the run-row recovery path (retry / queued resume) can
-      // restore them — the run row is those paths' only plan source, and a
-      // silently dropped field is neither full recovery nor a new decision.
+
       ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
-      ...(plan.autonomous ? { autonomous: { ...plan.autonomous } } : {}),
-      // The turn-start world rides with the run row so a retry or
-      // queued-resume — the same turn executing again — rebinds it instead of
-      // silently adopting the thread's current selection.
+      ...(plan.budget.batch
+        ? {
+            autonomous: {
+              maxIterations: plan.budget.batch.max,
+              ...(plan.budget.batch.continuePrompt
+                ? { continuePrompt: plan.budget.batch.continuePrompt }
+                : {}),
+            },
+          }
+        : {}),
+
       ...(plan.workspaceSelection !== undefined
         ? { workspaceSelection: plan.workspaceSelection }
         : {}),
       ...(typeof plan.contextTokens === 'number' ? { contextTokens: plan.contextTokens } : {}),
       skillMode: plan.skillMode,
-      maxIterations: plan.maxIterations,
+      maxIterations: plan.budget.step,
       enableTools: plan.enableTools,
       ...params.metadataExtras,
     },

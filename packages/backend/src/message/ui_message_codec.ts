@@ -70,8 +70,6 @@ const normalizePart = (
     );
   }
 
-  // Reasoning must survive storage, or the thinking block disappears after a
-  // reload even though it rendered during the live stream.
   if (part.type === 'reasoning' && typeof part.text === 'string') {
     return {
       type: 'reasoning',
@@ -145,7 +143,7 @@ export const parseStoredUiMessageRow = (row: StoredUiMessageRow): ParsedUiMessag
       return normalized;
     }
   } catch {
-    // Fallback below.
+    // Intentionally ignored: the caller cannot act on it.
   }
 
   return {

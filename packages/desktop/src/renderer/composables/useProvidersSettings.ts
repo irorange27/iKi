@@ -114,9 +114,6 @@ export const useProvidersSettings = () => {
       const config = selectedProviderConfig.value;
       const providerLookupKey = config?.type || selectedProviderId.value;
 
-      // Pass the DRAFT's base URL and key so discovery works before the
-      // provider is saved, and so a private gateway is queried directly rather
-      // than through the static catalog.
       const baseUrl = draft?.base_url.trim() || selectedProviderInfo.value?.defaultBaseUrl || '';
       const apiKey = draft?.api_key.trim() || '';
       const providerOverride =
@@ -276,12 +273,7 @@ export const useProvidersSettings = () => {
     }
   };
 
-  /**
-   * Persist the selected provider's draft if it has anything worth saving.
-   * Used by the settings footer's Save, which otherwise writes AppConfig only
-   * and would silently drop the provider changes it appears to cover.
-   * Returns true when a save actually happened.
-   */
+  
   const flushPendingProviderDraft = async (): Promise<boolean> => {
     if (!isSelectedProviderDirty.value || !canSaveSelectedProvider.value) {
       return false;
@@ -290,7 +282,6 @@ export const useProvidersSettings = () => {
     await saveProviderConfig();
     return true;
   };
-
 
   const saveProviderConfig = async () => {
     if (!selectedProviderId.value || !selectedProviderInfo.value || !selectedProviderDraft.value) {

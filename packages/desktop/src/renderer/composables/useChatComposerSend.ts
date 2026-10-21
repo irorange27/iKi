@@ -1,8 +1,7 @@
 import { ref, watch, type Ref } from 'vue';
-import type { FileUIPart } from 'ai';
+import type { UiFilePart as FileUIPart } from '@iki/backend/message/ui_protocol';
 
-import type { ChatUiMessage, ComposerInvocationPartData } from '@iki/backend/message/message_parts';
-import type { AudioEmotionResult } from '@iki/backend/types/speech';
+import type { ComposerInvocationPartData } from '@iki/backend/message/message_parts';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import type { ModelCapabilitySnapshot, Provider } from '@iki/backend/types/provider';
 import { getErrorMessage } from '@iki/backend/utils/errors';
@@ -64,11 +63,10 @@ export const useChatComposerSend = (deps: {
   resolveSendRequest?: (draft: string) => Promise<ResolvedComposerSendRequest>;
   canResolveEmptyDraft?: () => boolean;
   ensureProviderReady: () => Promise<ComposerProviderReadyResult>;
-  /** Work threads: return a feedback message when the project workspace is missing; null = ok. */
+  
   ensureWorkspaceForWork?: () => string | null;
   stopVoiceInput: () => void;
   attachedImages?: Ref<FileUIPart[]>;
-  audioEmotion?: Ref<AudioEmotionResult | null>;
 }) => {
   const composerFeedback = ref('');
   const isPreparingSend = ref(false);
@@ -116,9 +114,6 @@ export const useChatComposerSend = (deps: {
         isLoading.value = false;
         isStopping.value = false;
       } else {
-        // Allow user to send a new/steering message immediately after stop.
-        // The old stream will unwind in the background; any late UI chunks
-        // from it are superseded by the new stream when the user sends.
         isLoading.value = false;
         isStopping.value = false;
       }
@@ -169,7 +164,6 @@ export const useChatComposerSend = (deps: {
       return;
     }
 
-    // The composer holds no persistent skill selection; only slash-command overrides apply.
     const effectiveSkillMode = resolvedSendRequest.skillMode ?? 'auto';
     const effectiveSelectedSkillIds =
       resolvedSendRequest.skillMode === 'manual' && Array.isArray(resolvedSendRequest.skillIds)
@@ -210,10 +204,7 @@ export const useChatComposerSend = (deps: {
           providerId: providerReady.provider.id,
           promptAppId: resolvedSendRequest.promptAppId,
           composerInvocations: resolvedSendRequest.composerInvocations,
-          files: deps.attachedImages?.value?.length
-            ? [...deps.attachedImages.value]
-            : undefined,
-          audioEmotion: deps.audioEmotion?.value ?? undefined,
+          files: deps.attachedImages?.value?.length ? [...deps.attachedImages.value] : undefined,
         });
       }
     } catch (error) {
@@ -235,7 +226,6 @@ export const useChatComposerSend = (deps: {
     const previousMessage = deps.message.value;
     deps.message.value = '';
     deps.attachedImages?.value && (deps.attachedImages.value = []);
-    deps.audioEmotion?.value && (deps.audioEmotion.value = null);
     resolvedSendRequest.onCommitted?.();
     isLoading.value = true;
     isStopping.value = false;

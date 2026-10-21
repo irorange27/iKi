@@ -1,21 +1,12 @@
 // @vitest-environment node
 
-/**
- * Switch item 2c (issue #110): the Pi text turn harness's contract, pinned
- * against the AI SDK runner's observable semantics — live deltas, history
- * shape, budget owners, refusal, retry bounds, failure classification
- * (provider errors throw; aborts are AbortError), and AI-SDK-vocabulary
- * inference records. The model call is a scripted double over a real Pi
- * AssistantMessageEventStream, so the event protocol consumed here is the
- * one production consumes.
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createAssistantMessageEventStream,
   type AssistantMessage,
   type AssistantMessageEvent,
 } from '@earendil-works/pi-ai';
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '@iki/backend/message/model_history';
 
 vi.mock('@iki/backend/runtimes/thread_summary', () => ({
   generateThreadSummary: vi.fn(),
@@ -25,10 +16,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
     ...actual,
-    // Persona prompt (identity, date/timezone, OS, cwd) leads every request.
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
-    // The unit suite injects its model call; the provider row stub only
-    // keeps the default call harmless if it were ever reached.
     getProviderConfig: vi.fn(() => ({
       id: 'provider_pi',
       type: 'custom-openai',
@@ -96,8 +84,6 @@ const scriptedModelCall = (
     const stream = createAssistantMessageEventStream();
     stream.push({ type: 'start', partial: final });
     for (const event of events) stream.push(event);
-    // Terminal event: error/aborted finals close with the error variant
-    // (a later done push is a no-op — the stream is already complete).
     if (final.stopReason === 'error' || final.stopReason === 'aborted') {
       stream.push({ type: 'error', reason: final.stopReason, error: final });
     } else {
@@ -145,8 +131,6 @@ const drainError = async (harness: PiTextTurnHarness, input: TurnInput) => {
   return undefined;
 };
 
-/** A model call serving attempt i from `attempts` (clamped to the last),
- * recording every request — the retry tests' seam. */
 const sequentialModelCall = (
   attempts: Array<{ events: AssistantMessageEvent[]; final: AssistantMessage }>
 ): PiTextModelCall & { requests: CapturedRequest[] } => {
@@ -203,7 +187,6 @@ describe('pi text turn harness (switch item 2c)', () => {
     const done = events.at(-1);
     assert(done && done.event === 'done');
     expect(done.output.text).toBe('Hello world');
-    // Total-prompt convention: 100 = 40 + 60 cached; unreported reasoning → 0.
     expect(done.output.usage).toEqual({
       inputTokens: 100,
       outputTokens: 20,
@@ -239,8 +222,6 @@ describe('pi text turn harness (switch item 2c)', () => {
       content: [{ type: 'text', text: 'answer' }],
     });
 
-    // The wire projected the whole transcript; persona leads the system
-    // prompt, then the plan's system prompt.
     expect(modelCall.requests).toHaveLength(1);
     expect(modelCall.requests[0].systemPrompt).toContain('persona prompt');
     expect(modelCall.requests[0].systemPrompt).toContain('you are scripted');
@@ -256,7 +237,6 @@ describe('pi text turn harness (switch item 2c)', () => {
     await collect(harness, { prompt: '   ', history });
 
     expect(harness.getHistory()).toHaveLength(2);
-    // No empty user message on the wire either — the request is the history.
     const roles = modelCall.requests[0].messages.map(m => m.role);
     expect(roles).toEqual(['user']);
   });
@@ -300,8 +280,6 @@ describe('pi text turn harness (switch item 2c)', () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain('no script for key');
     expect(modelCall.requests).toHaveLength(1);
-    // The turn's prompt stays in history (recovery parity); no assistant
-    // message is invented for the failed call.
     expect(harness.getHistory()).toEqual([{ role: 'user', content: 'probe' }]);
   });
 
@@ -335,10 +313,8 @@ describe('pi text turn harness (switch item 2c)', () => {
     assert(done && done.event === 'done');
     expect(done.output.text).toBe('recovered');
     expect(modelCall.requests).toHaveLength(2);
-    // The second request carries the recovery note on the wire…
     const secondWire = JSON.stringify(modelCall.requests[1].messages);
     expect(secondWire).toContain('encountered an error');
-    // …and the note joins the STORED history on success (runner parity).
     expect(harness.getHistory()).toEqual([
       { role: 'user', content: 'probe' },
       { role: 'user', content: expect.stringContaining('encountered an error') },
@@ -363,7 +339,6 @@ describe('pi text turn harness (switch item 2c)', () => {
     const done = events.at(-1);
     assert(done && done.event === 'done');
     expect(done.output.text).toBe('safe answer');
-    // The refusal variant of the recovery note (not the generic error one).
     expect(harness.getHistory()[1].content).toContain('blocked by content policies');
   }, 15000);
 
@@ -407,7 +382,6 @@ describe('pi text turn harness (switch item 2c)', () => {
 
     const error = await drainError(harness, { prompt: 'probe' });
     expect(error).toBeInstanceOf(RefusalError);
-    // 1 initial attempt + 3 retries, all reasoning-only.
     expect(modelCall.requests).toHaveLength(4);
   }, 20000);
 
@@ -455,8 +429,6 @@ describe('pi text turn harness (switch item 2c)', () => {
     expect(generateThreadSummary).toHaveBeenCalledTimes(1);
     const summaryInput = vi.mocked(generateThreadSummary).mock.calls[0][0];
     expect(JSON.stringify(summaryInput.messages)).toContain(longText.slice(0, 32));
-    // The wire carries the summary system block and the protected tail, not
-    // the omitted prefix. Compaction never touches the STORED history.
     expect(modelCall.requests[0].systemPrompt).toContain('Earlier conversation summary:\ncompacted summary');
     const wireText = JSON.stringify(modelCall.requests[0].messages);
     expect(wireText).not.toContain(longText.slice(0, 64));
@@ -495,9 +467,6 @@ describe('pi text turn harness (switch item 2c)', () => {
     expect(record.finishReason).toBe('stop');
     expect(record.usage).toMatchObject({ inputTokens: 100, outputTokens: 20 });
     expect(record.messages.at(-1)).toEqual({ role: 'user', content: 'probe' });
-    // Reasoning rides as a `reasoning` part — the vocabulary the ATIF
-    // projection (and every record consumer) reads — never a Pi thinking
-    // block.
     expect(record.content).toEqual([
       { type: 'reasoning', text: 'because' },
       { type: 'text', text: 'scripted answer' },

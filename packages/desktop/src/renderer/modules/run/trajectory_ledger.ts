@@ -179,8 +179,6 @@ export const timingSpan = (ledgers: TurnLedger[]): TimingSpan => {
   return { startedMs, finishedMs, durationMs: finishedMs - startedMs };
 };
 
-// These are recorded timestamps, not inferred execution durations. Sequence
-// gives instantaneous audit records equal, selectable space by default.
 export const projectTimeline = (entries: LedgerEntry[], mode: TimelineMode): TimelineItem[] => {
   const origin = Math.min(...entries.map(entry => entry.startedMs));
   return entries.map((entry, index) => ({

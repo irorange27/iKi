@@ -1,11 +1,3 @@
-// The desktop app runs the daemon *embedded* — `startEmbeddedDaemon()` calls
-// `startDaemonServer()` in the same process as the main process, so both share
-// one module registry and one `defaultToolRegistry`. Main registers first, with
-// the renderer probe; the daemon registers second, with nothing. `registerStandardTools`
-// used to do `setElementSourceResolver(resolver ?? null)`, so the daemon's
-// registration silently wiped main's resolver and the in-app `element_source`
-// tool answered "No UI window is reachable" in every desktop session — even
-// though the probe, the IPC channel and the preload bridge were all fine.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { registerStandardTools } from '@iki/backend/tools';
@@ -51,7 +43,6 @@ describe('element_source resolver survives re-registration', () => {
       },
     });
 
-    // The embedded daemon's own registration: no resolver to offer.
     registerStandardTools(runtime);
 
     const result = (await ask({ target: 'point', x: 120, y: 620 })) as {

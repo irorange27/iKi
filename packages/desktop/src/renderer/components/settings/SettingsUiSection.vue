@@ -163,9 +163,6 @@ const setDensity = (density: AppConfig['ui']['density']) => {
   updateUi('density', density);
 };
 
-// Arrow keys walk the radio group in DOM order and wrap around. Focus follows
-// the selection so repeated presses keep walking the group instead of stalling
-// on the card the keyboard landed on first.
 const setDensityByOffset = (current: AppConfig['ui']['density'], offset: number, event: Event) => {
   const keys = densityOptions.value.map(option => option.key);
   const index = keys.indexOf(current);

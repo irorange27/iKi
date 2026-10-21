@@ -38,18 +38,31 @@ vi.mock('@iki/backend/db/chat_thread', () => ({
   updateChatThread: updateChatThreadMock,
 }));
 
-import { AgentHarness } from '@iki/backend/agent/harness';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
+const callPiChatMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
+  resolvePersonaPrompt: () => 'test persona',
+  getProviderConfig: () => ({
+    type: 'openai',
+    apiKey: 'key-test',
+    baseURL: 'http://127.0.0.1:9/v1',
+  }),
+}));
+
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
+}));
+
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 
 const toolName = 'freeze_probe';
 
-// Exercises the real adapter chain the earlier freeze test missed: the harness
-// copies the runtime context onto the generator, and the AI SDK tool adapter
-// spreads it again per invocation. The turn-start snapshot must survive both
-// copies and keep every tool call of the turn on one workspace root.
 describe('workspace freeze across the harness tool adapter', () => {
   let tempRoot: string;
   let rootA: string;
@@ -105,10 +118,8 @@ describe('workspace freeze across the harness tool adapter', () => {
       needsApproval: false,
       handler: async input => {
         executions++;
-        // The file tool runs inside the same adapter-spread context copy.
         await writeTool.execute({ path: `step-${executions}.txt`, content: input.content });
         if (executions === 1) {
-          // Mid-turn workspace switch (worktree assignment, daemon caller).
           getChatThreadMock.mockReturnValue({ id: 'thread_freeze', workspace_id: 'workspace_b' });
         }
         return { ok: true, step: executions };
@@ -116,7 +127,23 @@ describe('workspace freeze across the harness tool adapter', () => {
     });
     defaultToolRegistry.register(probe);
 
-    const harness = new AgentHarness({
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName, args: { content: 'first' }, id: 'call_freeze_1' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'toolCall', toolName, args: { content: 'second' }, id: 'call_freeze_2' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const harness = startPiTurnHarness({
       providerType: 'openai',
       providerId: 'provider_primary',
       model: 'gpt-4o-mini',
@@ -127,12 +154,6 @@ describe('workspace freeze across the harness tool adapter', () => {
       guardActive: false,
       maxIterations: 5,
       threadId: 'thread_freeze',
-      modelFactory: () =>
-        new FauxModelProvider([
-          fauxToolCall(toolName, { content: 'first' }, { id: 'call_freeze_1' }),
-          fauxToolCall(toolName, { content: 'second' }, { id: 'call_freeze_2' }),
-          fauxText('done'),
-        ]),
     });
 
     await runWithToolRuntimeContext({ threadId: 'thread_freeze' }, async () => {
@@ -142,15 +163,25 @@ describe('workspace freeze across the harness tool adapter', () => {
     });
 
     expect(executions).toBe(2);
-    // Both writes stayed on the frozen root A despite the mid-run switch.
     expect(await fs.readFile(path.join(rootA, 'step-1.txt'), 'utf8')).toBe('first');
     expect(await fs.readFile(path.join(rootA, 'step-2.txt'), 'utf8')).toBe('second');
     await expect(fs.readFile(path.join(rootB, 'step-2.txt'), 'utf8')).rejects.toThrow();
 
-    // A later turn resolves the switched workspace from scratch.
     getChatThreadMock.mockReturnValue({ id: 'thread_freeze', workspace_id: 'workspace_b' });
     executions = 0;
-    const nextHarness = new AgentHarness({
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName, args: { content: 'next-turn' }, id: 'call_freeze_3' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
+    const nextHarness = startPiTurnHarness({
       providerType: 'openai',
       providerId: 'provider_primary',
       model: 'gpt-4o-mini',
@@ -161,11 +192,6 @@ describe('workspace freeze across the harness tool adapter', () => {
       guardActive: false,
       maxIterations: 5,
       threadId: 'thread_freeze',
-      modelFactory: () =>
-        new FauxModelProvider([
-          fauxToolCall(toolName, { content: 'next-turn' }, { id: 'call_freeze_3' }),
-          fauxText('done'),
-        ]),
     });
     await runWithToolRuntimeContext({ threadId: 'thread_freeze' }, async () => {
       for await (const _event of nextHarness.turn({ prompt: 'run once more' })) {

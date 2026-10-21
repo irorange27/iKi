@@ -3,7 +3,7 @@ import { ipcMain } from 'electron';
 import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
 import { defaultToolRegistry } from '@iki/backend/tools';
-import { applyToolApprovalPolicyList } from '@iki/backend/utils/tool_approval';
+import { decideToolApproval } from '@iki/backend/utils/action_risk';
 
 let toolsIpcRegistered = false;
 const toolsIpcLogger = createLogger({ module: 'tools_ipc' });
@@ -21,9 +21,13 @@ export const registerToolsIpc = (): void => {
 
   ipcMain.handle('tools:list', () => {
     try {
-      return applyToolApprovalPolicyList(defaultToolRegistry.getToolMetadata(), {
-        autoApproveToolRequests: shouldAutoApproveToolRequests(),
-      });
+      const autoApprove = shouldAutoApproveToolRequests();
+      return defaultToolRegistry
+        .getToolMetadata()
+        .map(tool => ({
+          ...tool,
+          needsApproval: decideToolApproval(tool, { autoApprove }) === 'ask',
+        }));
     } catch (error: unknown) {
       toolsIpcLogger.event({
         level: 'error',

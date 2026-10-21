@@ -30,7 +30,7 @@ describe('chat_ui message serialization', () => {
     ]);
   });
 
-  it('preserves skill and memory citation parts for persistence and reload', () => {
+  it('preserves skill citation parts for persistence and reload', () => {
     const raw = JSON.stringify({
       role: 'assistant',
       parts: [
@@ -45,11 +45,6 @@ describe('chat_ui message serialization', () => {
               source: 'codex',
             },
           ],
-        },
-        {
-          type: 'memory-retrieval',
-          query: 'project constraints',
-          results: [{ id: 'mem_1', summary: 'Prefer maintainable changes.', score: 0.82 }],
         },
         {
           type: 'composer-invocation',
@@ -85,13 +80,6 @@ describe('chat_ui message serialization', () => {
               source: 'codex',
             },
           ],
-        },
-      },
-      {
-        type: 'data-memory-retrieval',
-        data: {
-          query: 'project constraints',
-          results: [{ id: 'mem_1', summary: 'Prefer maintainable changes.', score: 0.82 }],
         },
       },
       {

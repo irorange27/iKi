@@ -42,10 +42,6 @@ describe('provider_models helpers', () => {
             },
             tool_call: true,
             reasoning: false,
-            // The REAL models.dev shape for vision: a modalities object with
-            // an input array. The flat vision/supportsVision keys do not
-            // exist in the live catalog (verified across all 9048 records),
-            // so vision must be read from here.
             modalities: { input: ['text', 'image'], output: ['text'] },
           },
         },
@@ -232,10 +228,6 @@ describe('provider_models helpers', () => {
   });
 
   it('reads modalities and per-million-token cost rates from a live models.dev record', () => {
-    // The exact record shape models.dev serves for anthropic's Sonnet:
-    // modalities.input carries the vision signal, cost carries USD per
-    // MILLION tokens in snake_case (cache_read/cache_write), and both are
-    // absent from every stored-options path.
     const capability = lookupModelsDevModelCapability(
       {
         anthropic: {
@@ -271,10 +263,6 @@ describe('provider_models helpers', () => {
       source: 'models.dev',
     });
 
-    // Stored options can flip the vision FLAG; the modality list and the
-    // cost rates have no stored counterpart and ride the catalog record.
-    // (displayName falls back to the model id: the stored options carry
-    // none, and an empty string is not a display name.)
     expect(
       mergeModelCapability(capability, 'anthropic', 'claude-sonnet-4-5', {
         supportsVision: false,
@@ -298,8 +286,6 @@ describe('provider_models helpers', () => {
   });
 
   it('leaves cost and modalities absent for unpriced and provider-only models', () => {
-    // A catalog model with no cost record (5% of the catalog) — "unpriced"
-    // must stay distinguishable from "free".
     const unpriced = lookupModelsDevModelCapability(
       {
         openai: {
@@ -314,7 +300,6 @@ describe('provider_models helpers', () => {
     expect(unpriced?.costPerMillionTokens).toBeUndefined();
     expect(unpriced?.modalities).toEqual(['text']);
 
-    // Stored-options capabilities carry neither field.
     expect(createModelCapabilityFromProviderModelOptions('openai', 'm', { displayName: 'M' })).toEqual(
       {
         providerType: 'openai',
@@ -335,16 +320,9 @@ describe('provider_models helpers', () => {
     expect(normalizeModelCapabilityLimits()).toEqual({
       contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
       maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
-      // Regression: this used to be 393_216 (384K). That guess is sent to the
-      // provider as the request's hard max_tokens, so every model whose real
-      // ceiling is lower (e.g. 131_072) rejected every turn with HTTP 400.
-      // Unknown must stay unknown so the provider applies its own default.
       maxOutputTokens: null,
     });
 
-    // Unknown models still assume a modern multimodal reasoner for the INPUT
-    // side (1M window, text/image/reasoning/tools), but assert nothing about
-    // the output ceiling.
     expect(ensureModelCapability('openai', 'gpt-unknown')).toEqual({
       providerType: 'openai',
       providerKey: 'openai',
@@ -361,12 +339,9 @@ describe('provider_models helpers', () => {
   });
 
   it('keeps a declared output limit for a custom provider', () => {
-    // The exact shape that broke every custom provider: no catalog entry, no
-    // stored override. Resolution must not invent a ceiling.
     const resolved = ensureModelCapability('custom', 'zcode/GLM-5.3-Flash');
     expect(resolved.maxOutputTokens).toBeNull();
 
-    // A stored override is trusted as-is (it is the operator's declaration).
     const declared = ensureModelCapability(
       'custom',
       'zcode/GLM-5.3-Flash',

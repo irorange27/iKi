@@ -75,17 +75,14 @@ describe('Agent — basic generation (no tools)', () => {
 
 describe('Agent — tool calls', () => {
   it.skipIf(skipIfNoProvider())('runs a tool-equipped turn without crashing', async () => {
-    // Broad test: just verify the runner works with tools enabled
     const { steps, result } = await collectRun(
       'What time is it in Tokyo right now? If you need to search the web to answer accurately, do so.',
       { tools: ['web_search', 'fetch'] }
     );
 
-    // The runner must produce a result without error
     expect(result).toBeDefined();
     expect(result.response.length).toBeGreaterThan(0);
 
-    // Finish step must exist
     const finish = steps.find(s => s.type === 'turn_end') as TurnEndStep | undefined;
     expect(finish).toBeDefined();
     expect(finish!.text!.length).toBeGreaterThan(0);
@@ -97,10 +94,8 @@ describe('Agent — error resilience', () => {
   it.skipIf(skipIfNoProvider())('handles whitespace-only prompt gracefully', async () => {
     const { result, steps } = await collectRun('   ');
 
-    // Should not throw, should produce a result
     expect(result).toBeDefined();
 
-    // Terminal step should not be an error
     const last = steps[steps.length - 1];
     expect(last?.type).not.toBe('error');
   }, 30000);

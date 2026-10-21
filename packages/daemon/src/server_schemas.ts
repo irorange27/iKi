@@ -3,14 +3,12 @@ import { z } from 'zod';
 import { getDefaultAllowedTools } from './tool_access';
 import type { ChatInvocationOptions } from '@iki/backend/types/chat_invocation';
 import type { McpServerInput } from '@iki/backend/types/mcp';
-import type { ChatExperimentalContext } from '@iki/backend/message/intervention_policy';
+import type { ChatExperimentalContext } from '@iki/backend/message/chat_context_mode';
 import type { AgentRunKind } from '@iki/backend/types/agent_run';
 
 const DEFAULT_SCOPES = [
   'chat:read',
   'chat:write',
-  'memory:read',
-  'memory:write',
   'tools:run',
   'tools:approve',
   'mcp:read',
@@ -30,26 +28,15 @@ const NullableStringRecordSchema = z
 const LooseObjectSchema = z.object({}).passthrough();
 const ExperimentalContextSchema = z
   .object({
-    affect_mode: z.enum(['no_affect', 'tone_only', 'explicit_policy']).optional(),
-    affectMode: z.enum(['no_affect', 'tone_only', 'explicit_policy']).optional(),
     context_mode: z.enum(['default', 'benchmark_clean']).optional(),
     contextMode: z.enum(['default', 'benchmark_clean']).optional(),
-    await_realtime_affect: z.boolean().optional(),
-    awaitRealtimeAffect: z.boolean().optional(),
   })
   .passthrough()
   .transform(
     value =>
       ({
-        ...(value.affect_mode || value.affectMode
-          ? { affectMode: value.affect_mode ?? value.affectMode }
-          : {}),
         ...(value.context_mode || value.contextMode
           ? { contextMode: value.context_mode ?? value.contextMode }
-          : {}),
-        ...(typeof value.await_realtime_affect === 'boolean' ||
-        typeof value.awaitRealtimeAffect === 'boolean'
-          ? { awaitRealtimeAffect: value.await_realtime_affect ?? value.awaitRealtimeAffect }
           : {}),
       }) satisfies ChatExperimentalContext
   );
@@ -111,10 +98,6 @@ const ChatThreadCreatePayloadSchema = z
   .object({
     title: z.string().optional(),
     model: z.string().optional(),
-    // Declared so a headless client can bind a thread to a workspace at create
-    // time (dogfood §A step 4). The row write already accepted it through
-    // .passthrough(); naming it here makes it a contract and rejects a
-    // non-string value instead of silently dropping it to null.
     workspace_id: OptionalNullableTrimmedStringSchema,
   })
   .passthrough();
@@ -157,9 +140,7 @@ const ChatSendPayloadSchema = z
     skillMode: value.skillMode as ChatInvocationOptions['skillMode'],
     maxIterations: value.maxIterations,
     experimentalContext: value.experimental_context,
-    autonomous: value.autonomous as
-      | { maxIterations: number; continuePrompt?: string }
-      | undefined,
+    autonomous: value.autonomous as { maxIterations: number; continuePrompt?: string } | undefined,
     runConfig: value.run_config as
       | { kind?: AgentRunKind; parentRunId?: string; rootRunId?: string }
       | undefined,
@@ -195,21 +176,6 @@ const ApproveToolPayloadSchema = z
     approvalId: value.approval_id,
     approved: value.approved,
     connectionId: value.connection_id,
-  }));
-
-const MemorySearchPayloadSchema = z
-  .object({
-    query: NonEmptyTrimmedStringSchema,
-    limit: z.number().int().positive().optional(),
-    threshold: z.number().optional(),
-    include_incognito: z.boolean().default(false),
-  })
-  .passthrough()
-  .transform(value => ({
-    query: value.query,
-    limit: value.limit,
-    threshold: value.threshold,
-    includeIncognito: value.include_incognito,
   }));
 
 const WebSocketStartMessageSchema = z
@@ -254,7 +220,6 @@ export type ChatThreadCreatePayload = z.infer<typeof ChatThreadCreatePayloadSche
 export type ChatSendPayload = z.infer<typeof ChatSendPayloadSchema>;
 export type ChatMessageCreatePayload = z.infer<typeof ChatMessageCreatePayloadSchema>;
 export type ApproveToolPayload = z.infer<typeof ApproveToolPayloadSchema>;
-export type MemorySearchPayload = z.infer<typeof MemorySearchPayloadSchema>;
 export type DaemonWebSocketMessage = z.infer<typeof DaemonWebSocketMessageSchema>;
 
 export const formatSchemaError = (error: z.ZodError): string =>
@@ -289,9 +254,6 @@ export const parseChatMessageCreatePayload = (value: unknown): ChatMessageCreate
 
 export const parseApproveToolPayload = (value: unknown): ApproveToolPayload =>
   ApproveToolPayloadSchema.parse(value);
-
-export const parseMemorySearchPayload = (value: unknown): MemorySearchPayload =>
-  MemorySearchPayloadSchema.parse(value);
 
 export const parseMcpServerCreatePayload = (value: unknown): McpServerInput =>
   McpServerCreateSchema.parse(value);

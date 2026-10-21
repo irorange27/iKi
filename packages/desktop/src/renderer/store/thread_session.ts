@@ -34,12 +34,6 @@ type DraftComposerSelection = {
   providerId: string | null;
 };
 
-/**
- * Non-serializable runtime collaborators, injected once by the chat view.
- * Everything else lives in pinia state so composer components can read/write
- * thread-scoped preferences directly instead of prop-drilling through
- * ChatView -> ChatInput -> selectors.
- */
 type ThreadSessionRuntime = {
   electronAPI: Pick<ElectronApi, 'chat' | 'toolModel' | 'tasks'>;
   messageStore: ChatMessageStore;
@@ -63,7 +57,6 @@ const normalizeWorkspaceId = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-/** Scratch/worktree workspaces are thread-private — they never carry over. */
 const isThreadPrivateWorkspaceId = (workspaceId: string): boolean =>
   workspaceId.startsWith(THREAD_SCRATCH_WORKSPACE_PREFIX) ||
   workspaceId.startsWith(THREAD_WORKTREE_WORKSPACE_PREFIX);
@@ -80,7 +73,6 @@ const normalizeProviderId = (value: unknown): string | null => {
 };
 
 export const useThreadSessionStore = defineStore('threadSession', () => {
-  // ── State ────────────────────────────────────────────────────────────
   const currentThread = ref<ChatThread | null>(null);
   const currentModel = ref('');
   const currentProviderId = ref<string | null>(null);
@@ -91,12 +83,9 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   const selectedWorkspaceId = ref<string | null>(null);
   const showWelcome = ref(!localStorage.getItem('iki-welcome-seen'));
 
-  // ── Runtime (injected once) ─────────────────────────────────────────
   let runtime: ThreadSessionRuntime | null = null;
   const initRuntime = (deps: ThreadSessionRuntime) => {
     runtime = deps;
-    // Registered here (not in setup) because the watched sources live on the
-    // injected refs; a plain closure variable is not reactive on its own.
     watch(
       () =>
         [
@@ -119,7 +108,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     return runtime;
   };
 
-  // ── Draft selection helpers ─────────────────────────────────────────
   const readPreferredDraftSelection = (): DraftComposerSelection => ({
     model: normalizeModelId(runtime?.preferredDraftModel?.value),
     providerId: normalizeProviderId(runtime?.preferredDraftProviderId?.value),
@@ -161,9 +149,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
 
   const syncApprovalPolicyState = (thread: ChatThread | null) => {
     const metadata = thread ? parseJsonRecord(thread.metadata) : {};
-    // Ask first is the product default, so make it the in-memory default too.
-    // An empty value is not "unset" here — it is transmitted as "no policy"
-    // and makes the backend fall back to legacy flags.
     currentApprovalPolicy.value =
       parseApprovalPolicy(metadata[THREAD_APPROVAL_POLICY_KEY]) ?? 'askRisky';
   };
@@ -309,7 +294,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       .filter(message => message.role === 'user')
       .map(message => extractTextFromMessage(message).trim())
       .filter(text => text.length > 0);
-    // Prefer a substantive message (over 10 chars) for better fallback titles.
     const bestText = userTexts.find(text => text.length > 10) ?? userTexts[0];
     if (!bestText) return null;
     return bestText.slice(0, 50) + (bestText.length > 50 ? '...' : '');
@@ -322,8 +306,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     const assistantMessageCount = messages.filter(message => message.role === 'assistant').length;
     if (assistantMessageCount === 0) return false;
     if (DEFAULT_THREAD_TITLES.has(currentTitle)) return true;
-    // Regenerate on every turn for the first N assistant messages so the title
-    // converges quickly; afterward fall back to periodic updates.
     if (assistantMessageCount <= TITLE_FORCE_REGEN_LIMIT) return true;
     return assistantMessageCount % Math.max(TITLE_REGEN_INTERVAL, 2) === 0;
   };
@@ -380,10 +362,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       const draftPersonality = currentPersonality.value;
       const metadata: Record<string, unknown> = { mode };
       if (draftPersonality) metadata.personality = draftPersonality;
-      // Persist the approval policy at birth so every turn of this thread
-      // carries a concrete policy. Leaving it out made the first tool turn
-      // arrive with no policy, which the backend logs as `approval_policy
-      // degraded` and handles with legacy auto-run defaults.
       metadata[THREAD_APPROVAL_POLICY_KEY] = currentApprovalPolicy.value || 'askRisky';
       const thread = await electronAPI.chat.threads.create({
         title: translateWithLocale(getCurrentLocale(), 'chat.thread.newTitle'),
@@ -391,11 +369,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
         reasoning_effort: draftEffort || null,
         metadata: JSON.stringify(metadata),
         is_incognito: isIncognito.value ? 1 : 0,
-        // A workspace chosen on the starting screen applies to plain chats
-        // too: without it the model is told it has a working directory while
-        // every file/shell tool has nowhere to run. Thread-private scratch and
-        // worktree workspaces still never carry over — they belong to one
-        // thread by construction.
         workspace_id:
           options?.workspaceId ??
           (() => {
@@ -413,10 +386,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       }
       syncIncognitoState(thread);
       syncWorkspaceState(thread);
-      // Read the policy back from the row we just created: it was written into
-      // metadata above, so the composer must reflect the same value. Skipping
-      // this left `currentApprovalPolicy` empty for the whole first turn, and
-      // an empty policy is exactly what reaches the backend as "none given".
       syncApprovalPolicyState(thread);
       syncReasoningEffortState(thread);
       syncPersonalityState(thread);
@@ -443,7 +412,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     try {
       const dbMessages = await electronAPI.chat.messages.list(threadId);
 
-      // Discard if the active thread changed while loading
       if (currentThread.value?.id !== threadId) return;
 
       const rows = Array.isArray(dbMessages)
@@ -498,10 +466,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       syncProviderState(thread);
       syncIncognitoState(thread);
       syncWorkspaceState(thread);
-      // Read the policy back from the row we just created: it was written into
-      // metadata above, so the composer must reflect the same value. Skipping
-      // this left `currentApprovalPolicy` empty for the whole first turn, and
-      // an empty policy is exactly what reaches the backend as "none given".
       syncApprovalPolicyState(thread);
       syncReasoningEffortState(thread);
       syncPersonalityState(thread);
@@ -538,8 +502,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const handleNewChat = async () => {
-    // With a project selected, "new chat" opens the next session under that
-    // project (work binding); without one it stays a plain workspace-free chat.
     const workspaceId = normalizeWorkspaceId(selectedWorkspaceId.value);
     const inheritProject = workspaceId !== null && !isThreadPrivateWorkspaceId(workspaceId);
     return createNewThread({
@@ -636,7 +598,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
               thread_id: threadId,
             },
           });
-          // Rollback optimistic mutations on IPC failure, only if no newer selection has been made
           if (currentModel.value === data.model) {
             currentModel.value = previousModel;
             currentProviderId.value = previousProviderId;
@@ -803,10 +764,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     const normalizedValue = parseApprovalPolicy(nextValue);
     const activeThread = currentThread.value;
     if (!activeThread) {
-      // No thread yet (starting screen): stage the draft choice so the thread
-      // created by the first send inherits it. Returning here silently dropped
-      // the selection, and the new thread then ran under the default policy —
-      // which for a write tool means an approval card the user never asked for.
       currentApprovalPolicy.value = normalizedValue ?? '';
       return;
     }
@@ -919,7 +876,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   return {
-    // state
     threadListRevision,
     currentThread,
     currentModel,
@@ -930,9 +886,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     isIncognito,
     selectedWorkspaceId,
     showWelcome,
-    // runtime
     initRuntime,
-    // actions
     dismissWelcome,
     getCurrentThreadId,
     refreshThreads,

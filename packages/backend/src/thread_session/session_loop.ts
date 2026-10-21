@@ -1,12 +1,10 @@
 import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
 import { getStreamErrorMessage } from '@iki/backend/utils/errors';
-import type { ChatMemory } from './memory';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
 import { createApprovalRecoveryContext } from './approval_types';
 import {
   assembleExecutionPlan,
-  planToHarnessConfig,
   planToRunTrackerParams,
 } from './execution_plan';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
@@ -22,13 +20,10 @@ import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent } from './type
 import { createUiChunkEmitter } from './ui_stream';
 import {
   getCompanion,
-  getAssistantProfileContextMessage,
-  retrieveRelevantContinuity,
 } from './platform';
 import { resolveSkillsSystemPrompt } from './skills';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../workspaces/thread_workspace';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
-import { writeThreadTodoPlan } from '../db/thread_todos';
 import {
   persistAssistantTurnMessage,
   persistUserTurnMessage,
@@ -40,13 +35,13 @@ import {
   recordSessionEvents,
   turnFactsToEvents,
 } from './session_log';
-import type { UiChunkEmitter } from './types';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
 import {
   createTurnDriver,
-  finalizeRunForOutcome,
+  finalizeTurn,
+  finalizeTurnCancelled,
+  finalizeTurnFailure,
   runFailureFromError,
-  terminalFactForOutcome,
   type TurnDriverHandle,
 } from './turn_driver';
 
@@ -54,7 +49,6 @@ const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 
 export const createChatStreaming = (deps: {
   streamCoordinator: ThreadStreamCoordinator;
-  memory: ChatMemory;
   getThreadTitle?: (threadId: string) => string | undefined;
   usage: {
     recordUsageEvent: (params: {
@@ -84,7 +78,7 @@ export const createChatStreaming = (deps: {
       approvalId: string,
       session: {
         target: ChatStreamTarget;
-        history?: import('ai').ModelMessage[];
+        history?: import('../message/model_history').ModelMessage[];
         recoveryContext?: ApprovalRecoveryContext;
       }
     ) => unknown;
@@ -93,20 +87,16 @@ export const createChatStreaming = (deps: {
   };
 }) => {
   const turnPreparer = createChatTurnPreparer({
-    memory: deps.memory,
     resolveSkillsSystemPrompt,
-    getAssistantProfileContextMessage,
-    retrieveRelevantContinuity,
     getRuntimeConfig: () => {
       try {
         const config = getAppConfig();
         return {
-          emotion: config?.memory?.emotion || null,
           autoApproveToolRequests: config?.general?.autoApproveToolRequests === true,
-          memoryContext: config?.memory?.context ?? null,
+          contextBudget: config?.context ?? null,
         };
       } catch {
-        return { emotion: null, autoApproveToolRequests: false, memoryContext: null };
+        return { autoApproveToolRequests: false, contextBudget: null };
       }
     },
   });
@@ -129,10 +119,7 @@ export const createChatStreaming = (deps: {
 
   const stream = async (target: ChatStreamTarget, options: ChatTurnOptions) => {
     const senderId = target.id;
-    // Lease-loss must reach this execution even though the stream also rides
-    // the thread-membership path; the hook is the uniform handle all three
-    // entries share. The controller is wired within this synchronous block,
-    // so a heartbeat callback cannot fire in the gap.
+
     const executionAbort: { current: (() => void) | null } = { current: null };
     const release = coordinator.tryAcquireThreadRun(options.threadId, {
       onExecutionAbort: () => executionAbort.current?.(),
@@ -147,7 +134,10 @@ export const createChatStreaming = (deps: {
         const delaySec = Math.ceil((rateCheck.retryAfterMs ?? 1000) / 1000);
         release();
         uiChunkEmitter.error(`Too many requests on this thread. Retry in ${delaySec}s.`);
-        return { success: false, error: `Too many requests on this thread. Retry in ${delaySec}s.` };
+        return {
+          success: false,
+          error: `Too many requests on this thread. Retry in ${delaySec}s.`,
+        };
       }
     }
 
@@ -170,9 +160,7 @@ export const createChatStreaming = (deps: {
     };
     const companionThinkingKey = `renderer:${senderId}:${Date.now().toString(36)}`;
     coordinator.registerStream(senderId, streamState);
-    // The stream registry answers "who is subscribed"; this registration
-    // answers "who executes run X" — the question a cancel asks. A stream is
-    // cancelled by run id even when the sender has already moved on.
+
     const execution = coordinator.registerExecution({
       runId: null,
       cancel: reason => {
@@ -182,11 +170,9 @@ export const createChatStreaming = (deps: {
     });
 
     let driver: TurnDriverHandle | null = null;
-    // The run tracker exists before the driver does; a failure in the
-    // pre-driver window must still record the turn's terminal fact.
+
     let sessionLogTracker: import('./run_tracker').AgentRunTracker | null = null;
-    // Set once the settle/abort persist runs: late progress writes must not
-    // follow it (the per-message chain serializes, this bounds the ordering).
+
     let turnPersistFinalized = false;
     const notifyRunStatus = () => {
       const run = driver?.getRunTracker().getRun();
@@ -200,16 +186,7 @@ export const createChatStreaming = (deps: {
     };
 
     try {
-      // Turn-start workspace binding (D30), resolved at admission — it stays
-      // synchronous and ahead of every await (preparation, memory retrieval),
-      // so a mid-turn switch cannot be observed. It sits inside the try so a
-      // failing resolution (broken workspace directory, profile error) flows
-      // through the cleanup path and releases the admission instead of
-      // stranding the thread's in-memory guard and SQLite lease. The plan,
-      // the executing harness world, the context projection and the approval
-      // recovery context all share this one snapshot. Resumed turns (retry,
-      // queued resume, blocked resume) carry their original world in the
-      // options and rebind it — they are the same turn, not a new one.
+
       const turnStartWorkspace =
         options.workspaceSelection !== undefined
           ? options.workspaceSelection
@@ -217,12 +194,6 @@ export const createChatStreaming = (deps: {
       const preparedTurn = await turnPreparer.prepareChatTurn({
         ...options,
         workspaceSelection: turnStartWorkspace,
-        onMemoryRetrieved: payload => {
-          uiChunkEmitter.emitMemoryRetrieval({
-            query: payload.query,
-            results: payload.results,
-          });
-        },
       });
       streamState.abortController.signal.throwIfAborted();
       const autonomousMode = options.autonomous && options.autonomous.maxIterations > 1;
@@ -238,30 +209,9 @@ export const createChatStreaming = (deps: {
         });
       }
 
-      if (preparedTurn.affectSignal) {
-        uiChunkEmitter.emitAffectSignal(preparedTurn.affectSignal);
-      }
-
-      getCompanion().setChatPolicy(preparedTurn.interventionPolicy);
-      const affectState = preparedTurn.affectSignal?.state;
-      if (affectState && affectState.valence !== undefined && affectState.arousal !== undefined) {
-        getCompanion().setAffect({
-          label: affectState.label,
-          valence: affectState.valence,
-          arousal: affectState.arousal,
-        });
-      } else {
-        getCompanion().setAffect(null);
-      }
-
       const approvalPolicy = parseApprovalPolicy(options.approvalPolicy);
       if (preparedTurn.enableTools && !approvalPolicy && !preparedTurn.requireApproval) {
-        // A tool turn with no explicit policy. This used to ALSO auto-run
-        // workspace writes — exactly how a frontend wiring gap silently became
-        // "approvals never asked" once. The resolver no longer clears a tool's
-        // own declared approval (#166), so writes that ask for approval still
-        // get it; the warning stays because the missing policy is still a
-        // wiring gap worth surfacing.
+
         chatStreamingLogger.event({
           level: 'warn',
           event: 'chat.stream.approval_policy',
@@ -269,7 +219,9 @@ export const createChatStreaming = (deps: {
           entity: { thread_id: options.threadId || null },
           message:
             'Tool-enabled turn started without an explicit approval policy; legacy defaults may auto-run workspace writes.',
-          data: { hint: 'The composer should send approvalPolicy (ChatInput approvalPolicy prop).' },
+          data: {
+            hint: 'The composer should send approvalPolicy (ChatInput approvalPolicy prop).',
+          },
         });
       }
 
@@ -277,9 +229,10 @@ export const createChatStreaming = (deps: {
       let streamPrompt = preparedTurn.prompt;
 
       if (options.runConfig?.kind === 'handoff-resume' && options.runConfig?.parentRunId) {
+
         const parentRun = agentRunDb.getAgentRun(options.runConfig.parentRunId);
-        const handoffResume = buildHandoffResumeContext({
-          parentRun,
+        const handoffResume = await buildHandoffResumeContext({
+          threadId: parentRun?.threadId ?? options.threadId,
           preparedHistory: preparedTurn.history,
           preparedPrompt: preparedTurn.prompt,
         });
@@ -289,9 +242,6 @@ export const createChatStreaming = (deps: {
         }
       }
 
-      // Turn-start workspace binding (D30): the plan is the single definition
-      // of this execution — harness config, run-row identity/metadata and the
-      // approval recovery context below are all derived from it.
       const plan = assembleExecutionPlan({
         options,
         preparedTurn,
@@ -306,7 +256,6 @@ export const createChatStreaming = (deps: {
             messages: preparedTurn.finalMessages,
           },
           working: {
-            modelMessages: streamHistory,
             accumulatedText: '',
             pendingApprovalIds: [],
             lastStepIndex: 0,
@@ -318,19 +267,18 @@ export const createChatStreaming = (deps: {
       execution.setRunId(runTracker.id);
       sessionLogTracker = runTracker;
 
-      // Session log: the accepted input and the turn's frozen plan are
-      // business facts, recorded before execution begins. A write failure
-      // fails the turn before it runs (ADR 008 F1) — an unrecorded turn must
-      // not execute.
       const userTurnInput = pickUserTurnMessage(options);
       const acceptedInput =
         userTurnInput && asChatUiMessage(userTurnInput.message)
           ? { messageId: userTurnInput.messageId, message: asChatUiMessage(userTurnInput.message)! }
           : undefined;
-      recordSessionEvents(options.threadId ?? '', turnFactsToEvents({
-        ...(acceptedInput ? { input: acceptedInput } : {}),
-        started: { runId: runTracker.id, kind: plan.kind, plan },
-      }));
+      recordSessionEvents(
+        options.threadId ?? '',
+        turnFactsToEvents({
+          ...(acceptedInput ? { input: acceptedInput } : {}),
+          started: { runId: runTracker.id, kind: plan.kind, plan },
+        })
+      );
 
       const approvalContext = preparedTurn.enableTools
         ? createApprovalRecoveryContext({
@@ -340,28 +288,14 @@ export const createChatStreaming = (deps: {
           })
         : undefined;
 
-      // Supply selection (switch items 2c/3a/3b/3c): one selector decides —
-      // the Pi supply layer serves text-only turns and tool turns in every
-      // mode (autonomous chains included) under ANY approval policy (pause +
-      // five-state resume); every other shape stays on the AI SDK harness
-      // until its switch item.
       const harness = selectTurnHarness(plan, streamHistory);
 
-      // An effect-aware continuation (#143) re-enters with the dead chain's
-      // journaled exchange pairs as the history tail and NO user prompt —
-      // the model continues from what already happened. The guard stands
-      // down only for that shape; ordinary empty sends still refuse.
       if (!preparedTurn.prompt.trim() && options.runConfig?.metadata?.continuation !== true) {
         throw new Error('No user prompt provided for streaming');
       }
 
       getCompanion().beginThinking(companionThinkingKey);
 
-      // ponytail: clear stale todo plan from previous turn before starting fresh
-      writeThreadTodoPlan({ threadId: options.threadId, items: [] });
-
-      // Trailing debounce mirrors the write profile the renderer's old
-      // mid-turn persist had; the settle write always supersedes the last one.
       let progressTimer: ReturnType<typeof setTimeout> | null = null;
       let progressPending = false;
       const persistTurnProgress = () => {
@@ -373,9 +307,7 @@ export const createChatStreaming = (deps: {
           if (!progressPending || turnPersistFinalized) return;
           progressPending = false;
           void uiChunkEmitter.buildPersistedMessage().then(persisted => {
-            // The reduce started before the check above; the settle may have
-            // finalized while it ran. Re-check before enqueueing so a late
-            // progress write cannot follow the settle upsert.
+
             if (!persisted || turnPersistFinalized) return;
             return persistAssistantTurnMessage(
               deps.conversation,
@@ -387,25 +319,28 @@ export const createChatStreaming = (deps: {
           });
         }, 300);
       };
-      const activeDriver = createTurnDriver({
-        harness,
-        runTracker,
-        approvalContext,
-        streamHistory,
-        streamPrompt,
-        workspaceSelectionBox: { selection: plan.workspaceSelection },
-      }, {
-        target,
-        plan,
-        streamState,
-        uiChunkEmitter,
-        notifyRunStatus,
-        drainSteerMessages: () => coordinator.takeSteerMessages(senderId),
-        onToolActivity: persistTurnProgress,
-        onRunIdChanged: runId => execution.setRunId(runId),
-        registerChildRunAlias: coordinator.registerChildRunAlias,
-        approvals: deps.approvals,
-      });
+      const activeDriver = createTurnDriver(
+        {
+          harness,
+          runTracker,
+          approvalContext,
+          streamHistory,
+          streamPrompt,
+          workspaceSelectionBox: { selection: plan.workspaceSelection },
+        },
+        {
+          target,
+          plan,
+          streamState,
+          uiChunkEmitter,
+          notifyRunStatus,
+          drainSteerMessages: () => coordinator.takeSteerMessages(senderId),
+          onToolActivity: persistTurnProgress,
+          onRunIdChanged: runId => execution.setRunId(runId),
+          registerChildRunAlias: coordinator.registerChildRunAlias,
+          approvals: deps.approvals,
+        }
+      );
       driver = activeDriver;
 
       const streamResult = await activeDriver.run();
@@ -431,9 +366,6 @@ export const createChatStreaming = (deps: {
           },
         });
 
-        // Attach the turn's usage + perf metrics to the assistant message so
-        // the renderer can aggregate session stats (and persist them with the
-        // message). Must run before finish()/abort() terminates the emitter.
         uiChunkEmitter.emitTokenUsage({
           ...(streamResult.usage ?? {}),
           ...(typeof streamResult.lastStepInputTokens === 'number'
@@ -452,49 +384,23 @@ export const createChatStreaming = (deps: {
         });
       }
 
-      const finalResponse =
-        activeDriver.getAccumulatedResponse() || streamResult.response;
+      const finalResponse = activeDriver.getAccumulatedResponse() || streamResult.response;
       const finalRunTracker = activeDriver.getRunTracker();
 
-      // Event-first (ADR 008 F1): the turn's facts reach the session log
-      // BEFORE the run row finalizes — a write failure fails the turn through
-      // the catch below while the row is still non-terminal, never leaving a
-      // terminal row whose outcome was never recorded. The record also
-      // precedes finish(): a terminated emitter drops error chunks, so the
-      // failure must be caught while the failure channel is still open.
+      const lastFacts = activeDriver.getLastFacts();
+
+      let settledMessageRef: Awaited<
+        ReturnType<typeof uiChunkEmitter.buildPersistedMessage>
+      > = undefined;
       if (options.threadId) {
-        // Durable assistant record — partial (approval-pending) or completed.
-        // Upsert converges with any late progress write on the same id.
-        // Parts close first (without terminating the channel) so the built
-        // message carries their final state.
+
         uiChunkEmitter.settleParts();
         const settledMessage = (await uiChunkEmitter.buildPersistedMessage()) ?? {
           id: uiChunkEmitter.messageId,
           role: 'assistant' as const,
           parts: [],
         };
-        // Session log: committed output + how the turn ended. The terminal
-        // fact mirrors finalizeRunForOutcome's outcome mapping (the
-        // event-side twin; undefined for an approval pause).
-        const terminal = terminalFactForOutcome(streamResult);
-        recordSessionEvents(options.threadId, turnFactsToEvents({
-          committed: {
-            runId: finalRunTracker.id,
-            messageId: settledMessage.id,
-            message: settledMessage as never,
-            transport: 'stream',
-          },
-          ...(terminal
-            ? {
-                terminal: {
-                  runId: finalRunTracker.id,
-                  status: terminal.status,
-                  ...(terminal.finishReason ? { finishReason: terminal.finishReason } : {}),
-                  ...(terminal.errorText ? { errorText: terminal.errorText } : {}),
-                },
-              }
-            : {}),
-        }));
+        settledMessageRef = settledMessage;
         turnPersistFinalized = true;
         await persistAssistantTurnMessage(
           deps.conversation,
@@ -507,8 +413,21 @@ export const createChatStreaming = (deps: {
       if (streamResult.outcome !== 'awaiting-approval') {
         uiChunkEmitter.finish();
       }
-      finalizeRunForOutcome(finalRunTracker, streamResult, {
+
+      finalizeTurn({
+        tracker: finalRunTracker,
+        outcome: streamResult.outcome,
         text: finalResponse,
+        ...(lastFacts.usage ? { usage: lastFacts.usage } : {}),
+        ...(lastFacts.pendingToolCalls && lastFacts.pendingToolCalls.length > 0
+          ? { pendingToolCalls: lastFacts.pendingToolCalls }
+          : {}),
+        ...(streamResult.outcome === 'handoff' ? { handoff: streamResult.handoff } : {}),
+        ...(options.threadId ? { threadId: options.threadId } : {}),
+        transport: 'stream',
+        ...(settledMessageRef
+          ? { committed: { messageId: settledMessageRef.id, message: settledMessageRef as never } }
+          : {}),
         notify: notifyRunStatus,
       });
       return {
@@ -520,49 +439,40 @@ export const createChatStreaming = (deps: {
     } catch (error: unknown) {
       if (streamState.cancelled) {
         if (coordinator.peekStream(senderId) === streamState) uiChunkEmitter.abort();
+        const cancelledTracker = driver?.getRunTracker() ?? sessionLogTracker;
+        let abortedMessage:
+          | { id: string; role: 'assistant'; parts: [] }
+          | Awaited<ReturnType<typeof uiChunkEmitter.buildPersistedMessage>>
+          | undefined;
         if (options.threadId) {
           turnPersistFinalized = true;
-          const abortedMessage = (await uiChunkEmitter.buildPersistedMessage()) ?? {
+          const persistedAbort = (await uiChunkEmitter.buildPersistedMessage()) ?? {
             id: uiChunkEmitter.messageId,
             role: 'assistant' as const,
             parts: [],
           };
+          abortedMessage = persistedAbort;
           await persistAssistantTurnMessage(
             deps.conversation,
             options.threadId,
-            abortedMessage,
+            persistedAbort,
             'stream-abort',
             userTurnMessageId
           );
-          const cancelledTracker = driver?.getRunTracker() ?? sessionLogTracker;
-          // A cancel while blocked records turn_cancelled while the run row
-          // stays blocked (the approval remains resumable) — intentional
-          // until the resume slice unifies the two. This is a failure-path
-          // terminal: the record must not mask the cancellation being
-          // reported (ADR 008 F1).
-          if (cancelledTracker) {
-            recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-              committed: {
-                runId: cancelledTracker.id,
-                messageId: abortedMessage.id,
-                message: abortedMessage as never,
-                transport: 'stream-abort',
-              },
-              terminal: {
-                runId: cancelledTracker.id,
-                status:
-                  cancelledTracker.getRun().status === 'running' ||
-                  cancelledTracker.getRun().status === 'blocked'
-                    ? 'cancelled'
-                    : cancelledTracker.getRun().status,
-              },
-            }));
-          }
         }
-        const activeRunTracker = driver?.getRunTracker();
-        if (activeRunTracker?.getRun().status === 'running') {
-          activeRunTracker.markCancelled();
-          notifyRunStatus();
+        if (cancelledTracker) {
+
+          const rowStatus = cancelledTracker.getRun().status;
+          finalizeTurnCancelled({
+            tracker: cancelledTracker,
+            ...(abortedMessage
+              ? { committed: { messageId: abortedMessage.id, message: abortedMessage as never } }
+              : {}),
+            ...(options.threadId ? { threadId: options.threadId } : {}),
+            transport: 'stream-abort',
+            ...(rowStatus !== 'running' ? { keepRowStatus: rowStatus } : {}),
+            notify: notifyRunStatus,
+          });
         }
         return { success: true, stopped: streamState.stoppedByUser };
       }
@@ -581,27 +491,28 @@ export const createChatStreaming = (deps: {
           user_facing_error: message,
         },
       });
-      // The pre-execution window (run row created, driver not yet built) has
-      // no driver tracker — the stream's own tracker marks the failure.
-      const activeRunTracker = driver?.getRunTracker() ?? sessionLogTracker;
-      if (activeRunTracker?.getRun().status === 'running') {
-        activeRunTracker.markFailed(runFailureFromError(error, message));
-        notifyRunStatus();
-      }
-      // Session log: a failed turn is a terminal fact even when no assistant
-      // row is persisted on this path. The user-facing outcome is the failure
-      // regardless of which segment reached it; the record itself is
-      // loud-guarded — losing it must not mask the reported failure
-      // (ADR 008 F1).
-      const failedTracker = activeRunTracker ?? sessionLogTracker;
-      if (options.threadId && failedTracker) {
-        recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-          terminal: {
-            runId: failedTracker.id,
+
+      const failedTracker = driver?.getRunTracker() ?? sessionLogTracker;
+      if (failedTracker) {
+        const retry = runFailureFromError(error, message);
+        finalizeTurnFailure({
+          tracker: failedTracker,
+          failure: {
             status: 'failed',
             errorText: message,
+            ...(retry.code ? { code: retry.code } : {}),
+            ...(typeof retry.retryable === 'boolean' ? { retryable: retry.retryable } : {}),
           },
-        }));
+
+          ...(typeof retry.text === 'string' && retry.text.length > 0
+            ? { text: retry.text }
+            : {}),
+          ...(options.threadId ? { threadId: options.threadId } : {}),
+          transport: 'stream',
+          skipRow: failedTracker.getRun().status !== 'running',
+          loudGuard: true,
+          notify: notifyRunStatus,
+        });
       }
       uiChunkEmitter.error(message);
       return { success: false, error: message };
@@ -609,14 +520,10 @@ export const createChatStreaming = (deps: {
       getCompanion().clearConversationPreview();
       getCompanion().endThinking(companionThinkingKey);
       if (driver?.hasToolCalls() && !streamState.cancelled) {
-        const threadLabel =
-          options.threadId ? deps.getThreadTitle?.(options.threadId) : undefined;
+        const threadLabel = options.threadId ? deps.getThreadTitle?.(options.threadId) : undefined;
         getCompanion().notifyReplyComplete(threadLabel);
       }
-      if (
-        coordinator.peekStream(senderId) === streamState &&
-        !driver?.isAwaitingApproval()
-      ) {
+      if (coordinator.peekStream(senderId) === streamState && !driver?.isAwaitingApproval()) {
         deps.approvals.cleanupPendingSessionsForSender(senderId, uiChunkEmitter.messageId);
       }
       if (coordinator.peekStream(senderId) === streamState && options.threadId) {

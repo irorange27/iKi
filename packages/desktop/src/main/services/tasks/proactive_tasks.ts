@@ -15,13 +15,6 @@ const SCHEDULER_TICK_MS = 30 * 1000;
 
 let schedulerTimer: ReturnType<typeof setInterval> | undefined;
 
-/**
- * Stage E: the execution business (prompt construction, run orchestration,
- * result persistence, delivery) lives in backend/tasks/proactive_task_runner.
- * This file is the desktop assembly: it supplies the Electron capabilities —
- * desktop notifications, renderer push, companion nudge — and the chat
- * service, and owns the scheduler clock.
- */
 const sendPushEventToRenderers = (payload: unknown) => {
   for (const win of getAllBrowserWindows()) {
     try {

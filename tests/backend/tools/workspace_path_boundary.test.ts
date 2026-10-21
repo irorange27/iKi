@@ -1,13 +1,3 @@
-// Audit H5: the workspace path resolvers validated the REALPATH of a target
-// but returned the UNRESOLVED absolute path, so a consumer that opened the
-// return value operated on a path the boundary check never examined — a
-// check-then-use window where a symlink could be swapped between the check
-// and the use.
-//
-// The contract is now two-part: `validated` is the path the check examined
-// and the only one safe to open; `display` keeps the caller's own spelling so
-// tool results show the path they used, not a host-resolved form (macOS
-// resolves /var to /private/var).
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -61,10 +51,8 @@ describe('workspace path resolvers return the validated path', () => {
       resolveReadableWorkspacePath('link.txt')
     );
 
-    // The check examined the realpath, so that is what a caller may open.
     expect(resolved.validated).toBe(await fs.realpath(resolved.validated));
     expect(resolved.validated).toBe(path.join(await fs.realpath(root), 'inside.txt'));
-    // Results still echo the path the caller used.
     expect(resolved.display).toBe(path.join(root, 'link.txt'));
   });
 
@@ -94,8 +82,6 @@ describe('workspace path resolvers return the validated path', () => {
       resolveWritableWorkspacePath('nested/new.txt')
     );
 
-    // `nested/` does not exist, so the validated ancestor is the real workspace
-    // root and the missing segments are the caller's own literal components.
     const realRoot = await fs.realpath(root);
     expect(resolved.validated).toBe(path.join(realRoot, 'nested/new.txt'));
     expect(path.dirname(resolved.validated)).toBe(path.join(realRoot, 'nested'));
@@ -103,11 +89,6 @@ describe('workspace path resolvers return the validated path', () => {
   });
 
   it('writable: writing through a symlinked file targets the validated path', async () => {
-    // The write path is the one that matters: a tool that WRITES to the
-    // caller's unresolved spelling follows a swapped component. Pin that the
-    // write target is the validated path. This case exists because the first
-    // cut of this fix left WriteFileTool on `display` and the suite did not
-    // notice — the boundary test only covered the resolvers.
     await fs.writeFile(path.join(root, 'real.txt'), 'original');
     await fs.symlink(path.join(root, 'real.txt'), path.join(root, 'alias.txt'));
 
@@ -115,9 +96,6 @@ describe('workspace path resolvers return the validated path', () => {
       resolveWritableWorkspacePath('alias.txt')
     );
 
-    // The alias must not leak into the path the tool writes: the validated
-    // path is the link TARGET, so a write lands on real.txt through the
-    // checked path rather than the unchecked alias.
     expect(resolved.validated).not.toBe(resolved.display);
     expect(resolved.validated).toBe(path.join(await fs.realpath(root), 'real.txt'));
   });

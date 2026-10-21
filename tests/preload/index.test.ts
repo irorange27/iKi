@@ -5,7 +5,6 @@ import type { ElectronApi } from '@iki/backend/types/electron_api';
 const invokeMock = vi.fn();
 const onMock = vi.fn();
 const removeListenerMock = vi.fn();
-const removeAllListenersMock = vi.fn();
 const sendMock = vi.fn();
 
 let exposedApi: ElectronApi | null = null;
@@ -20,7 +19,6 @@ vi.mock('electron', () => ({
     invoke: (...args: unknown[]) => invokeMock(...args),
     on: (...args: unknown[]) => onMock(...args),
     removeListener: (...args: unknown[]) => removeListenerMock(...args),
-    removeAllListeners: (...args: unknown[]) => removeAllListenersMock(...args),
     send: (...args: unknown[]) => sendMock(...args),
   },
 }));
@@ -37,7 +35,6 @@ describe('preload task IPC payload serialization', () => {
     invokeMock.mockReset();
     onMock.mockReset();
     removeListenerMock.mockReset();
-    removeAllListenersMock.mockReset();
     sendMock.mockReset();
     await loadPreload();
   });
@@ -163,7 +160,6 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.updates.check();
     await exposedApi.updates.install();
     exposedApi.updates.onStatusChanged(updateStatusChanged);
-    exposedApi.updates.removeAllListeners();
 
     await exposedApi.providers.list();
     await exposedApi.providers.get('provider_1');
@@ -195,10 +191,8 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.chat.stopStream();
     exposedApi.chat.onUiChunk(chatChunk);
     await exposedApi.chat.approveTool('approval_1', true);
-    exposedApi.chat.removeAllListeners();
     await exposedApi.chat.threads.list();
     await exposedApi.chat.threads.get('thread_1');
-    await exposedApi.chat.threads.getTodoPlan('thread_1');
     await exposedApi.chat.threads.create({ title: 'Thread' });
     await exposedApi.chat.threads.clear('thread_1', { title: 'Cleared' });
     await exposedApi.chat.threads.update('thread_1', { title: 'Updated' });
@@ -206,32 +200,11 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.chat.messages.list('thread_1');
     await exposedApi.chat.messages.get('message_1');
     await exposedApi.chat.messages.update('message_1', { message: '{}' });
-    await exposedApi.chat.messages.delete('message_1');
     await exposedApi.chat.messages.truncateAfter('thread_1', 'message_1');
     await exposedApi.chat.runs.list('thread_1');
     await exposedApi.chat.runs.getTrace('run_1');
     await exposedApi.chat.runs.getTree('run_root_1');
     await exposedApi.chat.usage.summary('30d');
-
-    await exposedApi.memory.short.list('thread_1', 5);
-    await exposedApi.memory.short.add({
-      thread_id: 'thread_1',
-      message_id: 'message_1',
-      role: 'user',
-      content: 'hello',
-    });
-    await exposedApi.memory.short.listAll(5);
-    await exposedApi.memory.long.add({
-      thread_id: 'thread_1',
-      summary: 'summary',
-    });
-    await exposedApi.memory.long.update('memory_1', { summary: 'updated' });
-    await exposedApi.memory.long.delete('memory_1');
-    await exposedApi.memory.long.list('thread_1', 5);
-    await exposedApi.memory.long.listAll(5);
-    await exposedApi.memory.long.search('thread_1', 'query', { limit: 3 });
-    await exposedApi.memory.long.searchAll('query', { limit: 3 });
-    await exposedApi.memory.affect.get('thread_1');
 
     await exposedApi.workspaces.list();
     await exposedApi.workspaces.get('workspace_1');
@@ -265,7 +238,6 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.speech.listModels();
     await exposedApi.speech.downloadModel('base.en');
     exposedApi.speech.onDownloadProgress(speechProgress);
-    exposedApi.speech.removeAllListeners();
 
     await exposedApi.skills.list();
     await exposedApi.skills.roots();
@@ -279,9 +251,7 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.tasks.get('task_1');
     await exposedApi.tasks.runNow('task_1');
     exposedApi.tasks.onPush(taskPush);
-    exposedApi.tasks.removeAllListeners();
     exposedApi.awaiters.onPush(awaiterPush);
-    exposedApi.awaiters.removeAllListeners();
 
     await exposedApi.mcp.list();
     await exposedApi.mcp.add({ name: 'Docs', transport: 'stdio', command: 'node' });
@@ -323,29 +293,16 @@ describe('preload task IPC payload serialization', () => {
         'chat:approve-tool',
         'chat:threads:list',
         'chat:threads:get',
-        'chat:threads:todo:get',
         'chat:threads:create',
         'chat:threads:update',
         'chat:threads:delete',
         'chat:messages:list',
         'chat:messages:get',
         'chat:messages:update',
-        'chat:messages:delete',
         'chat:runs:list',
         'chat:runs:trace:get',
         'chat:runs:tree:get',
         'chat:usage:summary',
-        'memory:short:list',
-        'memory:short:add',
-        'memory:short:listAll',
-        'memory:long:add',
-        'memory:long:update',
-        'memory:long:delete',
-        'memory:long:list',
-        'memory:long:listAll',
-        'memory:long:search',
-        'memory:long:searchAll',
-        'memory:affect:get',
         'workspaces:list',
         'workspaces:get',
         'workspaces:getByPath',
@@ -401,14 +358,6 @@ describe('preload task IPC payload serialization', () => {
         'speech:download-progress',
         'tasks:push',
         'companion:updated',
-      ])
-    );
-    expect(removeAllListenersMock.mock.calls.map(call => call[0])).toEqual(
-      expect.arrayContaining([
-        'chat:ui-chunk',
-        'updates:status-changed',
-        'speech:download-progress',
-        'tasks:push',
       ])
     );
     expect(removeListenerMock).toHaveBeenCalledWith('providers:updated', expect.any(Function));

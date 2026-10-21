@@ -154,6 +154,7 @@ const createElectronApi = (options?: {
           return options?.configured ?? true;
         }),
         stopStream: vi.fn(async () => ({ success: true })),
+        onRunStatus: vi.fn(() => () => undefined),
         stream,
         threads: {
           get: vi.fn(async () => options?.thread ?? null),
@@ -194,7 +195,6 @@ const createElectronApi = (options?: {
   };
 };
 
-// Panel content renders through a reka body portal — query document-wide.
 const findInPortal = (selector: string) => {
   const match = Array.from(document.querySelectorAll(selector)).at(-1);
   if (!match) throw new Error(`Element not found in portal: ${selector}`);
@@ -285,9 +285,6 @@ const mountChatInput = async (options?: {
   const pinia = createPinia();
   setActivePinia(pinia);
   const threadSession = useThreadSessionStore();
-  // Workspace/permission actions persist through the runtime; without it the
-  // store throws after the click handlers resolve and vitest reports
-  // unhandled rejections even though the assertions pass.
   threadSession.initRuntime({
     electronAPI: api as never,
     messageStore: { setMessages: vi.fn(), getMessages: vi.fn(async () => []) } as never,
@@ -331,45 +328,6 @@ describe('ChatInput', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders the thread todo plan above the composer shell and hides it when absent', async () => {
-    const activePlan = {
-      thread_id: 'thread_1',
-      items: [
-        { id: '1', text: 'Inspect state', status: 'completed' },
-        { id: '2', text: 'Ship composer card', status: 'in_progress' },
-        { id: '3', text: 'Task three', status: 'pending' },
-        { id: '4', text: 'Task four', status: 'pending' },
-        { id: '5', text: 'Task five', status: 'pending' },
-        { id: '6', text: 'Task six', status: 'pending' },
-      ],
-      created_at: '2026-03-30T00:00:00.000Z',
-      updated_at: '2026-03-30T00:01:00.000Z',
-    };
-
-    const { wrapper } = await mountChatInput({
-      props: {
-        todoPlan: activePlan,
-      },
-    });
-
-    const plan = wrapper.find('.chat-input-plan');
-    const composer = wrapper.find('.chat-input-container');
-
-    expect(plan.exists()).toBe(true);
-    expect(plan.text()).toContain('1 out of 6 tasks completed');
-    expect(plan.text()).toContain('Ship composer card');
-    expect(plan.text()).toContain('Task five');
-    expect(plan.text()).not.toContain('Task six');
-    expect(
-      plan.element.compareDocumentPosition(composer.element) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-
-    await wrapper.setProps({ todoPlan: null });
-    await flushPromises();
-
-    expect(wrapper.find('.chat-input-plan').exists()).toBe(false);
-  });
-
   it('filters provider models and emits the selected provider/model pair', async () => {
     const deepseek = buildProvider({
       id: 'deepseek',
@@ -391,7 +349,6 @@ describe('ChatInput', () => {
     await wrapper.find('.model-selector-trigger').trigger('click');
     await flushPromises();
 
-    // The menu opens on the root pane; models live behind the drill-in cell.
     const menuCells = wrapper.findAll('.model-menu-cell');
     expect(menuCells.length).toBeGreaterThan(0);
     await menuCells[0].trigger('click');
@@ -505,8 +462,6 @@ describe('ChatInput', () => {
     await wrapper.find('.model-selector-trigger').trigger('click');
     await flushPromises();
 
-    // Drill into the provider pane the same way ChatModelSelector's own
-    // tests do for the new root-pane menu.
     const updateMenuCells = wrapper.findAll('.model-menu-cell');
     expect(updateMenuCells.length).toBeGreaterThan(0);
     await updateMenuCells[0].trigger('click');
@@ -937,8 +892,6 @@ describe('ChatInput', () => {
       },
     });
 
-    // The tooltip moved into the hover panel; the percent is encoded on the
-    // ring arc as stroke-dashoffset = circumference × (1 − percent/100), r=8.
     const ringCircumference = 2 * Math.PI * 8;
     expect(
       Number(wrapper.find('.composer-context-ring-arc').attributes('stroke-dashoffset'))
@@ -992,8 +945,6 @@ describe('ChatInput', () => {
       },
     });
 
-    // The tooltip moved into the hover panel; the percent is encoded on the
-    // ring arc as stroke-dashoffset = circumference × (1 − percent/100), r=8.
     const ringCircumference = 2 * Math.PI * 8;
     expect(
       Number(wrapper.find('.composer-context-ring-arc').attributes('stroke-dashoffset'))
@@ -1083,9 +1034,6 @@ describe('ChatInput', () => {
     await wrapper.find('.send-btn').trigger('click');
     await flushPromises();
 
-    // Manual tool/MCP selection is gone: a thread's persisted allowlist must
-    // never leak into the turn, or it silently restricts tools with no UI to
-    // see or clear it.
     const preparePayload = prepareMessageSend.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(preparePayload).not.toHaveProperty('tools');
     expect(preparePayload).not.toHaveProperty('mcpServerIds');

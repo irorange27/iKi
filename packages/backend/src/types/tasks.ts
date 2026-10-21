@@ -79,7 +79,7 @@ export interface ProactiveTask {
   provider_id?: string | null;
   model: string;
   tool_mode: ProactiveTaskToolMode;
-  tools?: string | null; // JSON string, default null
+  tools?: string | null;
   thread_id?: string | null;
   notify: boolean;
   last_run_at?: string | null;

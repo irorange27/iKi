@@ -2,6 +2,7 @@ import { createLogger } from '@iki/backend/logger';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import type { AgentRunStatus } from '@iki/backend/types/agent_run';
 import type { ExecutionPlan } from './execution_plan';
+import { parseExecutionPlanValue } from './execution_plan_codec';
 import {
   appendSessionFacts,
   getSessionEvents,
@@ -32,27 +33,11 @@ export class SessionLogWriteError extends Error {
   }
 }
 
-/**
- * The Session log's v1 event vocabulary and the turn-fact recorder. Events
- * are business facts about a conversation's turns — what input was accepted,
- * under which plan a turn started, what the model committed, how the turn
- * ended — not SDK stream deltas. UI rows, run audit and working state are
- * rebuildable projections; this stream is the record they must be derivable
- * from (stage C: D21–D23).
- */
-
 export const INPUT_ACCEPTED = 'input_accepted';
 export const TURN_STARTED = 'turn_started';
-/** One inline tool execution (issue #145): an effect that happened without
- * entering the five-state owner's admission (policy-permitted calls the
- * model loop executes directly). Single fact — the turn owns the execution,
- * no cross-process admission to record. Additive event type: old readers
- * degrade unknown types to no-ops. */
+
 export const TOOL_EXECUTED = 'tool_executed';
-/** A steering input the human sent mid-turn (audit H6). The driver splices
- * it into the next prompt; without this fact the log holds only the original
- * INPUT_ACCEPTED, so a recovery replay cannot see that the human ever
- * steered. Additive: old readers degrade unknown types to no-ops. */
+
 export const STEERING_INPUT_ACCEPTED = 'steering_input_accepted';
 export const MODEL_TEXT_COMMITTED = 'model_text_committed';
 export const MODEL_OUTPUT_COMMITTED = 'model_output_committed';
@@ -61,35 +46,17 @@ export const TURN_FAILED = 'turn_failed';
 export const TURN_CANCELLED = 'turn_cancelled';
 export const APPROVAL_REQUESTED = 'approval_requested';
 export const APPROVAL_DECIDED = 'approval_decided';
-/** A user-driven history rewrite (edit/resend truncate): the conversation
- * rows after `afterMessageId` were deleted in the SAME SQLite transaction
- * that appended this fact, so the pure replay yields the truncated view —
- * the display projection and the recovery authority cannot disagree
- * (ADR 008). Additive vocabulary: a reader that does not know this type
- * degrades it to a no-op (it keeps showing the deleted tail until it
- * updates). */
+
 export const MESSAGES_TRUNCATED = 'messages_truncated';
 
-/** Payload schema version — bump when a payload's shape changes in a MEANING
- * way: a field reinterpreted, removed, or made required. Additive OPTIONAL
- * fields extend the vocabulary without a bump (old readers ignore unknown
- * payload fields; new readers default absence to the old shape) — issue #139
- * adds `runId`/`system` to input_accepted this way. */
 export const SESSION_EVENT_VERSION = 1;
 
 export type InputAcceptedPayload = {
   messageId: string;
   message: ChatUiMessage;
-  /** The run the input was accepted for — recorded by id-less wake/task
-   * sends (issue #139); the recovery gate joins it against the retried
-   * run's ancestry so a later send's task is never re-run under an earlier
-   * run's plan. Chat inputs (client message ids) omit it. */
+
   runId?: string;
-  /** The caller's system-message contents, recorded by id-less wake/task
-   * sends: the task's agent prompt is execution config the plan never
-   * captured (plan.systemPrompt is the template join), and a resume without
-   * it would re-run the task under the wrong persona. Chat inputs omit it —
-   * their system assembly belongs to the preparer. */
+
   system?: string[];
 };
 
@@ -99,13 +66,10 @@ export type TurnStartedPayload = {
   plan: ExecutionPlan;
 };
 
-/** A mid-turn steering input (audit H6). `messageId` is the rebuilt user
- * message's id and must differ from the assistant's, or the assistant's
- * MODEL_OUTPUT_COMMITTED fact overwrites this message in the replay. */
 export type SteeringInputAcceptedPayload = {
   runId: string;
   messageId: string;
-  /** The batch the steer was drained in, so the id is unique per turn. */
+
   batchIndex: number;
   text: string;
 };
@@ -113,7 +77,7 @@ export type SteeringInputAcceptedPayload = {
 export type ModelTextCommittedPayload = {
   runId: string;
   messageId: string;
-  /** Within-run counter in commit order — replay concatenates in log order. */
+
   seq: number;
   text: string;
 };
@@ -121,8 +85,7 @@ export type ModelTextCommittedPayload = {
 export type ModelOutputCommittedPayload = {
   runId: string;
   messageId: string;
-  /** The committed assistant message (partial at an approval pause, final at
-   *  completion) — the same facts the UI projection row carries. */
+
   message: ChatUiMessage;
   transport: string;
 };
@@ -150,25 +113,13 @@ export type ApprovalDecidedPayload = {
   source: 'user' | 'timeout' | 'system';
 };
 
-/** A user-driven truncation (edit/resend), recorded by
- * `thread_session/history_truncation.ts` in the SAME transaction that
- * deleted the rows. `deletedMessageIds` is the explicit id list, so replay
- * removes exactly the rows the display projection lost — no second slicing
- * rule to keep in sync with `getChatMessages`' ORDER BY. */
 export type MessagesTruncatedPayload = {
-  /** The kept anchor: the edited/resent message whose tail was removed. */
+
   afterMessageId: string;
   deletedMessageIds: string[];
   truncatedAt: string;
 };
 
-/** Append observations atomically. Throws SessionLogWriteError on failure:
- * an unrecorded fact must not be indistinguishable from a recorded one
- * (ADR 008), so pre-execution and success-path callers let it fail the turn.
- * A failure-path terminal fact — one reported by a catch/cancel/recovery
- * handler — must not mask the failure it is recording; those call
- * recordFailureTerminalEvent. Any other degradation needs an explicit catch
- * with a stated reason. */
 export const recordSessionEvents = (
   threadId: string,
   events: NewSessionEvent[]
@@ -181,11 +132,6 @@ export const recordSessionEvents = (
   }
 };
 
-/** Record a terminal fact on a path that is already reporting a failure
- * (catch-path turn_failed, cancel/lease-loss barriers, approval expiry,
- * startup reclamation). A lost record is logged at error level; it never
- * masks the original failure reaching its subscriber, and it never
- * downgrades the event itself to warn-and-continue. */
 export const recordFailureTerminalEvent = (
   threadId: string,
   events: NewSessionEvent[]
@@ -212,7 +158,6 @@ export type TurnFact = {
   terminal?: TurnTerminalPayload;
 };
 
-/** Convenience ordering: input → start → committed output → terminal. */
 export const turnFactsToEvents = (facts: TurnFact): NewSessionEvent[] => {
   const events: NewSessionEvent[] = [];
   if (facts.input) events.push({ type: INPUT_ACCEPTED, version: SESSION_EVENT_VERSION, payload: facts.input });
@@ -231,14 +176,14 @@ export const turnFactsToEvents = (facts: TurnFact): NewSessionEvent[] => {
   return events;
 };
 
-// ── Pure replay ─────────────────────────────────────────────────────────
-
 export type RebuiltTurn = {
   runId: string;
   kind: string;
   status: AgentRunStatus;
   finishReason?: string;
   errorText?: string;
+
+  plan?: ExecutionPlan;
 };
 
 export type RebuiltApproval = {
@@ -259,19 +204,12 @@ export type RebuiltThreadView = {
   messages: ChatUiMessage[];
   turns: RebuiltTurn[];
   approvals: RebuiltApproval[];
-  /** The system-message contents recorded with the LAST input_accepted fact
-   * (issue #139): the system config travels bound to its input fact — a
-   * recovery consumer rebuilding a request from the replay pairs the tail
-   * input with THESE prompts. Chat inputs carry none, so chat-turn recovery
-   * sees an empty array and its preparer-owned assembly is untouched. */
+
   inputSystemPrompts: string[];
-  /** The `runId` of the LAST input_accepted fact, when it carries one
-   * (issue #139). The recovery gate joins it against the retried run's
-   * ancestry; absent for chat facts and pre-#139 rows, which skip the join. */
+
   inputRunId?: string;
 };
 
-/** Structural guard for message payloads — replay and recording share it. */
 export const asChatUiMessage = (value: unknown): ChatUiMessage | null => {
   if (typeof value !== 'object' || value === null) return null;
   const candidate = value as { id?: unknown; role?: unknown; parts?: unknown };
@@ -280,25 +218,11 @@ export const asChatUiMessage = (value: unknown): ChatUiMessage | null => {
   return value as ChatUiMessage;
 };
 
-/**
- * Rebuild the conversation view from the event stream alone. Pure: reads
- * rows, applies them in revision order, calls nothing — no model, no tools,
- * no run rights (acceptance item 2). Later slices extend the reducer to the
- * queue/consumption-permit facts; the message + turn reconstruction here is
- * the seed every extension must keep zero-side-effect.
- */
 export const rebuildThreadViewFromEvents = (
   threadId: string,
   options?: { excludeRunIds?: string[] }
 ): RebuiltThreadView => {
-  // A retried/resumed turn re-runs the ORIGINAL task from the conversation
-  // BEFORE it: the dead attempts' own committed output is excluded so the
-  // request ends with the task (prompt derivation) and the retry keeps the
-  // old row-copy semantics from the authoritative source. The caller owns
-  // the chain semantics (issue #141: the whole dead task chain, not just the
-  // retried run — an earlier failure's committed text must not stand between
-  // the task and the retry). Facts stay in the log — display and replay
-  // still show the whole story.
+
   const excluded = new Set(options?.excludeRunIds ?? []);
   const events = getSessionEvents(threadId).filter(event => {
     if (excluded.size === 0) return true;
@@ -314,9 +238,7 @@ export const rebuildThreadViewFromEvents = (
   const approvals = new Map<string, RebuiltApproval>();
   let inputSystemPrompts: string[] = [];
   let inputRunId: string | undefined;
-  // The input facts in log order, so a truncation that deletes the tail
-  // input can re-derive the binding instead of pairing a resumed request
-  // with a deleted task's system config.
+
   const inputBindings: { messageId: string; system: string[]; runId?: string }[] = [];
 
   for (const event of events) {
@@ -330,10 +252,7 @@ export const rebuildThreadViewFromEvents = (
         if (existing >= 0) messages[existing] = message;
         else messages.push(message);
         if (event.type === INPUT_ACCEPTED) {
-          // The system config is bound to its input fact: each new fact
-          // REPLACES the binding, so a thread interleaving task and chat
-          // sends pairs the tail input with its own config. A malformed
-          // array resets to none — never a partial config.
+
           const system = payload.system;
           inputSystemPrompts =
             Array.isArray(system) && system.every(item => typeof item === 'string' && item.trim())
@@ -349,11 +268,7 @@ export const rebuildThreadViewFromEvents = (
         break;
       }
       case STEERING_INPUT_ACCEPTED: {
-        // A mid-turn steering input becomes a user message in the rebuilt
-        // conversation. Without this arm the log carried the fact but no
-        // recovery consumer could reconstruct it — the steer existed only in
-        // the live turn's streamHistory, so a replay rebuilt a conversation
-        // where the human never steered.
+
         const steerText = typeof payload.text === 'string' ? payload.text : '';
         const steerMessageId =
           typeof payload.messageId === 'string' && payload.messageId
@@ -391,16 +306,7 @@ export const rebuildThreadViewFromEvents = (
         break;
       }
       case MESSAGES_TRUNCATED: {
-        // A user-driven rewrite (edit/resend): the named rows were deleted
-        // from the display projection in the same transaction that appended
-        // this fact, so replay must drop them too — otherwise the recovery
-        // authority would rebuild history INCLUDING the messages the user
-        // deleted (the defect this arm closes). Ids are removed explicitly
-        // (the fact carries the exact list the deletes matched), and turn /
-        // approval bookkeeping is LEFT ALONE: the facts for a deleted turn
-        // stay in the stream as audit history (the append-only contract —
-        // see rebuildResumeHistoryFromEvents' excludeRunIds, which is a
-        // caller-owned dead-chain decision, not this reducer's).
+
         const deletedIds = Array.isArray(payload.deletedMessageIds)
           ? payload.deletedMessageIds.filter((id): id is string => typeof id === 'string')
           : [];
@@ -409,10 +315,7 @@ export const rebuildThreadViewFromEvents = (
         for (let index = messages.length - 1; index >= 0; index -= 1) {
           if (deleted.has(messages[index]?.id ?? '')) messages.splice(index, 1);
         }
-        // The input-fact bindings survive in the same splice: drop the ones
-        // whose input was deleted and re-derive the tail binding, so a
-        // resumed request is never paired with a truncated task's system
-        // config or runId.
+
         for (let index = inputBindings.length - 1; index >= 0; index -= 1) {
           if (deleted.has(inputBindings[index]?.messageId ?? '')) inputBindings.splice(index, 1);
         }
@@ -454,10 +357,13 @@ export const rebuildThreadViewFromEvents = (
       case TURN_STARTED: {
         const runId = typeof payload.runId === 'string' ? payload.runId : '';
         if (!runId) break;
+
+        const plan = parseExecutionPlanValue(payload.plan);
         turns.set(runId, {
           runId,
           kind: typeof payload.kind === 'string' ? payload.kind : 'chat-turn',
           status: 'running',
+          ...(plan ? { plan } : {}),
         });
         break;
       }
@@ -481,8 +387,7 @@ export const rebuildThreadViewFromEvents = (
         break;
       }
       default:
-        // Unknown event types are skipped by replay, never interpreted —
-        // forward compatibility means new facts degrade to no-ops here.
+
         break;
     }
   }

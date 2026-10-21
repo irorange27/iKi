@@ -31,10 +31,8 @@ export const createMainWindow = (): BrowserWindow => {
     minWidth: 480,
     minHeight: 640,
     backgroundColor: resolveWindowBootstrapBackgroundColor(),
-    // Start shadow-free until the renderer resolves the active theme and opts in for light mode.
     hasShadow: false,
     frame: false,
-    // macOS
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 20, y: 20 },
     webPreferences: {
@@ -48,9 +46,6 @@ export const createMainWindow = (): BrowserWindow => {
   attachViewportResyncGuard(mainWindow);
 
   if (process.platform === 'darwin') {
-    // The traffic lights are drawn by the renderer (TrafficLights.vue): macOS
-    // 15 greys the native buttons out to near-invisible on the light sidebar
-    // when the window is not focused, and they cannot be recolored natively.
     mainWindow.setWindowButtonVisibility(false);
     mainWindow.on('enter-full-screen', () => {
       mainWindow.webContents.send('window:fullscreen-changed', true);

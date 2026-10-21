@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { registerStandardTools } from '@iki/backend/tools';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { startTurnHarness } from '@iki/backend/agent/harness';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { resolveTools } from '@iki/backend/agent/harness/tool_resolver';
 
@@ -10,7 +10,7 @@ registerStandardTools({
   delegatedAgentRuntime: {
     createRunTracker: createAgentRunTracker,
     getConversationToolModel: getToolModel,
-    createHarness: startTurnHarness,
+    createHarness: startPiTurnHarness,
   },
 });
 
@@ -28,50 +28,61 @@ const resolve = (
     approvalPolicy,
   });
 
-const needsApproval = (tools: ReturnType<typeof resolve>, name: string): boolean | undefined =>
-  tools.find(t => t.name === name)?.needsApproval;
+const needsApproval = async (
+  tools: ReturnType<typeof resolve>,
+  name: string,
+  input: unknown = {}
+): Promise<boolean | undefined> => {
+  const tool = tools.find(t => t.name === name);
+  if (!tool) return undefined;
+  const value = tool.needsApproval;
+  if (typeof value === 'function') {
+    return await (value as (input: unknown) => Promise<boolean>)(input);
+  }
+  return value;
+};
 
 describe('resolveTools approvalPolicy (ADR 005)', () => {
-  it('never clears approval on every tool', () => {
+  it('never clears approval on every tool', async () => {
     const tools = resolve('never');
-    expect(needsApproval(tools, 'write_file')).toBe(false);
-    expect(needsApproval(tools, 'edit')).toBe(false);
+    expect(await needsApproval(tools, 'write_file', { path: 'a.txt' })).toBe(false);
+    expect(await needsApproval(tools, 'edit', { path: 'a.txt' })).toBe(false);
   });
 
-  it('always gates every tool', () => {
+  it('always gates every tool', async () => {
     const tools = resolve('always');
-    expect(needsApproval(tools, 'write_file')).toBe(true);
-    expect(needsApproval(tools, 'read_file')).toBe(true);
+    expect(await needsApproval(tools, 'write_file', { path: 'a.txt' })).toBe(true);
+    expect(await needsApproval(tools, 'read_file', { path: 'a.txt' })).toBe(true);
   });
 
-  it('trustWorkspace auto-approves workspace writes but gates all shell commands', () => {
-    const tools = resolve('trustWorkspace', ['write_file', 'read_file', 'edit', 'shell', 'delete_file']);
+  it('trustWorkspace auto-approves workspace writes but gates all shell commands', async () => {
+    const tools = resolve('trustWorkspace', [
+      'write_file',
+      'read_file',
+      'edit',
+      'shell',
+      'delete_file',
+    ]);
 
-    const writeNeed = needsApproval(tools, 'write_file');
-    expect(typeof writeNeed).toBe('function');
-    expect((writeNeed as (input: unknown) => boolean)({ path: 'a.txt' })).toBe(false);
+    expect(await needsApproval(tools, 'write_file', { path: 'a.txt' })).toBe(false);
+    expect(await needsApproval(tools, 'edit', { path: 'a.txt' })).toBe(false);
 
-    const shellNeed = needsApproval(tools, 'shell') as (input: unknown) => boolean;
-    expect(shellNeed({ command: 'ls -la' })).toBe(true);
-    expect(shellNeed({ command: 'rm -rf build' })).toBe(true);
+    expect(await needsApproval(tools, 'shell', { command: 'ls -la' })).toBe(true);
+    expect(await needsApproval(tools, 'shell', { command: 'rm -rf build' })).toBe(true);
 
-    expect((needsApproval(tools, 'delete_file') as (input: unknown) => boolean)({})).toBe(true);
+    expect(await needsApproval(tools, 'delete_file', { path: 'a.txt' })).toBe(true);
   });
 
-  it('askRisky gates writes and unknown tools while allowing known reads', () => {
+  it('askRisky gates writes and unknown tools while allowing known reads', async () => {
     const tools = resolve('askRisky');
-    expect((needsApproval(tools, 'write_file') as (input: unknown) => boolean)({})).toBe(true);
-    expect((needsApproval(tools, 'undo_edit') as (input: unknown) => boolean)({})).toBe(true);
-    expect((needsApproval(tools, 'read_file') as (input: unknown) => boolean)({})).toBe(false);
+    expect(await needsApproval(tools, 'write_file', { path: 'a.txt' })).toBe(true);
+    expect(await needsApproval(tools, 'undo_edit', { path: 'a.txt' })).toBe(true);
+    expect(await needsApproval(tools, 'read_file', { path: 'a.txt' })).toBe(false);
   });
 
-  it('defaults to the legacy guard behavior when no policy is set', () => {
+  it('defaults to the legacy guard behavior when no policy is set', async () => {
     const tools = resolve(undefined);
-    // A tool that never asked for approval stays auto-approved.
-    expect(needsApproval(tools, 'read_file')).toBe(false);
-    // A tool that DOES ask for approval keeps it. write_file's registry flag
-    // is true (tools/file_tools.ts) — the legacy default must not discard a
-    // tool's own declaration and make it less safe than it says it is (#166).
-    expect(needsApproval(tools, 'write_file')).toBe(true);
+    expect(await needsApproval(tools, 'read_file', { path: 'a.txt' })).toBe(false);
+    expect(await needsApproval(tools, 'write_file', { path: 'a.txt' })).toBe(true);
   });
 });

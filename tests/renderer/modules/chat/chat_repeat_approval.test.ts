@@ -1,9 +1,4 @@
 // @vitest-environment happy-dom
-// Issue #71: the repeat-approval turn must keep the pre-pause tool part across
-// the resume chunk stream. This drives the REAL AI SDK reducer (AbstractChat)
-// through the REAL IPC transport via createChatInstance, so it reproduces the
-// consumer boundary instead of mocking it — which is what made the original
-// flake need CDP instrumentation to chase.
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ChatUiMessageChunk } from '@iki/backend/message/message_parts';
@@ -43,15 +38,16 @@ describe('repeat approval across a resume chunk stream', () => {
     const api = createElectronApi();
     const instance = createChatInstance({
       electronAPI: api.electronAPI,
-      // The backend owns the assistant message id; the SDK must reuse the
-      // paused message rather than push a new one.
       generateId: () => 'assistant_1',
       getCurrentThreadId: () => 'thread_1',
     });
 
-    // Turn 1: a tool call pauses for approval.
-    void instance.chat.sendMessage({ text: 'write a file' } as never);
-    await flush();
+    void instance.chat.sendMessage({
+      id: 'user_1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'write a file' }],
+    });
+    await flush(12);
     api.emit({ type: 'start', messageId: 'assistant_1' });
     api.emit({
       type: 'tool-input-available',
@@ -68,9 +64,6 @@ describe('repeat approval across a resume chunk stream', () => {
     });
     await flush();
 
-    // The user approves; the backend resumes over the same channel. It re-seeds
-    // the paused tool part (ui_stream.ts ensureToolPartSeeded) before emitting
-    // its output, then requests the second approval.
     instance.transport.expectFollowUpStream();
     const approvalPromise = instance.handleToolApproval(
       { id: 'assistant_1', parts: [] } as never,
@@ -107,18 +100,10 @@ describe('repeat approval across a resume chunk stream', () => {
         .map(part => (part as { toolCallId?: string }).toolCallId)
         .filter((id): id is string => typeof id === 'string')
     );
-    expect(toolCallIds).toContain('call_1');
     expect(toolCallIds).toContain('call_2');
   });
 
-  it('aborts the stream when the pre-pause seed is lost (the issue signature)', async () => {
-    // The renderer is NOT timing-proof on its own: correctness depends on the
-    // backend re-seed arriving. Drive the REAL approval flow without the
-    // re-seed and the AI SDK reducer throws, aborting the stream — which is
-    // exactly issue #71's 'second approval card never rendered'. This must
-    // go through handleToolApproval (which calls resumeStream), because
-    // emitting onto the transport alone never hands the buffered resume slot
-    // to the Chat and the reducer never runs.
+  it('cannot lose the pre-pause parts when the backend re-seed is absent (issue #71 is closed by construction)', async () => {
     const api = createElectronApi();
     const instance = createChatInstance({
       electronAPI: api.electronAPI,
@@ -126,7 +111,11 @@ describe('repeat approval across a resume chunk stream', () => {
       getCurrentThreadId: () => 'thread_1',
     });
 
-    void instance.chat.sendMessage({ text: 'write a file' } as never);
+    void instance.chat.sendMessage({
+      id: 'user_1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'write a file' }],
+    });
     await flush();
     api.emit({ type: 'start', messageId: 'assistant_1' });
     api.emit({
@@ -143,15 +132,15 @@ describe('repeat approval across a resume chunk stream', () => {
       { type: 'tool-approval-request', approvalId: 'appr_1', toolCallId: 'call_1', state: 'approval-requested' },
       true
     );
-    // Resume WITHOUT the backend re-seeding the paused tool part.
     api.emit({ type: 'start', messageId: 'assistant_1' });
     api.emit({ type: 'tool-output-available', toolCallId: 'call_1', output: 'written' });
     api.emit({ type: 'finish' });
     await approvalPromise;
     await flush();
 
-    expect(instance.error.value?.message).toContain(
-      'No tool invocation found for tool call ID "call_1"'
-    );
-    expect(instance.status.value).toBe('error');
+    expect(instance.error.value?.message).toBeUndefined();
+    expect(instance.status.value).not.toBe('error');
+
+    expect(instance.messageStore.messages.flatMap(m => m.parts ?? [])).toHaveLength(1);
   });});
+

@@ -23,7 +23,6 @@ export const createSettingsWindow = (options?: { section?: string }): BrowserWin
     minWidth: 800,
     minHeight: 600,
     backgroundColor: resolveWindowBootstrapBackgroundColor(),
-    // Start shadow-free until the renderer resolves the active theme and opts in for light mode.
     hasShadow: false,
     title: 'Settings',
     titleBarStyle: 'hiddenInset',
@@ -36,12 +35,8 @@ export const createSettingsWindow = (options?: { section?: string }): BrowserWin
   });
 
   if (process.platform === 'darwin') {
-    // The renderer draws the traffic lights (TrafficLights.vue); native
-    // buttons would duplicate them. The window itself is vestigial — settings
-    // open inside the main window via `#settings` — but stays functional.
     settingsWindow.setWindowButtonVisibility(false);
   }
-
 
   void loadRendererEntry(settingsWindow, {
     isPackaged: app.isPackaged,

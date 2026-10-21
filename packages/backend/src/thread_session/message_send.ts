@@ -12,7 +12,6 @@ import {
 } from './approval_types';
 import {
   assembleExecutionPlan,
-  planToHarnessConfig,
   planToRunTrackerParams,
 } from './execution_plan';
 import {
@@ -23,14 +22,14 @@ import {
 } from './session_log';
 import {
   createTurnDriver,
-  finalizeRunForOutcome,
+  finalizeTurn,
+  finalizeTurnCancelled,
+  finalizeTurnFailure,
   runFailureFromError,
-  terminalFactForOutcome,
 } from './turn_driver';
 import { NO_TOOLS_SYSTEM_PROMPT } from './constants';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';
-import { writeThreadTodoPlan } from '../db/thread_todos';
 import {
   persistAssistantTurnMessage,
   persistUserTurnMessage,
@@ -53,7 +52,7 @@ export type MessageSendResult =
       success: false;
       error: string;
       runId?: string;
-      /** The turn paused on tool approvals that are durably registered. */
+
       awaitingApproval?: boolean;
     };
 
@@ -82,11 +81,7 @@ export type MessageSendDeps = {
     threadId?: string,
     options?: { onExecutionAbort?: () => void }
   ) => (() => void) | null;
-  /**
-   * Register this execution under the run it owns so a cancel naming that run
-   * reaches it (the send transport has no stream membership). Optional so
-   * unit doubles stay small; the composition root always wires it.
-   */
+
   registerExecution?: (execution: {
     cancel: (reason: string) => void;
     runId?: string | null;
@@ -94,15 +89,14 @@ export type MessageSendDeps = {
     setRunId: (runId: string | null) => void;
     dispose: () => void;
   };
-  /** Alias a delegated child run onto the execution running it. */
+
   registerChildRunAlias?: (parentRunId: string, childRunId: string) => () => void;
   checkThreadRunRate: (threadId: string) => { allowed: boolean; retryAfterMs?: number };
   conversation: {
     createMessage: (input: unknown) => unknown;
     upsertTurnMessage: (input: unknown) => unknown;
   };
-  /** Durable approval registration (service wiring). Without it, an
-   *  approval-required send stays the non-interactive error path. */
+
   approvals?: {
     ensurePendingApprovalSession: (
       approvalId: string,
@@ -118,12 +112,7 @@ export type MessageSendDeps = {
 
 export const createMessageSend = (deps: MessageSendDeps) => {
   const send = async (options: ChatTurnOptions): Promise<MessageSendResult> => {
-    // The execution's cancel source, set synchronously inside each abort
-    // closure BEFORE the controller is aborted. An AbortSignal latches only
-    // its FIRST reason, so a second abort (a lease loss arriving while a user
-    // cancel is unwinding) would otherwise silently reclassify the turn.
-    // Reading a recorded source rather than the signal's reason keeps the
-    // classification independent of abort ORDER.
+
     const cancelSource: { current: 'lease-lost' | 'user-cancel' | null } = { current: null };
     const executionAbort = new AbortController();
     const release = deps.tryAcquireThreadRun(options.threadId, {
@@ -134,11 +123,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
     });
     if (!release) return { success: false, error: 'A turn is already running on this thread.' };
 
-    // A cancel names a run; this transport registers no stream, so without
-    // this handle `cancelRun` could only rewrite the run row while the tool
-    // handler kept executing. Registered before the first await on purpose:
-    // the run id arrives with the tracker below, and a cancel landing in
-    // between must already find this execution.
     const execution = deps.registerExecution?.({
       runId: null,
       cancel: reason => {
@@ -148,17 +132,11 @@ export const createMessageSend = (deps: MessageSendDeps) => {
     });
 
     let runTracker: ReturnType<typeof createAgentRunTracker> | null = null;
-    // Set once the driver exists; the catch paths must consult the driver's
-    // CURRENT tracker (a handoff chain swaps it mid-turn).
+
     let driverHandle: ReturnType<typeof createTurnDriver> | null = null;
 
     try {
-      // Turn-start workspace binding (D30), resolved at admission like the
-      // streaming path — synchronous, ahead of every preparation await. It
-      // sits inside the try so a failing resolution (broken workspace
-      // directory, profile error) flows through the cleanup path and
-      // releases the admission instead of stranding the thread. Resumed
-      // turns carry their original world in the options and rebind it.
+
       const turnStartWorkspace =
         options.workspaceSelection !== undefined
           ? options.workspaceSelection
@@ -174,7 +152,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         }
       }
 
-      // After admission: a rejected request must not leave a durable row.
       persistUserTurnMessage(deps.conversation, options);
 
       const preparedTurn = await deps.turnPreparer.prepareChatTurn({
@@ -183,8 +160,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       });
       executionAbort.signal.throwIfAborted();
 
-      // The plan is the single definition of this execution (same assembly
-      // the streaming path uses).
       const plan = assembleExecutionPlan({
         options,
         preparedTurn,
@@ -199,7 +174,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             messages: preparedTurn.finalMessages,
           },
           working: {
-            modelMessages: preparedTurn.history,
             accumulatedText: '',
             pendingApprovalIds: [],
             lastStepIndex: 0,
@@ -207,17 +181,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         })
       );
       runTracker = activeRunTracker;
-      // The run identity exists: index this execution under it. A handoff
-      // chain re-keys through the driver's tracker callback below.
+
       execution?.setRunId(activeRunTracker.id);
 
-      // Session log: same facts as streaming, from the waiter transport.
-      // An id-less send (wake/task transports) records its accepted input as
-      // a fact too — deterministic per-turn id, the run id, and the caller's
-      // system config — so the recovery replay can reconstruct the task
-      // (issue #139); without it the resume gate must keep refusing. Gated
-      // on NO client id at all: an id-ful but non-UI-shaped message persists
-      // its row under the client id and must not grow a second id here.
       const sendUserInput = pickUserTurnMessage(options);
       const sendAcceptedInput =
         sendUserInput && asChatUiMessage(sendUserInput.message)
@@ -242,23 +208,12 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           throw new Error('No user prompt provided for tool-enabled chat');
         }
 
-        // Same supply selection as streaming (switch item 3b): a send is a
-        // waiter on the same turn driver, so the same gate applies.
         const harness = selectTurnHarness(plan, preparedTurn.history);
 
-        // ponytail: clear stale todo plan from previous turn
-        writeThreadTodoPlan({ threadId: options.threadId, items: [] });
-
-        // Send runs the same durable projection as streaming: every step fact
-        // is emitted into a UI chunk emitter so the persisted assistant row
-        // (and the next turn's rebuilt context) keeps the full tool exchanges.
         const wireTarget: ChatStreamTarget = { id: -1, send: () => undefined };
         const uiChunkEmitter = createUiChunkEmitter(wireTarget, `assistant_${activeRunTracker.id}`);
         const assistantMessageId = uiChunkEmitter.messageId;
 
-        // Send is a waiter on the same turn driver the streaming path runs —
-        // same lifecycle, same step projection, same approval registration —
-        // with a no-op subscriber and no steering/preview surface.
         const streamState: ActiveStreamState = {
           cancelled: false,
           stoppedByUser: false,
@@ -303,40 +258,38 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         const result = await driver.run();
         if (!result) throw new Error('Unreachable: send driver produced no result');
 
-        // The driver's CURRENT tracker/harness, not the setup's: a handoff
-        // chain finalizes the child segment, not the completed parent.
         const finalTracker = driver.getRunTracker();
-        const finalHarness = driver.getHarness();
 
         if (result.outcome === 'cancelled') {
-          // Two cancel sources reach this transport: a lost thread lease
-          // (aborted by the lease hook) and a user/API cancel naming the run
-          // (aborted through the live-execution registration). Both are
-          // terminal; only the lease loss is a retryable interruption, and
-          // only the lease loss is reported as a failure. The source is the
-          // one RECORDED when the abort was issued, not the signal's reason,
-          // which latches whichever abort happened to arrive first.
+
           const leaseLost = cancelSource.current === 'lease-lost';
           const message = leaseLost
             ? 'Thread run lease was lost; the send was interrupted.'
             : 'Run cancelled.';
+
           if (leaseLost) {
-            if (finalTracker.getRun().status === 'running') {
-              finalTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
-            }
-          } else if (finalTracker.getRun().status === 'running') {
-            finalTracker.markCancelled();
-          }
-          if (options.threadId) {
-            // Session log: a lease loss ends the turn even here. Failure-path
-            // terminal — loud-guarded, never masks the reported interruption.
-            recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-              terminal: {
-                runId: finalTracker.id,
-                status: leaseLost ? 'failed' : 'cancelled',
-                ...(leaseLost ? { errorText: message } : {}),
+            finalizeTurnFailure({
+              tracker: finalTracker,
+              failure: {
+                status: 'failed',
+                errorText: message,
+
+                code: 'THREAD_LEASE_LOST',
+                retryable: true,
               },
-            }));
+              ...(options.threadId ? { threadId: options.threadId } : {}),
+              transport: 'send',
+              skipRow: finalTracker.getRun().status !== 'running',
+              loudGuard: true,
+            });
+          } else {
+            finalizeTurnCancelled({
+              tracker: finalTracker,
+              ...(options.threadId ? { threadId: options.threadId } : {}),
+              transport: 'send',
+              skipRow: finalTracker.getRun().status !== 'running',
+              loudGuard: true,
+            });
           }
           return {
             success: false,
@@ -345,7 +298,6 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           };
         }
 
-        finalTracker.syncModelMessages(finalHarness.getHistory());
         deps.usage.recordUsageEvent({
           threadId: options.threadId,
           providerType: options.providerType,
@@ -361,9 +313,7 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         const finalResponse = driver.getAccumulatedResponse() || result.response || '';
 
         if (result.outcome === 'awaiting-approval') {
-          // Durable decision handle: registered by the driver through
-          // deps.approvals, so this pause is resumable through approveTool
-          // (and recoverable after a restart) instead of name-only "blocked".
+
           const approvalError = describeApprovalRequiredTools(registeredApprovalRequests);
           if (!deps.approvals) {
             logger.event({
@@ -382,22 +332,9 @@ export const createMessageSend = (deps: MessageSendDeps) => {
               },
             });
           }
-          // Event-first: the pause's partial output is a fact before the row
-          // finalizes — a write failure fails the send with the row still
-          // running (the catch below marks it failed) instead of leaving a
-          // blocked row whose pause output was never recorded (ADR 008 F1).
+
           const persisted = await uiChunkEmitter.buildPersistedMessage();
           if (options.threadId && persisted) {
-            // Session log: the pause's partial output; its continuation
-            // (through approveTool) records its own facts.
-            recordSessionEvents(options.threadId, turnFactsToEvents({
-              committed: {
-                runId: finalTracker.id,
-                messageId: persisted.id,
-                message: persisted as never,
-                transport: 'send',
-              },
-            }));
             await persistAssistantTurnMessage(
               deps.conversation,
               options.threadId,
@@ -405,7 +342,17 @@ export const createMessageSend = (deps: MessageSendDeps) => {
               'send',
             );
           }
-          finalizeRunForOutcome(finalTracker, result, { text: finalResponse });
+
+          finalizeTurn({
+            tracker: finalTracker,
+            outcome: result.outcome,
+            text: finalResponse,
+            ...(options.threadId ? { threadId: options.threadId } : {}),
+            transport: 'send',
+            ...(persisted
+              ? { committed: { messageId: persisted.id, message: persisted as never } }
+              : {}),
+          });
           return {
             success: false,
             error: approvalError,
@@ -415,37 +362,17 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         }
 
         uiChunkEmitter.finish();
-        // Event-first (ADR 008 F1): the turn's facts reach the session log
-        // BEFORE the run row finalizes — a write failure fails the send
-        // through the catch below while the row is still running, never
-        // leaving a terminal row whose outcome was never recorded. The
-        // terminal fact mirrors finalizeRunForOutcome's outcome mapping
-        // (the event-side twin).
+
+        let settledMessage: Awaited<ReturnType<typeof uiChunkEmitter.buildPersistedMessage>> =
+          undefined;
         if (options.threadId) {
-          // Deterministic per-run id: a duplicate persist of the same turn
-          // converges on one row and the message joins back to its run.
-          // Retries are separate runs and legitimately separate rows.
+
           const persisted = await uiChunkEmitter.buildPersistedMessage();
-          const settledMessage = persisted ?? {
+          settledMessage = persisted ?? {
             id: assistantMessageId,
             role: 'assistant' as const,
             parts: [{ type: 'text', text: finalResponse, state: 'done' }],
           };
-          const terminal = terminalFactForOutcome(result);
-          recordSessionEvents(options.threadId, turnFactsToEvents({
-            committed: {
-              runId: finalTracker.id,
-              messageId: settledMessage.id,
-              message: settledMessage as never,
-              transport: 'send',
-            },
-            terminal: {
-              runId: finalTracker.id,
-              status: terminal.status,
-              ...(terminal.finishReason ? { finishReason: terminal.finishReason } : {}),
-              ...(terminal.errorText ? { errorText: terminal.errorText } : {}),
-            },
-          }));
           await persistAssistantTurnMessage(
             deps.conversation,
             options.threadId,
@@ -453,12 +380,22 @@ export const createMessageSend = (deps: MessageSendDeps) => {
             'send',
           );
         }
-        finalizeRunForOutcome(finalTracker, result, { text: finalResponse });
+        finalizeTurn({
+          tracker: finalTracker,
+          outcome: result.outcome,
+          text: finalResponse,
+          ...(result.usage ? { usage: result.usage } : {}),
+          ...(result.outcome === 'handoff' ? { handoff: result.handoff } : {}),
+          ...(options.threadId ? { threadId: options.threadId } : {}),
+          transport: 'send',
+          ...(settledMessage
+            ? { committed: { messageId: settledMessage.id, message: settledMessage as never } }
+            : {}),
+        });
         return {
           success: true,
           text: finalResponse,
-          // Same rule as the other branches: the identity that finished the
-          // turn (identical to the setup run unless a handoff chain ran).
+
           ...(options.runConfig?.kind ? { runId: finalTracker.id } : {}),
         };
       }
@@ -486,52 +423,45 @@ export const createMessageSend = (deps: MessageSendDeps) => {
         },
       });
       if (options.threadId && llmResult.text.trim()) {
-        // Deterministic per-run id (see the tool path above). Event-first
-        // (ADR 008 F1): facts reach the session log before the run row
-        // finalizes — a write failure fails the send with the row still
-        // running instead of reporting success on an unrecorded completion.
+
         const settledMessage = {
           id: `assistant_${activeRunTracker.id}`,
           role: 'assistant' as const,
           parts: [{ type: 'text', text: llmResult.text, state: 'done' }],
         };
-        recordSessionEvents(options.threadId, turnFactsToEvents({
-          committed: {
-            runId: activeRunTracker.id,
-            messageId: settledMessage.id,
-            message: settledMessage as never,
-            transport: 'send',
-          },
-          terminal: { runId: activeRunTracker.id, status: 'completed' },
-        }));
         await persistAssistantTurnMessage(
           deps.conversation,
           options.threadId,
           settledMessage,
           'send',
         );
-      } else if (options.threadId) {
-        recordSessionEvents(options.threadId, turnFactsToEvents({
-          terminal: { runId: activeRunTracker.id, status: 'completed' },
-        }));
+
+        finalizeTurn({
+          tracker: activeRunTracker,
+          outcome: 'completed',
+          text: llmResult.text,
+          ...(llmResult.usage ? { usage: llmResult.usage } : {}),
+          threadId: options.threadId,
+          transport: 'send',
+          committed: { messageId: settledMessage.id, message: settledMessage as never },
+        });
+      } else {
+        finalizeTurn({
+          tracker: activeRunTracker,
+          outcome: 'completed',
+          text: llmResult.text,
+          ...(llmResult.usage ? { usage: llmResult.usage } : {}),
+          ...(options.threadId ? { threadId: options.threadId } : {}),
+          transport: 'send',
+        });
       }
-      runTracker.markCompleted({
-        text: llmResult.text,
-        usage: llmResult.usage ? { ...llmResult.usage } : undefined,
-        finishReason: 'completed',
-      });
       return {
         success: true,
         text: llmResult.text,
         ...(options.runConfig?.kind ? { runId: runTracker.id } : {}),
       };
     } catch (error: unknown) {
-      // Both cancel sources end the turn here, whichever branch was running
-      // — the tool path finalizes from the driver's `cancelled` outcome, and
-      // this catch covers every path that throws instead. Classifying on the
-      // recorded source (not the signal's latched reason) keeps a user cancel
-      // from being reported as a provider failure when the abort surfaced as
-      // a plain AbortError from a non-tool provider call.
+
       const cancelSourceHit = cancelSource.current;
       if (cancelSourceHit) {
         const leaseLost = cancelSourceHit === 'lease-lost';
@@ -539,28 +469,33 @@ export const createMessageSend = (deps: MessageSendDeps) => {
           ? 'Thread run lease was lost; the send was interrupted.'
           : 'Run cancelled.';
         if (leaseLost) {
-          // The thread was taken over while this send ran: stop cleanly at the
-          // barrier instead of reporting a provider error or persisting
-          // results from an execution that lost its run right.
-          if (runTracker && runTracker.getRun().status === 'running') {
-            runTracker.markFailed({ message, code: 'THREAD_LEASE_LOST', retryable: true });
-          }
-          if (options.threadId && runTracker) {
-            // Session log: both lease-loss shapes end the turn. Failure-path
-            // terminal — loud-guarded, never masks the reported interruption.
-            recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-              terminal: { runId: runTracker.id, status: 'failed', errorText: message },
-            }));
+
+          if (runTracker) {
+            finalizeTurnFailure({
+              tracker: runTracker,
+              failure: {
+                status: 'failed',
+                errorText: message,
+
+                code: 'THREAD_LEASE_LOST',
+                retryable: true,
+              },
+              ...(options.threadId ? { threadId: options.threadId } : {}),
+              transport: 'send',
+              skipRow: runTracker.getRun().status !== 'running',
+              loudGuard: true,
+            });
           }
         } else {
           const cancelledTracker = driverHandle?.getRunTracker() ?? runTracker;
-          if (cancelledTracker && cancelledTracker.getRun().status === 'running') {
-            cancelledTracker.markCancelled();
-          }
-          if (options.threadId && cancelledTracker) {
-            recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-              terminal: { runId: cancelledTracker.id, status: 'cancelled' },
-            }));
+          if (cancelledTracker) {
+            finalizeTurnCancelled({
+              tracker: cancelledTracker,
+              ...(options.threadId ? { threadId: options.threadId } : {}),
+              transport: 'send',
+              skipRow: cancelledTracker.getRun().status !== 'running',
+              loudGuard: true,
+            });
           }
         }
         return {
@@ -571,13 +506,21 @@ export const createMessageSend = (deps: MessageSendDeps) => {
       }
       const message = getStreamErrorMessage(error);
       const failingTracker = driverHandle?.getRunTracker() ?? runTracker;
-      if (failingTracker && failingTracker.getRun().status === 'running') {
-        failingTracker.markFailed(runFailureFromError(error, message));
-      }
-      if (options.threadId && failingTracker) {
-        recordFailureTerminalEvent(options.threadId, turnFactsToEvents({
-          terminal: { runId: failingTracker.id, status: 'failed', errorText: message },
-        }));
+      if (failingTracker) {
+        const retry = runFailureFromError(error, message);
+        finalizeTurnFailure({
+          tracker: failingTracker,
+          failure: {
+            status: 'failed',
+            errorText: message,
+            ...(retry.code ? { code: retry.code } : {}),
+            ...(typeof retry.retryable === 'boolean' ? { retryable: retry.retryable } : {}),
+          },
+          ...(options.threadId ? { threadId: options.threadId } : {}),
+          transport: 'send',
+          skipRow: failingTracker.getRun().status !== 'running',
+          loudGuard: true,
+        });
       }
       return {
         success: false,

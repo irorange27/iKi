@@ -1,5 +1,6 @@
-import { convertToModelMessages, validateUIMessages } from 'ai';
-import type { FileUIPart } from 'ai';
+import { convertUiMessagesToModel } from './ui_to_model';
+
+type FileUIPart = { type: 'file'; url: string; mediaType: string; filename?: string };
 
 import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
 import type {
@@ -10,7 +11,6 @@ import type {
 } from '@iki/backend/message/message_parts';
 import { isChatUiMetadataPart } from '@iki/backend/message/message_parts';
 import { isTerminalDynamicToolPart, toInterruptedToolPart } from '@iki/backend/message/tool_parts';
-import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ChatInputMessage, ChatTransportMessage, LlmChatMessage } from './chat_message_types';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { normalizeToolPartForValidation } from '@iki/backend/message/tool_parts';
@@ -99,13 +99,6 @@ const isUiMessage = (value: unknown): value is ChatUiMessage =>
   typeof value.role === 'string' &&
   Array.isArray((value as { parts?: unknown }).parts);
 
-// A persisted snapshot can stop mid-tool (crash, quit, cancelled turn) with the
-// part still in a non-terminal state. Left as-is, conversion would either drop
-// the call (input-streaming/input-available — the model then re-issues a call
-// whose side effects may already exist) or emit an assistant tool-call with no
-// tool-result (approval-requested/approval-responded — providers reject the
-// whole follow-up request). Record the interruption as the tool result instead:
-// pairing stays valid and the model learns the action's outcome is unknown.
 const repairInterruptedToolPart = (part: DynamicToolPart): DynamicToolPart =>
   isTerminalDynamicToolPart(part) ? part : toInterruptedToolPart(part);
 
@@ -122,31 +115,12 @@ export const toModelInputMessages = async (
     );
     if (normalizedUiMessages.length === 0) return [];
 
-    try {
-      await validateUIMessages({
-        messages: normalizedUiMessages,
-      });
-    } catch (error: unknown) {
-      throw new Error(`Invalid UI messages: ${getErrorMessage(error)}`);
-    }
-
-    // The SDK's converter drops `approval-requested` parts outright, but the
-    // approval-resume fallback needs the live request in the model history so
-    // the decision appended by the approval layer pairs with it. Re-stamping
-    // the state for conversion only makes the converter emit the assistant
-    // tool-call + tool-approval-request pair; with no `approval.approved` on
-    // the part it emits neither a response nor a tool result, so the real
-    // decision still rides in the tool message appended by thread_session/approval.
     const stampLiveApprovalRequests = (messages: ChatUiMessage[]): ChatUiMessage[] =>
       messages.map(message => ({
         ...message,
         parts: message.parts.map((part): UiMessagePart => {
           if (part.type !== 'dynamic-tool' || part.state !== 'approval-requested') return part;
-          // Cannot go through the typed approval-responded variant: its
-          // `approved` flag would make the converter emit a fabricated
-          // response. The converter only reads `state` + `approval.id` here,
-          // so the bridge casts the record the same way validateUIMessages
-          // already accepted it.
+
           const stamped = { ...part, state: 'approval-responded' };
           return stamped as unknown as UiMessagePart;
         }),
@@ -157,20 +131,7 @@ export const toModelInputMessages = async (
         ? stampLiveApprovalRequests(normalizedUiMessages)
         : normalizedUiMessages;
 
-    try {
-      return await convertToModelMessages(
-        conversionReady.map(message => {
-          const { id, ...rest } = message;
-          void id;
-          return rest;
-        }),
-        {
-          ignoreIncompleteToolCalls: true,
-        }
-      );
-    } catch (error: unknown) {
-      throw new Error(`Failed to convert UI messages: ${getErrorMessage(error)}`);
-    }
+    return convertUiMessagesToModel(conversionReady);
   }
 
   return messages as ChatInputMessage[];

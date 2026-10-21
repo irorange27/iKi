@@ -45,7 +45,6 @@ describe('createThreadStreamCoordinator', () => {
     coordinator.registerStream(42, streamState);
     coordinator.trackThreadStream('thread-a', 42);
 
-    // Another connection's thread must not be steerable from sender 42.
     expect(coordinator.steerStream(42, 'thread-b', 'go left')).toEqual({
       success: false,
       error: 'No active stream for thread',
@@ -77,7 +76,6 @@ describe('createThreadStreamCoordinator', () => {
     expect(coordinator.stopStream(42)).toEqual({ success: true });
     expect(streamState.cancelled).toBe(true);
     expect(streamState.stoppedByUser).toBe(true);
-    // Queue closed: further steer attempts fail instead of queueing.
     expect(coordinator.steerStream(42, undefined, 'late')).toEqual({
       success: false,
       error: 'No active autonomous stream to steer',
@@ -134,7 +132,6 @@ describe('createThreadStreamCoordinator', () => {
     expect(first.stoppedByUser).toBe(false);
     expect(second.cancelled).toBe(false);
 
-    // Already-cancelled streams are skipped, unknown runs find nothing.
     expect(coordinator.abortStreamByRunId('run-1')).toBe(false);
     expect(coordinator.abortStreamByRunId('run-404')).toBe(false);
   });
@@ -142,8 +139,6 @@ describe('createThreadStreamCoordinator', () => {
   it('run cancellation reaches streams attached outside the coordinator session', () => {
     const coordinator = createThreadStreamCoordinator();
 
-    // Approval resume attaches its stream without a session — run
-    // cancellation must still find it.
     const resumed = makeStreamState();
     resumed.runId = 'run-9';
     coordinator.attachStream(7, resumed);
@@ -172,7 +167,6 @@ describe('createThreadStreamCoordinator', () => {
     const resumed = makeStreamState();
     coordinator.attachStream(7, resumed);
 
-    // A superseding stream took the sender's slot: the stale detach is a no-op.
     const replacement = makeStreamState();
     coordinator.attachStream(7, replacement);
 
@@ -201,7 +195,6 @@ describe('createThreadStreamCoordinator cross-process lease', () => {
 
     const release = coordinator.tryAcquireThreadRun('thread_local');
     expect(release).not.toBeNull();
-    // In-process fast path still guards while the cross lease is held locally.
     expect(coordinator.tryAcquireThreadRun('thread_local')).toBeNull();
     release!();
     expect(coordinator.tryAcquireThreadRun('thread_local')).not.toBeNull();
@@ -258,8 +251,6 @@ describe('createThreadStreamCoordinator execution handles', () => {
       },
     });
 
-    // Send shape: no stream at all, just an execution abort controller. The
-    // approval-resume and streaming entries register the same hook.
     const sendAbort = new AbortController();
 
     const release = coordinator.tryAcquireThreadRun('thread_handles', {
@@ -287,9 +278,6 @@ describe('createThreadStreamCoordinator execution handles', () => {
       onExecutionAbort: () => lateAbort.abort(),
     });
     notifyLeaseLost!();
-    // The hook was registered with the lease synchronously — a loss firing
-    // before the entry finished wiring its controller still reaches it once
-    // wired, because the hook itself is already live.
     expect(lateAbort.signal.aborted).toBe(true);
 
     release!();
@@ -309,7 +297,6 @@ describe('createThreadStreamCoordinator run-keyed executions', () => {
       cancel: reason => reasons.push(reason),
     });
 
-    // No registerStream/attachStream call: the send transport shape.
     expect(coordinator.hasLiveExecutionForRun('run_send')).toBe(true);
     expect(coordinator.cancelExecutionByRunId('run_send', 'run-cancelled')).toBe(true);
     expect(reasons).toEqual(['run-cancelled']);
@@ -328,8 +315,6 @@ describe('createThreadStreamCoordinator run-keyed executions', () => {
     const execution = coordinator.registerExecution({ runId: 'run_parent', cancel: () => undefined });
 
     execution.setRunId('run_child');
-    // The parent is no longer executing here: naming it must not reach the
-    // chained segment's execution.
     expect(coordinator.hasLiveExecutionForRun('run_parent')).toBe(false);
     expect(coordinator.hasLiveExecutionForRun('run_child')).toBe(true);
     expect(coordinator.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(true);
@@ -347,8 +332,6 @@ describe('createThreadStreamCoordinator run-keyed executions', () => {
     });
     coordinator.registerChildRunAlias('run_parent', 'run_child');
 
-    // The child has no execution of its own — it runs inside the parent's
-    // tool call and inherits the parent's abort signal.
     expect(coordinator.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(true);
     expect(reasons).toEqual(['run-cancelled']);
   });
@@ -368,9 +351,6 @@ describe('createThreadStreamCoordinator run-keyed executions', () => {
   });
 
   it('keeps two coordinators independent, so a second service cannot unmount the first', () => {
-    // The desktop embeds the daemon, so two chat services (and two
-    // coordinators) coexist in one process. A child alias registered through
-    // one must only ever reach that one's executions.
     const first = createThreadStreamCoordinator();
     const second = createThreadStreamCoordinator();
 
@@ -381,7 +361,6 @@ describe('createThreadStreamCoordinator run-keyed executions', () => {
     expect(second.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(false);
     expect(firstReasons).toEqual([]);
 
-    // The first coordinator owns both: the alias is registered on itself.
     const dispose = first.registerChildRunAlias('run_parent', 'run_child');
     expect(first.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(true);
     expect(firstReasons).toEqual(['run-cancelled']);
@@ -394,7 +373,6 @@ describe('createThreadStreamCoordinator run-keyed executions', () => {
     const second = coordinator.registerExecution({ runId: 'run_1', cancel: () => undefined });
 
     first.dispose();
-    // The stale record must not remove the newer owner's entry.
     expect(coordinator.hasLiveExecutionForRun('run_1')).toBe(true);
     first.dispose();
     second.dispose();

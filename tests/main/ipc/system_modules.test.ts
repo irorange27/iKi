@@ -250,7 +250,9 @@ describe('system IPC modules', () => {
 
   it('lists tools and falls back to an empty set when metadata resolution fails', async () => {
     getToolMetadataMock.mockReturnValueOnce([{ name: 'web' } as never]);
-    expect(await ipcHandlers.get('tools:list')?.(null)).toEqual([{ name: 'web' }]);
+    expect(await ipcHandlers.get('tools:list')?.(null)).toEqual([
+      { name: 'web', needsApproval: false },
+    ]);
 
     getAppConfigRuntimeMock.mockReturnValueOnce({
       general: {

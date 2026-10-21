@@ -1,10 +1,6 @@
 import type { DynamicToolPart } from '../message_parts';
 import { isObjectRecord } from '../message_parts';
 
-// A persisted tool part can be left non-terminal by a crash, quit, or a
-// restart-killed run. Converting it to a recorded error keeps three consumers
-// aligned: the UI renders a terminal state, providers receive a paired error
-// tool result on the next turn, and the approval card stops being answerable.
 export const TOOL_INTERRUPTED_ERROR_TEXT =
   'Tool execution was interrupted before a result was recorded (turn ended or app restarted); the action may or may not have taken effect. Verify the current state before retrying.';
 
@@ -32,8 +28,6 @@ export const toInterruptedToolPart = (
   errorText,
 });
 
-// State-aware text for persisted-part marking at restart: an approval-gated
-// call certainly never ran; anything interrupted mid-flight may have.
 export const interruptedToolPartErrorText = (part: DynamicToolPart): string =>
   part.state === 'approval-requested' || part.state === 'approval-responded'
     ? APPROVAL_PENDING_INTERRUPTED_ERROR_TEXT

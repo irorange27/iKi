@@ -89,10 +89,8 @@ describe('git_worktree', () => {
       'workspace_wt_thread_wt_1'
     );
 
-    // README from the repo HEAD is present in the worktree checkout.
     expect(fs.existsSync(path.join(result.workspace.path, 'README.md'))).toBe(true);
 
-    // Idempotent reuse.
     const again = await gitWorktree.createThreadWorktree('thread_wt_1', 'ws_repo');
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.created).toBe(false);
@@ -134,7 +132,6 @@ describe('git_worktree', () => {
   });
 
   it('merges the worktree branch back into the main checkout', async () => {
-    // Fresh thread + worktree; agent commits a change on the branch.
     createThread('thread_merge');
     chatDb.updateChatThread('thread_merge', { workspace_id: 'ws_repo' });
     const created = await gitWorktree.createThreadWorktree('thread_merge', 'ws_repo');
@@ -150,7 +147,6 @@ describe('git_worktree', () => {
     if (!result.ok) return;
     expect(result.branch).toBe('iki/thread_merge');
 
-    // The main checkout now contains the agent's file.
     expect(fs.existsSync(path.join(repoDir, 'feature.txt'))).toBe(true);
   });
 
@@ -163,14 +159,12 @@ describe('git_worktree', () => {
     await execFileAsync('git', ['add', '.'], { cwd: worktreePath });
     await execFileAsync('git', ['-c', 'user.email=a@b', '-c', 'user.name=a', 'commit', '-m', 'w'], { cwd: worktreePath });
 
-    // Dirty the main checkout.
     fs.writeFileSync(path.join(repoDir, 'user-note.txt'), 'user work in progress');
 
     const result = await gitWorktree.mergeThreadWorktree('thread_merge_dirty');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toContain('uncommitted changes');
-    // The agent's work did NOT land in the main checkout.
     expect(fs.existsSync(path.join(repoDir, 'w.txt'))).toBe(false);
     fs.rmSync(path.join(repoDir, 'user-note.txt'));
   });

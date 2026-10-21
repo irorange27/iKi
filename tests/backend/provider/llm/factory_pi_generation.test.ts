@@ -1,11 +1,5 @@
 // @vitest-environment node
 
-/**
- * Switch item 1 (issue #104, ADR 007): single-shot generation for the
- * default openai-compatible branch routes through the Pi supply layer;
- * static-factory providers stay on the AI SDK. Both sides are exercised at
- * the real HTTP boundary (scripted SSE server).
- */
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,6 +20,7 @@ import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { addProvider } from '@iki/backend/db/providers';
 import { generateChatWithModelMessages } from '@iki/backend/provider/llm/factory';
 import { callPiChat } from '@iki/backend/provider/llm/pi_adapter';
+import { getPersonaPrompt } from '@iki/backend/persona';
 import { createScriptedPiServer, sse, type ScriptedPiServer } from '../../pi_candidate/helpers/scripted_pi_server';
 
 let root: string;
@@ -86,35 +81,25 @@ describe('switch item 1: single-shot generation routing', () => {
     });
 
     expect(result.text).toBe('hello from pi');
-    // Total-prompt convention: inputTokens restores cached tokens (100 = 40 + 60).
     expect(result.usage.inputTokens).toBe(100);
     expect(result.usage.outputTokens).toBe(20);
     expect(result.usage.cacheReadTokens).toBe(60);
     expect(result.usage.reasoningTokens).toBe(5);
     expect(result.usage.totalTokens).toBe(120);
 
-    // The wire: persona/aux system prompt present, user message present,
-    // output cap projected, no strict normalization requested.
     const wire = server.getWire('pi generation probe');
     const messages = wire.messages as Array<{ role: string; content: unknown }>;
     expect(messages[0].role).toBe('system');
     expect(JSON.stringify(messages[0].content)).toContain('aux system prompt');
     expect(JSON.stringify(wire.messages)).toContain('pi generation probe');
-    // Compat default for unknown baseUrls is the newer field name.
     expect(wire.max_tokens ?? wire.max_completion_tokens).toBe(777);
     expect(wire).not.toHaveProperty('strict');
-    // Pi-path discriminator: streaming-shaped request, and the adapter call
-    // actually happened (routing bites by assertion, not by protocol luck).
     expect(wire.stream).toBe(true);
     expect(vi.mocked(callPiChat)).toHaveBeenCalledTimes(1);
     expect(server.countRequests('pi generation probe')).toBe(1);
   });
 
   it('out-of-domain history (multimodal part) falls back to the AI SDK branch (review B1)', async () => {
-    // The provider is Pi-eligible, but the history carries a file part —
-    // outside the projection's covered domain. Per ADR decision 2 the
-    // request must fall back to the AI SDK path — which fails fast on the
-    // closed port — and callPiChat must never be invoked.
     addProvider({
       id: 'provider_pi_closed',
       name: 'Pi-eligible closed',
@@ -143,14 +128,10 @@ describe('switch item 1: single-shot generation routing', () => {
       })
     ).rejects.toThrow();
     expect(vi.mocked(callPiChat)).not.toHaveBeenCalled();
-    // Per-key counting: immune to other tests' request pollution.
     expect(server.countRequests('pi generation probe')).toBe(1);
   }, 15000);
 
   it('provider failures reject — the resolved Pi error message is not swallowed into an empty success', async () => {
-    // Pi delivers upstream failures as a RESOLVED error-stopReason result
-    // (the event stream never rejects). The factory must surface them;
-    // before the stopReason check this call resolved with empty text.
     addProvider({
       id: 'provider_pi_error',
       name: 'Pi-eligible erroring',
@@ -161,7 +142,6 @@ describe('switch item 1: single-shot generation routing', () => {
       enabled: true,
     });
 
-    // No script for this key → the scripted server answers HTTP 500.
     await expect(
       generateChatWithModelMessages({
         providerType: 'custom-openai',
@@ -180,12 +160,6 @@ describe('switch item 1: single-shot generation routing', () => {
     ['minimax', 'anthropic-messages'],
     ['deepseek', 'openai-completions'],
   ])('serves a static-factory provider (%s) through Pi on the %s dialect', async (type, expectedApi) => {
-    // Regression: `STATIC_PROVIDER_MODEL_FACTORIES[type]` used to EXCLUDE these
-    // providers from the Pi supply, so openai/anthropic/minimax/deepseek rows
-    // were served by per-provider AI SDK clients. Pi covers all three dialects;
-    // what was missing was a single place that said which dialect a provider
-    // type speaks. `resolveProviderApi` is now that place, and every Pi model
-    // build carries its answer.
     addProvider({
       id: `provider_static_${type}`,
       name: `Static ${type}`,
@@ -212,7 +186,7 @@ describe('switch item 1: single-shot generation routing', () => {
     expect(model?.api).toBe(expectedApi);
   });
 
-  it('honors systemPromptOverride and temperature on the Pi path (#126 aux consolidation)', async () => {
+  it('lands the caller-declared aux instruction in the aux slot, never as a persona-led override', async () => {
     server.setScript('aux override probe', {
       chunks: [
         sse.delta('ok'),
@@ -225,14 +199,11 @@ describe('switch item 1: single-shot generation routing', () => {
       providerId: 'provider_pi_path',
       modelId: 'pi-model',
       messages: [{ role: 'user', content: 'aux override probe' }],
-      systemPromptOverride: 'exact runtime system',
+      auxSystemInstruction: 'exact runtime system',
       temperature: 0.3,
     });
     expect(result.text).toBe('ok');
 
-    // The override is the EXACT request system — the persona-led join is
-    // skipped entirely (fails on the old code, which ignored the override);
-    // the temperature rides into the adapter call.
     const [model, context, options] = vi.mocked(callPiChat).mock.calls.at(-1)!;
     void model;
     expect(context.systemPrompt).toBe('exact runtime system');
@@ -242,12 +213,29 @@ describe('switch item 1: single-shot generation routing', () => {
     expect(JSON.stringify(wire.messages)).toContain('aux override probe');
   });
 
+  it('carries a runtime-composed aux system exactly once, persona included', async () => {
+    server.setScript('aux duplicate probe', {
+      chunks: [sse.delta('ok'), sse.finish('stop', usageChunk())],
+    });
+
+    const composed = `${getPersonaPrompt()}\n\nAnswer the question briefly.`;
+    await generateChatWithModelMessages({
+      providerType: 'custom-openai',
+      providerId: 'provider_pi_path',
+      modelId: 'pi-model',
+      messages: [{ role: 'user', content: 'aux duplicate probe' }],
+      auxSystemInstruction: composed,
+    });
+
+    const wire = server.getWire('aux duplicate probe');
+    const body = JSON.stringify(wire);
+    const identityMarker = 'You are iKi, a powerful AI assistant';
+    const occurrences = body.split(identityMarker).length - 1;
+    expect(occurrences).toBe(1);
+    expect(body).toContain('Answer the question briefly.');
+  });
+
   it('serves a Responses provider through Pi with the openai-responses dialect', async () => {
-    // Regression: `isResponseApi` used to be an EXCLUSION from the Pi supply,
-    // so Responses providers were pushed to the AI SDK's client.responses().
-    // Pi drives that dialect natively (KnownApi includes "openai-responses"),
-    // and the only thing missing was this adapter hardcoding
-    // 'openai-completions'. The api kind must reach the built model.
     addProvider({
       id: 'provider_pi_responses',
       name: 'Responses provider',
@@ -271,16 +259,11 @@ describe('switch item 1: single-shot generation routing', () => {
       extraSystemPrompt: 'resp system',
     }).catch(error => ({ text: '', error: error as Error }));
 
-    // Either the scripted server answers or the dialect path errored on its
-    // own terms — what must NOT happen is a silent reroute to the AI SDK.
-    // Routing is asserted on the built model, which is supply-agnostic.
     const model = vi.mocked(callPiChat).mock.calls.at(-1)?.[0];
     if (model) {
       expect(model.api).toBe('openai-responses');
-      // The Responses compat shape has no reasoning-effort switch.
       expect(model.compat).not.toHaveProperty('supportsReasoningEffort');
     } else {
-      // No Pi call means the request never reached the supply: report it.
       throw new Error(
         `a Responses provider must be admitted to the Pi supply, got: ${JSON.stringify(
           'error' in result ? result.error?.message : 'no pi call'

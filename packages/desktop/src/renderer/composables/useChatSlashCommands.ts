@@ -134,8 +134,6 @@ export const useChatSlashCommands = (deps: {
   let promptAppLoadPromise: Promise<void> | null = null;
   let skillsLoadPromise: Promise<void> | null = null;
 
-  // Loaded once per composer: the restart command only does something in
-  // development, and this gates both its advice and its action.
   const devStatus = ref<{ available: boolean }>({ available: false });
   void deps.electronAPI.dev
     ?.getStatus?.()
@@ -189,8 +187,6 @@ export const useChatSlashCommands = (deps: {
       name: deps.t('chat.input.slash.personality.name'),
       description: deps.t('chat.input.slash.personality.description'),
     },
-    // Dev-only: the packaged app has no main process to reload, so offering the
-    // command there would only confuse.
     {
       id: 'builtin:restart',
       kind: 'builtin',
@@ -508,8 +504,6 @@ export const useChatSlashCommands = (deps: {
     }
 
     if (command.shortcut === 'restart') {
-      // Development only: in the packaged app there is no watcher and a restart
-      // is just Cmd+Q, so the command would be a no-op surprise.
       if (!devStatus.value.available) {
         return {
           kind: 'skip',
