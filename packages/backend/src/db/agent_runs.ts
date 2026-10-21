@@ -81,7 +81,9 @@ const normalizeInput = (value: unknown): AgentRunInput => {
 const normalizeWorking = (value: unknown): AgentRunWorkingState => {
   const parsed = parseJsonValue<Record<string, unknown>>(value, {});
   return {
-    modelMessages: Array.isArray(parsed.modelMessages) ? parsed.modelMessages : [],
+    // `modelMessages` is deliberately NOT read back: the field was removed from
+    // the shape (ADR 010 §3). Rows written before that change may still carry
+    // it; the reader ignores it, which is what makes the removal non-migrating.
     accumulatedText:
       typeof parsed.accumulatedText === 'string' ? parsed.accumulatedText : '',
     pendingApprovalIds: normalizeStringArray(parsed.pendingApprovalIds),
@@ -595,10 +597,6 @@ export const cleanupOldAgentRuns = (maxAgeDays: number): { deletedRuns: number }
 
   db.prepare(
     `DELETE FROM agent_run_steps WHERE run_id IN (${idPlaceholders})`
-  ).run(...runIds);
-
-  db.prepare(
-    `DELETE FROM agent_run_checkpoints WHERE run_id IN (${idPlaceholders})`
   ).run(...runIds);
 
   const result = db
