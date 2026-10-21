@@ -15,6 +15,7 @@ import type {
 } from '@iki/backend/types/provider';
 import type { ChatMessage, ChatThread, PromptApp, Workspace } from './chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from './chat_usage';
+import type { DevRuntimeStatus, DevToolsResolveRequest, DevToolsSourceResult } from './devtools';
 import type {
   AffectStateEntry,
   LongMemoryEntry,
@@ -34,7 +35,14 @@ import type {
 import type { SkillSource, SkillSummary } from './skill';
 import type { TaskPlan } from './task_plan';
 import type { AppUpdateStatus } from './update';
-import type { AgentRun, AgentEvalLabel, AgentRunStatus, AgentRunTrace, AgentRunTree, ReviewQueueItem } from '@iki/backend/types/agent_run';
+import type {
+  AgentRun,
+  AgentEvalLabel,
+  AgentRunStatus,
+  AgentRunTrace,
+  AgentRunTree,
+  ReviewQueueItem,
+} from '@iki/backend/types/agent_run';
 import type { CompanionSnapshot } from './companion';
 import type { ChatInvocationOptions, ChatInvocationResult } from './chat_invocation';
 export type { ChatInvocationOptions, ChatInvocationResult };
@@ -191,24 +199,47 @@ export interface ElectronApi {
       get: (id: string) => Promise<ChatMessage | null>;
       update: (id: string, message: ChatMessageInput) => Promise<unknown>;
       delete: (id: string) => Promise<unknown>;
+      /** User-driven history rewrite (edit/resend): ONE backend-owned
+       * transaction deletes this thread's messages strictly after
+       * `messageId` AND appends the matching session-log fact, so a crash
+       * replay yields the truncated state. The anchor row is kept. Idempotent
+       * when the anchor is missing; refuses an unknown thread. */
+      truncateAfter: (
+        threadId: string,
+        messageId: string
+      ) => Promise<{ success: boolean; deletedIds: string[]; error?: string }>;
     };
     runs: {
       list: (threadId: string) => Promise<AgentRun[]>;
       getTrace: (runId: string) => Promise<AgentRunTrace | null>;
-      trajectory: (runId: string) => Promise<import('@iki/backend/types/atif').AtifTrajectory | null>;
+      trajectory: (
+        runId: string
+      ) => Promise<import('@iki/backend/types/atif').AtifTrajectory | null>;
       getTree: (rootRunId: string) => Promise<AgentRunTree>;
       cancel: (runId: string) => Promise<{ success: boolean; error?: string }>;
       retry: (runId: string) => Promise<{ success: boolean; error?: string; newRunId?: string }>;
-      retryAndExecute: (runId: string) => Promise<{ success: boolean; error?: string; newRunId?: string }>;
+      retryAndExecute: (
+        runId: string
+      ) => Promise<{ success: boolean; error?: string; newRunId?: string }>;
       resume: (runId: string) => Promise<{ success: boolean; error?: string }>;
-      listByStatus: (statuses: string[], opts?: { limit?: number; clientId?: string }) => Promise<AgentRun[]>;
+      listByStatus: (
+        statuses: string[],
+        opts?: { limit?: number; clientId?: string }
+      ) => Promise<AgentRun[]>;
       reviewQueue: (limit?: number) => Promise<ReviewQueueItem[]>;
       eval: {
-        exportTrace: (runId: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+        exportTrace: (
+          runId: string
+        ) => Promise<{ success: boolean; filePath?: string; error?: string }>;
         exportRunTrajectory: (
           runId: string
         ) => Promise<import('@iki/backend/types/atif').AtifTrajectoryExportResult>;
-        addLabel: (input: { runId: string; stepId?: string | null; label: string; note?: string | null }) => Promise<AgentEvalLabel>;
+        addLabel: (input: {
+          runId: string;
+          stepId?: string | null;
+          label: string;
+          note?: string | null;
+        }) => Promise<AgentEvalLabel>;
         listLabels: (runId: string) => Promise<AgentEvalLabel[]>;
         deleteLabel: (labelId: string) => Promise<{ success: boolean }>;
       };
@@ -339,6 +370,17 @@ export interface ElectronApi {
     onUpdated: (callback: (snapshot: CompanionSnapshot) => void) => () => void;
     openMainWindow: () => Promise<WindowActionResult>;
     disable: () => Promise<WindowActionResult>;
+  };
+  /** Development runtime: restart for main-process edits, hot-reload facts. */
+  dev: {
+    getStatus: () => Promise<DevRuntimeStatus>;
+    restartApp: () => Promise<{ ok: boolean; reason?: string }>;
+  };
+  /** Element → source bridge: which file renders the element on screen. */
+  devtools: {
+    installRecorder: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
+    probeElement: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
+    resolveElement: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
   };
   openSettings: (section?: string) => void;
   /** Focus the main window and switch its chat view to the given thread. */

@@ -30,6 +30,12 @@ export const registerChatIpc = (): void => {
     chatService.updateMessage(id, message)
   );
   ipcMain.handle('chat:messages:delete', (_, id) => chatService.deleteMessage(id));
+  // Backend-owned atomic truncate (rows + session-log fact in one
+  // transaction): the renderer's edit/resend flow makes this ONE call
+  // instead of looping chat:messages:delete per row.
+  ipcMain.handle('chat:messages:truncate-after', (_, threadId, messageId) =>
+    chatService.truncateAfterMessage(threadId, messageId)
+  );
   ipcMain.handle('chat:runs:list', (_, threadId: string) =>
     toPlainData(chatService.listRuns(threadId))
   );

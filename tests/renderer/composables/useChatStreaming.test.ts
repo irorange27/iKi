@@ -46,6 +46,8 @@ const createHarness = (options?: {
   const messageCreated = vi.fn(async (input: { id: string }) => ({ id: input.id }));
   const messageUpdated = vi.fn(async () => undefined);
   const messageDeleted = vi.fn(async () => undefined);
+  // The backend-owned atomic truncate: one call, returns the ids it deleted.
+  const messageTruncateAfter = vi.fn(async () => ({ success: true, deletedIds: [] as string[] }));
   const stream = vi.fn(async () => ({ success: true }));
   const stopStream = vi.fn(async () => ({ success: true }));
   const updateThread = vi.fn(async () => ({ success: true }));
@@ -87,6 +89,7 @@ const createHarness = (options?: {
         create: messageCreated,
         update: messageUpdated,
         delete: messageDeleted,
+        truncateAfter: messageTruncateAfter,
       },
       threads: {
         update: updateThread,
@@ -132,6 +135,7 @@ const createHarness = (options?: {
     messageCreated,
     messageUpdated,
     messageDeleted,
+    messageTruncateAfter,
     stopStream,
     updateThread,
     createNewThread,
@@ -217,10 +221,11 @@ describe('useChatStreaming', () => {
       parts: [{ type: 'text', text: 'Follow-up' }],
     };
 
-    const { state, chatInstance, messageCreated, messageUpdated, messageDeleted } = createHarness({
-      currentThread: createStoredThread({ id: 'thread_1', model: 'gpt-4.1' }),
-      initialMessages: [userMessage, assistantMessage, trailingUserMessage],
-    });
+    const { state, chatInstance, messageCreated, messageUpdated, messageDeleted, messageTruncateAfter } =
+      createHarness({
+        currentThread: createStoredThread({ id: 'thread_1', model: 'gpt-4.1' }),
+        initialMessages: [userMessage, assistantMessage, trailingUserMessage],
+      });
 
     await state.beginEditMessage(userMessage, vi.fn(async () => undefined));
 
@@ -230,8 +235,12 @@ describe('useChatStreaming', () => {
     });
     await flushMicrotasks();
 
-    // The truncate drops everything after the edited message (durable rows via
-    // the admin delete channel; turn-driven writes belong to the backend).
+    // The truncate is ONE backend-owned atomic call (rows + session-log fact
+    // in one transaction) — not a per-row delete loop over the admin channel.
+    expect(messageTruncateAfter).toHaveBeenCalledTimes(1);
+    expect(messageTruncateAfter).toHaveBeenCalledWith('thread_1', 'user_1');
+    expect(messageDeleted).not.toHaveBeenCalled();
+    // The local store (the view) drops its tail only after the truncate lands.
     expect(chatInstance.messageStore.messages).toHaveLength(1);
     expect(getTextPart(chatInstance.messageStore.messages[0] as UIMessage)).toBe(
       'Updated question'
@@ -242,8 +251,6 @@ describe('useChatStreaming', () => {
         message: expect.stringContaining('Updated question'),
       })
     );
-    expect(messageDeleted).toHaveBeenCalledWith('assistant_1');
-    expect(messageDeleted).toHaveBeenCalledWith('user_2');
     expect(messageCreated).not.toHaveBeenCalled();
     expect(state.editingUserMessageId.value).toBeNull();
     expect(getTextPart(result?.userMessage as UIMessage)).toBe('Updated question');

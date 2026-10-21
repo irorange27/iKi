@@ -19,6 +19,7 @@
             data-gramm="false"
             :ref="assignInputRef"
             :value="props.modelValue"
+            :aria-label="t('a11y.composerInput')"
             :placeholder="props.placeholder"
             class="chat-input-field ui-text-primary placeholder-muted focus:outline-none"
             :class="{ 'is-expanded': isExpanded, 'has-expand-toggle': showExpandToggle }"
@@ -348,7 +349,10 @@ onBeforeUnmount(() => {
   min-width: 120px;
   flex: 999 1 140px;
   min-height: 36px;
-  max-height: 220px;
+  /* Height-aware growth: on a short window the composer may use ~26% of the
+     height instead of a flat 220px, which used to leave a 420px-tall window
+     with more composer than conversation. */
+  max-height: clamp(96px, 26vh, 220px);
   resize: none;
   overflow-y: hidden;
   border: 0;

@@ -6,12 +6,14 @@ const {
   getHistoryMock,
   createAgentRunTrackerMock,
   getToolModelMock,
+  createHarnessSpy,
 } = vi.hoisted(() => ({
   createSimpleAgentRunnerMock: vi.fn(),
   runMock: vi.fn(),
   getHistoryMock: vi.fn(() => [{ role: 'assistant', content: 'delegated history' }]),
   createAgentRunTrackerMock: vi.fn(),
   getToolModelMock: vi.fn(() => ({ providerType: 'openai', model: 'gpt-4o-mini' })),
+  createHarnessSpy: vi.fn(),
 }));
 
 vi.mock('@iki/backend/agent/runners/simple_agent_runner', () => ({
@@ -57,7 +59,14 @@ describe('DelegatedAgentTool', () => {
     setDelegatedAgentRuntime({
       createRunTracker: createAgentRunTrackerMock,
       getConversationToolModel: getToolModelMock,
-      createHarness: startTurnHarness,
+      // These cases assert WHAT the tool hands its child harness (tool set,
+      // run wiring, cancellation, alias); the supply is the composition root's
+      // choice, covered by factory_pi_generation / startPiTurnHarness. The
+      // legacy assembly keeps a scripted runner available here.
+      createHarness: assembly => {
+        createHarnessSpy(assembly);
+        return startTurnHarness(assembly);
+      },
     });
   });
 
@@ -343,6 +352,29 @@ describe('DelegatedAgentTool', () => {
       )
     ).rejects.toThrow(/recursive delegated agent calls are disabled/i);
   });
-});
 
-type AgentToolLike = { name: string };
+  it('builds the child harness through the injected runtime, not a hardcoded implementation', async () => {
+    // Regression (ADR 009): the child harness used to be named `AgentHarness`
+    // in this tool, which pinned delegation to the AI SDK supply. The tool now
+    // asks the composition root for a `TurnDriverHarness`, and startPiTurnHarness
+    // serves it — this asserts the SEAM, so a future supply change needs no edit
+    // here, only a different registration.
+    setRunResult({ response: 'done', iterations: 0, toolCalls: [] });
+    const tool = new DelegatedAgentTool();
+
+    await runWithToolRuntimeContext(
+      {
+        threadId: 'thread_seam',
+        availableTools: [new ReadFileTool().toAgentTool()],
+        conversationModel: { providerType: 'openai', model: 'gpt-4o-mini' },
+      } as never,
+      async () => await tool.execute({ task: 'seam probe' })
+    );
+
+    expect(createHarnessSpy).toHaveBeenCalledTimes(1);
+    const assembly = createHarnessSpy.mock.calls[0][0] as Record<string, unknown>;
+    // The child runs approval-free: a subagent has no surface to answer a card.
+    expect(assembly.approvalPolicy).toBe('never');
+    expect(assembly.enableTools).toBe(true);
+  });
+});

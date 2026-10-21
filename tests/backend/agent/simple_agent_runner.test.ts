@@ -956,7 +956,7 @@ describe('SimpleAgentRunner — characterization tests', () => {
       await drain(gen);
     });
 
-    it('hands the summarizer a marker-free replay of the routed prefix when compaction fires', async () => {
+    it('summarizes the omitted history without replaying the routed prefix', async () => {
       generateThreadSummaryMock.mockReset().mockResolvedValue({ summary: 'ok' });
       setupAll(makeStreamTextResult(), { providerType: 'anthropic' });
       const runner = new SimpleAgentRunner();
@@ -985,23 +985,20 @@ describe('SimpleAgentRunner — characterization tests', () => {
 
       expect(generateThreadSummaryMock).toHaveBeenCalledTimes(1);
       const call = generateThreadSummaryMock.mock.calls[0][0] as Record<string, any>;
+      // The omitted history is what the summarizer must read.
       expect(call.messages[0].content).toContain('token');
-      expect(call.cachePrefix).toBeDefined();
-      expect(call.cachePrefix.providerType).toBe('anthropic');
-      expect(call.cachePrefix.model).toBe('claude-3-5-sonnet');
-      // The replay must carry the routed request's system prompt, never the summarizer's own.
-      const routedSystem = (streamTextMock.mock.calls.at(-1)?.[0] as { system?: string } | undefined)?.system;
-      expect(call.cachePrefix.systemPrompt).toBe(routedSystem);
-      expect(call.cachePrefix.systemPrompt).not.toContain('rolling thread summary');
-      expect(call.cachePrefix.history).toHaveLength(3);
-      for (const message of call.cachePrefix.history) {
-        expect(message.providerOptions?.anthropic?.cacheControl).toBeUndefined();
-      }
+      // Regression (ADR 009): this used to also hand over a `cachePrefix` — a
+      // replay of the routed request's prefix so the read was eligible for
+      // provider prompt-cache reuse. Only this runner ever supplied it, and once
+      // every turn moved to the Pi supply nothing did, so the machinery was
+      // unreachable and has been deleted. The summarizer is one standalone aux
+      // call now; asserting the ABSENCE keeps it from growing back silently.
+      expect(call.cachePrefix).toBeUndefined();
 
       await drain(gen);
     });
 
-    it('passes the conversation OpenAI cache key to the compaction replay', async () => {
+    it('does not attach a prompt-cache replay key to the compaction call', async () => {
       generateThreadSummaryMock.mockReset().mockResolvedValue({ summary: 'ok' });
       setupAll(makeStreamTextResult(), { providerType: 'openai' });
       const runner = new SimpleAgentRunner();
@@ -1025,16 +1022,16 @@ describe('SimpleAgentRunner — characterization tests', () => {
         ],
       });
 
+      // The routed request still carries its cache key (prompt caching on the
+      // main call is untouched); the compaction aux call does not replay it.
       const routedCall = streamTextMock.mock.calls.at(-1)?.[0] as {
         providerOptions?: { openai?: { promptCacheKey?: string } };
       };
-      const summaryCall = generateThreadSummaryMock.mock.calls[0][0] as {
-        cachePrefix?: { openAIPromptCacheKey?: string };
-      };
-      expect(summaryCall.cachePrefix?.openAIPromptCacheKey).toBe(
-        routedCall.providerOptions?.openai?.promptCacheKey
+      expect(routedCall.providerOptions?.openai?.promptCacheKey).toMatch(
+        /^iki-thread-[a-f0-9]{32}$/
       );
-      expect(summaryCall.cachePrefix?.openAIPromptCacheKey).toMatch(/^iki-thread-[a-f0-9]{32}$/);
+      const summaryCall = generateThreadSummaryMock.mock.calls[0][0] as { cachePrefix?: unknown };
+      expect(summaryCall.cachePrefix).toBeUndefined();
 
       await drain(gen);
     });

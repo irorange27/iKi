@@ -116,13 +116,17 @@ const buildRequestedContextTokens = (config: ContextConfig): number =>
 const resolveMaxOutputTokens = (
   modelInputLimit: number,
   capability?: ModelCapability | null
-): number => {
+): number | null => {
   const declaredOutput = capability?.maxOutputTokens ?? null;
-  if (declaredOutput && declaredOutput > 0) {
-    return clampInteger(declaredOutput, 256, Math.max(256, Math.floor(modelInputLimit / 2)));
+  if (!declaredOutput || declaredOutput <= 0) {
+    // Undeclared output limit: do not invent one. Whatever we pick here is
+    // sent as the request's hard max_tokens, so a guess larger than the real
+    // per-model limit fails the entire turn (HTTP 400). Leaving it null lets
+    // the provider apply its own default, which is always valid.
+    return null;
   }
 
-  return clampInteger(Math.floor(modelInputLimit * 0.2), 512, 2048);
+  return clampInteger(declaredOutput, 256, Math.max(256, Math.floor(modelInputLimit / 2)));
 };
 
 const scaleMessageClipBudget = (
@@ -166,9 +170,12 @@ export const deriveModelAwareContextConfig = (
 
   const maxOutputTokens = resolveMaxOutputTokens(modelInputLimit, capability);
   const safetyReserveTokens = clampInteger(Math.floor(modelInputLimit * 0.05), 128, 1024);
+  // An unknown output limit reserves nothing: the provider's own default is
+  // small relative to the window, and subtracting a guessed reserve would
+  // shrink the input budget on behalf of a number we never send.
   const availableContextTokens = Math.max(
     CONTEXT_BUDGET_FLOORS.maxRecentTokens,
-    modelInputLimit - maxOutputTokens - safetyReserveTokens
+    modelInputLimit - (maxOutputTokens ?? 0) - safetyReserveTokens
   );
 
   if (availableContextTokens >= requestedContextTokens) {

@@ -173,31 +173,44 @@ describe('switch item 1: single-shot generation routing', () => {
     expect(server.countRequests('pi error probe')).toBe(1);
   });
 
-  it('static-factory providers stay on the AI SDK path — Pi never sees the request', async () => {
-    // The static-factory provider keeps the AI SDK path: callPiChat is never
-    // invoked and the request goes to the provider's own (closed) endpoint,
-    // failing there — never on the Pi supply layer.
+  it.each([
+    ['openai', 'openai-responses'],
+    ['anthropic', 'anthropic-messages'],
+    ['anthropic-compatible', 'anthropic-messages'],
+    ['minimax', 'anthropic-messages'],
+    ['deepseek', 'openai-completions'],
+  ])('serves a static-factory provider (%s) through Pi on the %s dialect', async (type, expectedApi) => {
+    // Regression: `STATIC_PROVIDER_MODEL_FACTORIES[type]` used to EXCLUDE these
+    // providers from the Pi supply, so openai/anthropic/minimax/deepseek rows
+    // were served by per-provider AI SDK clients. Pi covers all three dialects;
+    // what was missing was a single place that said which dialect a provider
+    // type speaks. `resolveProviderApi` is now that place, and every Pi model
+    // build carries its answer.
     addProvider({
-      id: 'provider_static_closed',
-      name: 'Static closed',
-      type: 'openai',
+      id: `provider_static_${type}`,
+      name: `Static ${type}`,
+      type,
       api_key: 'key-static',
       models: '["static-model"]',
-      base_url: 'http://127.0.0.1:9/v1',
+      base_url: `http://127.0.0.1:${server.port}/v1`,
       enabled: 1,
+    } as never);
+
+    server.setScript(`static probe ${type}`, {
+      chunks: [sse.delta('ok'), sse.finish('stop', usageChunk())],
     });
 
-    await expect(
-      generateChatWithModelMessages({
-        providerType: 'openai',
-        providerId: 'provider_static_closed',
-        modelId: 'static-model',
-        messages: [{ role: 'user', content: 'static probe' }],
-      })
-    ).rejects.toThrow();
-    expect(vi.mocked(callPiChat)).not.toHaveBeenCalled();
-    expect(server.countRequests('pi generation probe')).toBe(1); // unchanged
-  }, 15000);
+    await generateChatWithModelMessages({
+      providerType: type,
+      providerId: `provider_static_${type}`,
+      modelId: 'static-model',
+      messages: [{ role: 'user', content: `static probe ${type}` }],
+    }).catch(() => undefined);
+
+    const model = vi.mocked(callPiChat).mock.calls.at(-1)?.[0];
+    expect(model, `${type} must be admitted to the Pi supply`).toBeDefined();
+    expect(model?.api).toBe(expectedApi);
+  });
 
   it('honors systemPromptOverride and temperature on the Pi path (#126 aux consolidation)', async () => {
     server.setScript('aux override probe', {
@@ -227,5 +240,52 @@ describe('switch item 1: single-shot generation routing', () => {
     expect((options as { temperature?: number }).temperature).toBe(0.3);
     const wire = server.getWire('aux override probe');
     expect(JSON.stringify(wire.messages)).toContain('aux override probe');
+  });
+
+  it('serves a Responses provider through Pi with the openai-responses dialect', async () => {
+    // Regression: `isResponseApi` used to be an EXCLUSION from the Pi supply,
+    // so Responses providers were pushed to the AI SDK's client.responses().
+    // Pi drives that dialect natively (KnownApi includes "openai-responses"),
+    // and the only thing missing was this adapter hardcoding
+    // 'openai-completions'. The api kind must reach the built model.
+    addProvider({
+      id: 'provider_pi_responses',
+      name: 'Responses provider',
+      type: 'custom-responses',
+      api_key: 'key-resp',
+      models: '["resp-model"]',
+      base_url: `http://127.0.0.1:${server.port}/v1`,
+      enabled: 1,
+      is_response_api: 1,
+    } as never);
+
+    server.setScript('responses dialect probe', {
+      chunks: [sse.delta('hello from responses'), sse.finish('stop', usageChunk())],
+    });
+
+    const result = await generateChatWithModelMessages({
+      providerType: 'custom-responses',
+      providerId: 'provider_pi_responses',
+      modelId: 'resp-model',
+      messages: [{ role: 'user', content: 'responses dialect probe' }],
+      extraSystemPrompt: 'resp system',
+    }).catch(error => ({ text: '', error: error as Error }));
+
+    // Either the scripted server answers or the dialect path errored on its
+    // own terms — what must NOT happen is a silent reroute to the AI SDK.
+    // Routing is asserted on the built model, which is supply-agnostic.
+    const model = vi.mocked(callPiChat).mock.calls.at(-1)?.[0];
+    if (model) {
+      expect(model.api).toBe('openai-responses');
+      // The Responses compat shape has no reasoning-effort switch.
+      expect(model.compat).not.toHaveProperty('supportsReasoningEffort');
+    } else {
+      // No Pi call means the request never reached the supply: report it.
+      throw new Error(
+        `a Responses provider must be admitted to the Pi supply, got: ${JSON.stringify(
+          'error' in result ? result.error?.message : 'no pi call'
+        )}`
+      );
+    }
   });
 });

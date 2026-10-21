@@ -77,6 +77,36 @@ export type NewSessionEvent = {
 };
 
 /**
+ * Assign consecutive revisions at the current head and insert. NOT its own
+ * transaction: a caller that must land the append together with another write
+ * (history truncation deletes rows in the SAME transaction) calls this inside
+ * its own `db.transaction(...)` — an append that could commit on its own
+ * would let one side of a boundary land without the other. The head read and
+ * the inserts run on the caller's connection, so the enclosing transaction is
+ * what makes them atomic; BEGIN IMMEDIATE in the wrapper already holds the
+ * write lock.
+ */
+export const insertSessionEventsAtHead = (
+  threadId: string,
+  events: NewSessionEvent[]
+): number => {
+  if (events.length === 0) return getSessionEventRevision(threadId);
+
+  const db = getDb();
+  const now = new Date().toISOString();
+  const insert = db.prepare(
+    'INSERT INTO session_events (thread_id, revision, type, version, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+
+  let revision = getSessionEventRevision(threadId);
+  for (const event of events) {
+    revision += 1;
+    insert.run(threadId, revision, event.type, event.version, JSON.stringify(event.payload), now);
+  }
+  return revision;
+};
+
+/**
  * Append events to a thread's stream. `expectedRevision` is the revision the
  * caller based its decision on (0 for an empty stream); the write commits
  * only while that still holds, assigning consecutive revisions inside one
@@ -90,21 +120,10 @@ const append = (
 ): number | null => {
   if (events.length === 0) return getSessionEventRevision(threadId);
 
-  const db = getDb();
-  const now = new Date().toISOString();
-  const insert = db.prepare(
-    'INSERT INTO session_events (thread_id, revision, type, version, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-  );
-
-  const transaction = db.transaction((): number | null => {
+  const transaction = getDb().transaction((): number | null => {
     const current = getSessionEventRevision(threadId);
     if (expectedRevision !== null && current !== expectedRevision) return null;
-    let revision = current;
-    for (const event of events) {
-      revision += 1;
-      insert.run(threadId, revision, event.type, event.version, JSON.stringify(event.payload), now);
-    }
-    return revision;
+    return insertSessionEventsAtHead(threadId, events);
   });
 
   return transaction();

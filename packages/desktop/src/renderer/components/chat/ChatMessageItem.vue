@@ -82,6 +82,7 @@
             ref="moreMenuEl"
             class="message-more-menu"
             role="menu"
+            :aria-label="t('a11y.messageActions')"
             @keydown="handleMoreMenuKeydown"
           >
             <button

@@ -23,7 +23,13 @@ export const createChatComposerStreamPayload = (params: {
   reasoningEffort?: string;
   /** Thread-level agent personality; empty string = default (omitted from payload). */
   personality?: string;
-  /** Session-level tool approval policy; empty = global default (omitted). */
+  /**
+   * Tool approval policy. The composer's "default" entry carries `askRisky`
+   * rather than an empty string: an omitted policy made the backend log
+   * `chat.stream.approval_policy degraded` and fall back to legacy flags on
+   * every tool turn, so "the user picked nothing" silently differed from
+   * "the user picked Ask first".
+   */
   approvalPolicy?: string;
 }): ChatComposerInvocationBody | null => {
   if (!params.threadId) {

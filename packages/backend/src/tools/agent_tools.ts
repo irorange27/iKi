@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 import type { AgentResult, AgentTool, AgentUsage } from '@iki/backend/agent/types';
-import type { AgentHarness, TurnHarnessAssembly } from '@iki/backend/agent/harness';
+import type { TurnDriverHarness, TurnHarnessAssembly } from '@iki/backend/agent/harness';
 import type { AgentStep, ModelInferenceRecord } from '@iki/backend/agent/agent_step';
 import type {
   AgentRunInput,
@@ -65,7 +65,13 @@ type DelegatedAgentRunTracker = {
 export type DelegatedAgentRuntime = {
   createRunTracker: (params: DelegatedAgentRunTrackerParams) => DelegatedAgentRunTracker;
   getConversationToolModel: () => ToolModelConfig | null;
-  createHarness: (assembly: TurnHarnessAssembly) => AgentHarness;
+  /**
+   * Builds the SUBAGENT's executor. Narrowed to `TurnDriverHarness` (turn +
+   * getHistory) so the tool does not care which supply serves the child — the
+   * composition root picks, exactly as it does for a parent turn. It used to
+   * name `AgentHarness`, which pinned delegation to the AI SDK.
+   */
+  createHarness: (assembly: TurnHarnessAssembly) => TurnDriverHarness;
 };
 
 let delegatedAgentRuntime: DelegatedAgentRuntime | null = null;
@@ -110,9 +116,20 @@ const normalizeToolNames = (input: unknown): string[] => {
   return normalized;
 };
 
-const isApprovalFreeTool = (tool: Pick<AgentTool, 'needsApproval' | 'approvalMode'>): boolean =>
-  tool.approvalMode !== 'always' &&
-  (tool.needsApproval === false || tool.needsApproval === undefined);
+/**
+ * May this tool run without a human deciding on each call?
+ *
+ * Reads the tool's OWN declaration, never the live `needsApproval` decision.
+ * Under an explicit askRisky/trustWorkspace policy the resolver replaces
+ * `needsApproval` with a per-call function on EVERY tool, so asking it here
+ * made every candidate look approval-gated and emptied the delegable set —
+ * which is why delegation was unusable in the product's default configuration.
+ * Session policy still governs the child's own execution; this only decides
+ * what a subagent may inherit.
+ */
+const isApprovalFreeTool = (
+  tool: Pick<AgentTool, 'declaredNeedsApproval' | 'approvalMode'>
+): boolean => tool.approvalMode !== 'always' && tool.declaredNeedsApproval !== true;
 
 const EXPLORER_TOOL_NAMES: ReadonlySet<string> = new Set([
   'read_file',
@@ -247,7 +264,9 @@ const resolveDelegableTools = (
         );
       }
 
-      resolved.push(tool);
+      // Same reason as the auto path below: the child cannot answer an
+      // approval, and the declaration check above already admitted this tool.
+      resolved.push({ ...tool, needsApproval: false });
     }
 
     return resolved;
@@ -284,7 +303,11 @@ const resolveDelegableTools = (
       'No tool is delegable to the subagent: none of this turn\'s available tools is approval-free for this subagent type. Either the tools themselves require an approval decision, or this subagent type may not use them. Narrow the task to one without tools, or pass tools: [] for a tool-free subagent.'
     );
   }
-  return delegable;
+  // The child has no approval surface, so strip the parent's per-call decision
+  // from the tools it inherits. Selection above already proved every one of
+  // them declares itself approval-free; leaving the parent's function in place
+  // would let a policy the child cannot satisfy pause it mid-task.
+  return delegable.map(tool => ({ ...tool, needsApproval: false }));
 };
 
 const SCRATCHPAD_MAX_FILES = 20;
@@ -366,6 +389,13 @@ export class DelegatedAgentTool extends BaseTool {
       enabledToolNames: [],
       availableSkillIds: runtimeContext.availableSkillIds ?? [],
       guardActive: false,
+      // The child inherits ALREADY-SELECTED approval-free tools (see
+      // isApprovalFreeTool), and it has no UI to answer a card. Without an
+      // explicit policy it fell back to legacy flags, where a tool carrying a
+      // per-call `needsApproval` function could still pause the child on an
+      // approval nobody can grant. 'never' states what the selection already
+      // guarantees: every inherited call needs no human decision.
+      approvalPolicy: 'never',
       maxIterations: resolvedMaxIterations,
       maxOutputTokens: resolvedMaxTokens,
     });

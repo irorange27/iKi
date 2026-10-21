@@ -54,6 +54,13 @@
                   <button
                     type="button"
                     class="provider-secret-toggle"
+                    :aria-label="
+                      selectedProviderDraft.showApiKey ? t('a11y.hideApiKey') : t('a11y.showApiKey')
+                    "
+                    :aria-pressed="selectedProviderDraft.showApiKey"
+                    :title="
+                      selectedProviderDraft.showApiKey ? t('a11y.hideApiKey') : t('a11y.showApiKey')
+                    "
                     @click="emit('toggle-api-key-visibility')"
                   >
                     <EyeOff v-if="selectedProviderDraft.showApiKey" :size="18" />

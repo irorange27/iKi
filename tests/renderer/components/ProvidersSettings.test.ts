@@ -94,6 +94,7 @@ describe('ProvidersSettings', () => {
     });
 
     const wrapper = mount(ProvidersSettings, {
+      attachTo: document.body,
       global: {
         stubs: {
           LobeIcon: true,
@@ -103,6 +104,9 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
+          // Radix teleports dialog content to <body>, outside the VTU wrapper;
+          // render the portal in place so queries keep working.
+          DialogPortal: { template: '<div><slot /></div>' },
         },
       },
     });
@@ -141,6 +145,74 @@ describe('ProvidersSettings', () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
+  it('treats a toggled model as a change worth saving', async () => {
+    const update = vi.fn(async () => ({}));
+    const list = vi.fn(async () => [
+      {
+        id: 'openai_1',
+        name: 'OpenAI',
+        type: 'openai',
+        api_key: 'saved-key',
+        models: '["gpt-4.1"]',
+        base_url: 'https://api.openai.com/v1',
+        enabled: true,
+        created_at: '2026-03-21T12:00:00.000Z',
+        updated_at: '2026-03-21T12:00:00.000Z',
+        available_models: '["gpt-4.1","o3"]',
+      },
+    ]);
+
+    setElectronApi({
+      providers: {
+        list,
+        add: vi.fn(),
+        update,
+        delete: vi.fn(),
+      },
+      chat: {
+        getModels: vi.fn(async () => []),
+      },
+    });
+
+    const wrapper = mount(ProvidersSettings, {
+      attachTo: document.body,
+      global: {
+        stubs: {
+          LobeIcon: true,
+          BookOpen: true,
+          ChevronDown: true,
+          ExternalLink: true,
+          Eye: true,
+          EyeOff: true,
+          RefreshCw: true,
+          // Radix teleports dialog content to <body>, outside the VTU wrapper;
+          // render the portal in place so queries keep working.
+          DialogPortal: { template: '<div><slot /></div>' },
+        },
+      },
+    });
+
+    await flushPromises();
+    await wrapper.find('.provider-models-toggle').trigger('click');
+    await flushPromises();
+
+    expect(findButtonByText(wrapper, 'Save').attributes('disabled')).toBeDefined();
+    expect((wrapper.find('.model-toggle input').element as HTMLInputElement).checked).toBe(true);
+
+    await wrapper.find('.model-toggle input').setValue(false);
+    await flushPromises();
+
+    expect(findButtonByText(wrapper, 'Cancel').attributes('disabled')).toBeUndefined();
+    expect(findButtonByText(wrapper, 'Save').attributes('disabled')).toBeUndefined();
+
+    await findButtonByText(wrapper, 'Save').trigger('click');
+    await flushPromises();
+
+    expect(update).toHaveBeenCalledTimes(1);
+    const [, payload] = update.mock.calls[0];
+    expect(JSON.parse(payload.models as string)).toEqual([]);
+  });
+
   it('adds a manual model to the list before enabling it', async () => {
     const add = vi.fn(async () => ({ id: 'openai_176' }));
 
@@ -157,6 +229,7 @@ describe('ProvidersSettings', () => {
     });
 
     const wrapper = mount(ProvidersSettings, {
+      attachTo: document.body,
       global: {
         stubs: {
           LobeIcon: true,
@@ -166,6 +239,9 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
+          // Radix teleports dialog content to <body>, outside the VTU wrapper;
+          // render the portal in place so queries keep working.
+          DialogPortal: { template: '<div><slot /></div>' },
         },
       },
     });
@@ -241,6 +317,7 @@ describe('ProvidersSettings', () => {
     });
 
     const wrapper = mount(ProvidersSettings, {
+      attachTo: document.body,
       global: {
         stubs: {
           LobeIcon: true,
@@ -250,6 +327,9 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
+          // Radix teleports dialog content to <body>, outside the VTU wrapper;
+          // render the portal in place so queries keep working.
+          DialogPortal: { template: '<div><slot /></div>' },
         },
       },
     });
@@ -289,6 +369,7 @@ describe('ProvidersSettings', () => {
     });
 
     const wrapper = mount(ProvidersSettings, {
+      attachTo: document.body,
       global: {
         stubs: {
           LobeIcon: true,
@@ -298,6 +379,9 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
+          // Radix teleports dialog content to <body>, outside the VTU wrapper;
+          // render the portal in place so queries keep working.
+          DialogPortal: { template: '<div><slot /></div>' },
         },
       },
     });
@@ -307,30 +391,37 @@ describe('ProvidersSettings', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('API Format');
-    expect(wrapper.text()).toContain('Chat Completions (/chat/completions)');
+    // A new custom gateway defaults to the Responses dialect: it is the
+    // preferred protocol, and a gateway that only speaks chat completions is
+    // one click away.
+    expect(wrapper.text()).toContain('Responses (/responses)');
     expect(wrapper.text()).toContain(
-      'Runtime adapter: AI SDK OpenAI-compatible provider against your custom base URL.'
+      'Runtime adapter: Pi-AI (OpenAI Responses dialect) against your base URL.'
     );
 
     await wrapper.find('.provider-format-section .settings-select-trigger').trigger('click');
     await flushPromises();
 
-    const responsesOption = wrapper
+    const completionsOption = wrapper
       .findAll('.provider-format-section .settings-select-option')
-      .find(candidate => candidate.text().replace(/\s+/g, ' ').includes('Responses (/responses)'));
+      .find(candidate =>
+        candidate.text().replace(/\s+/g, ' ').includes('Chat Completions (/chat/completions)')
+      );
 
-    if (!responsesOption) {
-      throw new Error('Responses API format option not found');
+    if (!completionsOption) {
+      throw new Error('Chat Completions API format option not found');
     }
 
-    await responsesOption.trigger('click');
+    await completionsOption.trigger('click');
     await flushPromises();
 
+    // Custom type: the generic chat-completions copy applies (the
+    // OpenAI-compatible variant is reserved for that type).
     expect(wrapper.text()).toContain(
-      'Use this when your gateway exposes an OpenAI Responses endpoint.'
+      'This selection sends OpenAI-compatible Chat Completions requests to your configured base URL. Switch to Responses when your gateway exposes it.'
     );
     expect(wrapper.text()).toContain(
-      'Runtime adapter: AI SDK OpenAI Responses provider with your custom base URL.'
+      'Runtime adapter: Pi-AI (OpenAI Chat Completions dialect) against your base URL.'
     );
 
     await selectSettingsOption(wrapper, 'Type', 'Anthropic Compatible');
@@ -340,7 +431,7 @@ describe('ProvidersSettings', () => {
       'Use this when your gateway exposes an Anthropic Messages endpoint.'
     );
     expect(wrapper.text()).toContain(
-      'Runtime adapter: AI SDK Anthropic provider configured against your custom base URL.'
+      'Runtime adapter: Pi-AI (Anthropic Messages dialect) against your base URL.'
     );
   });
 
@@ -361,6 +452,7 @@ describe('ProvidersSettings', () => {
     });
 
     const wrapper = mount(ProvidersSettings, {
+      attachTo: document.body,
       global: {
         stubs: {
           LobeIcon: true,
@@ -370,6 +462,9 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
+          // Radix teleports dialog content to <body>, outside the VTU wrapper;
+          // render the portal in place so queries keep working.
+          DialogPortal: { template: '<div><slot /></div>' },
         },
       },
     });
@@ -410,6 +505,7 @@ describe('ProvidersSettings', () => {
     });
 
     const wrapper = mount(ProvidersSettings, {
+      attachTo: document.body,
       global: {
         stubs: {
           LobeIcon: true,
@@ -419,6 +515,9 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
+          // Radix teleports dialog content to <body>, outside the VTU wrapper;
+          // render the portal in place so queries keep working.
+          DialogPortal: { template: '<div><slot /></div>' },
         },
       },
     });
@@ -485,6 +584,7 @@ describe('ProvidersSettings', () => {
     });
 
     const wrapper = mount(ProvidersSettings, {
+      attachTo: document.body,
       global: {
         stubs: {
           LobeIcon: true,
@@ -494,6 +594,9 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
+          // Radix teleports dialog content to <body>, outside the VTU wrapper;
+          // render the portal in place so queries keep working.
+          DialogPortal: { template: '<div><slot /></div>' },
         },
       },
     });
@@ -531,6 +634,7 @@ describe('ProvidersSettings', () => {
     });
 
     const wrapper = mount(ProvidersSettings, {
+      attachTo: document.body,
       global: {
         stubs: {
           LobeIcon: true,
@@ -540,6 +644,9 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
+          // Radix teleports dialog content to <body>, outside the VTU wrapper;
+          // render the portal in place so queries keep working.
+          DialogPortal: { template: '<div><slot /></div>' },
         },
       },
     });
@@ -600,6 +707,7 @@ describe('ProvidersSettings', () => {
     });
 
     const wrapper = mount(ProvidersSettings, {
+      attachTo: document.body,
       global: {
         stubs: {
           LobeIcon: true,
@@ -609,6 +717,9 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
+          // Radix teleports dialog content to <body>, outside the VTU wrapper;
+          // render the portal in place so queries keep working.
+          DialogPortal: { template: '<div><slot /></div>' },
         },
       },
     });
@@ -653,6 +764,7 @@ describe('ProvidersSettings', () => {
     });
 
     const wrapper = mount(ProvidersSettings, {
+      attachTo: document.body,
       global: {
         stubs: {
           LobeIcon: true,
@@ -662,6 +774,9 @@ describe('ProvidersSettings', () => {
           Eye: true,
           EyeOff: true,
           RefreshCw: true,
+          // Radix teleports dialog content to <body>, outside the VTU wrapper;
+          // render the portal in place so queries keep working.
+          DialogPortal: { template: '<div><slot /></div>' },
         },
       },
     });

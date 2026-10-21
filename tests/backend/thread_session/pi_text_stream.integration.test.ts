@@ -146,11 +146,16 @@ beforeAll(async () => {
   });
   addProvider({
     id: 'provider_sdk_regress',
-    name: 'SDK regression provider',
-    type: 'openai',
+    name: 'Formerly SDK-pinned provider (now Pi-served)',
+    // `openai` would ask for the Responses dialect, which the scripted server
+    // does not implement (it reads `messages`, Responses sends `input`). The
+    // dialect mapping is covered in factory_pi_generation.test.ts; here the
+    // point is only that a provider type this selector used to EXCLUDE now
+    // rides Pi, so use the completions dialect.
+    type: 'deepseek',
     api_key: 'key-sdk',
     models: '["sdk-model"]',
-    base_url: 'http://127.0.0.1:9/v1',
+    base_url: `http://127.0.0.1:${server.port}/v1`,
     enabled: true,
   });
   conversation = createChatPersistence({
@@ -260,15 +265,30 @@ describe('switch item 2c: text-only streaming turns on the Pi supply layer', () 
     expect(committedText('thread_pi_stream')).toContain(shown);
   }, 30000);
 
-  it('keeps openai providers on the AI SDK harness even with tools off', async () => {
-    createModelMock.mockReturnValue(new FauxModelProvider([fauxText('sdk answer')]));
+  it('serves a formerly SDK-pinned provider type through Pi even with tools off', async () => {
+    // Contract change: static-factory provider types (deepseek, openai,
+    // anthropic, minimax) used to be excluded from the Pi supply and pinned to
+    // the AI SDK harness. They are admitted now, so the request must reach the
+    // Pi server and the AI SDK model must never be built.
+    server.setScript('sdk probe', {
+      chunks: [
+        sse.delta('pi answer'),
+        sse.finish('stop', {
+          prompt_tokens: 100,
+          completion_tokens: 20,
+          total_tokens: 120,
+          prompt_tokens_details: { cached_tokens: 60 },
+          completion_tokens_details: { reasoning_tokens: 5 },
+        }),
+      ],
+    });
     const requestsBefore = server.totalRequests();
 
     const target = { id: 702, send: vi.fn() };
     const streaming = buildStreaming();
 
     const result = await streaming.stream(target, {
-      providerType: 'openai',
+      providerType: 'deepseek',
       providerId: 'provider_sdk_regress',
       model: 'sdk-model',
       threadId: 'thread_sdk_regress',
@@ -280,10 +300,10 @@ describe('switch item 2c: text-only streaming turns on the Pi supply layer', () 
     });
     expect(result).toMatchObject({ success: true });
 
-    expect(publishedText(target)).toBe('sdk answer');
+    expect(publishedText(target)).toBe('pi answer');
     expect(lastRunStatus(target)).toBe('completed');
-    expect(createModelMock).toHaveBeenCalled();
-    // No request reached the scripted server: the turn never rode Pi.
-    expect(server.totalRequests()).toBe(requestsBefore);
+    // The discriminator: Pi served it.
+    expect(createModelMock).not.toHaveBeenCalled();
+    expect(server.totalRequests()).toBe(requestsBefore + 1);
   }, 20000);
 });

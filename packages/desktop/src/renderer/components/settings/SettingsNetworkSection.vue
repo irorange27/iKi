@@ -166,6 +166,7 @@
         max="20000"
         step="500"
         :value="config.network.timeout"
+        :aria-label="t('settings.network.timeoutMs')"
         @input="updateNetwork('timeout', parseRequiredInteger(getInputValue($event)))"
       />
       <p class="slider-hint">{{ t('settings.network.timeoutHint') }}</p>
@@ -180,6 +181,7 @@
         max="10"
         step="1"
         :value="config.network.retryAttempts"
+        :aria-label="t('settings.network.retryAttempts')"
         @input="updateNetwork('retryAttempts', parseRequiredInteger(getInputValue($event)))"
       />
       <p class="slider-hint">{{ t('settings.network.retryHint') }}</p>

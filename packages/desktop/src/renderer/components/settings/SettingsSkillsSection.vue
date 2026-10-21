@@ -41,6 +41,7 @@
         <input
           v-model="skillSearchQuery"
           type="text"
+          :aria-label="t('a11y.searchSkills')"
           :placeholder="t('settings.skills.searchPlaceholder')"
         />
       </div>

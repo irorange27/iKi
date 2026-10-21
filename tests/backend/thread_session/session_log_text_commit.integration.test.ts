@@ -56,6 +56,7 @@ import {
   MODEL_OUTPUT_COMMITTED,
 } from '@iki/backend/thread_session/session_log';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
+import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
@@ -137,6 +138,12 @@ describe('streamed text commit gate', () => {
   });
 
   beforeEach(() => {
+  // These suites drive the DURABLE layer (streaming, approvals, session-log
+  // facts, retry, persistence) with a scripted AI SDK model. They are not about
+  // which supply serves the turn, so they opt into the legacy executor: the
+  // production default refuses a turn its projection cannot carry, and a
+  // scripted model has no endpoint to project to.
+  setTurnHarnessFallback(legacyTurnHarness);
     // reset (not clear): leftover mockReturnValueOnce queues from a previous
     // test would leak providers and preparer fixtures across tests.
     vi.resetAllMocks();

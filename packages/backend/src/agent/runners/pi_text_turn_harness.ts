@@ -10,6 +10,7 @@ import {
   resolvePersonaPrompt,
   getProviderConfig,
   resolvePiModelCapability,
+  resolveProviderApi,
 } from '../../provider/llm/factory';
 import {
   buildPiModel,
@@ -92,6 +93,8 @@ const defaultPiTextModelCall: PiTextModelCall = (config, request) => {
     id: config.model,
     providerType: config.providerType,
     baseUrl: provider.baseURL,
+    // Responses providers speak the Responses dialect (see buildPiModel).
+    api: resolveProviderApi(config.providerType, provider),
     // Same convention as the factory's Pi branch: the catalog's window is
     // informational here (the harness enforces the input budget from the
     // capability the turn preparer resolved), and the output cap rides the

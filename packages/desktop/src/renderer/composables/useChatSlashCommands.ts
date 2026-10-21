@@ -24,7 +24,14 @@ import { createLogger } from '../logger';
 
 type ComposerTextControl = HTMLInputElement | HTMLTextAreaElement;
 
-type BuiltInSlashCommandId = 'new' | 'clear' | 'incognito' | 'init' | 'help' | 'personality';
+type BuiltInSlashCommandId =
+  | 'new'
+  | 'clear'
+  | 'incognito'
+  | 'init'
+  | 'help'
+  | 'personality'
+  | 'restart';
 
 type BuiltInSlashCommand = {
   id: `builtin:${BuiltInSlashCommandId}`;
@@ -103,7 +110,7 @@ const toComposerInvocationPartData = (
 };
 
 export const useChatSlashCommands = (deps: {
-  electronAPI: Pick<ElectronApi, 'promptApps' | 'skills' | 'workspaces'>;
+  electronAPI: Pick<ElectronApi, 'promptApps' | 'skills' | 'workspaces' | 'dev'>;
   message: Ref<string>;
   inputRef: Ref<ComposerTextControl | null>;
   threadId: Ref<string | undefined>;
@@ -126,6 +133,18 @@ export const useChatSlashCommands = (deps: {
   const lastLoadedSkillsAt = ref(0);
   let promptAppLoadPromise: Promise<void> | null = null;
   let skillsLoadPromise: Promise<void> | null = null;
+
+  // Loaded once per composer: the restart command only does something in
+  // development, and this gates both its advice and its action.
+  const devStatus = ref<{ available: boolean }>({ available: false });
+  void deps.electronAPI.dev
+    ?.getStatus?.()
+    .then(status => {
+      devStatus.value = { available: Boolean(status?.available) };
+    })
+    .catch(() => {
+      devStatus.value = { available: false };
+    });
 
   const builtInCommands = computed<BuiltInSlashCommand[]>(() => [
     {
@@ -169,6 +188,15 @@ export const useChatSlashCommands = (deps: {
       shortcut: 'personality',
       name: deps.t('chat.input.slash.personality.name'),
       description: deps.t('chat.input.slash.personality.description'),
+    },
+    // Dev-only: the packaged app has no main process to reload, so offering the
+    // command there would only confuse.
+    {
+      id: 'builtin:restart',
+      kind: 'builtin',
+      shortcut: 'restart',
+      name: deps.t('dev.slash.name'),
+      description: deps.t('dev.slash.description'),
     },
   ]);
 
@@ -476,6 +504,23 @@ export const useChatSlashCommands = (deps: {
       return {
         kind: 'skip',
         feedback: deps.t('chat.input.slash.personality.executed', { value: requested }),
+      };
+    }
+
+    if (command.shortcut === 'restart') {
+      // Development only: in the packaged app there is no watcher and a restart
+      // is just Cmd+Q, so the command would be a no-op surprise.
+      if (!devStatus.value.available) {
+        return {
+          kind: 'skip',
+          feedback: deps.t('dev.slash.devOnly'),
+        };
+      }
+      deps.message.value = '';
+      void deps.electronAPI.dev.restartApp();
+      return {
+        kind: 'skip',
+        feedback: deps.t('dev.slash.executed'),
       };
     }
 

@@ -91,15 +91,19 @@ export const resolveSkillsSystemPrompt = async (params: {
     }));
 
     const toolModel = getToolModel();
+    // Skills are an optional enrichment: `null` (selector unavailable or
+    // failed) means "no automatic pick this turn", which is a legitimate
+    // empty result here — unlike the tool set, nothing degrades to a broken
+    // state because a skill was not preloaded.
     const autoSelectedSkillIds =
-      toolModel && availableSkillCatalog.length > 0
+      (toolModel && availableSkillCatalog.length > 0
         ? await selectSkillsWithAgent({
             messages: toLlmChatMessages(params.inputMessages),
             availableSkills: availableSkillCatalog,
             formatCatalogItem: formatSkillMetadataForPrompt,
             affectState: params.affectState,
           })
-        : [];
+        : null) ?? [];
 
     if (normalizedThreadId && toolModel && availableSkillCatalog.length > 0) {
       recordAutoSkillSelection({

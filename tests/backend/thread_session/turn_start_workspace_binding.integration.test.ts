@@ -51,6 +51,7 @@ import { addWorkspace } from '@iki/backend/db/workspaces';
 import { getChatThread } from '@iki/backend/db/chat_thread';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
+import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
@@ -88,6 +89,12 @@ describe('stream binds the turn workspace at admission', () => {
   };
 
   beforeEach(async () => {
+  // These suites drive the DURABLE layer (streaming, approvals, session-log
+  // facts, retry, persistence) with a scripted AI SDK model. They are not about
+  // which supply serves the turn, so they opt into the legacy executor: the
+  // production default refuses a turn its projection cannot carry, and a
+  // scripted model has no endpoint to project to.
+  setTurnHarnessFallback(legacyTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-turn-start-workspace-'));
     initializeDatabase({ dbPath: path.join(root, 'binding.db') });
     const a = path.join(root, 'a');

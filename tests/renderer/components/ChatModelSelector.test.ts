@@ -141,4 +141,44 @@ describe('ChatModelSelector', () => {
     expect(wrapper.find('.model-selector-trigger').attributes('title')).toBe('Choose model');
     expect(wrapper.find('.model-selector-trigger').attributes('aria-label')).toBe('Choose model');
   });
+  it('keeps a configured provider visible so its models can be picked', async () => {
+    const configured = buildProvider({
+      id: 'custom_gateway',
+      name: 'My Gateway',
+      type: 'openai-compatible',
+      models: '["gateway-model-a"]',
+      base_url: 'https://gateway.example.com/v1',
+      api_key: 'gateway-key',
+    });
+    // A provider the user just saved in settings but has not enabled any model
+    // for yet — it must still be listed, otherwise it can never be selected.
+    const withoutModels = buildProvider({
+      id: 'deepseek_new',
+      name: 'DeepSeek',
+      type: 'deepseek',
+      models: '[]',
+      api_key: 'sk-new',
+    });
+
+    const wrapper = mount(ChatModelSelector, {
+      props: {
+        availableProviders: [configured, withoutModels],
+        selectedProvider: configured,
+        selectedModel: 'gateway-model-a',
+      },
+      global: { stubs: { LobeIcon: true } },
+    });
+
+    await wrapper.find('.model-selector-trigger').trigger('click');
+    await flushPromises();
+
+    // root pane -> model list pane
+    await wrapper.find('.model-menu-cell').trigger('click');
+    await flushPromises();
+
+    const names = wrapper.findAll('.model-provider-name').map(n => n.text());
+    expect(names).toContain('My Gateway');
+    expect(names).toContain('DeepSeek');
+    expect(wrapper.text()).toContain('gateway-model-a');
+  });
 });

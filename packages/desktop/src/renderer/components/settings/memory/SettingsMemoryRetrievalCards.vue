@@ -21,6 +21,7 @@
         min="1"
         max="20"
         :value="config.memory.maxRetrievalCount"
+        :aria-label="t('settings.memory.maxRetrievedMemories')"
         @input="
           updateMemory('maxRetrievalCount', parseInt(($event.target as HTMLInputElement).value))
         "
@@ -37,6 +38,7 @@
         max="100"
         step="1"
         :value="Math.round(config.memory.similarThreshold * 100)"
+        :aria-label="t('settings.memory.similarityThreshold')"
         @input="
           updateMemory(
             'similarThreshold',

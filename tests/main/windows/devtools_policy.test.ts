@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { WebContents } from 'electron';
 
 import {
+  createDevToolsToggleAction,
   maybeOpenDevTools,
   parseBooleanEnv,
   shouldAutoOpenDevTools,
+  toggleDevTools,
 } from '../../../packages/desktop/src/main/windows/devtools_policy';
 
 describe('devtools policy', () => {
@@ -81,3 +83,79 @@ describe('devtools policy', () => {
     expect(webContents.openDevTools).toHaveBeenCalledTimes(1);
   });
 });
+
+type ToggleStubOptions = {
+  open?: boolean;
+  devToolsEnabled?: boolean;
+  url?: string;
+  destroyed?: boolean;
+};
+
+const createToggleableContents = (options: ToggleStubOptions = {}) => {
+  const webContents = {
+    isDestroyed: vi.fn(() => options.destroyed ?? false),
+    isDevToolsOpened: vi.fn(() => options.open ?? false),
+    openDevTools: vi.fn(),
+    closeDevTools: vi.fn(),
+    getURL: vi.fn(() => options.url ?? 'file:///app/index.html'),
+    devToolsEnabled: options.devToolsEnabled,
+  };
+  return webContents;
+};
+
+describe('on-demand devtools toggle', () => {
+  it('opens a closed pane', () => {
+    // Packaging plays no part: the same code path opens DevTools in a shipped
+    // app, which is the whole point of the menu accelerator.
+    const webContents = createToggleableContents();
+    expect(toggleDevTools(webContents as unknown as WebContents)).toBe(true);
+    expect(webContents.openDevTools).toHaveBeenCalledTimes(1);
+    expect(webContents.closeDevTools).not.toHaveBeenCalled();
+  });
+
+  it('closes an already-open pane instead of re-focusing it', () => {
+    const webContents = createToggleableContents({ open: true });
+    expect(toggleDevTools(webContents as unknown as WebContents)).toBe(false);
+    expect(webContents.closeDevTools).toHaveBeenCalledTimes(1);
+    expect(webContents.openDevTools).not.toHaveBeenCalled();
+  });
+
+  it('skips a window whose devTools were disabled at construction', () => {
+    // settings_window / companion_window used to pass devTools: !app.isPackaged,
+    // which made F12 in a packaged build throw instead of opening.
+    const webContents = createToggleableContents({ devToolsEnabled: false });
+    expect(toggleDevTools(webContents as unknown as WebContents)).toBe(false);
+    expect(webContents.openDevTools).not.toHaveBeenCalled();
+  });
+
+  it('skips the inspector page and destroyed contents', () => {
+    const inspector = createToggleableContents({ url: 'devtools://devtools/bundled/x.html' });
+    expect(toggleDevTools(inspector as unknown as WebContents)).toBe(false);
+
+    const destroyed = createToggleableContents({ destroyed: true });
+    expect(toggleDevTools(destroyed as unknown as WebContents)).toBe(false);
+  });
+
+  it('resolves the toggle target at click time, not menu build time', () => {
+    const first = createToggleableContents();
+    const second = createToggleableContents();
+    let current = first;
+    const toggle = createDevToolsToggleAction(
+      () => current as unknown as WebContents,
+      { mode: 'detach' }
+    );
+
+    toggle();
+    current = second;
+    toggle();
+
+    expect(first.openDevTools).toHaveBeenCalledWith({ mode: 'detach' });
+    expect(second.openDevTools).toHaveBeenCalledWith({ mode: 'detach' });
+  });
+
+  it('does nothing when no window is available', () => {
+    const toggle = createDevToolsToggleAction(() => null);
+    expect(toggle()).toBe(false);
+  });
+});
+

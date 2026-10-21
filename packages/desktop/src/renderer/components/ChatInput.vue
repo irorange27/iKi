@@ -119,6 +119,7 @@
                   :class="{ 'permission-option--selected': approvalPolicy === option.value }"
                   role="radio"
                   :aria-checked="approvalPolicy === option.value"
+                  :data-policy="option.value"
                   @click="selectApprovalPolicy(option.value)"
                 >
                   <span class="permission-option-icon" aria-hidden="true">
@@ -229,18 +230,24 @@
         </template>
 
         <template #image-previews>
-          <div v-if="attachedImages.length > 0" class="image-preview-strip" aria-label="Attached images">
-            <div
-              v-for="(file, index) in attachedImages"
-              :key="index"
-              class="image-preview-chip"
-              @click="viewerSrc = file.url"
-            >
-              <img
-                :src="file.url"
-                :alt="file.filename || 'Attached image'"
-                class="image-preview-thumb"
-              />
+          <div
+            v-if="attachedImages.length > 0"
+            class="image-preview-strip"
+            :aria-label="t('a11y.attachedImages')"
+          >
+            <div v-for="(file, index) in attachedImages" :key="index" class="image-preview-chip">
+              <button
+                type="button"
+                class="image-preview-open"
+                :aria-label="t('a11y.viewImage')"
+                @click="viewerSrc = file.url"
+              >
+                <img
+                  :src="file.url"
+                  :alt="file.filename || 'Attached image'"
+                  class="image-preview-thumb"
+                />
+              </button>
               <button
                 type="button"
                 class="image-preview-dismiss"
@@ -329,7 +336,10 @@ const permissionOptions = computed<
   { value: string; icon: Component; name: string; description: string }[]
 >(() => [
   {
-    value: '',
+    // "Default" IS Ask first. It carries the explicit policy value so the
+    // backend never has to guess: an empty policy used to reach the turn as
+    // "no policy given" and degraded to legacy auto-run behaviour.
+    value: 'askRisky',
     icon: Settings,
     name: t('chat.input.permission.defaultName'),
     description: t('chat.input.permission.defaultDesc'),
@@ -364,7 +374,9 @@ const permissionChipLabel = computed(() => {
 });
 
 const selectApprovalPolicy = (value: string) => {
-  void threadSession.setApprovalPolicy(parseApprovalPolicy(value) ?? '');
+  // Always store a concrete policy: an empty value is what made tool turns
+  // reach the backend with no policy at all.
+  void threadSession.setApprovalPolicy(parseApprovalPolicy(value) ?? 'askRisky');
   permissionPanelOpen.value = false;
 };
 const {
@@ -972,6 +984,34 @@ defineExpose({
   overflow: hidden;
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
+}
+
+/* Opens the full-size preview. It wraps only the thumbnail: the chip stays a
+   plain container so the dismiss button is not nested inside another button. */
+.image-preview-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  /* the chip clips overflow, so pull the ring fully inside its box */
+  outline-offset: calc((var(--focus-ring-width) + var(--focus-ring-offset)) * -1);
+}
+
+/* Opens the full-size preview. It wraps only the thumbnail: the chip stays a
+   plain container so the dismiss button is not nested inside another button. */
+.image-preview-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  /* the chip clips overflow, so pull the ring fully inside its box */
+  outline-offset: calc((var(--focus-ring-width) + var(--focus-ring-offset)) * -1);
 }
 
 .image-preview-thumb {

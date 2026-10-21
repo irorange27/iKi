@@ -28,6 +28,7 @@ import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
+import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import {
   INPUT_ACCEPTED,
   recordSessionEvents,
@@ -92,6 +93,12 @@ describe('run retry and queued resume at the service boundary', () => {
   };
 
   beforeEach(async () => {
+  // These suites drive the DURABLE layer (streaming, approvals, session-log
+  // facts, retry, persistence) with a scripted AI SDK model. They are not about
+  // which supply serves the turn, so they opt into the legacy executor: the
+  // production default refuses a turn its projection cannot carry, and a
+  // scripted model has no endpoint to project to.
+  setTurnHarnessFallback(legacyTurnHarness);
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-run-resume-'));
     userDataMock.mockReturnValue(root);
     initializeDatabase({ dbPath: path.join(root, 'resume.db') });

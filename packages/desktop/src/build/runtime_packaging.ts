@@ -10,6 +10,10 @@ export const VITE_EXTERNAL_RUNTIME_DEPS = [
   '@langfuse/tracing',
   '@opentelemetry/api',
   '@opentelemetry/sdk-node',
+  // Main-process runtime dep: the DevTools element→source bridge decodes
+  // renderer sourcemaps with it, and it must ship as real files under
+  // node_modules (the copier below walks its transitive closure).
+  'source-map-js',
 ] as const;
 
 type InstalledPackageManifest = {

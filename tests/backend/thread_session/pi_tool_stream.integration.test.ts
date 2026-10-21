@@ -171,11 +171,15 @@ beforeAll(async () => {
   });
   addProvider({
     id: 'provider_sdk_tool_regress',
-    name: 'SDK tool regression provider',
-    type: 'openai',
+    name: 'Formerly SDK-pinned tool provider (now Pi-served)',
+    // `openai` would ask for the Responses dialect (the scripted server speaks
+    // completions); the dialect mapping has its own coverage in
+    // factory_pi_generation.test.ts. What this case asserts is that a provider
+    // type the selector used to EXCLUDE now rides Pi.
+    type: 'deepseek',
     api_key: 'key-sdk',
     models: '["sdk-model"]',
-    base_url: 'http://127.0.0.1:9/v1',
+    base_url: `http://127.0.0.1:${server.port}/v1`,
     enabled: true,
   });
   defaultToolRegistry.register(
@@ -470,13 +474,26 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     });
   }, 30000);
 
-  it('keeps openai providers on the AI SDK harness under the same never policy', async () => {
-    createModelMock.mockReturnValue(
-      new FauxModelProvider([
-        fauxToolCall(TOOL_NAME, { path: '/sdk.txt' }, { id: 'call_sdk' }),
-        fauxText('sdk tool answer'),
-      ])
-    );
+  it('serves a formerly SDK-pinned provider through Pi under the same never policy', async () => {
+    // Contract change: static-factory provider types used to stay on the AI SDK
+    // harness. They are admitted to the single Pi supply now, so the tool turn
+    // must reach the scripted server and the AI SDK model must not be built.
+    server.setScriptSequence('read the sdk probe file', [
+      {
+        chunks: [
+          // Arguments stream as fragments, matching the Pi wire shape.
+          sse.toolCallDelta('call_sdk', TOOL_NAME, '{"path":'),
+          sse.toolCallDelta(null, null, '"/sdk.txt"}'),
+          sse.finish('tool_calls', { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }),
+        ],
+      },
+      {
+        chunks: [
+          sse.delta('pi tool answer'),
+          sse.finish('stop', { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28 }),
+        ],
+      },
+    ]);
     const requestsBefore = server.totalRequests();
     const executionsBefore = executions.length;
 
@@ -484,7 +501,7 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     const streaming = buildStreaming();
 
     const result = await streaming.stream(target, {
-      providerType: 'openai',
+      providerType: 'deepseek',
       providerId: 'provider_sdk_tool_regress',
       model: 'sdk-model',
       threadId: 'thread_sdk_tool_regress',
@@ -500,13 +517,12 @@ describe('switch item 3a: never-approve tool turns on the Pi supply layer', () =
     });
     expect(result).toMatchObject({ success: true });
 
-    // The tool still ran — but on the AI SDK path.
+    // The tool ran, and it ran on the Pi supply.
     expect(executions.slice(executionsBefore)).toEqual(['/sdk.txt']);
-    expect(publishedText(target)).toContain('sdk tool answer');
+    expect(publishedText(target)).toContain('pi tool answer');
     expect(lastRunStatus(target)).toBe('completed');
-    expect(createModelMock).toHaveBeenCalled();
-    // No request reached the scripted server: the turn never rode Pi.
-    expect(server.totalRequests()).toBe(requestsBefore);
+    expect(createModelMock).not.toHaveBeenCalled();
+    expect(server.totalRequests()).toBe(requestsBefore + 2);
   }, 30000);
 
   it('chains a handoff into a fresh Pi batch in autonomous mode (3c: supply survives the rebuild)', async () => {

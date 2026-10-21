@@ -47,20 +47,25 @@ const resolveStaticTool = (
   requireApproval: boolean,
   autoApproveToolRequests: boolean
 ): AgentTool => {
-  let resolved = tool;
+  // Capture the tool's own declaration BEFORE any policy rewrites
+  // `needsApproval`. Policy is per-turn and per-call; the declaration is what
+  // the tool says about itself, and consumers like delegation need that answer
+  // to stay stable no matter which policy the turn runs under.
+  const declaredNeedsApproval = tool.needsApproval === true ? true : false;
+  let resolved: AgentTool = { ...tool, declaredNeedsApproval };
   if (approvalPolicy === 'never') {
-    resolved = { ...tool, needsApproval: false };
+    resolved = { ...resolved, needsApproval: false };
   } else if (approvalPolicy === 'always') {
-    resolved = { ...tool, needsApproval: true };
+    resolved = { ...resolved, needsApproval: true };
   } else if (approvalPolicy === 'trustWorkspace' || approvalPolicy === 'askRisky') {
     const allowPatterns = listToolAllowPatterns(tool.name);
     resolved = {
-      ...tool,
+      ...resolved,
       needsApproval: (input: unknown) =>
         classifyActionRisk(tool.name, input, allowPatterns, approvalPolicy === 'trustWorkspace') === 'escalate',
     };
   } else if (requireApproval) {
-    resolved = { ...tool, needsApproval: true };
+    resolved = { ...resolved, needsApproval: true };
   } else if (
     !guardActive &&
     tool.approvalMode !== 'always' &&
@@ -75,7 +80,7 @@ const resolveStaticTool = (
     // `needsApproval = true` (file_tools.ts) — so a tool was made LESS safe
     // than its declaration and affect state alone decided whether writes were
     // auto-approved (#166).
-    resolved = { ...tool, needsApproval: false };
+    resolved = { ...resolved, needsApproval: false };
   }
 
   return approvalPolicy ? resolved : applyToolApprovalPolicy(resolved, { autoApproveToolRequests });
@@ -103,6 +108,10 @@ const prepareToolWithGuard = (
   const fallback = resolveStaticTool(tool, undefined, guardActive, requireApproval, autoApproveToolRequests);
   return {
     ...tool,
+    // `...tool` is the raw registry tool, so carry the declaration computed by
+    // the fallback: without it this branch (per-step policy snapshot) would be
+    // the one path where delegation still saw no static answer.
+    declaredNeedsApproval: fallback.declaredNeedsApproval,
     needsApproval: (
       input: unknown,
       options: { toolCallId: string; messages: unknown[]; experimental_context?: unknown }

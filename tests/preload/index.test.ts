@@ -207,6 +207,7 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.chat.messages.get('message_1');
     await exposedApi.chat.messages.update('message_1', { message: '{}' });
     await exposedApi.chat.messages.delete('message_1');
+    await exposedApi.chat.messages.truncateAfter('thread_1', 'message_1');
     await exposedApi.chat.runs.list('thread_1');
     await exposedApi.chat.runs.getTrace('run_1');
     await exposedApi.chat.runs.getTree('run_root_1');

@@ -6,6 +6,7 @@ import { createChatApproval } from './approval';
 import { createChatMemory } from './memory';
 import { createChatPersistence } from '../turn_prep/persistence';
 import { createChatRuns } from './runs';
+import { truncateAfterMessage } from './history_truncation';
 import { createChatEval } from './eval';
 import { createChatStreaming } from './session_loop';
 import { createThreadStreamCoordinator } from './thread_stream_coordinator';
@@ -337,6 +338,9 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     retryAndExecute,
     exportThreadMarkdown,
     searchThreadContent,
+    // User-driven history rewrite (edit/resend truncate): the ONE backend
+    // owner — rows and their session-log fact land in one transaction.
+    truncateAfterMessage,
   };
 };
 

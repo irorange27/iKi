@@ -9,7 +9,12 @@ import type { ToolApprovalRequest } from '../types';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import { withRetry } from '@iki/backend/utils/retry';
 import { appendUserPromptToHistory, cloneModelMessages } from '../../provider/ai_sdk_runtime';
-import { resolvePersonaPrompt, getProviderConfig, resolvePiModelCapability } from '../../provider/llm/factory';
+import {
+  resolvePersonaPrompt,
+  getProviderConfig,
+  resolvePiModelCapability,
+  resolveProviderApi,
+} from '../../provider/llm/factory';
 import {
   buildPiModel,
   callPiChat,
@@ -290,6 +295,8 @@ const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
     id: config.model,
     providerType: config.providerType,
     baseUrl: provider.baseURL,
+    // Responses providers speak the Responses dialect (see buildPiModel).
+    api: resolveProviderApi(config.providerType, provider),
     contextWindow: capability?.contextWindow ?? 128000,
     maxTokens: config.maxOutputTokens ?? capability?.maxTokens ?? 4096,
     ...(capability?.input ? { input: capability.input } : {}),
@@ -426,9 +433,6 @@ export class PiToolTurnHarness {
   async *turn(input: TurnInput): AsyncGenerator<TurnEvent, void> {
     const signal = input.abortSignal;
     signal?.throwIfAborted();
-    if (input.toolsOverride?.length) {
-      throw new Error('PiToolTurnHarness does not support toolsOverride; delegated subagents keep the AgentHarness.');
-    }
     // Inline-execution fact port (issue #145): loop-executed calls journal
     // through it; owner-executed resume calls bypass the executor and stay
     // on the owner's own journal.
@@ -436,7 +440,14 @@ export class PiToolTurnHarness {
     const runId = input.runId;
 
     const policyBox = createApprovalPolicyBox(this.config.approvalPolicy);
-    const tools = resolveTools({
+    // A caller-supplied tool set is the capability upper bound (the same
+    // contract the AI SDK harness honours): delegation hands the subagent its
+    // pre-filtered tools here, and resolution is skipped entirely. This used to
+    // throw, which pinned delegated subagents to the AI SDK harness; the tools
+    // arrive already resolved — with `needsApproval: false`, because a
+    // subagent has no surface to answer a card — so the loop below treats them
+    // exactly like resolved ones.
+    const tools = input.toolsOverride ?? resolveTools({
       enableTools: this.config.enableTools,
       enabledToolNames: this.config.enabledToolNames,
       availableSkillIds: this.config.availableSkillIds,

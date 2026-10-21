@@ -61,6 +61,14 @@ export const TURN_FAILED = 'turn_failed';
 export const TURN_CANCELLED = 'turn_cancelled';
 export const APPROVAL_REQUESTED = 'approval_requested';
 export const APPROVAL_DECIDED = 'approval_decided';
+/** A user-driven history rewrite (edit/resend truncate): the conversation
+ * rows after `afterMessageId` were deleted in the SAME SQLite transaction
+ * that appended this fact, so the pure replay yields the truncated view —
+ * the display projection and the recovery authority cannot disagree
+ * (ADR 008). Additive vocabulary: a reader that does not know this type
+ * degrades it to a no-op (it keeps showing the deleted tail until it
+ * updates). */
+export const MESSAGES_TRUNCATED = 'messages_truncated';
 
 /** Payload schema version — bump when a payload's shape changes in a MEANING
  * way: a field reinterpreted, removed, or made required. Additive OPTIONAL
@@ -140,6 +148,18 @@ export type ApprovalDecidedPayload = {
   approved: boolean;
   reason?: string;
   source: 'user' | 'timeout' | 'system';
+};
+
+/** A user-driven truncation (edit/resend), recorded by
+ * `thread_session/history_truncation.ts` in the SAME transaction that
+ * deleted the rows. `deletedMessageIds` is the explicit id list, so replay
+ * removes exactly the rows the display projection lost — no second slicing
+ * rule to keep in sync with `getChatMessages`' ORDER BY. */
+export type MessagesTruncatedPayload = {
+  /** The kept anchor: the edited/resent message whose tail was removed. */
+  afterMessageId: string;
+  deletedMessageIds: string[];
+  truncatedAt: string;
 };
 
 /** Append observations atomically. Throws SessionLogWriteError on failure:
@@ -294,6 +314,10 @@ export const rebuildThreadViewFromEvents = (
   const approvals = new Map<string, RebuiltApproval>();
   let inputSystemPrompts: string[] = [];
   let inputRunId: string | undefined;
+  // The input facts in log order, so a truncation that deletes the tail
+  // input can re-derive the binding instead of pairing a resumed request
+  // with a deleted task's system config.
+  const inputBindings: { messageId: string; system: string[]; runId?: string }[] = [];
 
   for (const event of events) {
     const payload = event.payload as Record<string, unknown>;
@@ -316,6 +340,11 @@ export const rebuildThreadViewFromEvents = (
               ? [...(system as string[])]
               : [];
           inputRunId = typeof payload.runId === 'string' ? payload.runId : undefined;
+          inputBindings.push({
+            messageId: message.id,
+            system: inputSystemPrompts,
+            ...(inputRunId ? { runId: inputRunId } : {}),
+          });
         }
         break;
       }
@@ -359,6 +388,37 @@ export const rebuildThreadViewFromEvents = (
         } else {
           parts.push({ type: 'text', text });
         }
+        break;
+      }
+      case MESSAGES_TRUNCATED: {
+        // A user-driven rewrite (edit/resend): the named rows were deleted
+        // from the display projection in the same transaction that appended
+        // this fact, so replay must drop them too — otherwise the recovery
+        // authority would rebuild history INCLUDING the messages the user
+        // deleted (the defect this arm closes). Ids are removed explicitly
+        // (the fact carries the exact list the deletes matched), and turn /
+        // approval bookkeeping is LEFT ALONE: the facts for a deleted turn
+        // stay in the stream as audit history (the append-only contract —
+        // see rebuildResumeHistoryFromEvents' excludeRunIds, which is a
+        // caller-owned dead-chain decision, not this reducer's).
+        const deletedIds = Array.isArray(payload.deletedMessageIds)
+          ? payload.deletedMessageIds.filter((id): id is string => typeof id === 'string')
+          : [];
+        if (deletedIds.length === 0) break;
+        const deleted = new Set(deletedIds);
+        for (let index = messages.length - 1; index >= 0; index -= 1) {
+          if (deleted.has(messages[index]?.id ?? '')) messages.splice(index, 1);
+        }
+        // The input-fact bindings survive in the same splice: drop the ones
+        // whose input was deleted and re-derive the tail binding, so a
+        // resumed request is never paired with a truncated task's system
+        // config or runId.
+        for (let index = inputBindings.length - 1; index >= 0; index -= 1) {
+          if (deleted.has(inputBindings[index]?.messageId ?? '')) inputBindings.splice(index, 1);
+        }
+        const tail = inputBindings[inputBindings.length - 1];
+        inputSystemPrompts = tail ? [...tail.system] : [];
+        inputRunId = tail?.runId;
         break;
       }
       case APPROVAL_REQUESTED: {

@@ -43,6 +43,7 @@
         max="100"
         step="1"
         :value="Math.round(config.memory.emotion.minConfidence * 100)"
+        :aria-label="t('settings.memory.minimumConfidence')"
         @input="
           updateEmotion('minConfidence', parseInt(($event.target as HTMLInputElement).value) / 100)
         "
@@ -59,6 +60,7 @@
         max="8"
         step="1"
         :value="config.memory.emotion.minSampleCount"
+        :aria-label="t('settings.memory.minimumSamples')"
         @input="updateEmotion('minSampleCount', parseInt(($event.target as HTMLInputElement).value))"
       />
 
@@ -72,6 +74,7 @@
         max="20"
         step="1"
         :value="config.memory.emotion.windowSize"
+        :aria-label="t('settings.memory.windowSize')"
         @input="updateEmotion('windowSize', parseInt(($event.target as HTMLInputElement).value))"
       />
       <p class="slider-hint">{{ t('settings.memory.windowSizeHint') }}</p>
@@ -166,6 +169,7 @@
         max="100"
         step="1"
         :value="Math.round(config.memory.emotion.toolGuard.minConfidence * 100)"
+        :aria-label="t('settings.memory.toolGuardConfidenceThreshold')"
         @input="
           updateEmotionGuard(
             'minConfidence',
@@ -186,6 +190,7 @@
         max="100"
         step="1"
         :value="Math.round(config.memory.emotion.toolGuard.minArousal * 100)"
+        :aria-label="t('settings.memory.toolGuardArousalThreshold')"
         @input="
           updateEmotionGuard(
             'minArousal',
@@ -206,6 +211,7 @@
         max="0"
         step="1"
         :value="Math.round(config.memory.emotion.toolGuard.maxValence * 100)"
+        :aria-label="t('settings.memory.toolGuardValenceThreshold')"
         @input="
           updateEmotionGuard(
             'maxValence',

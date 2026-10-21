@@ -21,7 +21,7 @@ beforeEach(() => {
 });
 
 describe('selectSkillsWithAgent', () => {
-  it('returns empty when tool model is unavailable', async () => {
+  it('returns null (not []) when tool model is unavailable', async () => {
     getToolModelMock.mockReturnValue(null);
 
     const skills = await selectSkillsWithAgent({
@@ -32,7 +32,11 @@ describe('selectSkillsWithAgent', () => {
       formatCatalogItem: formatSkillMetadataForPrompt,
     });
 
-    expect(skills).toEqual([]);
+    // `null` = no selection could be made, `[]` = selected nothing on
+    // purpose. Callers rely on the difference to decide whether to fall back
+    // to the full catalog; collapsing it here once left a failed selector
+    // silently emptying the tool set.
+    expect(skills).toBeNull();
     expect(createSimplePromptTextGeneratorMock).not.toHaveBeenCalled();
   });
 

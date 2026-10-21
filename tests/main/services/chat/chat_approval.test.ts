@@ -1,4 +1,5 @@
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
+import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExecutionPlan } from '@iki/backend/thread_session/execution_plan';
@@ -57,9 +58,15 @@ vi.mock('@iki/backend/tools', () => ({
 
 vi.mock('@iki/backend/provider/llm/factory', () => ({
   resolveModelCapability: vi.fn(async () => null),
-  // Supply selection (switch item 3b): approval-resume tests exercise the
-  // AI SDK harness — the Pi supply never admits these plans.
-  supportsPiTurnSupply: vi.fn(() => false),
+  // Supply selection: these approval-resume tests drive a scripted model, so
+  // they force the legacy executor via setTurnHarnessFallback. The resolver
+  // still has to exist (the selector calls it when nothing is forced) and it
+  // refuses, which keeps the routing decision itself out of these assertions.
+  resolvePiTurnSupply: vi.fn(() => ({
+    admitted: false,
+    cause: 'config',
+    reason: 'not configured in this suite',
+  })),
 }));
 
 vi.mock('@iki/backend/message/ui_messages', () => ({
@@ -120,6 +127,8 @@ const expirePendingToolCallApprovalsByRunIdsMock = vi.mocked(
 );
 
 beforeEach(() => {
+  // Scripted model: force the executor instead of routing it.
+  setTurnHarnessFallback(legacyTurnHarness);
   vi.clearAllMocks();
   rehydrateHarnessMock.mockImplementation(function () {
     let capturedHistory: ModelMessage[] = [];

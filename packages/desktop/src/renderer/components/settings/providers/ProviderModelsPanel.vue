@@ -44,6 +44,7 @@
           class="provider-models-inline-input"
           :placeholder="t('settings.providers.modelAddIdPlaceholder')"
           :title="t('settings.providers.modelAddTitle')"
+          :aria-label="t('a11y.modelIdInput')"
           @keydown.enter.prevent="submitManualModel"
         />
         <input
@@ -51,6 +52,7 @@
           class="provider-models-inline-input"
           :placeholder="t('settings.providers.modelAddDisplayNamePlaceholder')"
           :title="t('settings.providers.modelOptions.tooltip')"
+          :aria-label="t('a11y.modelDisplayNameInput')"
           @keydown.enter.prevent="submitManualModel"
         />
         <button
@@ -71,6 +73,7 @@
           v-model="searchQuery"
           class="provider-models-search-input"
           :placeholder="t('settings.providers.modelSearchPlaceholder')"
+          :aria-label="t('a11y.searchModels')"
         />
       </label>
 
@@ -113,6 +116,7 @@
                 <input
                   type="checkbox"
                   :checked="model.enabled"
+                  :aria-label="t('a11y.modelEnabled', { model: model.label })"
                   @change="$emit('toggle-model', model.id)"
                 />
                 <span class="model-toggle-track">
@@ -283,10 +287,12 @@ const submitManualModel = () => {
 <style scoped src="../settings_shared.css"></style>
 
 <style scoped>
+/* Nested one level inside the details card, so it reads as an inset group
+   rather than a second card: hairline border, same 16px radius. */
 .provider-models-panel {
-  border: 1px solid var(--border-color);
+  border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
   border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-secondary) 76%, var(--bg-tertiary));
+  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
   overflow: hidden;
 }
 
@@ -303,7 +309,7 @@ const submitManualModel = () => {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 16px 18px;
+  padding: 10px 12px;
   cursor: pointer;
 }
 
@@ -316,32 +322,32 @@ const submitManualModel = () => {
 .provider-models-toggle-main {
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .provider-models-toggle-meta {
   gap: 10px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
 .provider-models-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .provider-models-subtitle {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.45;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--text-muted);
   max-width: 460px;
 }
 
 .provider-models-summary {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .models-toggle-open {
@@ -349,10 +355,10 @@ const submitManualModel = () => {
 }
 
 .provider-models-body {
-  padding: 0 18px 18px;
+  padding: 0 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .provider-models-toolbar {
@@ -362,23 +368,23 @@ const submitManualModel = () => {
 
 .fetch-models-btn,
 .manual-add-btn {
-  min-height: 38px;
-  border-radius: 999px;
+  min-height: 34px;
+  border-radius: var(--control-radius);
 }
 
 .provider-models-manual {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 8px;
 }
 
 .provider-models-inline-input,
 .provider-models-search-input {
   width: 100%;
-  border: 1px solid var(--border-color);
+  border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
   background: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 13px;
   transition:
     border-color 0.2s ease,
     background-color 0.2s ease,
@@ -386,14 +392,14 @@ const submitManualModel = () => {
 }
 
 .provider-models-inline-input {
-  min-height: 40px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: var(--control-radius);
 }
 
 .provider-models-inline-input::placeholder,
 .provider-models-search-input::placeholder {
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .provider-models-inline-input:focus,
@@ -410,27 +416,29 @@ const submitManualModel = () => {
 .provider-models-search-icon {
   position: absolute;
   top: 50%;
-  left: 12px;
+  left: 10px;
   transform: translateY(-50%);
-  color: var(--text-secondary);
+  color: var(--text-muted);
   pointer-events: none;
 }
 
 .provider-models-search-input {
-  min-height: 42px;
-  border-radius: 14px;
-  padding: 11px 14px 11px 40px;
+  min-height: 34px;
+  border-radius: var(--control-radius);
+  padding: 6px 10px 6px 32px;
 }
 
 .provider-models-list-summary {
-  font-size: 12px;
-  color: var(--text-secondary);
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
+/* Same inset treatment as the panel itself, so the list does not read as a
+   third nested card. */
 .provider-models-list-shell {
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-primary) 90%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
   overflow: hidden;
 }
 
@@ -439,16 +447,18 @@ const submitManualModel = () => {
   overflow-y: auto;
 }
 
+/* Rows use the selector's 34px quiet-row scale. */
 .provider-model-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 14px 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  gap: 10px;
+  min-height: 34px;
+  padding: 4px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
   transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease;
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .provider-model-row:last-child {
@@ -456,36 +466,37 @@ const submitManualModel = () => {
 }
 
 .provider-model-row:hover {
-  background: color-mix(in srgb, var(--bg-hover) 86%, transparent);
+  background: var(--bg-hover);
 }
 
+/* Enabled rows get the shared wash instead of an accent tint. */
 .provider-model-row-enabled {
-  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-primary));
+  background: var(--bg-active);
 }
 
 .provider-model-row-configured:not(.provider-model-row-enabled) {
-  background: color-mix(in srgb, var(--accent-color) 4%, var(--bg-primary));
+  background: transparent;
 }
 
 .provider-model-row-copy {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .provider-model-row-title {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-primary);
-  line-height: 1.35;
+  line-height: 17px;
   word-break: break-word;
 }
 
 .provider-model-row-secondary {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.4;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--text-muted);
   word-break: break-word;
 }
 
@@ -500,29 +511,25 @@ const submitManualModel = () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  border: 1px solid var(--border-color);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--control-radius-sm);
+  border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   cursor: pointer;
   transition:
-    border-color 0.2s ease,
-    color 0.2s ease,
-    background-color 0.2s ease;
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .model-options-btn:hover {
-  border-color: color-mix(in srgb, var(--accent-color) 55%, var(--border-color));
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+  background: var(--bg-hover);
 }
 
 .model-options-btn-configured {
   color: var(--accent-color);
-  border-color: color-mix(in srgb, var(--accent-color) 45%, var(--border-color));
-  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
 }
 
 .model-toggle {
@@ -539,11 +546,11 @@ const submitManualModel = () => {
 }
 
 .model-toggle-track {
-  width: 48px;
-  height: 28px;
+  width: 40px;
+  height: 22px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-tertiary) 90%, var(--bg-secondary));
-  border: 1px solid color-mix(in srgb, var(--border-color) 85%, transparent);
+  background: color-mix(in srgb, var(--border-color) 70%, var(--bg-secondary));
+  border: 1px solid var(--border-color);
   padding: 2px;
   display: inline-flex;
   align-items: center;
@@ -553,10 +560,10 @@ const submitManualModel = () => {
 }
 
 .model-toggle-thumb {
-  width: 22px;
-  height: 22px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--text-secondary) 40%, var(--bg-primary));
+  background: var(--bg-primary);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   transition:
     transform 0.2s ease,
@@ -569,14 +576,14 @@ const submitManualModel = () => {
 }
 
 .model-toggle input:checked + .model-toggle-track .model-toggle-thumb {
-  transform: translateX(20px);
+  transform: translateX(18px);
   background: var(--accent-contrast);
 }
 
 .provider-models-empty {
-  padding: 18px 16px;
-  color: var(--text-secondary);
-  font-size: 13px;
+  padding: 14px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
   line-height: 1.5;
 }
 

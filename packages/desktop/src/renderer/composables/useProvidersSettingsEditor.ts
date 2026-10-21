@@ -54,14 +54,16 @@ export const useProvidersSettingsEditor = (params: {
     const isResponseApi = editingProvider.value?.is_response_api === true;
     const usesOpenAICompatibleType = providerType === 'openai-compatible';
     const value = isResponseApi ? 'responses' : 'chat-completions';
+    // Responses first: it is the preferred dialect. Chat completions stays
+    // listed because a gateway may only speak it.
     const options = [
-      {
-        value: 'chat-completions' as const,
-        label: t('settings.providers.modal.apiFormat.chatCompletions'),
-      },
       {
         value: 'responses' as const,
         label: t('settings.providers.modal.apiFormat.responses'),
+      },
+      {
+        value: 'chat-completions' as const,
+        label: t('settings.providers.modal.apiFormat.chatCompletions'),
       },
     ];
 
@@ -99,7 +101,11 @@ export const useProvidersSettingsEditor = (params: {
       models: '',
       base_url: '',
       enabled: true,
-      is_response_api: false,
+      // Prefer the Responses API for a new custom gateway. Gateways that only
+      // speak chat completions are one click away in the format selector, and
+      // the failure is immediate and visible (404 on /responses) rather than a
+      // silent capability difference.
+      is_response_api: true,
       available_models: '[]',
     };
     showProviderEditor.value = true;

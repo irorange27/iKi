@@ -22,6 +22,8 @@ import type { AffectStateEntry } from '@iki/backend/types/memory';
 import type { ProactiveTask } from '@iki/backend/types/tasks';
 import type { McpServerInput, McpServerSummary } from '@iki/backend/types/mcp';
 import type { AgentRun, AgentRunTrace, AgentRunTree } from '@iki/backend/types/agent_run';
+import type { DevToolsResolveRequest, DevToolsSourceResult } from '@iki/backend/types/devtools';
+import type { DevRuntimeStatus } from '@iki/backend/types/devtools';
 import type {
   SpeechStatus,
   SpeechTranscriptionInput,
@@ -106,8 +108,9 @@ const electronApi: ElectronApi = {
     approveTool: (approvalId: string, approved: boolean) => {
       return ipcRenderer.invoke('chat:approve-tool', approvalId, approved);
     },
-    onRunStatus: (callback: (event: import('@iki/backend/types/electron_api').RunStatusEvent) => void) =>
-      subscribe('chat:run-status', callback),
+    onRunStatus: (
+      callback: (event: import('@iki/backend/types/electron_api').RunStatusEvent) => void
+    ) => subscribe('chat:run-status', callback),
     removeAllListeners: () => {
       ipcRenderer.removeAllListeners('chat:ui-chunk');
       ipcRenderer.removeAllListeners('chat:run-status');
@@ -119,13 +122,13 @@ const electronApi: ElectronApi = {
       create: (thread: ChatThreadInput) => ipcRenderer.invoke('chat:threads:create', thread),
       clear: (id: string, thread: ChatThreadInput) =>
         ipcRenderer.invoke('chat:threads:clear', id, thread),
-    update: (id: string, thread: ChatThreadInput) =>
-      ipcRenderer.invoke('chat:threads:update', id, thread),
-    exportMarkdown: (threadId: string) =>
-      ipcRenderer.invoke('chat:threads:export-markdown', threadId),
+      update: (id: string, thread: ChatThreadInput) =>
+        ipcRenderer.invoke('chat:threads:update', id, thread),
+      exportMarkdown: (threadId: string) =>
+        ipcRenderer.invoke('chat:threads:export-markdown', threadId),
       delete: (id: string) => ipcRenderer.invoke('chat:threads:delete', id),
-    searchContent: (query: string, limit?: number) =>
-      ipcRenderer.invoke('chat:threads:search-content', query, limit),
+      searchContent: (query: string, limit?: number) =>
+        ipcRenderer.invoke('chat:threads:search-content', query, limit),
     },
     messages: {
       list: (threadId: string) => ipcRenderer.invoke('chat:messages:list', threadId),
@@ -133,6 +136,8 @@ const electronApi: ElectronApi = {
       update: (id: string, message: ChatMessageInput) =>
         ipcRenderer.invoke('chat:messages:update', id, message),
       delete: (id: string) => ipcRenderer.invoke('chat:messages:delete', id),
+      truncateAfter: (threadId: string, messageId: string) =>
+        ipcRenderer.invoke('chat:messages:truncate-after', threadId, messageId),
     },
     runs: {
       list: (threadId: string): Promise<AgentRun[]> =>
@@ -153,7 +158,7 @@ const electronApi: ElectronApi = {
         exportTrace: (runId: string) => ipcRenderer.invoke('chat:eval:export-trace', runId),
         exportRunTrajectory: (runId: string) =>
           ipcRenderer.invoke('chat:eval:export-run-trajectory', runId),
-        addLabel: (input) => ipcRenderer.invoke('chat:eval:add-label', input),
+        addLabel: input => ipcRenderer.invoke('chat:eval:add-label', input),
         listLabels: (runId: string) => ipcRenderer.invoke('chat:eval:list-labels', runId),
         deleteLabel: (labelId: string) => ipcRenderer.invoke('chat:eval:delete-label', labelId),
       },
@@ -256,8 +261,7 @@ const electronApi: ElectronApi = {
   tasks: {
     list: () => ipcRenderer.invoke('tasks:list'),
     get: (id: string) => ipcRenderer.invoke('tasks:get', id),
-    create: (task: ProactiveTaskInput) =>
-      ipcRenderer.invoke('tasks:create', toPlainData(task)),
+    create: (task: ProactiveTaskInput) => ipcRenderer.invoke('tasks:create', toPlainData(task)),
     update: (id: string, updates: Partial<ProactiveTask>) =>
       ipcRenderer.invoke('tasks:update', id, toPlainData(updates)),
     delete: (id: string) => ipcRenderer.invoke('tasks:delete', id),
@@ -290,9 +294,23 @@ const electronApi: ElectronApi = {
     openMainWindow: () => ipcRenderer.invoke('companion:open-main-window'),
     disable: () => ipcRenderer.invoke('companion:disable'),
   },
+  dev: {
+    getStatus: (): Promise<DevRuntimeStatus> => ipcRenderer.invoke('dev:get-status'),
+    restartApp: (): Promise<{ ok: boolean; reason?: string }> =>
+      ipcRenderer.invoke('dev:restart-app'),
+  },
+  devtools: {
+    installRecorder: (request?: DevToolsResolveRequest): Promise<DevToolsSourceResult> =>
+      ipcRenderer.invoke('devtools:install-recorder', request),
+    probeElement: (request?: DevToolsResolveRequest): Promise<DevToolsSourceResult> =>
+      ipcRenderer.invoke('devtools:probe-element', request),
+    resolveElement: (request?: DevToolsResolveRequest): Promise<DevToolsSourceResult> =>
+      ipcRenderer.invoke('devtools:resolve-element', request),
+  },
   openSettings: (section?: string) => ipcRenderer.send('open-settings', section),
   focusThread: (threadId: string) => ipcRenderer.send('chat:focus-thread', threadId),
-  onFocusThread: (callback: (threadId: string) => void) => subscribe('chat:thread-activate', callback),
+  onFocusThread: (callback: (threadId: string) => void) =>
+    subscribe('chat:thread-activate', callback),
   closeWindow: () => ipcRenderer.send('close-window'),
   setWindowShadow: (enabled: boolean) => ipcRenderer.send('window:set-shadow', enabled),
   ...(process.platform === 'darwin'

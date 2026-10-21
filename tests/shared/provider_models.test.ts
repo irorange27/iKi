@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   createModelCapabilityFromProviderModelOptions,
   DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
-  DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
   ensureModelCapability,
   getModelsDevProviderKey,
   getProviderModelOptions,
@@ -332,15 +331,20 @@ describe('provider_models helpers', () => {
     );
   });
 
-  it('normalizes missing capability limits to the modern large-window defaults', () => {
+  it('leaves an undeclared output limit null instead of guessing one', () => {
     expect(normalizeModelCapabilityLimits()).toEqual({
       contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
       maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
-      maxOutputTokens: DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+      // Regression: this used to be 393_216 (384K). That guess is sent to the
+      // provider as the request's hard max_tokens, so every model whose real
+      // ceiling is lower (e.g. 131_072) rejected every turn with HTTP 400.
+      // Unknown must stay unknown so the provider applies its own default.
+      maxOutputTokens: null,
     });
 
-    // Unknown models assume a modern multimodal reasoner: 1M window, 384K
-    // output, text/image/reasoning/tools all offered by default.
+    // Unknown models still assume a modern multimodal reasoner for the INPUT
+    // side (1M window, text/image/reasoning/tools), but assert nothing about
+    // the output ceiling.
     expect(ensureModelCapability('openai', 'gpt-unknown')).toEqual({
       providerType: 'openai',
       providerKey: 'openai',
@@ -348,12 +352,28 @@ describe('provider_models helpers', () => {
       displayName: 'gpt-unknown',
       contextWindow: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
       maxInputTokens: DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
-      maxOutputTokens: DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+      maxOutputTokens: null,
       supportsToolCalls: true,
       supportsReasoning: true,
       supportsVision: true,
       source: 'default',
     });
+  });
+
+  it('keeps a declared output limit for a custom provider', () => {
+    // The exact shape that broke every custom provider: no catalog entry, no
+    // stored override. Resolution must not invent a ceiling.
+    const resolved = ensureModelCapability('custom', 'zcode/GLM-5.3-Flash');
+    expect(resolved.maxOutputTokens).toBeNull();
+
+    // A stored override is trusted as-is (it is the operator's declaration).
+    const declared = ensureModelCapability(
+      'custom',
+      'zcode/GLM-5.3-Flash',
+      null,
+      { maxOutputTokens: 128_000 }
+    );
+    expect(declared.maxOutputTokens).toBe(128_000);
   });
 
   it('clamps deepseek max output tokens to the API hard cap', () => {

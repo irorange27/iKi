@@ -68,6 +68,8 @@
  */
 import { normalizeContext } from '@earendil-works/pi-ai';
 import { stream as openaiCompletionsStream } from '@earendil-works/pi-ai/api/openai-completions';
+import { stream as openaiResponsesStream } from '@earendil-works/pi-ai/api/openai-responses';
+import { stream as anthropicMessagesStream } from '@earendil-works/pi-ai/api/anthropic-messages';
 import type {
   AssistantMessage,
   ImageContent,
@@ -93,9 +95,57 @@ export class PiProjectionError extends Error {
   }
 }
 
+/**
+ * The protocol dialects this adapter can drive.
+ *
+ * Three families cover every provider iKi shipped an AI SDK client for:
+ * - `openai-completions` — OpenAI-compatible gateways (the `custom` default,
+ *   DeepSeek, Ollama shims, and the majority of OpenAI-compatible routers).
+ * - `openai-responses` — providers whose `is_response_api` flag is set.
+ * - `anthropic-messages` — Anthropic proper, `anthropic-compatible` gateways,
+ *   and MiniMax (whose AI SDK client pointed at `/anthropic/v1`).
+ */
+export type PiApiKind = 'openai-completions' | 'openai-responses' | 'anthropic-messages';
+
+/**
+ * Pinned compat flags, per dialect. Every shape denies the autodetected
+ * protocol changes so the Pi wire matches what the AI SDK path sent for the
+ * same provider+model (see `reasoning` on PiModel).
+ *
+ * The shapes differ per dialect because Pi's compat types do:
+ * `supportsReasoningEffort` exists only on completions, and the Anthropic
+ * compat surface is about caching/beta headers, not roles. Passing one
+ * literal object to all three would either fail Pi's type check or silently
+ * set a flag the dialect does not read.
+ */
+export type PiModelCompat =
+  | {
+      supportsDeveloperRole: false;
+      supportsReasoningEffort: false;
+      supportsMidConvoSystemMessages: false;
+      requiresReasoningContentOnAssistantMessages: false;
+    }
+  | {
+      supportsDeveloperRole: false;
+      supportsMidConvoSystemMessages: false;
+    }
+  | {
+      // Anthropic's system prompt is a top-level field, not a message role, so
+      // there is no developer-role switch here. Long cache retention is left
+      // to Pi's default (true), matching what the AI SDK path did.
+      supportsEagerToolInputStreaming: boolean;
+    };
+
 /** A Pi chat model as iKi's provider config produces it. */
 export type PiModelConfig = {
   id: string;
+  /**
+   * Which OpenAI-protocol dialect to speak. Defaults to `openai-completions`.
+   * A provider with `is_response_api` set must pass `openai-responses`; before
+   * this switch such providers were excluded from the Pi supply entirely and
+   * served by the AI SDK's `client.responses()`.
+   */
+  api?: PiApiKind;
   /** iKi's providerType — carried onto the Pi model as its provider. */
   providerType?: string;
   baseUrl: string;
@@ -114,7 +164,17 @@ export type PiModelConfig = {
 export type PiModel = {
   id: string;
   name: string;
-  api: 'openai-completions';
+  /**
+   * Which OpenAI-protocol dialect this model speaks.
+   *
+   * `openai-completions` (chat completions) is the default and what every
+   * non-Responses provider uses. `openai-responses` picks Pi's Responses
+   * adapter — needed for providers whose `is_response_api` flag is set (the
+   * AI SDK path served those through `client.responses()`). Pi supports both,
+   * so the API surface is not what kept those providers on the AI SDK; this
+   * adapter hardcoding `openai-completions` was.
+   */
+  api: PiApiKind;
   /** The REAL provider identity (iKi's providerType), not a synthetic one.
    * Pi reads this as an identity, not a label: its transform decides "is
    * this the same model that produced this history?" by comparing
@@ -144,13 +204,10 @@ export type PiModel = {
   /** Protocol capabilities pinned to the shapes iKi's traffic relies on.
    * Pi would otherwise autodetect these from the base URL/model id and
    * change the wire (developer role, reasoning_effort, thinking) without
-   * any caller asking for it. */
-  compat: {
-    supportsDeveloperRole: false;
-    supportsReasoningEffort: false;
-    supportsMidConvoSystemMessages: false;
-    requiresReasoningContentOnAssistantMessages: false;
-  };
+   * any caller asking for it. The exact field set follows the API dialect:
+   * the Responses adapter has no `supportsReasoningEffort`, and its compat
+   * type does not accept it. */
+  compat: PiModelCompat;
   contextWindow: number;
   maxTokens: number;
   cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
@@ -199,29 +256,42 @@ const nonNegativeOrZero = (value: number | null | undefined): number =>
  * vocabulary; it never re-fetches or re-decides. Missing capability data
  * degrades exactly like before: text-only input and zero cost rates.
  */
-export const buildPiModel = (config: PiModelConfig): PiModel => ({
-  id: config.id,
-  name: config.id,
-  api: 'openai-completions',
-  provider: config.providerType?.trim() || 'unknown',
-  baseUrl: config.baseUrl,
-  input: piInputModalities(config.input),
-  reasoning: false,
-  compat: {
-    supportsDeveloperRole: false,
-    supportsReasoningEffort: false,
-    supportsMidConvoSystemMessages: false,
-    requiresReasoningContentOnAssistantMessages: false,
-  },
-  contextWindow: config.contextWindow,
-  maxTokens: config.maxTokens,
-  cost: {
-    input: nonNegativeOrZero(config.cost?.input),
-    output: nonNegativeOrZero(config.cost?.output),
-    cacheRead: nonNegativeOrZero(config.cost?.cacheRead),
-    cacheWrite: nonNegativeOrZero(config.cost?.cacheWrite),
-  },
-});
+export const buildPiModel = (config: PiModelConfig): PiModel => {
+  const api: PiApiKind = config.api ?? 'openai-completions';
+  // The Responses dialect takes reasoning effort per request, not per model, so
+  // its compat shape has no `supportsReasoningEffort`. Building the wrong
+  // literal would be rejected by Pi's model type at the call site.
+  const compat: PiModelCompat =
+    api === 'openai-responses'
+      ? { supportsDeveloperRole: false, supportsMidConvoSystemMessages: false }
+      : api === 'anthropic-messages'
+        ? { supportsEagerToolInputStreaming: true }
+        : {
+            supportsDeveloperRole: false,
+            supportsReasoningEffort: false,
+            supportsMidConvoSystemMessages: false,
+            requiresReasoningContentOnAssistantMessages: false,
+          };
+
+  return {
+    id: config.id,
+    name: config.id,
+    api,
+    provider: config.providerType?.trim() || 'unknown',
+    baseUrl: config.baseUrl,
+    input: piInputModalities(config.input),
+    reasoning: false,
+    compat,
+    contextWindow: config.contextWindow,
+    maxTokens: config.maxTokens,
+    cost: {
+      input: nonNegativeOrZero(config.cost?.input),
+      output: nonNegativeOrZero(config.cost?.output),
+      cacheRead: nonNegativeOrZero(config.cost?.cacheRead),
+      cacheWrite: nonNegativeOrZero(config.cost?.cacheWrite),
+    },
+  } as PiModel;
+};
 
 /**
  * Project iKi tool declarations onto the Pi wire shape. `parameters` is the
@@ -617,26 +687,55 @@ export type PiChatCallContext = {
 
 /**
  * The narrow call surface: one model call over a caller-assembled, already
- * projected transcript. Uses the real openai-completions stream function —
- * production wiring points send paths HERE, and nowhere else imports the
- * pi-ai runtime.
+ * projected transcript. Dispatches on `model.api` so the same call surface
+ * serves chat-completions and Responses providers — production wiring points
+ * send paths HERE, and nowhere else imports the pi-ai runtime.
+ *
+ * Both stream functions share Pi's event-stream contract; the return type is
+ * taken from the completions variant because the two are structurally the same
+ * stream of the same events (only the wire beneath differs).
  */
 export const callPiChat = (
   model: PiModel,
   context: PiChatCallContext & { systemPrompt: string },
   options: { apiKey?: string; signal?: AbortSignal; maxTokens?: number; temperature?: number } = {}
-): ReturnType<typeof openaiCompletionsStream> =>
-  openaiCompletionsStream(
-    model,
-    normalizeContext({
-      systemPrompt: context.systemPrompt,
-      messages: context.messages as never,
-      tools: context.tools as never,
-    }),
-    {
-      apiKey: options.apiKey,
-      signal: options.signal,
-      ...(typeof options.maxTokens === 'number' ? { maxTokens: options.maxTokens } : {}),
-      ...(typeof options.temperature === 'number' ? { temperature: options.temperature } : {}),
-    }
-  );
+): ReturnType<typeof openaiCompletionsStream> => {
+  const piContext = normalizeContext({
+    systemPrompt: context.systemPrompt,
+    messages: context.messages as never,
+    tools: context.tools as never,
+  });
+  const streamOptions = {
+    apiKey: options.apiKey,
+    signal: options.signal,
+    ...(typeof options.maxTokens === 'number' ? { maxTokens: options.maxTokens } : {}),
+    ...(typeof options.temperature === 'number' ? { temperature: options.temperature } : {}),
+  };
+
+  if (model.api === 'anthropic-messages') {
+    return anthropicMessagesStream(
+      model as never,
+      piContext,
+      streamOptions
+    ) as unknown as ReturnType<typeof openaiCompletionsStream>;
+  }
+
+  if (model.api === 'openai-responses') {
+    // The Responses adapter has its own model/compat types; the values were
+    // built by buildPiModel for that dialect, so the cast states a fact the
+    // types cannot express across the union.
+    return openaiResponsesStream(
+      model as never,
+      piContext,
+      streamOptions
+    ) as unknown as ReturnType<typeof openaiCompletionsStream>;
+  }
+
+  // Reaching here means api is 'openai-completions'; the cast is the same
+  // union-narrowing fact as the branch above.
+  return openaiCompletionsStream(
+    model as never,
+    piContext,
+    streamOptions
+  ) as unknown as ReturnType<typeof openaiCompletionsStream>;
+};

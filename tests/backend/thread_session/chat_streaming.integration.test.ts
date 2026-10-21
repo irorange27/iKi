@@ -95,6 +95,7 @@ import type { LanguageModelV3Usage } from '@ai-sdk/provider';
 
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
+import { legacyTurnHarness, setTurnHarnessFallback } from '@iki/backend/thread_session/turn_supply_selection';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
@@ -104,6 +105,12 @@ const toolName = 'streaming_context_probe';
 
 describe('createChatStreaming integration', () => {
   beforeEach(() => {
+  // These suites drive the DURABLE layer (streaming, approvals, session-log
+  // facts, retry, persistence) with a scripted AI SDK model. They are not about
+  // which supply serves the turn, so they opt into the legacy executor: the
+  // production default refuses a turn its projection cannot carry, and a
+  // scripted model has no endpoint to project to.
+  setTurnHarnessFallback(legacyTurnHarness);
     vi.clearAllMocks();
   });
 

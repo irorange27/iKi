@@ -326,6 +326,9 @@ importers:
       '@iki/theme':
         specifier: workspace:*
         version: link:../theme
+      source-map-js:
+        specifier: ^1.2.1
+        version: 1.2.1
     devDependencies:
       '@electron-forge/cli':
         specifier: ^7.8.3
