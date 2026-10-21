@@ -317,10 +317,10 @@ const parseLogLine = (line: string): DaemonLogEntry | null => {
 export const getDaemonLogFilePath = (userDataPath?: string): string =>
   userDataPath ? path.join(userDataPath, 'logs', 'daemon.log') : getDefaultLogFilePath();
 
-export const getNapCatPreviewFilePath = (userDataPath?: string): string =>
+const getNapCatPreviewFilePath = (userDataPath?: string): string =>
   userDataPath ? path.join(userDataPath, 'logs', 'napcat-preview.json') : getDefaultNapCatPreviewFilePath();
 
-export const readRecentNapCatMessagePreviews = (
+const readRecentNapCatMessagePreviews = (
   limit = 20,
   userDataPath?: string
 ): NapCatMessagePreviewEntry[] => {

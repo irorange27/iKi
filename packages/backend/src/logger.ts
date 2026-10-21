@@ -548,7 +548,7 @@ export const createLogger = (options: ModuleLoggerOptions): ModuleLogger => {
 
 export const logger = createLogger({ module: 'app' });
 
-export function getLogContext(): LogContext {
+function getLogContext(): LogContext {
   return {
     ...baseContext,
     ...(contextStorage.getStore() || {}),
