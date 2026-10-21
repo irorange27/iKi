@@ -214,16 +214,14 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     expect(JSON.stringify(summarize.mock.calls[0][0])).toContain(OLD_TEXT);
 
     expect(modelCall.requests).toHaveLength(2);
-    expect(JSON.stringify(modelCall.requests[1]!.messages)).toContain(
-      'Earlier conversation summary'
-    );
+    expect(JSON.stringify(modelCall.requests[1]!.messages)).toContain('<compacted-summary>');
     expect(JSON.stringify(modelCall.requests[1]!.messages)).not.toContain(OLD_TEXT);
     expect(JSON.stringify(modelCall.requests[1]!.messages)).toContain(STEP_ONE_TEXT);
 
     expect(JSON.stringify(harness.getHistory())).toContain(OLD_TEXT);
 
     expect(JSON.stringify(records[1]!.messages)).not.toContain(OLD_TEXT);
-    expect(JSON.stringify(records[1]!.messages)).toContain('Earlier conversation summary');
+    expect(JSON.stringify(records[1]!.messages)).toContain('<compacted-summary>');
   }, 30000);
 
   it('chains re-compactions within one turn: the second summary builds on the first', async () => {
@@ -244,7 +242,8 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
 
     expect(summarize).toHaveBeenCalledTimes(2);
     const secondCall = summarize.mock.calls[1][0] as { existingSummary?: string };
-    expect(secondCall.existingSummary).toContain('Earlier conversation summary');
+    // The prior checkpoint is unwrapped before merging, so frames never nest.
+    expect(secondCall.existingSummary).not.toContain('<compacted-summary>');
     expect(secondCall.existingSummary).toContain('summary#1');
 
     expect(JSON.stringify(modelCall.requests[2]!.messages)).toContain('summary#2');
@@ -308,10 +307,9 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
 
     expect(summarize).toHaveBeenCalledTimes(2);
     const secondCall = summarize.mock.calls[1][0] as { existingSummary?: string };
-    expect(secondCall.existingSummary).toContain('Earlier conversation summary');
 
     const second = modelCall.requests[1]!;
-    expect(second.systemPrompt).not.toContain('Earlier conversation summary');
+    expect(second.systemPrompt).not.toContain('<compacted-summary>');
     expect(second.systemPrompt).toContain('persona prompt');
     expect(JSON.stringify(second.messages)).toContain('summary#2');
     expect(JSON.stringify(second.messages)).not.toContain('summary#1');
@@ -341,7 +339,7 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     expect(JSON.stringify(second.messages)).not.toContain('[FRESH AGENT CONTEXT]');
     expect(JSON.stringify(second.messages)).toContain('summary#2');
     expect(JSON.stringify(second.messages)).not.toContain('summary#1');
-    expect(second.systemPrompt).not.toContain('Earlier conversation summary');
+    expect(second.systemPrompt).not.toContain('<compacted-summary>');
     expectToolPairsAligned(second.messages);
   }, 30000);
 
@@ -364,7 +362,7 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     const second = modelCall.requests[1]!;
     expect(second.systemPrompt).toContain('[FRESH AGENT CONTEXT]');
     expect(JSON.stringify(second.messages)).not.toContain('[FRESH AGENT CONTEXT]');
-    expect(JSON.stringify(second.messages)).toContain('Earlier conversation summary');
+    expect(JSON.stringify(second.messages)).toContain('<compacted-summary>');
     expect(JSON.stringify(second.messages)).not.toContain(OLD_TEXT);
     expectToolPairsAligned(second.messages);
     expect(JSON.stringify(records[1]!.messages)).not.toContain(OLD_TEXT);
@@ -410,7 +408,7 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     });
 
     const second = modelCall.requests[1]!;
-    expect(JSON.stringify(second.messages)).toContain('Earlier conversation summary');
+    expect(JSON.stringify(second.messages)).toContain('<compacted-summary>');
     expect(JSON.stringify(second.messages)).not.toContain(OLD_TEXT);
     for (const request of modelCall.requests) expectToolPairsAligned(request.messages);
     expect(JSON.stringify(records[1]!.messages)).not.toContain(OLD_TEXT);

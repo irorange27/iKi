@@ -62,19 +62,41 @@ export const estimateToolSchemaTokens = (tools: AgentTool[]): { builtin: number;
 };
 
 export const AUTO_COMPACT_THRESHOLD = 0.8;
-export const AUTO_COMPACT_KEEP_RATIO = 0.5;
+// Retention is a fraction of the budget, like DSH's retainRatio. The absolute
+// floor matters on small windows: a pure ratio on a 900-token budget retains
+// too little to stay a useful summary, and DSH's own guidance for small windows
+// is to configure retention that fits the capacity rather than scale blindly.
+export const AUTO_COMPACT_KEEP_RATIO = 0.2;
+export const AUTO_COMPACT_RETAIN_FLOOR_TOKENS = 1200;
 
 export const autoCompactHistory = (params: {
   history: ModelMessage[];
   maxInputTokens?: number;
   threshold?: number;
   keepRatio?: number;
+
+  retainTokens?: number;
 }): { history: ModelMessage[]; omitted: ModelMessage[]; compacted: boolean; droppedCount: number } => {
-  const { history, maxInputTokens, threshold = AUTO_COMPACT_THRESHOLD, keepRatio = AUTO_COMPACT_KEEP_RATIO } = params;
+  const {
+    history,
+    maxInputTokens,
+    threshold = AUTO_COMPACT_THRESHOLD,
+    keepRatio = AUTO_COMPACT_KEEP_RATIO,
+    retainTokens,
+  } = params;
   const unchanged = { history, omitted: [] as ModelMessage[], compacted: false, droppedCount: 0 };
   if (!maxInputTokens || !Number.isFinite(maxInputTokens) || maxInputTokens <= 0) return unchanged;
   const total = history.reduce((sum, message) => sum + estimateMessageTokens(message), 0);
   if (total <= maxInputTokens * threshold) return unchanged;
+
+  // Retention is the larger of the ratio share and the floor, capped below the
+  // trigger so a pass always reclaims something. Without the cap a tiny window
+  // could retain more than it triggers at, and compaction would loop forever.
+  const triggerTokens = maxInputTokens * threshold;
+  const retainTarget = Math.min(
+    Math.max(maxInputTokens * keepRatio, retainTokens ?? AUTO_COMPACT_RETAIN_FLOOR_TOKENS),
+    triggerTokens * 0.9
+  );
   const systems = history.filter(message => message.role === 'system');
   const conversation = history.filter(message => message.role !== 'system');
   const lastUser = conversation.findLastIndex(message => message.role === 'user');
@@ -87,7 +109,7 @@ export const autoCompactHistory = (params: {
     const next = boundaries[i];
     const added = conversation.slice(next, start).filter(message => !protectedUser.includes(message))
       .reduce((sum, message) => sum + estimateMessageTokens(message), 0);
-    if (tokens + added > maxInputTokens * keepRatio) break;
+    if (tokens + added > retainTarget) break;
     tokens += added;
     start = next;
   }

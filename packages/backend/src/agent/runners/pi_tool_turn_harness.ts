@@ -54,6 +54,7 @@ import { getToolRuntimeContext, runWithToolRuntimeContext } from '../../utils/ru
 import { resolveThreadWorkspaceSelectionSnapshot } from '../../workspaces/thread_workspace';
 import type { AgentTool, AgentTurnPerf, AgentUsage } from '../types';
 import type { HarnessConfig, TurnEvent, TurnInput, TurnOutput } from '../harness/harness_types';
+import { unwrapCheckpoint } from '../../runtimes/compaction_prompt';
 
 const logger = createLogger({ module: 'pi_tool_turn_harness' });
 
@@ -650,7 +651,7 @@ export class PiToolTurnHarness {
         ...(this.config.threadId ? { threadId: this.config.threadId } : {}),
         ...(signal ? { signal } : {}),
         ...(summaryMessage && typeof summaryMessage.content === 'string'
-          ? { existingSummary: summaryMessage.content }
+          ? { existingSummary: unwrapCheckpoint(summaryMessage.content) }
           : {}),
 
         ...(summaryMessage ? { previousSummaryMessage: summaryMessage } : {}),

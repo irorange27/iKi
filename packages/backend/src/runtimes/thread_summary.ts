@@ -1,6 +1,11 @@
+import type { ModelMessage } from '@iki/backend/message/model_history';
 import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
 import { createLogger } from '@iki/backend/logger';
-import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
+import {
+  appendCompactionInstruction,
+  COMPACTION_INSTRUCTION,
+} from './compaction_prompt';
+import { generateChatWithModelMessages, getModelGenerationSettings } from '../provider/llm/factory';
 
 export type ThreadSummaryMessage = {
   role: 'user' | 'assistant';
@@ -14,14 +19,8 @@ export type ThreadSummaryResult = {
 
 const threadSummaryLogger = createLogger({ module: 'thread_summary' });
 
-const SYSTEM_PROMPT =
-  'You maintain a rolling thread summary for a chat assistant.\n' +
-  'Preserve only information that improves future replies:\n' +
-  '- user goals, projects, durable preferences, and constraints\n' +
-  '- decisions already made\n' +
-  '- unresolved follow-ups or pending work\n' +
-  'Drop small talk, repeated assistant phrasing, and tool noise.\n' +
-  'Output plain text only, compact and factual, no markdown tables or code fences.';
+// The checkpoint is eight structured sections; 320 tokens truncated it mid-list.
+const SUMMARY_MAX_OUTPUT_TOKENS = 2000;
 
 const normalizeWhitespace = (value: string) =>
   value
@@ -69,10 +68,13 @@ const buildPrompt = (params: { existingSummary?: string; messages: ThreadSummary
 export const generateThreadSummary = async (params: {
   existingSummary?: string;
   messages: ThreadSummaryMessage[];
+
+  history?: ModelMessage[];
   threadId?: string;
   abortSignal?: AbortSignal;
 }): Promise<ThreadSummaryResult | null> => {
-  if (!Array.isArray(params.messages) || params.messages.length === 0) return null;
+  const hasHistory = Array.isArray(params.history) && params.history.length > 0;
+  if (!hasHistory && (!Array.isArray(params.messages) || params.messages.length === 0)) return null;
 
   const toolModel = getToolModel();
   if (!toolModel) {
@@ -85,26 +87,47 @@ export const generateThreadSummary = async (params: {
     return null;
   }
 
-  const prompt = buildPrompt(params);
-  if (!prompt.trim()) return null;
+  // Replaying the conversation and appending the compaction instruction as the
+  // final user message keeps the auxiliary call a genuine prefix of the last
+  // routed request, so the provider's warm cache is reused instead of paying for
+  // a fresh system prompt. Without history there is nothing to replay, so fall
+  // back to the transcript-in-one-prompt shape.
+  const messages: ModelMessage[] = hasHistory
+    ? appendCompactionInstruction(params.history!)
+    : appendCompactionInstruction([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: buildPrompt(params) },
+            { type: 'text', text: COMPACTION_INSTRUCTION },
+          ],
+        },
+      ]);
 
-  const generator = createSimplePromptTextGenerator({
-    enabled: true,
+  const generationSettings = getModelGenerationSettings({
     providerType: toolModel.providerType,
     ...(toolModel.providerId ? { providerId: toolModel.providerId } : {}),
-    model: toolModel.model,
-    systemPrompt: SYSTEM_PROMPT,
+    modelId: toolModel.model,
     temperature: 0.1,
-    maxTokens: 320,
-    maxIterations: 1,
-    enableTools: false,
-    enableMemory: false,
-    ...(params.threadId ? { threadId: params.threadId } : {}),
   });
 
   try {
-    const result = await generator.generate(prompt, params.abortSignal);
-    const summary = sanitizeSummary(result.response || '');
+    const result = await generateChatWithModelMessages({
+      providerType: toolModel.providerType,
+      ...(toolModel.providerId ? { providerId: toolModel.providerId } : {}),
+      modelId: toolModel.model,
+      messages,
+      ...(typeof generationSettings.temperature === 'number'
+        ? { temperature: generationSettings.temperature }
+        : {}),
+      ...(generationSettings.providerOptions
+        ? { providerOptions: generationSettings.providerOptions }
+        : {}),
+      maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
+      ...(params.threadId ? { threadId: params.threadId } : {}),
+      ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
+    });
+    const summary = sanitizeSummary(result.text || '');
     if (!summary) return null;
 
     return {
@@ -119,7 +142,8 @@ export const generateThreadSummary = async (params: {
       outcome: 'failed',
       error,
       data: {
-        message_count: params.messages.length,
+        message_count: params.messages?.length ?? 0,
+        history_count: params.history?.length ?? 0,
         has_existing_summary: Boolean(params.existingSummary?.trim()),
       },
     });

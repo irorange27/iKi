@@ -429,7 +429,7 @@ describe('pi text turn harness (switch item 2c)', () => {
     expect(generateThreadSummary).toHaveBeenCalledTimes(1);
     const summaryInput = vi.mocked(generateThreadSummary).mock.calls[0][0];
     expect(JSON.stringify(summaryInput.messages)).toContain(longText.slice(0, 32));
-    expect(modelCall.requests[0].systemPrompt).toContain('Earlier conversation summary:\ncompacted summary');
+    expect(modelCall.requests[0].systemPrompt).toContain('<compacted-summary>\ncompacted summary\n</compacted-summary>');
     const wireText = JSON.stringify(modelCall.requests[0].messages);
     expect(wireText).not.toContain(longText.slice(0, 64));
     expect(wireText).toContain('current');
