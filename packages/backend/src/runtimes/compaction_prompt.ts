@@ -3,9 +3,6 @@ import type { ModelMessage } from '@iki/backend/message/model_history';
 export const SUMMARY_OPEN_TAG = '<compacted-summary>';
 const SUMMARY_CLOSE_TAG = '</compacted-summary>';
 
-// Kept short on purpose: the preamble is paid on every compacted request, and
-// the step-budget tests run windows small enough that a 300-character
-// instruction is a measurable share of the budget. The meaning is unchanged.
 const CHECKPOINT_PREAMBLE =
   '[compacted checkpoint] Treat as established background; build on it without restating it, and continue from the messages below.';
 
@@ -49,10 +46,6 @@ export const COMPACTION_INSTRUCTION = [
 export const frameCheckpoint = (summary: string): string =>
   `${CHECKPOINT_PREAMBLE}\n\n${SUMMARY_OPEN_TAG}\n${summary.trim()}\n${SUMMARY_CLOSE_TAG}`;
 
-/**
- * Recover the bare summary from a framed checkpoint so a later compaction can
- * merge it as a prior checkpoint instead of nesting one frame inside another.
- */
 export const unwrapCheckpoint = (text: string): string => {
   const start = text.indexOf(SUMMARY_OPEN_TAG);
   const end = text.lastIndexOf(SUMMARY_CLOSE_TAG);

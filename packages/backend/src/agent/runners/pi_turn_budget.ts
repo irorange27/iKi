@@ -10,7 +10,6 @@ import {
 } from '../context_budget';
 import { frameCheckpoint } from '../../runtimes/compaction_prompt';
 
-// Matches DSH's compactionRetries default: one retry, then fail closed.
 const COMPACTION_RETRIES = 1;
 
 const summarizerMessages = (omitted: ModelMessage[]) =>

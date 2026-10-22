@@ -29,9 +29,6 @@ export const loadAgentConfig = (overrideConfig?: PartialAgentConfig): AgentConfi
   try {
     return AgentConfigSchema.parse(merged);
   } catch (error) {
-    // Retrying the same parse cannot succeed; the schema rejected this input.
-    // Falling back to defaults keeps auxiliary callers (titles, summaries,
-    // routing) alive instead of taking the caller down with it.
     configLogger.event({
       level: 'error',
       event: 'agent.config.parse',

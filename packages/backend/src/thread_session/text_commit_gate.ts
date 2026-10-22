@@ -6,9 +6,7 @@ import {
 } from './session_log';
 
 export type TextCommitGate = {
-  /** Buffer a streamed delta, flushing when the interval has elapsed. */
   buffer: (text: string) => void;
-  /** Write whatever is buffered to the session log, then publish it. */
   flush: () => void;
 };
 

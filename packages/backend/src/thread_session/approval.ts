@@ -63,7 +63,6 @@ export const createChatApproval = (deps: {
 }) => {
   const pendingApprovalSessions = new Map<string, PendingApprovalSession>();
 
-  /** End a paused session: stop its timers and drop the executor's bindings. */
   const clearApprovalTimeouts = (session: PendingApprovalSession) => {
     if (session.timeouts) {
       for (const timeoutId of session.timeouts.values()) clearTimeout(timeoutId);
@@ -181,7 +180,6 @@ export const createChatApproval = (deps: {
       );
     }
 
-    // Register the bindings the executor will need once a human answers.
     const bindingReleases: Array<() => void> = [];
     const newBindings = new Map<string, ApprovalBinding>();
     for (const request of approvalRequests) {

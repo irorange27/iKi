@@ -362,7 +362,6 @@ export const executeApprovalResume = async (
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       const failingTracker = driverHandle?.getRunTracker() ?? resumeRunTracker;
-      // Both teardowns target the same row, so they share one projection of it.
       const teardown = failingTracker
         ? {
             tracker: failingTracker,

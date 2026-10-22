@@ -62,10 +62,6 @@ export const estimateToolSchemaTokens = (tools: AgentTool[]): { builtin: number;
 };
 
 const AUTO_COMPACT_THRESHOLD = 0.8;
-// Retention is a fraction of the budget, like DSH's retainRatio. The absolute
-// floor matters on small windows: a pure ratio on a 900-token budget retains
-// too little to stay a useful summary, and DSH's own guidance for small windows
-// is to configure retention that fits the capacity rather than scale blindly.
 export const AUTO_COMPACT_KEEP_RATIO = 0.2;
 const AUTO_COMPACT_RETAIN_FLOOR_TOKENS = 1200;
 

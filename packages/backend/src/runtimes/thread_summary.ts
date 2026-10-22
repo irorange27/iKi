@@ -19,7 +19,6 @@ export type ThreadSummaryResult = {
 
 const threadSummaryLogger = createLogger({ module: 'thread_summary' });
 
-// The checkpoint is eight structured sections; 320 tokens truncated it mid-list.
 const SUMMARY_MAX_OUTPUT_TOKENS = 2000;
 
 const normalizeWhitespace = (value: string) =>
