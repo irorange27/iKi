@@ -125,7 +125,7 @@ const applyChunk = (
         return;
       }
       found.state = 'input-available';
-      found.input = chunk.input;
+      if (chunk.input !== undefined) found.input = chunk.input;
       return;
     }
     case 'tool-input-error': {

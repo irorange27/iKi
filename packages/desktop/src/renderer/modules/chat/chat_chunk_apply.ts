@@ -94,7 +94,7 @@ export const applyChatUiChunk = (
       if (index < 0) return message;
       const tool = parts[index] as UiDynamicToolPart;
       tool.state = 'input-available';
-      tool.input = chunk.input;
+      if (chunk.input !== undefined) tool.input = chunk.input;
       return message;
     }
     case 'tool-input-error': {

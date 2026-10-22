@@ -1,4 +1,3 @@
-
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -240,12 +239,28 @@ it('(g) the recorded interruption reaches the wire as a paired error tool result
   await executeApprovedTool(address, port());
 
   const finished = getSessionEvents(THREAD_ID, [TOOL_EXECUTION_FINISHED]);
-  const output = (
-    finished[0]!.payload as { result: { output: unknown } }
-  ).result.output as { type: string; value: unknown };
+  const output = (finished[0]!.payload as { result: { output: unknown } }).result.output as {
+    type: string;
+    value: unknown;
+  };
   expect(output.type).toBe('error-json');
   expect(toolResultIsError(output)).toBe(true);
   const text = toolResultText(output);
   expect(text).toContain('tool-execution-interrupted');
   expect(text).toMatch(/may have partially run/i);
+});
+
+it('(h) a second execution of the same approval does not run the effect twice', async () => {
+  declare('probe_safe', 'safe');
+  registerApproval('probe_safe');
+
+  const first = port();
+  await executeApprovedTool(address, first);
+
+  const second = port();
+  const outcome = await executeApprovedTool(address, second);
+
+  expect(first.execute).toHaveBeenCalledTimes(1);
+  expect(second.execute).not.toHaveBeenCalled();
+  expect(outcome.kind).toBe('completed');
 });

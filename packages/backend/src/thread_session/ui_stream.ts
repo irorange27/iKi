@@ -238,7 +238,7 @@ export const createUiChunkEmitter = (
       type: 'tool-input-available',
       toolCallId,
       toolName,
-      input,
+      ...(input !== undefined ? { input } : {}),
       dynamic: true,
       ...(title ? { title } : {}),
     });
@@ -283,7 +283,7 @@ export const createUiChunkEmitter = (
               ? event.toolCall.args
               : event.toolCall.input
             : undefined;
-        ensureToolPartSeeded(toolCallId, toolName, input ?? {});
+        ensureToolPartSeeded(toolCallId, toolName, input);
       }
       const uiChunk = toUiChunkFromToolEvent(event);
       if (uiChunk) {

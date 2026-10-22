@@ -161,20 +161,34 @@ const appendFact = (
   type: string,
   extra?: Pick<ExecutionFact, 'result' | 'source' | 'replay'> & { executor?: ExecutionFact['executor'] }
 ) =>
-  appendSessionEvents(action.binding.threadId, action.revision, [
-    {
-      type,
-      version: SESSION_EVENT_VERSION,
-      payload: {
-        binding: action.binding,
-        decision: action.decision,
-        ...(extra?.result ? { result: extra.result } : {}),
-        ...(extra?.source ? { source: extra.source } : {}),
-        ...(extra?.replay ? { replay: extra.replay } : {}),
-        ...(extra?.executor ? { executor: extra.executor } : {}),
-      },
-    },
-  ]) !== null;
+  {
+    const currentFacts = getSessionEvents(action.binding.threadId, EXECUTION_EVENTS, {
+      path: '$.binding.approvalId',
+      value: action.binding.approvalId,
+    });
+    if (currentFacts.length !== action.facts.length) return false;
+
+    return (
+      appendSessionEvents(
+        action.binding.threadId,
+        getSessionEventRevision(action.binding.threadId),
+        [
+          {
+            type,
+            version: SESSION_EVENT_VERSION,
+            payload: {
+              binding: action.binding,
+              decision: action.decision,
+              ...(extra?.result ? { result: extra.result } : {}),
+              ...(extra?.source ? { source: extra.source } : {}),
+              ...(extra?.replay ? { replay: extra.replay } : {}),
+              ...(extra?.executor ? { executor: extra.executor } : {}),
+            },
+          },
+        ]
+      ) !== null
+    );
+  };
 
 export const prepareToolExecution = (address: ToolExecutionAddress): void => {
   const action = loadAction(address);
