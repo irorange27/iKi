@@ -147,14 +147,10 @@ const budgetConfig = (maxInputTokens: number): HarnessConfig => ({
 
 const collect = async (harness: PiToolTurnHarness, input: TurnInput) => {
   const events: TurnEvent[] = [];
-  const records: Array<{ messages: unknown }> = [];
-  for await (const event of harness.turn({
-    ...input,
-    onInference: record => records.push({ messages: record.messages }),
-  })) {
+  for await (const event of harness.turn(input)) {
     events.push(event);
   }
-  return { events, records };
+  return { events };
 };
 
 const expectToolPairsAligned = (messages: CapturedRequest['messages']) => {
@@ -202,7 +198,7 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     ]);
     const harness = new PiToolTurnHarness(budgetConfig(600), { modelCall });
 
-    const { records } = await collect(harness, {
+    await collect(harness, {
       prompt: 'go',
       history: [
         { role: 'user', content: OLD_TEXT },
@@ -220,8 +216,6 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
 
     expect(JSON.stringify(harness.getHistory())).toContain(OLD_TEXT);
 
-    expect(JSON.stringify(records[1]!.messages)).not.toContain(OLD_TEXT);
-    expect(JSON.stringify(records[1]!.messages)).toContain('<compacted-summary>');
   }, 30000);
 
   it('chains re-compactions within one turn: the second summary builds on the first', async () => {
@@ -276,7 +270,7 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     const modelCall = scriptedModelCall([{ content: [textBlock('done')] }]);
     const harness = new PiToolTurnHarness(budgetConfig(600), { modelCall });
 
-    const { records } = await collect(harness, {
+    await collect(harness, {
       prompt: 'go',
       history: [
         { role: 'user', content: 'x'.repeat(4000) },
@@ -285,7 +279,6 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     });
 
     expect(summarize).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(records[0]!.messages)).not.toContain('x'.repeat(500));
     expect(JSON.stringify(harness.getHistory())).toContain('x'.repeat(500));
     expect(JSON.stringify(modelCall.requests[0]!.messages)).not.toContain('x'.repeat(500));
   }, 30000);
@@ -350,7 +343,7 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     ]);
     const harness = new PiToolTurnHarness(budgetConfig(600), { modelCall });
 
-    const { records } = await collect(harness, {
+    await collect(harness, {
       prompt: 'go',
       history: [
         { role: 'system', content: '[FRESH AGENT CONTEXT] You are a fresh agent instance.' },
@@ -365,7 +358,6 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     expect(JSON.stringify(second.messages)).toContain('<compacted-summary>');
     expect(JSON.stringify(second.messages)).not.toContain(OLD_TEXT);
     expectToolPairsAligned(second.messages);
-    expect(JSON.stringify(records[1]!.messages)).not.toContain(OLD_TEXT);
   }, 30000);
 
   it('omits a multi-part tool message without orphaning its projected results', async () => {
@@ -375,7 +367,7 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     ]);
     const harness = new PiToolTurnHarness(budgetConfig(600), { modelCall });
 
-    const { records } = await collect(harness, {
+    await collect(harness, {
       prompt: 'go',
       history: [
         { role: 'user', content: OLD_TEXT },
@@ -411,6 +403,5 @@ describe('per-request budget compaction on the Pi tool harness (#122)', () => {
     expect(JSON.stringify(second.messages)).toContain('<compacted-summary>');
     expect(JSON.stringify(second.messages)).not.toContain(OLD_TEXT);
     for (const request of modelCall.requests) expectToolPairsAligned(request.messages);
-    expect(JSON.stringify(records[1]!.messages)).not.toContain(OLD_TEXT);
   }, 30000);
 });

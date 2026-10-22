@@ -531,7 +531,6 @@ export class PiToolTurnHarness {
       args: Record<string, unknown>;
       result?: unknown;
     }> = [];
-    const sentSnapshots: ModelMessage[][] = [];
 
     const executor =
       this.executorOverride ??
@@ -712,7 +711,6 @@ export class PiToolTurnHarness {
           timestamp: Date.now(),
         });
       }
-      sentSnapshots.push([...requestView, ...pendingNotes]);
     };
 
     let reminderSent = false;
@@ -786,7 +784,6 @@ export class PiToolTurnHarness {
           transcript.push({ role: 'user', content: reminder, timestamp: Date.now() });
         }
 
-        sentSnapshots.push([...requestView, ...pendingNotes]);
         return this.modelCall(this.config, {
           systemPrompt: requestSystemPrompt,
           messages: context.messages,
@@ -865,8 +862,6 @@ export class PiToolTurnHarness {
 
         const stepUsage: AgentUsage = mapBuckets(step.usage);
         input.onInference?.({
-          messages: sentSnapshots.at(-1) ?? requestView,
-          systemPrompt,
           content: assistantParts,
           finishReason: step.toolCalls.length > 0 ? 'tool-calls' : 'stop',
           usage: stepUsage,

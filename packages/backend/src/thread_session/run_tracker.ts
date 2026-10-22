@@ -266,7 +266,6 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
         type: 'model',
         status: 'completed',
         summary: 'Model inference',
-        input: { messages: record.messages, systemPrompt: record.systemPrompt },
         output: {
           inference: true,
           content: record.content,

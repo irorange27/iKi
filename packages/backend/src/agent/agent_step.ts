@@ -1,9 +1,6 @@
 import type { AgentUsage, ToolApprovalRequest } from './types';
-import type { ModelMessage } from '../message/model_history';
 
 export type ModelInferenceRecord = {
-  messages: ModelMessage[];
-  systemPrompt: string;
   content: unknown[];
   finishReason?: string;
   usage: AgentUsage;

@@ -397,11 +397,9 @@ describe('pi tool turn harness (switch item 3a)', () => {
     expect(first.content).toEqual([
       { type: 'tool-call', toolCallId: 'call_i', toolName: 'probe_read', input: { path: '/i.txt' } },
     ]);
-    expect(first.messages.at(-1)).toEqual({ role: 'user', content: 'probe' });
     const second = onInference.mock.calls[1][0];
     expect(second.finishReason).toBe('stop');
     expect(second.usage).toMatchObject({ inputTokens: 80 });
-    expect(second.messages.map((m: ModelMessage) => m.role)).toEqual(['user', 'assistant', 'tool']);
   });
 
   it('lastStepInputTokens is the final step billed input, not the multi-step sum', async () => {
@@ -418,7 +416,7 @@ describe('pi tool turn harness (switch item 3a)', () => {
     expect(done.output.lastStepInputTokens).toBe(100);
   });
 
-  it('recovery notes join the mirror before the next assistant entry and ride the sent snapshot', async () => {
+  it('recovery notes join the mirror before the next assistant entry', async () => {
     const modelCall: PiToolModelCall = (_config, request) => {
       request.onRecoveryNote?.('note: retrying after 503');
       return {
@@ -429,16 +427,14 @@ describe('pi tool turn harness (switch item 3a)', () => {
       };
     };
     const harness = new PiToolTurnHarness(harnessConfig({ enabledToolNames: [] }), { modelCall });
-    const onInference = vi.fn();
 
-    const events = await collect(harness, { prompt: 'probe', onInference });
+    const events = await collect(harness, { prompt: 'probe' });
     const done = events.at(-1);
     assert(done && done.event === 'done');
     expect(done.output.text).toBe('recovered');
     const history = harness.getHistory();
     expect(history[1]).toEqual({ role: 'user', content: expect.stringContaining('note: retrying') });
     expect(history[2]).toMatchObject({ role: 'assistant' });
-    expect(onInference.mock.calls[0][0].messages.map((m: ModelMessage) => m.role)).toEqual(['user']);
   });
 
   it('honours toolsOverride as the capability bound (delegation) and still refuses pre-aborted signals', async () => {

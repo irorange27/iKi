@@ -358,8 +358,6 @@ export class PiTextTurnHarness {
     this.history = [...tracks.storedTrack, ...tracks.recoveryNotes, { role: 'assistant', content: responseParts }];
 
     input.onInference?.({
-      messages: tracks.requestHistory,
-      systemPrompt,
       content: responseParts,
       finishReason: final.stopReason,
       usage: mappedUsage,

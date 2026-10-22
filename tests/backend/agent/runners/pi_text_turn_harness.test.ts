@@ -463,14 +463,15 @@ describe('pi text turn harness (switch item 2c)', () => {
 
     expect(onInference).toHaveBeenCalledTimes(1);
     const record = onInference.mock.calls[0][0];
-    expect(record.systemPrompt).toContain('persona prompt');
     expect(record.finishReason).toBe('stop');
     expect(record.usage).toMatchObject({ inputTokens: 100, outputTokens: 20 });
-    expect(record.messages.at(-1)).toEqual({ role: 'user', content: 'probe' });
     expect(record.content).toEqual([
       { type: 'reasoning', text: 'because' },
       { type: 'text', text: 'scripted answer' },
     ]);
+    const request = modelCall.requests[0]!;
+    expect(request.systemPrompt).toContain('persona prompt');
+    expect(request.messages.at(-1)).toMatchObject({ role: 'user', content: 'probe' });
   });
 });
 
