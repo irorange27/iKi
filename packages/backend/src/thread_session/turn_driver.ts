@@ -540,7 +540,11 @@ const runTurnBatches = async (
     if (event) {
       state.runTracker.recordAgentStep(step);
       uiChunkEmitter.emitToolEvent(event);
-      if (event.type === 'tool-result' || event.type === 'tool-error') {
+      if (
+        event.type === 'tool-call' ||
+        event.type === 'tool-result' ||
+        event.type === 'tool-error'
+      ) {
         deps.onToolActivity?.();
       }
     }
