@@ -27,10 +27,15 @@ export type ReviewQueueItem = {
 };
 
 /**
- * `finalize` is retained for rows written before a terminal run transition
- * stopped appending a step. Nothing writes it any more: completion, cancellation
- * and approval resume all record the run row alone, because the step duplicated
- * `output.text` and made every turn look like it ended in a separate event.
+ * `finalize` and `approval-response` are retained for rows written before those
+ * transitions stopped appending a step. Nothing writes either any more.
+ *
+ * A terminal transition (completion, cancellation, approval resume) records the
+ * run row alone: the step duplicated `output.text` and made every turn look like
+ * it ended in a separate event. An approval decision is recorded as the
+ * `approval_decided` session-log fact, which already carries the approval id,
+ * the decision and the reason — the step was a second copy of the same three
+ * fields under a "Decision" label.
  */
 export type AgentRunStepType =
   | 'model'

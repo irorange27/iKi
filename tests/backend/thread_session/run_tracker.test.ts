@@ -150,33 +150,4 @@ describe('agent run tracker', () => {
     expect(after.error).toBeNull();
   });
 
-  it('records an approval response once per approval id', () => {
-    const { parentId, threadId } = seedParent();
-    const tracker = buildTracker({
-      parentId,
-      threadId,
-      working: { accumulatedText: '', pendingApprovalIds: ['approval_1'], lastStepIndex: 0 },
-    });
-
-    const response = {
-      approvalId: 'approval_1',
-      toolCallId: 'call_1',
-      approved: false,
-      reason: 'Denied by user',
-    };
-    tracker.recordApprovalResponse(response as never);
-    // A resumed turn re-delivers decisions it already recorded; the second one
-    // must not add a second step.
-    tracker.recordApprovalResponse(response as never);
-
-    const steps = listAgentRunSteps(tracker.id).filter(
-      step => step.type === 'approval-response'
-    );
-    expect(steps).toHaveLength(1);
-    expect(steps[0]!.input).toMatchObject({
-      approvalId: 'approval_1',
-      approved: false,
-      reason: 'Denied by user',
-    });
-  });
 });

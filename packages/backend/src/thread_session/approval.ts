@@ -14,7 +14,6 @@ import {
 import { admitPiResume } from './pi_resume_admission';
 import { executeApprovalResume } from './approval_resume_execution';
 import type { ApprovalBinding, PendingApprovalSession } from './approval_session';
-import { rehydrateAgentRunTracker } from './run_tracker';
 import { registerApprovalBinding } from './tool_execution';
 import type { ActiveStreamState, ChatStreamTarget } from './types';
 
@@ -274,18 +273,6 @@ export const createChatApproval = (deps: {
         reason ?? (approved ? 'User approved tool execution.' : 'User rejected tool execution.'),
     };
 
-    const recordApprovalResponse = () => {
-      const runId = session.recoveryContext?.runId;
-      if (!runId) return;
-      const binding = session.bindings.get(approvalId);
-      rehydrateAgentRunTracker(runId)?.recordApprovalResponse({
-        approvalId,
-        ...(binding ? { toolCallId: binding.toolCallId } : {}),
-        approved,
-        reason: approvalResponse.reason,
-      });
-    };
-
     const decidedThreadId = session.recoveryContext?.plan.threadId ?? null;
     const recordDecisionEvent = () => {
       if (!decidedThreadId) return;
@@ -307,7 +294,6 @@ export const createChatApproval = (deps: {
       const existing = session.collectedApprovalResponses.get(approvalId);
 
       if (existing && existing.approved === approved) {
-        recordApprovalResponse();
         return { success: true };
       }
       return {
@@ -318,7 +304,6 @@ export const createChatApproval = (deps: {
 
     recordDecisionEvent();
     session.collectedApprovalResponses.set(approvalId, approvalResponse);
-    recordApprovalResponse();
 
     const waitingForApprovals = Array.from(session.pendingApprovalIds).filter(
       id => !session.collectedApprovalResponses.has(id)

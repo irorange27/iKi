@@ -3,7 +3,6 @@ import {
   appendAgentRunStepAndUpdateRunIfStatus,
   createAgentRun,
   getAgentRun,
-  listAgentRunSteps,
   updateAgentRun,
 } from '@iki/backend/db/agent_runs';
 import { claimQueuedAgentRun } from '@iki/backend/db/agent_runs';
@@ -102,12 +101,6 @@ export type AgentRunTracker = {
   getRun: () => AgentRun;
   recordModelStep: (record: ModelInferenceRecord) => void;
   recordAgentStep: (step: AgentStep) => void;
-  recordApprovalResponse: (params: {
-    approvalId: string;
-    toolCallId?: string;
-    approved: boolean;
-    reason?: string;
-  }) => AgentRun;
   markResumed: (params: { childRunId: string }) => AgentRun;
   recordChildRun: (params: {
     childRunId: string;
@@ -129,7 +122,6 @@ export type AgentRunTracker = {
 
 const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
   let currentRun = initialRun;
-  let recordedApprovalResponseIds: Set<string> | null = null;
 
   const persist = (updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>) => {
     if (updates.status) assertRunStatusTransition(currentRun, updates.status);
@@ -315,30 +307,6 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
           });
         }
       }
-    },
-    recordApprovalResponse: params => {
-      const approvalId = normalizeWhitespace(params.approvalId);
-      if (!approvalId) return currentRun;
-      recordedApprovalResponseIds ??= new Set(
-        listAgentRunSteps(currentRun.id)
-          .filter(step => step.type === 'approval-response')
-          .map(step => normalizeWhitespace(step.input?.approvalId))
-          .filter(Boolean)
-      );
-      if (recordedApprovalResponseIds.has(approvalId)) return currentRun;
-      appendStep({
-        type: 'approval-response',
-        status: 'completed',
-        summary: 'Tool approval ' + (params.approved ? 'approved' : 'rejected'),
-        input: {
-          approvalId,
-          ...(params.toolCallId ? { toolCallId: params.toolCallId } : {}),
-          approved: params.approved,
-          ...(params.reason ? { reason: params.reason } : {}),
-        },
-      });
-      recordedApprovalResponseIds.add(approvalId);
-      return currentRun;
     },
     markResumed: params => {
       const childRunId = normalizeWhitespace(params.childRunId);
