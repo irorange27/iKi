@@ -45,8 +45,8 @@ Read the [backend ownership and regression map](packages/backend/README.md#runti
 - `packages/{desktop,daemon}/README.md` — shell boundary rules
 - `docs/conventions.md` — code conventions, prohibited actions, landmines, testing, commit governance
 - `docs/decisions/` — ADRs: why `AgentHarness` exists, why `turn_prep/` is the boundary, why `@iki/core` was deleted
-- `docs/napcat-integration.md` — QQ bridge via NapCat; `postmortem/backend-bugs-2026-04.md` — bug patterns (pre-monorepo paths, see its banner)
-- `docs/design/` — operative subsystem notes only (MCP, awaiters, proactive tasks, logging contract) — see its README index
+- `postmortem/backend-bugs-2026-04.md` — bug patterns (pre-monorepo paths, see its banner)
+- `docs/design/` — operative subsystem notes only (MCP, awaiters, logging contract) — see its README index
 - `docs/archive/` — **historical archive, not authority** (`archive/reports/` dated audits, `archive/process/` proposals): many claims are superseded by current code. Do not treat anything there (or its file:line pointers) as fact without checking the code. Nothing under `docs/` is tracked in git.
 - `README.md` — user-facing (features, download, quick start); `.impeccable.md` — UI design philosophy
 - `CLAUDE.md` / `IKI.md` — pointer stubs to this file; don't add content there
