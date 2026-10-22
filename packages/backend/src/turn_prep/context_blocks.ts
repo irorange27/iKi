@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
-import type { ModelCapability } from '@iki/backend/utils/provider_models';
 import type { ContextConfig, IdentityContext, SkillContext } from './context_types';
 import { buildDroppedBlock, clipTextToTokenBudget, estimateTextTokens } from './context_helpers';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
@@ -48,7 +47,6 @@ export const buildIdentityContext = (
   workspaceSystemMessage: ((threadId?: string) => string) | undefined,
   threadId: string | undefined,
   contextConfig: ContextConfig,
-  modelCapability: ModelCapability | null | undefined,
   agentInstructions: string
 ): IdentityContext => {
 
@@ -85,7 +83,6 @@ export const buildSkillContext = async (params: {
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
   contextConfig: ContextConfig;
-  modelCapability?: ModelCapability | null;
   resolveSkillsSystemPrompt: typeof import('../thread_session/skills').resolveSkillsSystemPrompt;
 }): Promise<SkillContext> => {
   const { skillsSystemPrompt, usedSkills, skillMode } = await params.resolveSkillsSystemPrompt({

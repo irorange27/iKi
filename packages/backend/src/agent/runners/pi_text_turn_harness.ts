@@ -213,7 +213,7 @@ export class PiTextTurnHarness {
 
       this.traceCall(attemptRequest.maxTokens, final, failure);
       if (!failure) {
-        yield* this.finishTurn(input, final, finalText, systemPrompt, {
+        yield* this.finishTurn(input, final, finalText, {
           requestHistory: attemptHistory,
           storedTrack,
           recoveryNotes,
@@ -321,7 +321,6 @@ export class PiTextTurnHarness {
     input: TurnInput,
     final: AssistantMessage,
     text: string,
-    systemPrompt: string,
     tracks: {
       requestHistory: ModelMessage[];
       storedTrack: ModelMessage[];

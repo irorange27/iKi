@@ -112,10 +112,7 @@ export const assembleExecutionPlan = (params: {
   };
 };
 
-export const planToHarnessConfig = (
-  plan: ExecutionPlan,
-  overrides?: Partial<Pick<HarnessConfig, 'requireApproval'>>
-): HarnessConfig => ({
+export const planToHarnessConfig = (plan: ExecutionPlan): HarnessConfig => ({
   providerType: plan.providerType,
   ...(plan.providerId ? { providerId: plan.providerId } : {}),
   model: plan.model,

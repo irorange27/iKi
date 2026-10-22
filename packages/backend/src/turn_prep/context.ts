@@ -62,7 +62,6 @@ export const createChatContextAssembler = (deps: {
           () => workspaceSystemMessage,
           params.threadId,
           contextConfig,
-          params.modelCapability,
           agentInstructions,
         );
     blocks.push(identityContext.block);
@@ -87,7 +86,6 @@ export const createChatContextAssembler = (deps: {
           skillIds: params.skillIds,
           skillMode: params.skillMode,
           contextConfig,
-          modelCapability: params.modelCapability,
           resolveSkillsSystemPrompt: deps.resolveSkillsSystemPrompt,
         });
     blocks.push(skillContext.block);
