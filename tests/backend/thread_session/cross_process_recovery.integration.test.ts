@@ -18,7 +18,7 @@ vi.mock('@iki/backend/platform', () => ({
 
 import { closeDatabase, getDb, initializeDatabase } from '@iki/backend/db/database';
 import { rebuildThreadViewFromEvents } from '@iki/backend/thread_session/session_log';
-import { recoverStuckRunsOnStartup } from '@iki/backend/thread_session/run_tracker';
+import { recoverStuckRunsOnStartup } from '@iki/backend/thread_session/run_recovery';
 
 let dataDir = '';
 let dbPath = '';

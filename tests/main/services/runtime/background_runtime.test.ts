@@ -5,7 +5,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
   cleanupOldAgentRuns: vi.fn(() => ({ deletedRuns: 0 })),
 }));
 
-vi.mock('@iki/backend/thread_session/run_tracker', () => ({
+vi.mock('@iki/backend/thread_session/run_recovery', () => ({
   recoverStuckRunsOnStartup: vi.fn(() => ({
     totalRuns: 0,
     failedRuns: 0,
