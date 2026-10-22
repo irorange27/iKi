@@ -5,16 +5,15 @@ import { cloneModelMessages } from '../agent/harness';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import type { ToolCallApprovalDecision } from '@iki/backend/types/tool_call_approval';
 import type { ApprovalRecoveryContext } from './approval_types';
-import { serializeExecutionPlan } from './execution_plan_codec';
 import {
   recordFailureTerminalEvent,
   recordSessionEvents,
-  APPROVAL_REQUESTED,
   APPROVAL_DECIDED,
   SESSION_EVENT_VERSION,
   type ApprovalDecidedPayload,
 } from './session_log';
 import { recoverApprovalSession } from './approval_recovery';
+import { persistApprovalBatch } from './approval_persistence';
 import { admitPiResume } from './pi_resume_admission';
 import { executeApprovalResume } from './approval_resume_execution';
 import type { PendingApprovalSession } from './approval_session';
@@ -160,60 +159,12 @@ export const createChatApproval = (deps: {
     if (approvalIds.length === 0) return;
 
     if (session.recoveryContext) {
-      const recoveryContext = session.recoveryContext;
-
-      const plan = recoveryContext.plan;
-
-      if (plan.threadId) {
-        recordSessionEvents(
-          plan.threadId,
-          approvalRequests.map(request => ({
-            type: APPROVAL_REQUESTED,
-            version: SESSION_EVENT_VERSION,
-            payload: {
-              approvalId: request.approvalId,
-              sessionId: recoveryContext.sessionId,
-              ...(recoveryContext.runId ? { runId: recoveryContext.runId } : {}),
-              ...(request.toolCallId ? { toolCallId: request.toolCallId } : {}),
-              ...(request.toolCall?.toolName ? { toolName: request.toolCall.toolName } : {}),
-              ...(request.toolCall?.args ? { args: request.toolCall.args } : {}),
-            },
-          }))
-        );
-      }
-
-      toolCallApprovalDb.upsertToolCallApprovalSession({
-        session_id: recoveryContext.sessionId,
-        thread_id: plan.threadId ?? null,
-        assistant_message_id: recoveryContext.assistantMessageId,
-        run_id: recoveryContext.runId ?? null,
-        provider_type: plan.providerType,
-        provider_id: plan.providerId ?? null,
-        model: plan.model,
-        system_prompt: plan.systemPrompt,
-        max_input_tokens: plan.maxInputTokens ?? null,
-        max_output_tokens: plan.maxOutputTokens ?? null,
-        max_iterations: plan.budget.step ?? null,
-        enabled_tools: JSON.stringify(plan.enabledTools),
-        available_skill_ids: JSON.stringify(plan.availableSkillIds),
-
-        workspace_selection:
-          plan.workspaceSelection !== undefined ? JSON.stringify(plan.workspaceSelection) : null,
-
-        plan_json: serializeExecutionPlan(plan),
+      persistApprovalBatch({
+        requests: approvalRequests,
+        recoveryContext: session.recoveryContext,
       });
-
-      toolCallApprovalDb.upsertToolCallApprovals(
-        approvalRequests.map(request => ({
-          approval_id: request.approvalId,
-          session_id: recoveryContext.sessionId,
-          tool_call_id: request.toolCallId || null,
-          tool_name: request.toolCall?.toolName || null,
-          tool_args: request.toolCall ? JSON.stringify(request.toolCall.args ?? {}) : null,
-          state: 'pending',
-        }))
-      );
     }
+
 
     let existingSession: PendingApprovalSession | undefined;
     for (const approvalId of approvalIds) {

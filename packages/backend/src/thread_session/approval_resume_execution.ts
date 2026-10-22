@@ -366,11 +366,9 @@ export const executeApprovalResume = async (
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       const failingTracker = driverHandle?.getRunTracker() ?? resumeRunTracker;
-      if (streamState.cancelled) {
-        uiChunkEmitter.abort();
-        if (failingTracker) {
-
-          finalizeTurnCancelled({
+      // Both teardowns target the same row, so they share one projection of it.
+      const teardown = failingTracker
+        ? {
             tracker: failingTracker,
             ...(failingTracker.getRun().threadId
               ? { threadId: failingTracker.getRun().threadId as string }
@@ -378,26 +376,24 @@ export const executeApprovalResume = async (
             transport: 'approval-resume',
             skipRow: failingTracker.getRun().status !== 'running',
             loudGuard: true,
-          });
-        }
+          }
+        : null;
+
+      if (streamState.cancelled) {
+        uiChunkEmitter.abort();
+        if (teardown) finalizeTurnCancelled(teardown);
         return { success: true };
       }
-      if (failingTracker) {
+      if (teardown) {
         const retry = runFailureFromError(error, message);
         finalizeTurnFailure({
-          tracker: failingTracker,
+          ...teardown,
           failure: {
             status: 'failed',
             errorText: message,
             ...(retry.code ? { code: retry.code } : {}),
             ...(typeof retry.retryable === 'boolean' ? { retryable: retry.retryable } : {}),
           },
-          ...(failingTracker.getRun().threadId
-            ? { threadId: failingTracker.getRun().threadId as string }
-            : {}),
-          transport: 'approval-resume',
-          skipRow: failingTracker.getRun().status !== 'running',
-          loudGuard: true,
         });
       }
       uiChunkEmitter.error(message);
