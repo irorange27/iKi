@@ -137,6 +137,9 @@ const launchApp = async label => {
         // it did — which is how "approval policy never wired" stayed invisible.
         IKI_LOG_DIR: path.join(workDir, 'logs'),
         MAIN_WINDOW_VITE_DEV_SERVER_URL: `http://127.0.0.1:${VITE_PORT}`,
+        // The gate drives the UI over CDP; an auto-opened dock only gets in the
+        // way, and in a detached child it is a window nobody closes.
+        IKI_AUTO_OPEN_DEVTOOLS: 'false',
       },
       stdio: ['ignore', 'inherit', 'inherit'],
       detached: true,
