@@ -10,7 +10,6 @@ vi.mock('@iki/backend/thread_session/run_tracker', () => ({
     totalRuns: 0,
     failedRuns: 0,
     blockedRuns: 0,
-    expiredApprovals: 0,
     interruptedToolParts: 0,
   })),
 }));

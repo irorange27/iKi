@@ -1,5 +1,4 @@
 import { isDeepStrictEqual } from 'node:util';
-import { getToolCallApproval, getToolCallApprovalSession } from '../db/tool_call_approval';
 import { findMessageEvent } from '../db/session_events';
 import {
   appendSessionEvents,
@@ -72,24 +71,31 @@ export type ToolExecutionOutcome =
   | { kind: 'pending' | 'unknown' | 'busy' }
   | { kind: 'completed'; result: ToolResult; reused: boolean; interrupted?: ToolExecutionInterruption };
 
-const legacyAction = (address: ToolExecutionAddress) => {
-  const approval = getToolCallApproval(address.approvalId);
-  const session = approval && getToolCallApprovalSession(approval.session_id);
-  if (!approval?.tool_call_id || !approval.tool_name || session?.thread_id !== address.threadId) {
-    throw new Error('Tool approval is missing its execution binding.');
-  }
+/**
+ * Bindings for live approvals. The approval owner registers one per call before
+ * the human is asked and drops it once the call is consumed; there is no
+ * durable fallback, because a pause is not resumable across a restart.
+ */
+const approvalBindings = new Map<string, Omit<Binding, 'threadId' | 'approvalId'>>();
+
+export const registerApprovalBinding = (
+  binding: Binding
+): (() => void) => {
+  const { threadId: _threadId, approvalId, ...rest } = binding;
+  approvalBindings.set(approvalId, rest);
+  return () => {
+    if (approvalBindings.get(approvalId) === rest) approvalBindings.delete(approvalId);
+  };
+};
+
+const liveAction = (address: ToolExecutionAddress) => {
+  const binding = approvalBindings.get(address.approvalId);
+  if (!binding) return undefined;
   return {
-    binding: {
-      ...address,
-      messageId: session.assistant_message_id,
-      toolCallId: approval.tool_call_id,
-      toolName: approval.tool_name,
-      args: JSON.parse(approval.tool_args ?? '{}') as unknown,
-      workspace: session.workspace_selection ?? null,
-    },
-    decision: approval.decision ?? null,
-    reason: approval.decision_reason ?? undefined,
-    consumed: approval.state === 'consumed',
+    binding: { ...address, ...binding },
+    decision: null as null,
+    reason: undefined as string | undefined,
+    consumed: false,
   };
 };
 
@@ -103,8 +109,8 @@ const loadAction = (address: ToolExecutionAddress) => {
     throw new Error('Unsupported tool execution event version.');
   }
   const recorded = facts[0]?.payload as ExecutionFact | undefined;
-  const legacy = recorded ? undefined : legacyAction(address);
-  const binding = recorded?.binding ?? legacy!.binding;
+  const live = recorded ? undefined : liveAction(address);
+  const binding = recorded?.binding ?? live?.binding;
   if (
     !binding ||
     binding.threadId !== address.threadId ||
@@ -121,15 +127,15 @@ const loadAction = (address: ToolExecutionAddress) => {
   if (latest && latest.version !== SESSION_EVENT_VERSION)
     throw new Error('Unsupported approval event version.');
   const decision = latest?.payload as { approved: boolean; reason?: string } | undefined;
-  let approval = recorded?.decision ?? legacy?.decision ?? null;
+  let approval = recorded?.decision ?? live?.decision ?? null;
   if (decision) approval = decision.approved ? 'approved' : 'rejected';
   return {
     binding,
     revision,
     facts,
     decision: approval,
-    reason: decision?.reason ?? legacy?.reason,
-    legacyConsumed: legacy?.consumed ?? false,
+    reason: decision?.reason ?? live?.reason,
+    legacyConsumed: live?.consumed ?? false,
   };
 };
 type Action = ReturnType<typeof loadAction>;

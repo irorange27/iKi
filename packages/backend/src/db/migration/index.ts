@@ -19,6 +19,7 @@ import { migration as dropContinuity } from './011_drop_continuity';
 import { migration as dropIdentityProfiles } from './012_drop_identity_profiles';
 import { migration as dropAwaiterWakeEvents } from './013_drop_awaiter_wake_events';
 import { migration as dropTodoTables } from './014_drop_todo_tables';
+import { migration as dropToolCallApprovalTables } from './015_drop_tool_call_approval_tables';
 
 export const registeredMigrations: Migration[] = [
   baseline,
@@ -35,6 +36,7 @@ export const registeredMigrations: Migration[] = [
   dropIdentityProfiles,
   dropAwaiterWakeEvents,
   dropTodoTables,
+  dropToolCallApprovalTables,
 ];
 
 export const initializeMigrations = (db: SqliteDatabase) => {

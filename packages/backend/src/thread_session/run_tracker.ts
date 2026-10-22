@@ -14,10 +14,9 @@ import {
   getSessionEvents,
 } from '@iki/backend/db/session_events';
 import { hasLiveThreadRunLease } from '@iki/backend/db/thread_run_locks';
-import { expirePendingToolCallApprovalsByRunIds, getToolCallApprovalSession } from '@iki/backend/db/tool_call_approval';
 import {
-  APPROVAL_DECIDED,
   APPROVAL_REQUESTED,
+  APPROVAL_DECIDED,
   recordFailureTerminalEvent,
   SESSION_EVENT_VERSION,
   turnFactsToEvents,
@@ -569,7 +568,6 @@ export type RunRecoveryResult = {
   failedRuns: number;
   blockedRuns: number;
   totalRuns: number;
-  expiredApprovals: number;
   interruptedToolParts: number;
 
   skippedLiveLease: number;
@@ -590,30 +588,6 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
     return true;
   });
 
-  const runIds = reclaimable.map(run => run.id);
-  const expiredApprovalRecords =
-    runIds.length > 0 ? expirePendingToolCallApprovalsByRunIds(runIds) : [];
-  const expiredApprovals = expiredApprovalRecords.length;
-
-  for (const record of expiredApprovalRecords) {
-    const sessionId = record.session_id;
-    const threadId = sessionId
-      ? getToolCallApprovalSession(sessionId)?.thread_id
-      : null;
-    if (!threadId) continue;
-    recordFailureTerminalEvent(threadId, [
-      {
-        type: APPROVAL_DECIDED,
-        version: SESSION_EVENT_VERSION,
-        payload: {
-          approvalId: record.approval_id,
-          approved: false,
-          reason: 'Run reclaimed by startup recovery; pending approval expired.',
-          source: 'system',
-        },
-      },
-    ]);
-  }
   const threadIds = Array.from(
     new Set(reclaimable.map(run => run.threadId).filter((id): id is string => typeof id === 'string'))
   );
@@ -718,6 +692,31 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
       blockedRuns += 1;
     }
 
+    // A run reclaimed while blocked was waiting on an approval whose session
+    // died with its process. The transcript must show that decision, or the
+    // replayed turn ends with a proposal nobody ever answered.
+    if (run.status === 'blocked' && run.threadId) {
+      const proposals = getSessionEvents(run.threadId, [APPROVAL_REQUESTED], {
+        path: '$.runId',
+        value: run.id,
+      });
+      if (proposals.length > 0) {
+        recordFailureTerminalEvent(
+          run.threadId,
+          proposals.map(event => ({
+            type: APPROVAL_DECIDED,
+            version: SESSION_EVENT_VERSION,
+            payload: {
+              approvalId: (event.payload as { approvalId: string }).approvalId,
+              approved: false,
+              reason: 'Run reclaimed by startup recovery; the approval session died with its process.',
+              source: 'system' as const,
+            },
+          }))
+        );
+      }
+    }
+
     if (run.threadId) {
       recordFailureTerminalEvent(run.threadId, turnFactsToEvents({
         terminal: {
@@ -733,7 +732,6 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
     failedRuns,
     blockedRuns,
     totalRuns: reclaimable.length,
-    expiredApprovals,
     interruptedToolParts,
     skippedLiveLease,
   };

@@ -31,13 +31,6 @@ export interface ChatMessage {
   updated_at: string;
 }
 
-export type {
-  ToolCallApproval,
-  ToolCallApprovalDecision,
-  ToolCallApprovalSession,
-  ToolCallApprovalState,
-} from './tool_call_approval';
-
 export interface Workspace {
   id: string;
   path: string;

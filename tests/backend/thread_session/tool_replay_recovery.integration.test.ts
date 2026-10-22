@@ -9,10 +9,6 @@ vi.mock('@iki/backend/platform', () => ({ getUserDataPath: () => profile.path })
 import { initializeDatabase, closeDatabase } from '@iki/backend/db/database';
 import { addChatThread } from '@iki/backend/db/chat_thread';
 import {
-  upsertToolCallApprovalSession,
-  upsertToolCallApprovals,
-} from '@iki/backend/db/tool_call_approval';
-import {
   appendSessionEvents,
   getSessionEventRevision,
   getSessionEvents,
@@ -20,6 +16,7 @@ import {
 import {
   executeApprovedTool,
   prepareToolExecution,
+  registerApprovalBinding,
   TOOL_EXECUTION_FINISHED,
   TOOL_EXECUTION_PREPARED,
   TOOL_EXECUTION_STARTED,
@@ -48,17 +45,6 @@ beforeEach(async () => {
     is_incognito: 0,
     enable_artifacts: 0,
   });
-  upsertToolCallApprovalSession({
-    session_id: 'replay_session',
-    thread_id: THREAD_ID,
-    assistant_message_id: 'replay_message',
-    provider_type: 'openai',
-    model: 'test',
-    system_prompt: '',
-    enabled_tools: '[]',
-    available_skill_ids: '[]',
-    workspace_selection: null,
-  });
 });
 
 afterEach(async () => {
@@ -82,16 +68,15 @@ const declare = (name: string, replay?: 'safe' | 'unsafe') => {
 };
 
 const registerApproval = (toolName: string) => {
-  upsertToolCallApprovals([
-    {
-      approval_id: APPROVAL_ID,
-      session_id: 'replay_session',
-      tool_call_id: 'replay_call',
-      tool_name: toolName,
-      tool_args: JSON.stringify({ probe: true }),
-      state: 'pending',
-    },
-  ]);
+  registerApprovalBinding({
+    threadId: THREAD_ID,
+    approvalId: APPROVAL_ID,
+    messageId: 'replay_message',
+    toolCallId: 'replay_call',
+    toolName,
+    args: { probe: true },
+    workspace: null,
+  });
   prepareToolExecution(address);
   appendSessionEvents(THREAD_ID, getSessionEventRevision(THREAD_ID), [
     {

@@ -643,11 +643,14 @@ const main = async () => {
     return b ? 'ZOMBIE' : 'OK';
   })()`);
   if (zombie !== 'OK') throw new Error('approval card still answerable after restart');
-  const leftoverPending = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'))
-    .prepare("SELECT approval_id FROM tool_call_approvals WHERE state = 'pending'")
+  // A pause is memory-only, so a restart must leave no approval the app can
+  // still answer. The zombie-button probe above proves that from the UI side;
+  // this proves the tables a pause used to need are gone from the schema.
+  const leftoverTables = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'))
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'tool_call_approval%'")
     .all();
-  if (leftoverPending.length !== 0) {
-    throw new Error(`pending approvals survived restart: ${JSON.stringify(leftoverPending)}`);
+  if (leftoverTables.length !== 0) {
+    throw new Error(`approval tables still present after migration: ${JSON.stringify(leftoverTables)}`);
   }
 
   // F4 (ADR 008 flip): the restart recovery must record its facts in the
@@ -708,7 +711,7 @@ const main = async () => {
   assertPiSupplyServed();
 
   clearTimeout(watchdog);
-  log(`PASS — approval loop + crash-restart recovery verified (tool pairs: ${toolMsgs2})`);
+  log(`PASS — approval loop, restart failure semantics, and crash recovery verified (tool pairs: ${toolMsgs2})`);
 };
 
 try {

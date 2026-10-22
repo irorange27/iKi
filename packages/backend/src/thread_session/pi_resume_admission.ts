@@ -1,5 +1,5 @@
 import type { ModelMessage } from '@iki/backend/message/model_history';
-import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
+import type { ApprovalBinding } from './approval_session';
 import { pausedPlanRunsOnPiToolSupply } from './turn_supply_selection';
 import { prepareToolExecution } from './tool_execution';
 import type { ExecutionPlan } from './execution_plan';
@@ -32,6 +32,7 @@ export const admitPiResume = (params: {
   plan: ExecutionPlan | undefined;
   history: ModelMessage[];
   pendingApprovalIds: Iterable<string>;
+  bindings: Map<string, ApprovalBinding>;
   onRefuse: () => void;
 }): PiResumeAdmission | undefined => {
   const { plan, history } = params;
@@ -41,16 +42,16 @@ export const admitPiResume = (params: {
 
   try {
     const commands = Array.from(params.pendingApprovalIds).flatMap((approvalId: string) => {
-      const row = toolCallApprovalDb.getToolCallApproval(approvalId);
-      if (!row?.tool_call_id || !row.tool_name) {
-        throw new Error(`Approval row ${approvalId} is missing its execution binding.`);
+      const binding = params.bindings.get(approvalId);
+      if (!binding) {
+        throw new Error(`Approval ${approvalId} is missing its execution binding.`);
       }
       return [
         {
           approvalId,
-          toolCallId: row.tool_call_id,
-          toolName: row.tool_name,
-          args: JSON.parse(row.tool_args ?? '{}') as Record<string, unknown>,
+          toolCallId: binding.toolCallId,
+          toolName: binding.toolName,
+          args: binding.args,
         },
       ];
     });

@@ -1,5 +1,4 @@
 import type { ModelMessage } from '@iki/backend/message/model_history';
-import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
 import { cloneModelMessages, type TurnDriverHarness } from '../agent/harness';
 import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
 import { planToHarnessConfig } from './execution_plan';
@@ -173,9 +172,6 @@ export const executeApprovalResume = async (
 
     deps.clearApprovalTimeouts(session);
     deps.forgetSession(session);
-    if (session.sessionId) {
-      toolCallApprovalDb.consumeToolCallApprovalSession(session.sessionId);
-    }
 
     const resumedSenderId = session.target.id;
     const existingStream = deps.streams.peek(resumedSenderId);

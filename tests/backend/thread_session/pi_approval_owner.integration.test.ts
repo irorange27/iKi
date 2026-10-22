@@ -10,14 +10,10 @@ import { z } from 'zod';
 import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { addProvider } from '@iki/backend/db/providers';
 import { addChatThread } from '@iki/backend/db/chat_thread';
-import {
-  answerToolCallApproval,
-  upsertToolCallApprovalSession,
-  upsertToolCallApprovals,
-} from '@iki/backend/db/tool_call_approval';
 import { getSessionEvents } from '@iki/backend/db/session_events';
 import { recordSessionEvents, SESSION_EVENT_VERSION } from '@iki/backend/thread_session/session_log';
 import {
+  registerApprovalBinding,
   prepareToolExecution,
   executeApprovedTool,
   TOOL_EXECUTION_FINISHED,
@@ -132,17 +128,6 @@ beforeAll(async () => {
     is_incognito: 0,
     enable_artifacts: 0,
   });
-  upsertToolCallApprovalSession({
-    session_id: 'pi_owner_session',
-    thread_id: address.threadId,
-    assistant_message_id: 'pi_owner_message',
-    provider_type: 'custom-openai',
-    model: 'pi-model',
-    system_prompt: '',
-    enabled_tools: JSON.stringify([TOOL_NAME]),
-    available_skill_ids: '[]',
-    workspace_selection: null,
-  });
   defaultToolRegistry.register(
     createTool({
       name: TOOL_NAME,
@@ -169,17 +154,15 @@ describe('pi tool resume through the real five-state owner (switch item 3b)', ()
   });
 
   it('approved call: owner admits, executes exactly once, records the facts; replay joins the record', async () => {
-    upsertToolCallApprovals([
-      {
-        approval_id: address.approvalId,
-        session_id: 'pi_owner_session',
-        tool_call_id: 'call_owner',
-        tool_name: TOOL_NAME,
-        tool_args: JSON.stringify({ path: '/owner.txt' }),
-        state: 'pending',
-      },
-    ]);
-    answerToolCallApproval(address.approvalId, 'approved', 'integration approval');
+    registerApprovalBinding({
+      threadId: address.threadId,
+      approvalId: address.approvalId,
+      messageId: 'pi_owner_message',
+      toolCallId: 'call_owner',
+      toolName: TOOL_NAME,
+      args: { path: '/owner.txt' },
+      workspace: null,
+    });
     recordSessionEvents(address.threadId, [
       {
         type: 'approval_decided',
@@ -230,17 +213,15 @@ describe('pi tool resume through the real five-state owner (switch item 3b)', ()
 
   it('rejected call: the owner canonical denial, zero effects', async () => {
     const rejectedApprovalId = 'ap_owner_rejected';
-    upsertToolCallApprovals([
-      {
-        approval_id: rejectedApprovalId,
-        session_id: 'pi_owner_session',
-        tool_call_id: 'call_owner_rejected',
-        tool_name: TOOL_NAME,
-        tool_args: JSON.stringify({ path: '/rejected.txt' }),
-        state: 'pending',
-      },
-    ]);
-    answerToolCallApproval(rejectedApprovalId, 'rejected', 'integration rejection');
+    registerApprovalBinding({
+      threadId: address.threadId,
+      approvalId: rejectedApprovalId,
+      messageId: 'pi_owner_message',
+      toolCallId: 'call_owner_rejected',
+      toolName: TOOL_NAME,
+      args: { path: '/rejected.txt' },
+      workspace: null,
+    });
     recordSessionEvents(address.threadId, [
       {
         type: 'approval_decided',

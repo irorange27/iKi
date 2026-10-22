@@ -2,22 +2,20 @@ import { createLogger } from '@iki/backend/logger';
 import type { ModelMessage, ToolApprovalResponse } from '@iki/backend/message/model_history';
 
 import { cloneModelMessages } from '../agent/harness';
-import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
-import type { ToolCallApprovalDecision } from '@iki/backend/types/tool_call_approval';
 import type { ApprovalRecoveryContext } from './approval_types';
 import {
   recordFailureTerminalEvent,
   recordSessionEvents,
+  APPROVAL_REQUESTED,
   APPROVAL_DECIDED,
   SESSION_EVENT_VERSION,
   type ApprovalDecidedPayload,
 } from './session_log';
-import { recoverApprovalSession } from './approval_recovery';
-import { persistApprovalBatch } from './approval_persistence';
 import { admitPiResume } from './pi_resume_admission';
 import { executeApprovalResume } from './approval_resume_execution';
-import type { PendingApprovalSession } from './approval_session';
+import type { ApprovalBinding, PendingApprovalSession } from './approval_session';
 import { rehydrateAgentRunTracker } from './run_tracker';
+import { registerApprovalBinding } from './tool_execution';
 import type { ActiveStreamState, ChatStreamTarget } from './types';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
@@ -65,12 +63,14 @@ export const createChatApproval = (deps: {
 }) => {
   const pendingApprovalSessions = new Map<string, PendingApprovalSession>();
 
+  /** End a paused session: stop its timers and drop the executor's bindings. */
   const clearApprovalTimeouts = (session: PendingApprovalSession) => {
-    if (!session.timeouts) return;
-    for (const timeoutId of session.timeouts.values()) {
-      clearTimeout(timeoutId);
+    if (session.timeouts) {
+      for (const timeoutId of session.timeouts.values()) clearTimeout(timeoutId);
+      session.timeouts.clear();
     }
-    session.timeouts.clear();
+    for (const release of session.releases ?? []) release();
+    session.releases = [];
   };
 
   const scheduleApprovalTimeout = (
@@ -133,6 +133,8 @@ export const createChatApproval = (deps: {
       recoveryContext: session.recoveryContext,
       pendingApprovalIds: new Set([approvalId]),
       collectedApprovalResponses: new Map(),
+      bindings: new Map(),
+      releases: [],
       timeouts: new Map(),
     };
     pendingApprovalSessions.set(approvalId, created);
@@ -158,11 +160,45 @@ export const createChatApproval = (deps: {
 
     if (approvalIds.length === 0) return;
 
-    if (session.recoveryContext) {
-      persistApprovalBatch({
-        requests: approvalRequests,
-        recoveryContext: session.recoveryContext,
-      });
+    const context = session.recoveryContext;
+    if (context?.plan.threadId) {
+      // The proposal is an audit fact, not a resumable checkpoint: it records
+      // what was asked so the transcript explains the pause.
+      recordSessionEvents(
+        context.plan.threadId,
+        approvalRequests.map(request => ({
+          type: APPROVAL_REQUESTED,
+          version: SESSION_EVENT_VERSION,
+          payload: {
+            approvalId: request.approvalId,
+            sessionId: context.sessionId,
+            ...(context.runId ? { runId: context.runId } : {}),
+            ...(request.toolCallId ? { toolCallId: request.toolCallId } : {}),
+            ...(request.toolCall?.toolName ? { toolName: request.toolCall.toolName } : {}),
+            ...(request.toolCall?.args ? { args: request.toolCall.args } : {}),
+          },
+        }))
+      );
+    }
+
+    // Register the bindings the executor will need once a human answers.
+    const bindingReleases: Array<() => void> = [];
+    const newBindings = new Map<string, ApprovalBinding>();
+    for (const request of approvalRequests) {
+      if (!request.toolCall || !context) continue;
+      const binding: ApprovalBinding = {
+        approvalId: request.approvalId,
+        messageId: context.assistantMessageId,
+        toolCallId: request.toolCallId ?? '',
+        toolName: request.toolCall.toolName,
+        args: request.toolCall.args ?? {},
+        workspace:
+          context.plan.workspaceSelection !== undefined
+            ? JSON.stringify(context.plan.workspaceSelection)
+            : null,
+      };
+      newBindings.set(request.approvalId, binding);
+      bindingReleases.push(registerApprovalBinding({ ...binding, threadId: context.plan.threadId ?? '' }));
     }
 
 
@@ -182,6 +218,10 @@ export const createChatApproval = (deps: {
       if (session.recoveryContext?.sessionId) {
         existingSession.sessionId = session.recoveryContext.sessionId;
       }
+      existingSession.releases.push(...bindingReleases);
+      for (const [approvalId, binding] of newBindings) {
+        existingSession.bindings.set(approvalId, binding);
+      }
       for (const approvalId of approvalIds) {
         existingSession.pendingApprovalIds.add(approvalId);
         pendingApprovalSessions.set(approvalId, existingSession);
@@ -197,6 +237,8 @@ export const createChatApproval = (deps: {
       recoveryContext: session.recoveryContext,
       pendingApprovalIds: new Set(approvalIds),
       collectedApprovalResponses: new Map(),
+      bindings: newBindings,
+      releases: bindingReleases,
       timeouts: new Map(),
     };
 
@@ -204,24 +246,6 @@ export const createChatApproval = (deps: {
       pendingApprovalSessions.set(approvalId, pendingSession);
       scheduleApprovalTimeout(approvalId, pendingSession);
     }
-  };
-
-  const tryRecoverApprovalSession = async (
-    approvalId: string,
-    target: ChatStreamTarget
-  ): Promise<PendingApprovalSession | null> => {
-    const recovered = await recoverApprovalSession(approvalId);
-    if (!recovered) return null;
-    const session: PendingApprovalSession = {
-      ...recovered,
-      target,
-      timeouts: new Map(),
-    };
-    for (const id of session.pendingApprovalIds) {
-      pendingApprovalSessions.set(id, session);
-      scheduleApprovalTimeout(id, session);
-    }
-    return session;
   };
 
   const resumeApproval = async (
@@ -232,21 +256,13 @@ export const createChatApproval = (deps: {
     executionAbort?: { current: (() => void) | null; lost: boolean },
     source: ApprovalDecidedPayload['source'] = 'user'
   ) => {
-    const storedApproval = toolCallApprovalDb.getToolCallApproval(approvalId);
-    let session = pendingApprovalSessions.get(approvalId);
+    const session = pendingApprovalSessions.get(approvalId);
     if (!session) {
-      session = await tryRecoverApprovalSession(approvalId, target);
-    }
-    if (!session) {
-      if (storedApproval && storedApproval.state !== 'pending') {
-        return {
-          success: false,
-          error: 'Approval request already processed.',
-        };
-      }
+      // A pause is memory-only by design: if the process that asked is gone, the
+      // decision has nowhere to land and the turn is over.
       return {
         success: false,
-        error: 'Approval request not found or already processed.',
+        error: 'Approval request not found. A paused turn does not survive a restart.',
       };
     }
 
@@ -261,22 +277,18 @@ export const createChatApproval = (deps: {
     };
 
     const recordApprovalResponse = () => {
-      const runId = session?.recoveryContext?.runId;
+      const runId = session.recoveryContext?.runId;
       if (!runId) return;
+      const binding = session.bindings.get(approvalId);
       rehydrateAgentRunTracker(runId)?.recordApprovalResponse({
         approvalId,
-        ...(storedApproval?.tool_call_id ? { toolCallId: storedApproval.tool_call_id } : {}),
+        ...(binding ? { toolCallId: binding.toolCallId } : {}),
         approved,
         reason: approvalResponse.reason,
       });
     };
 
-    const decidedThreadId =
-      session.recoveryContext?.plan.threadId ??
-      (storedApproval
-        ? (toolCallApprovalDb.getToolCallApprovalSession(storedApproval.session_id)?.thread_id ??
-          null)
-        : null);
+    const decidedThreadId = session.recoveryContext?.plan.threadId ?? null;
     const recordDecisionEvent = () => {
       if (!decidedThreadId) return;
       recordSessionEvents(decidedThreadId, [
@@ -308,8 +320,6 @@ export const createChatApproval = (deps: {
 
     recordDecisionEvent();
     session.collectedApprovalResponses.set(approvalId, approvalResponse);
-    const decision: ToolCallApprovalDecision = approved ? 'approved' : 'rejected';
-    toolCallApprovalDb.answerToolCallApproval(approvalId, decision, approvalResponse.reason);
     recordApprovalResponse();
 
     const waitingForApprovals = Array.from(session.pendingApprovalIds).filter(
@@ -328,6 +338,7 @@ export const createChatApproval = (deps: {
       plan: session.recoveryContext?.plan,
       history: cloneModelMessages(session.history ?? []),
       pendingApprovalIds: session.pendingApprovalIds,
+      bindings: session.bindings,
       onRefuse: () => session.collectedApprovalResponses.delete(approvalId),
     });
 
@@ -355,12 +366,7 @@ export const createChatApproval = (deps: {
     reason?: string,
     source: ApprovalDecidedPayload['source'] = 'user'
   ) => {
-    const pending = pendingApprovalSessions.get(approvalId);
-    const record = toolCallApprovalDb.getToolCallApproval(approvalId);
-    const storedSession = record
-      ? toolCallApprovalDb.getToolCallApprovalSession(record.session_id)
-      : null;
-    const threadId = pending?.recoveryContext?.plan.threadId ?? storedSession?.thread_id;
+    const threadId = pendingApprovalSessions.get(approvalId)?.recoveryContext?.plan.threadId;
 
     const executionAbort: { current: (() => void) | null; lost: boolean } = {
       current: null,
@@ -393,33 +399,30 @@ export const createChatApproval = (deps: {
     const normalizedRunId = runId.trim();
     if (!normalizedRunId) return 0;
 
-    const sessions = new Set(pendingApprovalSessions.values());
-    for (const session of sessions) {
+    const expired: Array<{ approvalId: string; threadId?: string }> = [];
+    for (const session of new Set(pendingApprovalSessions.values())) {
       if (session.recoveryContext?.runId !== normalizedRunId) continue;
       clearApprovalTimeouts(session);
       for (const approvalId of session.pendingApprovalIds) {
         pendingApprovalSessions.delete(approvalId);
+        expired.push({
+          approvalId,
+          ...(session.recoveryContext?.plan.threadId
+            ? { threadId: session.recoveryContext.plan.threadId }
+            : {}),
+        });
       }
     }
-    const expired = toolCallApprovalDb.expirePendingToolCallApprovalsByRunIds([normalizedRunId]);
 
-    const expiredThreadId = expired
-      .map(record => record.session_id)
-      .filter((sessionId): sessionId is string => Boolean(sessionId))
-      .map(sessionId => toolCallApprovalDb.getToolCallApprovalSession(sessionId)?.thread_id)
-      .find(threadId => Boolean(threadId));
-    const threadId =
-      (typeof expiredThreadId === 'string' ? expiredThreadId : undefined) ??
-      [...sessions.values()].find(session => session.recoveryContext?.runId === normalizedRunId)
-        ?.recoveryContext?.plan.threadId;
-    if (threadId && expired.length > 0) {
+    const threadId = expired.find(entry => entry.threadId)?.threadId;
+    if (threadId) {
       recordFailureTerminalEvent(
         threadId,
-        expired.map(record => ({
+        expired.map(entry => ({
           type: APPROVAL_DECIDED,
           version: SESSION_EVENT_VERSION,
           payload: {
-            approvalId: record.approval_id,
+            approvalId: entry.approvalId,
             approved: false,
             reason: 'Run cancelled; pending approval expired.',
             source: 'system' as const,

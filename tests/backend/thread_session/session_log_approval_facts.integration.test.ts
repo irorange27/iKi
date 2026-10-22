@@ -62,8 +62,11 @@ describe('session log approval facts across entries', () => {
   let conversation: ReturnType<typeof createChatPersistence>;
   let coordinator: ReturnType<typeof createThreadStreamCoordinator>;
 
+  let approvalsSingleton: ReturnType<typeof createChatApproval> | null = null;
+  // The approval owner holds the pending sessions and their execution bindings
+  // in memory, so a test must drive one instance, not build a second.
   const buildApprovals = () =>
-    createChatApproval({
+    (approvalsSingleton ??= createChatApproval({
       streams: {
         tryAcquireThreadRun: coordinator.tryAcquireThreadRun,
         peek: coordinator.peekStream,
@@ -73,7 +76,7 @@ describe('session log approval facts across entries', () => {
       memory: memory as never,
       conversation: conversation as never,
       usage: { recordUsageEvent: vi.fn() },
-    });
+    }));
 
   beforeAll(async () => {
     dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-session-facts-'));
