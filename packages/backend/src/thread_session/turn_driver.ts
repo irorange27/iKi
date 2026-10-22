@@ -30,8 +30,6 @@ import type { AgentRunStatus } from '@iki/backend/types/agent_run';
 
 type TurnDriverResultBase = {
   response?: string;
-
-  text?: string;
   usage?: import('@iki/backend/agent').AgentResult['usage'];
 
   lastStepInputTokens?: number;
@@ -111,7 +109,6 @@ export type TurnDriverHandle = {
 
   getLastFacts: () => TurnDriverResultBase;
 
-  getHarness: () => TurnDriverHarness;
   getAccumulatedResponse: () => string;
   getBatchCount: () => number;
   hasToolCalls: () => boolean;
@@ -724,7 +721,6 @@ const runTurnBatches = async (
         };
         state.isAwaitingApproval = true;
         state.lastFacts = {
-          text: state.accumulatedResponse || agentResult.response,
           ...(agentResult.usage ? { usage: agentResult.usage } : {}),
         };
         break;
@@ -771,7 +767,6 @@ const runTurnBatches = async (
 
 
       state.lastFacts = {
-        text: state.accumulatedResponse || streamResult.response,
         ...(streamResult.usage ? { usage: streamResult.usage } : {}),
         ...(streamResult.pendingToolCalls && streamResult.pendingToolCalls.length > 0
           ? { pendingToolCalls: streamResult.pendingToolCalls }
@@ -817,7 +812,6 @@ export const createTurnDriver = (
     run: () => runTurnBatches(state, deps),
     getRunTracker: () => state.runTracker,
     getLastFacts: () => state.lastFacts,
-    getHarness: () => state.harness,
     getAccumulatedResponse: () => state.accumulatedResponse,
     getBatchCount: () => state.batchIndex,
     hasToolCalls: () => state.turnHadToolCalls,
