@@ -43,8 +43,6 @@ export const searchThreadContent = (rawQuery: string, limit = 12): ThreadContent
   const query = rawQuery.trim();
   if (!query) return [];
 
-  const like = `%${query.replace(/[%_]/g, ch => `\\${ch}`)}%`;
-
   const rows = getChatThreads()
     .flatMap(thread =>
       getSessionEvents(thread.id, ['input_accepted', 'model_output_committed'])

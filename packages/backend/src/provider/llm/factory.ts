@@ -319,27 +319,6 @@ export const getModelGenerationSettings = (params: {
     : callSettings;
 };
 
-const createInstrumentedFetch = (): typeof globalThis.fetch => {
-  return async (input, init) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const method = init?.method ?? 'GET';
-
-    if (method === 'POST' && url.includes('/chat/completions')) {
-      const bodyText = init?.body as string;
-      try {
-        const body = JSON.parse(bodyText);
-        if (!body.thinking) {
-          body.thinking = { type: 'disabled' };
-        }
-        return globalThis.fetch(input, { ...init, body: JSON.stringify(body) });
-      } catch {
-    // Intentionally ignored: the caller cannot act on it.
-  }
-    }
-    return globalThis.fetch(input, init);
-  };
-};
-
 export const resolvePersonaPrompt = (providerType: string, providerId?: string | null) => {
   getProviderConfig(providerType, providerId);
   const personaPrompt = getPersonaPrompt();

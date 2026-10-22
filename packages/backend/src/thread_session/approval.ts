@@ -576,8 +576,6 @@ export const createChatApproval = (deps: {
         throw new Error("Approval resume requires the paused turn's recovery context");
       }
 
-      const resumesOnPi = Boolean(piResumeAdmission);
-
       if (!piResumeAdmission) {
         throw new PiSupplyRefusedError(
           'the paused turn no longer matches an admissible provider plan (its provider row may have been removed or disabled)',
@@ -672,7 +670,6 @@ export const createChatApproval = (deps: {
         uiChunkEmitter.finish();
       }
 
-      const finalTracker = driver.getRunTracker();
       if (streamResult.outcome !== 'cancelled' && nextApprovalContext) {
         deps.usage.recordUsageEvent({
           threadId: nextApprovalContext.plan.threadId,

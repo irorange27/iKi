@@ -15,7 +15,6 @@ import { isObjectRecord } from '@iki/backend/utils/guards';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { ensureThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/git_worktree';
-import { getErrorMessage } from '@iki/backend/utils/errors';
 import { sanitizeUiMessageJsonForStorage } from '@iki/backend/message/ui_message_codec';
 
 const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });

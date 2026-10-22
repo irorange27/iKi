@@ -232,7 +232,6 @@ export const resolveShellWorkingDirectory = async (inputCwd?: string): Promise<s
   const roots = await resolveWorkspaceRoots();
 
   const primaryRoot = roots[0]?.realPath;
-  const displayRoot = roots[0]?.resolvedPath;
   if (!primaryRoot) {
     throw getWorkspaceSelectionRequirementError();
   }

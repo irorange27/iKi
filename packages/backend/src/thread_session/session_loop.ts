@@ -7,7 +7,6 @@ import {
   assembleExecutionPlan,
   planToRunTrackerParams,
 } from './execution_plan';
-import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createAgentRunTracker } from './run_tracker';
 import { summarizeContextComposition } from '../turn_prep/context_helpers';
 import { selectTurnHarness } from './turn_supply_selection';
@@ -30,7 +29,6 @@ import {
 } from './turn_persistence';
 import {
   asChatUiMessage,
-  recordFailureTerminalEvent,
   recordSessionEvents,
   turnFactsToEvents,
 } from './session_log';
@@ -195,7 +193,6 @@ export const createChatStreaming = (deps: {
         workspaceSelection: turnStartWorkspace,
       });
       streamState.abortController.signal.throwIfAborted();
-      const autonomousMode = options.autonomous && options.autonomous.maxIterations > 1;
 
       if (preparedTurn.usedSkills.length > 0) {
         uiChunkEmitter.emitSkillUsage({

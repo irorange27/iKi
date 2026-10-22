@@ -16,7 +16,6 @@ import {
 } from './execution_plan';
 import {
   asChatUiMessage,
-  recordFailureTerminalEvent,
   recordSessionEvents,
   turnFactsToEvents,
 } from './session_log';

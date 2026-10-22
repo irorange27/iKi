@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-import type { AgentResult, AgentTool, AgentUsage } from '@iki/backend/agent/types';
+import type { AgentResult, AgentTool } from '@iki/backend/agent/types';
 import type { TurnDriverHarness, TurnHarnessAssembly } from '@iki/backend/agent/harness';
 import type { AgentStep, ModelInferenceRecord } from '@iki/backend/agent/agent_step';
 import type {
@@ -44,14 +44,6 @@ type DelegatedAgentRunTrackerParams = {
   availableSkillIds: string[];
   input: AgentRunInput;
   working: AgentRunWorkingState;
-};
-
-type DelegatedAgentRunTracker = {
-  id: string;
-  recordModelStep: (record: ModelInferenceRecord) => void;
-  recordAgentStep: (step: AgentStep) => void;
-
-  terminal: TerminalRunTracker;
 };
 
 export type TerminalRunTracker = {

@@ -136,7 +136,6 @@ export const createChatTurnPreparer = (deps: {
     );
     const maxInputTokens = modelCapability.maxInputTokens;
     const maxOutputTokens = modelCapability.maxOutputTokens ?? undefined;
-    const lastModelMessage = modelMessages[modelMessages.length - 1];
     const runtimeConfig = deps.getRuntimeConfig();
     const autoApproveToolRequests = runtimeConfig.autoApproveToolRequests;
 
@@ -158,7 +157,7 @@ export const createChatTurnPreparer = (deps: {
       .map(skill => skill.id)
       .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
 
-    const { resolvedTools, mode } = await resolveToolNames({
+    const { resolvedTools } = await resolveToolNames({
       tools: options.tools,
       mcpServerIds: options.mcpServerIds,
       inputMessages: finalMessages,
