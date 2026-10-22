@@ -16,7 +16,7 @@ import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import {
   finalizeHarnessTurn,
   finalizeTurnFailure,
-} from '@iki/backend/thread_session/turn_driver';
+} from '@iki/backend/thread_session/turn_finalize';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { resolveElement } from './main/services/devtools/element_source';
 import { startDaemonServer } from '@iki/daemon/server';

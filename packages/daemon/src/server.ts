@@ -10,7 +10,7 @@ import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import {
   finalizeHarnessTurn,
   finalizeTurnFailure,
-} from '@iki/backend/thread_session/turn_driver';
+} from '@iki/backend/thread_session/turn_finalize';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { registerStandardTools } from '@iki/backend/tools';

@@ -19,13 +19,13 @@ import {
   recordSessionEvents,
   turnFactsToEvents,
 } from './session_log';
+import { createTurnDriver } from './turn_driver';
 import {
-  createTurnDriver,
   finalizeTurn,
   finalizeTurnCancelled,
   finalizeTurnFailure,
   runFailureFromError,
-} from './turn_driver';
+} from './turn_finalize';
 import { NO_TOOLS_SYSTEM_PROMPT } from './constants';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import type { createChatTurnPreparer } from '../turn_prep/turn_preparer';

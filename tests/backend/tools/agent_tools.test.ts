@@ -32,7 +32,7 @@ import { DelegatedAgentTool, setDelegatedAgentRuntime } from '@iki/backend/tools
 import {
   finalizeHarnessTurn,
   finalizeTurnFailure,
-} from '@iki/backend/thread_session/turn_driver';
+} from '@iki/backend/thread_session/turn_finalize';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { defaultToolRegistry } from '@iki/backend/tools/base';
 import { ReadFileTool, WriteFileTool, UndoEditTool } from '@iki/backend/tools/file_tools';

@@ -33,14 +33,13 @@ import {
   turnFactsToEvents,
 } from './session_log';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
+import { createTurnDriver, type TurnDriverHandle } from './turn_driver';
 import {
-  createTurnDriver,
   finalizeTurn,
   finalizeTurnCancelled,
   finalizeTurnFailure,
   runFailureFromError,
-  type TurnDriverHandle,
-} from './turn_driver';
+} from './turn_finalize';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 

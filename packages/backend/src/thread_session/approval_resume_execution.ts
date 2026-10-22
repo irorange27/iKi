@@ -9,13 +9,13 @@ import { reidentifyPlan } from './approval_types';
 import { createAgentRunTracker, rehydrateAgentRunTracker } from './run_tracker';
 import { planToRunTrackerParams } from './execution_plan';
 import { recordSessionEvents, turnFactsToEvents } from './session_log';
+import { createTurnDriver } from './turn_driver';
 import {
-  createTurnDriver,
   finalizeTurn,
   finalizeTurnCancelled,
   finalizeTurnFailure,
   runFailureFromError,
-} from './turn_driver';
+} from './turn_finalize';
 import { executeApprovedTool, prepareToolExecution } from './tool_execution';
 import { loadPersistedAssistantParts, persistAssistantTurnMessage } from './turn_persistence';
 import { createUiChunkEmitter } from './ui_stream';
