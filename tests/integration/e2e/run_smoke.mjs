@@ -34,6 +34,9 @@ const fail = message => {
 
 let workDir;
 let fauxServer;
+const VIEWPORT_WIDTH = 1200;
+const VIEWPORT_HEIGHT = 800;
+
 const launchedPids = [];
 
 let currentStep = 'startup';
@@ -140,6 +143,10 @@ const launchApp = async label => {
         // The gate drives the UI over CDP; an auto-opened dock only gets in the
         // way, and in a detached child it is a window nobody closes.
         IKI_AUTO_OPEN_DEVTOOLS: 'false',
+        // The window must be at least as large as the emulated viewport, or the
+        // page lays out wider than its window and the composer is clipped off.
+        IKI_WINDOW_WIDTH: String(VIEWPORT_WIDTH),
+        IKI_WINDOW_HEIGHT: String(VIEWPORT_HEIGHT),
       },
       stdio: ['ignore', 'inherit', 'inherit'],
       detached: true,
@@ -165,8 +172,8 @@ const launchApp = async label => {
 const applyStableViewport = async cdp => {
   const applied = await cdp
     .send('Emulation.setDeviceMetricsOverride', {
-      width: 1200,
-      height: 800,
+      width: VIEWPORT_WIDTH,
+      height: VIEWPORT_HEIGHT,
       deviceScaleFactor: 1,
       mobile: false,
     })
