@@ -390,18 +390,11 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
       return currentRun;
     },
     markCompleted: params => {
-      appendStep({
-        type: 'model',
-        status: 'completed',
-        summary: toSummary('Run completed successfully', 'Run completed'),
-        output: {
-          ...(typeof params.text === 'string' ? { text: params.text } : {}),
-          ...(typeof params.finishReason === 'string'
-            ? { finishReason: params.finishReason }
-            : {}),
-          ...(params.usage && typeof params.usage === 'object' ? { usage: params.usage } : {}),
-        },
-      }, {
+      // No step: the run row already carries the final text, finish reason and
+      // usage, and the trajectory shows the last model step as the answer. A
+      // second record of the same text is what made every turn look like it
+      // ended in a separate "finalize" event.
+      persist({
         status: 'completed',
         working: {
           ...currentRun.working,
@@ -478,12 +471,8 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
       return claimed ? currentRun : null;
     },
     markCancelled: params => {
-      appendStep({
-        type: 'finalize',
-        status: 'completed',
-        summary: toSummary('Run cancelled', 'Run cancelled'),
-        output: typeof params?.text === 'string' ? { text: params.text } : null,
-      }, {
+      // Same rule as markCompleted: the row carries the outcome, so no step.
+      persist({
         status: 'cancelled',
         working: {
           ...currentRun.working,

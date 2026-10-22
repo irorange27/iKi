@@ -656,8 +656,10 @@ describe('createChatStreaming integration', () => {
     );
     expect(await run(1, 2)).toMatchObject({ success: true });
     expect(callPiChatMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    // Completion writes the run row only; it appends no step, so the run row is
+    // the record of how the turn ended.
     const completedUpdate = vi
-      .mocked(agentRunDb.appendAgentRunStepAndUpdateRun)
+      .mocked(agentRunDb.updateAgentRun)
       .mock.calls.map(([, updates]) => updates)
       .filter(updates => updates.status === 'completed')
       .at(-1);

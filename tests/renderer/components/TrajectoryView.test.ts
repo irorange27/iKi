@@ -113,7 +113,9 @@ describe('trajectory browser', () => {
     expect(view.get('[role="tabpanel"]').text()).toContain('older-tool');
     await view.get('[aria-label="Close details"]').trigger('click');
     expect(view.find('aside').exists()).toBe(false);
-    expect(view.findAll('.ledger-row')).toHaveLength(6);
+    // 2 runs x (system + user + tool) = 6 rows, minus 1: the second run's system
+    // prompt is identical to the first, so it is not shown again.
+    expect(view.findAll('.ledger-row')).toHaveLength(5);
   });
 
   it('searches payload and output without destroying records and restores them after clearing', async () => {
@@ -126,7 +128,7 @@ describe('trajectory browser', () => {
     await view.get('input[type="search"]').setValue('no match');
     expect(view.text()).toContain('No matching records');
     await view.get('input[type="search"]').setValue('');
-    expect(view.findAll('.ledger-row')).toHaveLength(6);
+    expect(view.findAll('.ledger-row')).toHaveLength(5);
   });
 
   it('selects a timeline record from a folded run and expands that run; keyboard follows the ledger', async () => {

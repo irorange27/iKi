@@ -66,7 +66,20 @@ const toMs = (value: string | null | undefined): number | null => {
 export const laneFor = (type: LedgerKind): LedgerLane =>
   type === 'tool-call' || type === 'tool-result' ? 2 : type === 'model' ? 1 : 0;
 
-export const buildTurnLedger = (trace: AgentRunTrace, turn: number): TurnLedger => {
+export type LedgerContext = {
+  /**
+   * The system prompt the previous turn already showed. A turn whose prompt is
+   * unchanged shows no system entry at all — the same rule DSH uses: a request
+   * header only becomes a record when it differs from the one before it.
+   */
+  previousSystemPrompt?: string;
+};
+
+export const buildTurnLedger = (
+  trace: AgentRunTrace,
+  turn: number,
+  context: LedgerContext = {}
+): TurnLedger => {
   const runStart = toMs(trace.run.createdAt) ?? 0;
   const entries: LedgerEntry[] = [];
   const add = (entry: Omit<LedgerEntry, 'searchText'>) => {
@@ -101,8 +114,14 @@ export const buildTurnLedger = (trace: AgentRunTrace, turn: number): TurnLedger 
       lane: 0,
       isError: false,
     });
-  if (trace.run.systemPrompt)
-    contextEntry('system', trace.run.systemPrompt, trace.run.systemPrompt);
+  const systemPrompt = trace.run.systemPrompt;
+  if (systemPrompt && systemPrompt !== context.previousSystemPrompt) {
+    contextEntry(
+      'system',
+      systemPrompt,
+      context.previousSystemPrompt === undefined ? systemPrompt : `changed\n${systemPrompt}`
+    );
+  }
   const user = [...(trace.run.input?.messages ?? [])]
     .reverse()
     .map(record)
@@ -116,7 +135,11 @@ export const buildTurnLedger = (trace: AgentRunTrace, turn: number): TurnLedger 
       const input = record(step.input);
       const output = record(step.output);
       const reasoning = contentText(output.content, 'reasoning');
-      const type = step.type === 'model' && output.inference !== true ? 'finalize' : step.type;
+      // A model step without `inference` used to be the run-completion record,
+      // which this projection renamed to "finalize". Completion no longer writes
+      // a step, so the rename would only mislabel legacy rows; the step's own
+      // type is what the ledger shows.
+      const type = step.type;
       let summary = step.summary;
       if (type === 'model')
         summary = contentText(output.content) || contentText(output.text) || reasoning || summary;
@@ -166,12 +189,18 @@ export const buildTurnLedger = (trace: AgentRunTrace, turn: number): TurnLedger 
   };
 };
 
-export const buildTurnLedgers = (traces: AgentRunTrace[]): TurnLedger[] =>
-  [...traces]
+export const buildTurnLedgers = (traces: AgentRunTrace[]): TurnLedger[] => {
+  let previousSystemPrompt: string | undefined;
+  return [...traces]
     .sort(
       (a, b) => a.run.createdAt.localeCompare(b.run.createdAt) || a.run.id.localeCompare(b.run.id)
     )
-    .map((trace, index) => buildTurnLedger(trace, index + 1));
+    .map((trace, index) => {
+      const ledger = buildTurnLedger(trace, index + 1, { previousSystemPrompt });
+      if (trace.run.systemPrompt) previousSystemPrompt = trace.run.systemPrompt;
+      return ledger;
+    });
+};
 export const timingSpan = (ledgers: TurnLedger[]): TimingSpan => {
   if (!ledgers.length) return { startedMs: 0, finishedMs: 0, durationMs: 0 };
   const startedMs = Math.min(...ledgers.map(ledger => ledger.startedMs));
