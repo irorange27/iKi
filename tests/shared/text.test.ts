@@ -1,16 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  normalizeOptionalWhitespace,
-  normalizeWhitespace,
-  toIsoNow,
-} from '@iki/backend/utils/text';
+import { normalizeOptionalString, normalizeWhitespace, toIsoNow } from '@iki/backend/utils/text';
 
 describe('text utils', () => {
   it('normalizes whitespace-only string inputs consistently', () => {
     expect(normalizeWhitespace('  hello   world \n\n again  ')).toBe('hello world again');
     expect(normalizeWhitespace(42)).toBe('');
-    expect(normalizeOptionalWhitespace('   ')).toBeNull();
+    expect(normalizeOptionalString('   ')).toBeNull();
   });
 
   it('formats the provided date as an ISO timestamp', () => {
