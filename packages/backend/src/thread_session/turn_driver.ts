@@ -6,14 +6,9 @@ import { traceChatTurn } from '@iki/backend/observability/langfuse';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import type { TurnDriverHarness, TurnOutput } from '../agent/harness';
 import type { AgentRunTracker } from './run_tracker';
-import { createAgentRunTracker } from './run_tracker';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
-import { createApprovalRecoveryContext, reidentifyPlan } from './approval_types';
 import type { ExecutionPlan } from './execution_plan';
-import { planToRunTrackerParams } from './execution_plan';
-import { selectTurnHarness } from './turn_supply_selection';
 import {
-  MODEL_TEXT_COMMITTED,
   recordFailureTerminalEvent,
   recordSessionEvents,
   STEERING_INPUT_ACCEPTED,
@@ -24,6 +19,7 @@ import {
   turnFactsToEvents,
 } from './session_log';
 import { recordInlineToolExecution } from './tool_execution';
+import { createTextCommitGate } from './text_commit_gate';
 import { getCompanion } from './platform';
 import type { ActiveStreamState, ChatStreamEvent, ChatStreamTarget, UiChunkEmitter } from './types';
 import type { AgentRunStatus } from '@iki/backend/types/agent_run';
@@ -427,38 +423,16 @@ const runTurnBatches = async (
     }, 300);
   };
 
-  let pendingText = '';
-  let pendingTextSeq = 0;
-  let lastTextFlushAt = Date.now();
-  const flushCommittedText = () => {
-    if (!pendingText) return;
-    const text = pendingText;
-    lastTextFlushAt = Date.now();
-
-    try {
-      recordSessionEvents(threadId, [
-        {
-          type: MODEL_TEXT_COMMITTED,
-          version: SESSION_EVENT_VERSION,
-          payload: {
-            runId: state.runTracker.id,
-            messageId: uiChunkEmitter.messageId,
-            seq: pendingTextSeq,
-            text,
-          },
-        },
-      ]);
-    } catch (error) {
-      throw new SessionLogCommitError(text, previewText, { cause: error });
-    }
-    pendingText = '';
-    pendingTextSeq += 1;
-    uiChunkEmitter.emitTextDelta(text);
-  };
-  const bufferStreamedText = (text: string) => {
-    pendingText += text;
-    if (Date.now() - lastTextFlushAt >= TEXT_COMMIT_INTERVAL_MS) flushCommittedText();
-  };
+  const textGate = createTextCommitGate({
+    threadId,
+    runId: () => state.runTracker.id,
+    messageId: uiChunkEmitter.messageId,
+    publish: text => uiChunkEmitter.emitTextDelta(text),
+    previewText: () => previewText,
+    intervalMs: TEXT_COMMIT_INTERVAL_MS,
+  });
+  const flushCommittedText = textGate.flush;
+  const bufferStreamedText = textGate.buffer;
 
   const forwardAgentStep = (step: AgentStep) => {
 
