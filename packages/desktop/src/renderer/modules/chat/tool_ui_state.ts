@@ -13,8 +13,6 @@ export type ToolUiStatePatch = Partial<ToolUiState>;
 
 const toolUiStateMap = shallowReactive<Record<string, ToolUiState>>({});
 
-export const getToolUiStateMap = (): Readonly<Record<string, ToolUiState>> => toolUiStateMap;
-
 export const getToolUiState = (toolCallId: string | null | undefined): ToolUiState | undefined => {
   if (!toolCallId) return undefined;
   return toolUiStateMap[toolCallId];

@@ -373,9 +373,6 @@ const reuseSummary = <T>(
 };
 const toolSummaryCache: SummaryCache<ToolReferenceSummary> = new WeakMap();
 const skillSummaryCache: SummaryCache<SkillReferenceSummary> = new WeakMap();
-const selectedSkillSummaryCache: SummaryCache<
-  Pick<SkillReferenceSummary, 'mode' | 'selectedItems'>
-> = new WeakMap();
 const usageSummaryCache: SummaryCache<TokenUsageSummary> = new WeakMap();
 
 export const getReferenceSummaries = (message: unknown) => {
@@ -408,13 +405,6 @@ export const getReferenceSummaries = (message: unknown) => {
 };
 export const getToolReferenceSummary = (message: unknown) => getReferenceSummaries(message).tool;
 export const getSkillReferenceSummary = (message: unknown) => getReferenceSummaries(message).skill;
-export const getSelectedSkillReferenceSummary = (message: unknown) => {
-  const parts = getMessageParts(message);
-  const part = parts.find(isSkillUsagePart);
-  return reuseSummary(selectedSkillSummaryCache, parts, [part && getSkillUsagePartData(part)], () =>
-    buildSelectedSkillReferenceSummary({ parts: part ? [part] : [] })
-  );
-};
 export const getTokenUsageSummary = (message: unknown): TokenUsageSummary => {
   const parts = getMessageParts(message);
   const part = parts.find(isTokenUsagePart);

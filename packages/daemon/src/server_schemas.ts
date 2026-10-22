@@ -25,7 +25,6 @@ const NullableStringArraySchema = z.union([StringArraySchema, z.null()]).optiona
 const NullableStringRecordSchema = z
   .union([z.record(NonEmptyTrimmedStringSchema, z.string()), z.null()])
   .optional();
-const LooseObjectSchema = z.object({}).passthrough();
 const ExperimentalContextSchema = z
   .object({
     context_mode: z.enum(['default', 'benchmark_clean']).optional(),
@@ -263,6 +262,3 @@ export const parseMcpServerUpdatePayload = (value: unknown): Partial<McpServerIn
 
 export const parseDaemonWebSocketMessage = (value: unknown): DaemonWebSocketMessage =>
   DaemonWebSocketMessageSchema.parse(value);
-
-export const parseDaemonJsonObject = (value: unknown): Record<string, unknown> =>
-  LooseObjectSchema.parse(value);

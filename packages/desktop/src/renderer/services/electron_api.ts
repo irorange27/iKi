@@ -70,18 +70,3 @@ export const requireElectronApiSlice = <K extends keyof ElectronApi>(
   }
   return slice;
 };
-
-export const requireElectronApiSliceMethod = <
-  K extends SliceKeys,
-  M extends MethodKeys<ElectronApi[K]>,
->(
-  sliceKey: K,
-  methodKey: M,
-  errorMessage: string
-): ElectronApi[K][M] => {
-  const method = getElectronApiSliceMethod(sliceKey, methodKey);
-  if (!method) {
-    throw new Error(errorMessage);
-  }
-  return method;
-};

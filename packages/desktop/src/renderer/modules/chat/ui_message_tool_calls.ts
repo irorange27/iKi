@@ -18,7 +18,6 @@ import {
   getToolOutput,
   isObjectRecord,
   isToolCallPart,
-  isToolPart,
   isToolResultPart,
   normalizeToolNameKey,
 } from '@iki/backend/message/tool_parts';
@@ -453,24 +452,6 @@ export const toggleToolCollapse = (_message: ChatUiMessage, part: unknown) => {
   const toolCallId = getToolCallIdFromPart(part);
   if (!toolCallId) return;
   updateToolUiState(toolCallId, { collapsed: !isToolCollapsed(part) });
-};
-
-export const getUsedToolNames = (message: unknown): string[] => {
-  const parts = isObjectRecord(message) && Array.isArray(message.parts) ? message.parts : [];
-  const names: string[] = [];
-  const seen = new Set<string>();
-
-  for (const part of parts) {
-    if (!isToolPart(part)) continue;
-    const rawName = getToolName(part);
-    const name = typeof rawName === 'string' ? rawName.trim() : '';
-    if (!name || name === 'tool') continue;
-    if (seen.has(name)) continue;
-    seen.add(name);
-    names.push(name);
-  }
-
-  return names;
 };
 
 const getUrlDomain = (value: string): string => {
