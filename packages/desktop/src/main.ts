@@ -11,7 +11,6 @@ import {
 import { registerStandardTools } from '@iki/backend/tools';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getMcpManager } from '@iki/backend/mcp';
-import { initLangfuseTracing, shutdownLangfuseTracing } from '@iki/backend/observability/langfuse';
 import { setHostFetch, setPlatformInfo } from '@iki/backend/platform';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import {
@@ -50,7 +49,6 @@ if (!isDaemonMode) {
 
 wirePlatformContext();
 setHostFetch(electronFetchWithTimeout);
-initLangfuseTracing();
 
 const syncLoggingConfig = () => {
   try {
@@ -187,7 +185,6 @@ if (isDaemonMode) {
     });
     stopBackgroundRuntime();
     stopDesktopDaemon();
-    void shutdownLangfuseTracing();
   });
 
   app.on('window-all-closed', () => {

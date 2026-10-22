@@ -170,29 +170,6 @@ describe('pi tool turn harness (switch item 3a)', () => {
     }
   });
 
-  it('appends the injected step reminder to a later request without duplicating it', async () => {
-    const scripted = scriptedModelCall([
-      { content: [toolCallBlock('call_1', 'probe_read', { path: '/a.txt' })] },
-      { content: [toolCallBlock('call_2', 'probe_read', { path: '/b.txt' })] },
-      { content: [textBlock('done')], deltas: ['done'] },
-    ]);
-    const counts: number[] = [];
-    const modelCall: PiToolModelCall = (_config, request) => {
-      counts.push(JSON.stringify(request.messages).match(/Reminder probe\./g)?.length ?? 0);
-      return scripted(_config, request as never);
-    };
-    const harness = new PiToolTurnHarness(harnessConfig(), {
-      modelCall,
-      stepReminder: steps => (steps.length >= 1 ? '<reminder>Reminder probe.</reminder>' : undefined),
-    });
-
-    await collect(harness, { prompt: 'probe' });
-
-    expect(counts[0]).toBe(0);
-    expect(counts.at(-1)).toBe(1);
-    expect(Math.max(...counts)).toBe(1);
-  });
-
   it('runs a tool step chain: live deltas, tool events around the effect, terminal mapping', async () => {
     const modelCall = scriptedModelCall([
       { content: [textBlock('reading '), toolCallBlock('call_1', 'probe_read', { path: '/a.txt' })], deltas: ['reading '], usage: { input: 0, output: 0, totalTokens: 0 } },

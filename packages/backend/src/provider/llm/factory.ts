@@ -6,7 +6,6 @@ import path from 'node:path';
 import os from 'node:os';
 import { getProviders } from '../../db/providers';
 import { createLogger } from '@iki/backend/logger';
-import { tracePiGeneration } from '@iki/backend/observability/langfuse';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
 import {
@@ -442,19 +441,7 @@ const generateViaPi = async (
         ]).prompt;
 
   try {
-    const settle = await tracePiGeneration(
-      {
-        name: 'pi.chat.generate',
-        model: options.modelId,
-        provider: options.providerType,
-        ...(options.threadId ? { sessionId: options.threadId } : {}),
-        ...(typeof options.temperature === 'number'
-          ? { modelParameters: { temperature: options.temperature } }
-          : {}),
-        input: messages.map(message => ({ role: message.role })),
-      },
-      onSettle =>
-        (async () => {
+    const settle = await (async () => {
           const eventStream = callPiChat(
             model,
             { systemPrompt, messages },
@@ -485,26 +472,12 @@ const generateViaPi = async (
               final.stopReason === 'aborted'
                 ? new DOMException(final.errorMessage || 'Generation aborted', 'AbortError')
                 : new Error(final.errorMessage || 'Provider returned an error stop reason');
-            onSettle({ errorMessage: getErrorMessage(failure) });
             throw failure;
           }
 
           const mapped = projectUsageToIki(final.usage);
-          onSettle({
-            output: settledText,
-            usageDetails: {
-              input: mapped.inputTokens,
-              output: mapped.outputTokens,
-              total: mapped.totalTokens,
-              ...(mapped.cacheReadTokens ? { cacheRead: mapped.cacheReadTokens } : {}),
-              ...(mapped.cacheWriteTokens ? { cacheWrite: mapped.cacheWriteTokens } : {}),
-              ...(mapped.reasoningTokens ? { reasoning: mapped.reasoningTokens } : {}),
-            },
-            costUsd: final.usage.cost.total,
-          });
           return { final, text: settledText, usage: mapped };
-        })()
-    );
+    })();
     const { final, text, usage } = settle;
     if (!text) {
       factoryLogger.event({

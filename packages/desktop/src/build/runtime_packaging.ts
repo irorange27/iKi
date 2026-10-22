@@ -5,10 +5,6 @@ import path from 'node:path';
 export const VITE_EXTERNAL_RUNTIME_DEPS = [
   'whisper-node',
   'ffmpeg-static',
-  '@langfuse/otel',
-  '@langfuse/tracing',
-  '@opentelemetry/api',
-  '@opentelemetry/sdk-node',
   'source-map-js',
 ] as const;
 

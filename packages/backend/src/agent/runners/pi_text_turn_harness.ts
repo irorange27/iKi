@@ -2,7 +2,6 @@ import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-
 
 import { createLogger } from '@iki/backend/logger';
 import { RefusalError, getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
-import { isLangfuseEnabled, tracePiGeneration } from '@iki/backend/observability/langfuse';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import {
   appendUserPromptToHistory,
@@ -211,7 +210,6 @@ export class PiTextTurnHarness {
         );
       }
 
-      this.traceCall(attemptRequest.maxTokens, final, failure);
       if (!failure) {
         yield* this.finishTurn(input, final, finalText, {
           requestHistory: attemptHistory,
@@ -272,43 +270,6 @@ export class PiTextTurnHarness {
     return cloneModelMessages(this.history);
   }
 
-  private traceCall(maxTokens: number | undefined, final: AssistantMessage, failure?: Error): void {
-    if (!isLangfuseEnabled()) return;
-
-    void tracePiGeneration(
-      {
-        name: 'pi.text.turn',
-        model: this.config.model,
-        provider: this.config.providerType,
-        ...(this.config.threadId ? { sessionId: this.config.threadId } : {}),
-        ...(typeof maxTokens === 'number' ? { modelParameters: { maxTokens } } : {}),
-      },
-      onSettle => {
-        onSettle({
-          output: final.content
-            .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
-            .map(block => block.text)
-            .join(''),
-          usageDetails: {
-            input: final.usage?.input ?? 0,
-            output: final.usage?.output ?? 0,
-            total: final.usage?.totalTokens ?? 0,
-          },
-          costUsd: final.usage?.cost?.total ?? 0,
-          ...(failure ? { errorMessage: getErrorMessage(failure) } : {}),
-        });
-        return Promise.resolve();
-      }
-    ).catch(error => {
-      logger.event({
-        level: 'warn',
-        event: 'langfuse.span.failed',
-        outcome: 'degraded',
-        message: 'Failed to record the Pi generation observation.',
-        error,
-      });
-    });
-  }
 
   private buildTurnHistory(history: ModelMessage[] | undefined, prompt: string): ModelMessage[] {
     const base = cloneModelMessages(history);

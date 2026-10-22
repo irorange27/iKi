@@ -96,11 +96,7 @@
     "vue-tsc": "^3.2.6"
   },
   "dependencies": {
-    "@langfuse/otel": "^5.5.3",
-    "@langfuse/tracing": "^5.5.3",
     "@modelcontextprotocol/sdk": "^1.25.1",
-    "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/sdk-node": "^0.219.0",
     "@tailwindcss/vite": "^4.1.18",
     "cron-parser": "^5.5.0",
     "electron-squirrel-startup": "^1.0.1",

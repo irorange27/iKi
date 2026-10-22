@@ -2,7 +2,6 @@ import type { ModelMessage } from '../message/model_history';
 
 import { addTurnPerf, type AgentStep, type AgentTurnPerf } from '@iki/backend/agent';
 import type { ConversationPreview } from '@iki/backend/types/companion';
-import { traceChatTurn } from '@iki/backend/observability/langfuse';
 import { runWithToolRuntimeContext } from '../utils/runtime_context';
 import type { TurnDriverHarness, TurnOutput } from '../agent/harness';
 import type { AgentRunTracker } from './run_tracker';
@@ -532,15 +531,7 @@ const runTurnBatches = async (
       let steered = false;
 
       try {
-        agentResult = await traceChatTurn(
-          {
-            threadId,
-            prompt: state.streamPrompt,
-            provider: plan.providerType,
-            model: plan.model,
-          },
-          () =>
-            runWithToolRuntimeContext(
+        agentResult = await runWithToolRuntimeContext(
               {
                 runId: state.runTracker.id,
                 runTracker: state.runTracker,
@@ -607,9 +598,7 @@ const runTurnBatches = async (
                 }
                 return undefined;
               }
-            ),
-          result => result?.response
-        );
+            );
       } catch (error) {
         if (
           (streamState.steered ?? false) ||

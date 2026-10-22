@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-ai';
 
 import { createLogger } from '@iki/backend/logger';
-import { isLangfuseEnabled, tracePiGeneration } from '@iki/backend/observability/langfuse';
 import {
   RefusalError,
   getErrorMessage,
@@ -53,7 +52,13 @@ import {
 import { getToolRuntimeContext, runWithToolRuntimeContext } from '../../utils/runtime_context';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../../workspaces/thread_workspace';
 import type { AgentTool, AgentTurnPerf, AgentUsage } from '../types';
-import type { HarnessConfig, TurnEvent, TurnInput, TurnOutput } from '../harness/harness_types';
+import type {
+  HarnessConfig,
+  InlineExecutionRecord,
+  TurnEvent,
+  TurnInput,
+  TurnOutput,
+} from '../harness/harness_types';
 import { unwrapCheckpoint } from '../../runtimes/compaction_prompt';
 
 const logger = createLogger({ module: 'pi_tool_turn_harness' });
@@ -330,11 +335,6 @@ type ToolResultOutput =
 export class PiToolTurnHarness {
   private readonly config: HarnessConfig;
   private readonly modelCall: PiToolModelCall;
-  private readonly stepReminder?: (steps: ReadonlyArray<{ toolCalls: ReadonlyArray<{ name: string }> }>) => string | undefined;
-  private readonly executorOverride?: (
-    call: { name: string; arguments: Record<string, unknown> },
-    signal?: AbortSignal
-  ) => Promise<unknown>;
   private readonly resume?: {
     commands: Array<{
       approvalId: string;
@@ -369,13 +369,6 @@ export class PiToolTurnHarness {
     deps?: {
       modelCall?: PiToolModelCall;
 
-      stepReminder?: (steps: ReadonlyArray<{ toolCalls: ReadonlyArray<{ name: string }> }>) => string | undefined;
-
-      executeTool?: (
-        call: { name: string; arguments: Record<string, unknown> },
-        signal?: AbortSignal
-      ) => Promise<unknown>;
-
       resume?: {
         commands: Array<{
           approvalId: string;
@@ -398,8 +391,6 @@ export class PiToolTurnHarness {
   ) {
     this.config = config;
     this.modelCall = deps?.modelCall ?? defaultPiToolModelCall;
-    this.stepReminder = deps?.stepReminder;
-    this.executorOverride = deps?.executeTool;
     this.resume = deps?.resume;
   }
 
@@ -532,37 +523,12 @@ export class PiToolTurnHarness {
       result?: unknown;
     }> = [];
 
-    const executor =
-      this.executorOverride ??
-      (async (
-        call: { id?: string; name: string; arguments: Record<string, unknown> },
-        execSignal?: AbortSignal
-      ) => {
-        const output = (await defaultPiToolExecutor(
-          tools,
-          this.config,
-          this.workspaceSelectionBox
-        )(call, execSignal)) as {
-          type: string;
-        };
+    const executor = this.buildExecutor({
+      tools,
+      recordInlineExecution,
+      runId,
+    });
 
-        if (
-          recordInlineExecution &&
-          runId &&
-          output.type !== 'error-text' &&
-          output.type !== 'execution-denied' &&
-          true
-        ) {
-          recordInlineExecution({
-            runId,
-            toolCallId: call.id ?? '',
-            toolName: call.name,
-            args: call.arguments,
-            output,
-          });
-        }
-        return output;
-      });
 
     if (this.resume && this.resume.commands.length > 0) {
       if (!this.config.threadId) {
@@ -713,51 +679,12 @@ export class PiToolTurnHarness {
       }
     };
 
-    let reminderSent = false;
     const iterator = runPiAgentLoop({
       systemPrompt,
       messages: transcript,
       ...(loopTools ? { tools: loopTools } : {}),
       maxSteps: this.config.maxIterations,
 
-      onModelCall: settled => {
-        if (!isLangfuseEnabled()) return;
-        void tracePiGeneration(
-          {
-            name: 'pi.tool.turn',
-            model: this.config.model,
-            provider: this.config.providerType,
-            ...(this.config.threadId ? { sessionId: this.config.threadId } : {}),
-            ...(typeof this.config.maxOutputTokens === 'number'
-              ? { modelParameters: { maxTokens: this.config.maxOutputTokens } }
-              : {}),
-          },
-          onSettle => {
-            onSettle({
-              output: settled.text,
-              usageDetails: {
-                input: settled.usage.input,
-                output: settled.usage.output,
-                total: settled.usage.totalTokens,
-                ...(settled.usage.cacheRead ? { cacheRead: settled.usage.cacheRead } : {}),
-                ...(settled.usage.cacheWrite ? { cacheWrite: settled.usage.cacheWrite } : {}),
-                ...(settled.usage.reasoning ? { reasoning: settled.usage.reasoning } : {}),
-              },
-              costUsd: settled.usage.costUsd,
-            });
-            return Promise.resolve();
-          }
-
-        ).catch(error => {
-          logger.event({
-            level: 'warn',
-            event: 'langfuse.span.failed',
-            outcome: 'degraded',
-            message: 'Failed to record the Pi generation observation.',
-            error,
-          });
-        });
-      },
       requestApproval: async call => {
         pendingApprovalRequests.push({
           approvalId: randomUUID(),
@@ -774,14 +701,6 @@ export class PiToolTurnHarness {
 
         if (typeof this.config.maxInputTokens === 'number') {
           await applyCompaction({ force: false });
-        }
-
-        const reminder = this.stepReminder?.(context.steps ?? []);
-
-        if (reminder && !reminderSent) {
-          reminderSent = true;
-
-          transcript.push({ role: 'user', content: reminder, timestamp: Date.now() });
         }
 
         return this.modelCall(this.config, {
@@ -974,6 +893,43 @@ export class PiToolTurnHarness {
 
   getHistory(): ModelMessage[] {
     return cloneModelMessages(this.history);
+  }
+
+
+  private buildExecutor(params: {
+    tools: AgentTool[];
+    recordInlineExecution?: (execution: InlineExecutionRecord) => void;
+    runId?: string;
+  }) {
+    const { tools, recordInlineExecution, runId } = params;
+    return async (
+      call: { id?: string; name: string; arguments: Record<string, unknown> },
+      execSignal?: AbortSignal
+    ) => {
+      const output = (await defaultPiToolExecutor(
+        tools,
+        this.config,
+        this.workspaceSelectionBox
+      )(call, execSignal)) as {
+        type: string;
+      };
+
+      if (
+        recordInlineExecution &&
+        runId &&
+        output.type !== 'error-text' &&
+        output.type !== 'execution-denied'
+      ) {
+        recordInlineExecution({
+          runId,
+          toolCallId: call.id ?? '',
+          toolName: call.name,
+          args: call.arguments,
+          output,
+        });
+      }
+      return output;
+    };
   }
 
   private buildTurnHistory(history: ModelMessage[] | undefined, prompt: string): ModelMessage[] {
