@@ -1,56 +1,28 @@
 import { createLogger } from '@iki/backend/logger';
 import type { ModelMessage, ToolApprovalResponse } from '@iki/backend/message/model_history';
 
-import { cloneModelMessages, type TurnDriverHarness } from '../agent/harness';
-import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
-import {
-  pausedPlanRunsOnPiToolSupply,
-  piDomainResumeHistory,
-  PiSupplyRefusedError,
-} from './turn_supply_selection';
+import { cloneModelMessages } from '../agent/harness';
 import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
-import { createPrefixedId } from '../utils/id';
 import type { ToolCallApprovalDecision } from '@iki/backend/types/tool_call_approval';
-import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ApprovalRecoveryContext } from './approval_types';
-import { reidentifyPlan } from './approval_types';
-import { planToHarnessConfig, planToRunTrackerParams } from './execution_plan';
 import { serializeExecutionPlan } from './execution_plan_codec';
 import {
   recordFailureTerminalEvent,
   recordSessionEvents,
-  turnFactsToEvents,
   APPROVAL_REQUESTED,
   APPROVAL_DECIDED,
   SESSION_EVENT_VERSION,
   type ApprovalDecidedPayload,
 } from './session_log';
-import {
-  createTurnDriver,
-  finalizeTurn,
-  finalizeTurnCancelled,
-  finalizeTurnFailure,
-  runFailureFromError,
-} from './turn_driver';
 import { recoverApprovalSession } from './approval_recovery';
-import { executeApprovedTool, prepareToolExecution } from './tool_execution';
-export { executeApprovedTool, prepareToolExecution } from './tool_execution';
-import { loadPersistedAssistantParts, persistAssistantTurnMessage } from './turn_persistence';
-import { createAgentRunTracker, rehydrateAgentRunTracker } from './run_tracker';
+import { admitPiResume } from './pi_resume_admission';
+import { executeApprovalResume } from './approval_resume_execution';
+import type { PendingApprovalSession } from './approval_session';
+import { rehydrateAgentRunTracker } from './run_tracker';
 import type { ActiveStreamState, ChatStreamTarget } from './types';
-import { createUiChunkEmitter } from './ui_stream';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
 
-type PendingApprovalSession = {
-  sessionId?: string;
-  target: ChatStreamTarget;
-  recoveryContext?: ApprovalRecoveryContext;
-  history?: ModelMessage[];
-  pendingApprovalIds: Set<string>;
-  collectedApprovalResponses: Map<string, ToolApprovalResponse>;
-  timeouts: Map<string, ReturnType<typeof setTimeout>>;
-};
 
 export const createChatApproval = (deps: {
 
@@ -350,12 +322,10 @@ export const createChatApproval = (deps: {
 
     const decidedThreadId =
       session.recoveryContext?.plan.threadId ??
-      (() => {
-        const stored = toolCallApprovalDb.getToolCallApprovalSession(
-          toolCallApprovalDb.getToolCallApproval(approvalId)?.session_id ?? ''
-        );
-        return stored?.thread_id ?? null;
-      })();
+      (storedApproval
+        ? (toolCallApprovalDb.getToolCallApprovalSession(storedApproval.session_id)?.thread_id ??
+          null)
+        : null);
     const recordDecisionEvent = () => {
       if (!decidedThreadId) return;
       recordSessionEvents(decidedThreadId, [
@@ -403,380 +373,28 @@ export const createChatApproval = (deps: {
       };
     }
 
-    const piResumeAdmission = (() => {
-      const pausedPlan = session.recoveryContext?.plan;
-      const pausedHistory = cloneModelMessages(session.history ?? []);
-      if (!pausedPlan?.threadId || !pausedPlanRunsOnPiToolSupply(pausedPlan, pausedHistory)) {
-        return undefined;
-      }
-
-      try {
-        const commands = Array.from(session.pendingApprovalIds).flatMap((approvalId: string) => {
-          const row = toolCallApprovalDb.getToolCallApproval(approvalId);
-
-          if (!row?.tool_call_id || !row.tool_name) {
-            throw new Error(`Approval row ${approvalId} is missing its execution binding.`);
-          }
-          return [
-            {
-              approvalId,
-              toolCallId: row.tool_call_id,
-              toolName: row.tool_name,
-              args: JSON.parse(row.tool_args ?? '{}') as Record<string, unknown>,
-            },
-          ];
-        });
-        for (const command of commands) {
-          prepareToolExecution({ threadId: pausedPlan.threadId, approvalId: command.approvalId });
-        }
-        return { commands, threadId: pausedPlan.threadId };
-      } catch (error) {
-        session.collectedApprovalResponses.delete(approvalId);
-        throw error;
-      }
-    })();
-
-    const resumeMessageId = session.recoveryContext?.sessionId ?? createPrefixedId('assistant');
-    const streamState: ActiveStreamState = {
-      cancelled: false,
-      stoppedByUser: false,
-      abortController: new AbortController(),
-    };
-    if (executionAbort) {
-
-      executionAbort.current = () => {
-        streamState.cancelled = true;
-        streamState.abortController.abort('thread-lease-lost');
-      };
-      if (executionAbort.lost) executionAbort.current();
-    }
-    const uiChunkEmitter = createUiChunkEmitter(session.target, resumeMessageId);
-    const baseApprovalContext = session.recoveryContext
-      ? {
-          ...session.recoveryContext,
-          sessionId: resumeMessageId,
-          assistantMessageId: resumeMessageId,
-        }
-      : undefined;
-    const resumePlan = baseApprovalContext
-      ? reidentifyPlan(baseApprovalContext.plan, {
-          kind: 'approval-resume',
-          parentRunId: baseApprovalContext.runId,
-          transport: 'approval-resume',
-        })
-      : undefined;
-    const resumeRunTracker = resumePlan
-      ? createAgentRunTracker(
-          planToRunTrackerParams(resumePlan, {
-            input: {
-              messages: session.history ?? [],
-            },
-            working: {
-              accumulatedText: '',
-              pendingApprovalIds: Array.from(session.pendingApprovalIds).filter(
-                id => !session.collectedApprovalResponses.has(id)
-              ),
-              lastStepIndex: 0,
-            },
-            metadataExtras: {
-              sourceSessionId: session.sessionId ?? session.recoveryContext?.sessionId ?? null,
-              sourceRunId: session.recoveryContext?.runId ?? null,
-              answeredApprovalIds: Array.from(session.collectedApprovalResponses.keys()),
-              assistantMessageId: uiChunkEmitter.messageId,
-            },
-          })
-        )
-      : null;
-    if (resumePlan?.threadId && resumeRunTracker) {
-
-      const parentStatus = baseApprovalContext?.runId
-        ? rehydrateAgentRunTracker(baseApprovalContext.runId)?.getRun().status
-        : undefined;
-      const parentStillResumable =
-        parentStatus === 'running' || parentStatus === 'blocked' || parentStatus === 'queued';
-
-      try {
-        recordSessionEvents(
-          resumePlan.threadId,
-          turnFactsToEvents({
-            ...(baseApprovalContext?.runId && parentStillResumable
-              ? {
-                  terminal: {
-                    runId: baseApprovalContext.runId,
-                    status: 'completed' as const,
-                    finishReason: 'approval-resumed',
-                  },
-                }
-              : {}),
-            started: { runId: resumeRunTracker.id, kind: resumePlan.kind, plan: resumePlan },
-          })
-        );
-      } catch (error) {
-        session.collectedApprovalResponses.delete(approvalId);
-
-        finalizeTurnFailure({
-          tracker: resumeRunTracker,
-          failure: {
-            status: 'failed',
-            errorText: getErrorMessage(error),
-            retryable: true,
-          },
-          threadId: resumePlan.threadId,
-          transport: 'approval-resume',
-          loudGuard: true,
-        });
-        throw error;
-      }
-    }
-
-    clearApprovalTimeouts(session);
-    for (const pendingId of session.pendingApprovalIds) {
-      pendingApprovalSessions.delete(pendingId);
-    }
-    if (session.sessionId) {
-      toolCallApprovalDb.consumeToolCallApprovalSession(session.sessionId);
-    }
-
-    const resumedSenderId = session.target.id;
-    const existingStream = deps.streams.peek(resumedSenderId);
-    if (existingStream) {
-      existingStream.cancelled = true;
-      existingStream.abortController.abort('resume-after-tool-approval');
-    }
-
-    if (resumeRunTracker && baseApprovalContext?.runId) {
-      rehydrateAgentRunTracker(baseApprovalContext.runId)?.markResumed({
-        childRunId: resumeRunTracker.id,
-      });
-    }
-    const nextApprovalContext = baseApprovalContext
-      ? {
-          ...baseApprovalContext,
-          ...(resumePlan ? { plan: resumePlan } : {}),
-          ...(resumeRunTracker ? { runId: resumeRunTracker.id } : {}),
-        }
-      : undefined;
-    streamState.runId = resumeRunTracker?.id;
-    deps.streams.attach(resumedSenderId, streamState);
-
-    const execution = deps.streams.registerExecution?.({
-      runId: resumeRunTracker?.id ?? null,
-      cancel: reason => {
-        streamState.cancelled = true;
-        streamState.abortController.abort(reason);
-      },
+    const piResumeAdmission = admitPiResume({
+      plan: session.recoveryContext?.plan,
+      history: cloneModelMessages(session.history ?? []),
+      pendingApprovalIds: session.pendingApprovalIds,
+      onRefuse: () => session.collectedApprovalResponses.delete(approvalId),
     });
-    let isAwaitingApproval = false;
 
-    let driverHandle: ReturnType<typeof createTurnDriver> | null = null;
-
-    try {
-      const ctx = nextApprovalContext ?? session.recoveryContext;
-      if (!ctx || !resumeRunTracker) {
-        throw new Error("Approval resume requires the paused turn's recovery context");
-      }
-
-      if (!piResumeAdmission) {
-        throw new PiSupplyRefusedError(
-          'the paused turn no longer matches an admissible provider plan (its provider row may have been removed or disabled)',
-          'config',
-          {
-            providerType: ctx.plan.providerType,
-            providerId: ctx.plan.providerId ?? null,
-            model: ctx.plan.model,
-          }
-        );
-      }
-      const approvalHarness: TurnDriverHarness = new PiToolTurnHarness(
-        planToHarnessConfig(ctx.plan),
-        {
-          resume: {
-            commands: piResumeAdmission.commands,
-            owner: {
-              prepare: address => prepareToolExecution(address),
-              executeApproved: (address, port) =>
-                executeApprovedTool(address, {
-                  signal: port.signal ?? new AbortController().signal,
-                  execute: async (toolName, args) =>
-                    (await port.execute(toolName, args)) as unknown,
-                }),
-            },
-          },
-        }
-      );
-
-      const streamHistory = piDomainResumeHistory(cloneModelMessages(session.history ?? []));
-
-      const persistResumeProgress = () => {
-        const threadId = baseApprovalContext?.plan.threadId;
-        if (!threadId) return;
-        void uiChunkEmitter
-          .buildPersistedMessage(loadPersistedAssistantParts(uiChunkEmitter.messageId))
-          .then(persisted =>
-            persisted
-              ? persistAssistantTurnMessage(
-                  deps.conversation,
-                  threadId,
-                  persisted,
-                  'stream-progress'
-                )
-              : undefined
-          );
-      };
-
-      const driver = createTurnDriver(
-        {
-          harness: approvalHarness,
-          runTracker: resumeRunTracker,
-          approvalContext: nextApprovalContext,
-          streamHistory,
-          streamPrompt: '',
-          ...(ctx.plan.workspaceSelection !== undefined
-            ? { workspaceSelectionBox: { selection: ctx.plan.workspaceSelection } }
-            : {}),
+    return executeApprovalResume(
+      { session, approvalId, piResumeAdmission, ...(executionAbort ? { executionAbort } : {}) },
+      {
+        streams: deps.streams,
+        conversation: deps.conversation,
+        usage: deps.usage,
+        ensurePendingApprovalSession,
+        registerApprovalBatch,
+        clearApprovalTimeouts,
+        cleanupPendingSessionsForSender,
+        forgetSession: target => {
+          for (const pendingId of target.pendingApprovalIds) pendingApprovalSessions.delete(pendingId);
         },
-        {
-          target: session.target,
-          plan: ctx.plan,
-          streamState,
-          uiChunkEmitter,
-          notifyRunStatus: () => undefined,
-          drainSteerMessages: () => [],
-          conversationPreview: false,
-          onToolActivity: persistResumeProgress,
-
-          onRunIdChanged: runId => execution?.setRunId(runId),
-          registerChildRunAlias: deps.streams.registerChildRunAlias,
-          approvals: {
-            ensurePendingApprovalSession: (approvalId, approvalSession) =>
-              ensurePendingApprovalSession(approvalId, approvalSession),
-            registerApprovalBatch: (requests, approvalSession) =>
-              registerApprovalBatch(requests, approvalSession),
-          },
-        }
-      );
-
-      driverHandle = driver;
-      const driverResult = await driver.run();
-      if (!driverResult) {
-        throw new Error('Unreachable: approval resume produced no result');
       }
-      const streamResult = driverResult;
-
-      isAwaitingApproval = streamResult.outcome === 'awaiting-approval';
-      if (streamResult.outcome === 'cancelled') {
-        uiChunkEmitter.abort();
-      } else if (!isAwaitingApproval) {
-        uiChunkEmitter.finish();
-      }
-
-      if (streamResult.outcome !== 'cancelled' && nextApprovalContext) {
-        deps.usage.recordUsageEvent({
-          threadId: nextApprovalContext.plan.threadId,
-          messageId: uiChunkEmitter.messageId,
-          providerType: nextApprovalContext.plan.providerType,
-          model: nextApprovalContext.plan.model,
-          usage: streamResult.usage,
-          source: 'chat.approval-stream',
-          metadata: {
-            sessionId: nextApprovalContext.sessionId,
-            awaitingApproval: isAwaitingApproval,
-          },
-        });
-      }
-
-      let persistedContinuation:
-        | Awaited<ReturnType<typeof uiChunkEmitter.buildPersistedMessage>>
-        | undefined;
-      if (baseApprovalContext?.plan.threadId) {
-
-        persistedContinuation = await uiChunkEmitter.buildPersistedMessage(
-          loadPersistedAssistantParts(uiChunkEmitter.messageId)
-        );
-        if (persistedContinuation) {
-          await persistAssistantTurnMessage(
-            deps.conversation,
-            baseApprovalContext.plan.threadId,
-            persistedContinuation,
-            'approval-resume'
-          );
-        }
-      }
-      const continuationText = driver.getAccumulatedResponse() || streamResult.response;
-      finalizeTurn({
-        tracker: driver.getRunTracker(),
-        outcome: streamResult.outcome,
-        text: continuationText,
-        ...(streamResult.usage ? { usage: streamResult.usage } : {}),
-        ...(baseApprovalContext?.plan.threadId
-          ? { threadId: baseApprovalContext.plan.threadId }
-          : {}),
-        transport: 'approval-resume',
-        ...(persistedContinuation
-          ? {
-              committed: {
-                messageId: persistedContinuation.id,
-                message: persistedContinuation as never,
-              },
-            }
-          : {}),
-      });
-      return {
-        success: true,
-        awaitingApproval: isAwaitingApproval,
-        stopped: streamState.stoppedByUser,
-
-        ...(session.recoveryContext?.plan.threadId
-          ? { threadId: session.recoveryContext.plan.threadId }
-          : {}),
-        ...(streamResult.response ? { text: streamResult.response } : {}),
-      };
-    } catch (error: unknown) {
-      const message = getErrorMessage(error);
-      const failingTracker = driverHandle?.getRunTracker() ?? resumeRunTracker;
-      if (streamState.cancelled) {
-        uiChunkEmitter.abort();
-        if (failingTracker) {
-
-          finalizeTurnCancelled({
-            tracker: failingTracker,
-            ...(failingTracker.getRun().threadId
-              ? { threadId: failingTracker.getRun().threadId as string }
-              : {}),
-            transport: 'approval-resume',
-            skipRow: failingTracker.getRun().status !== 'running',
-            loudGuard: true,
-          });
-        }
-        return { success: true, stopped: streamState.stoppedByUser };
-      }
-      if (failingTracker) {
-        const retry = runFailureFromError(error, message);
-        finalizeTurnFailure({
-          tracker: failingTracker,
-          failure: {
-            status: 'failed',
-            errorText: message,
-            ...(retry.code ? { code: retry.code } : {}),
-            ...(typeof retry.retryable === 'boolean' ? { retryable: retry.retryable } : {}),
-          },
-          ...(failingTracker.getRun().threadId
-            ? { threadId: failingTracker.getRun().threadId as string }
-            : {}),
-          transport: 'approval-resume',
-          skipRow: failingTracker.getRun().status !== 'running',
-          loudGuard: true,
-        });
-      }
-      uiChunkEmitter.error(message);
-      return { success: false, error: message };
-    } finally {
-      if (deps.streams.peek(resumedSenderId) === streamState && !isAwaitingApproval) {
-        cleanupPendingSessionsForSender(resumedSenderId, resumeMessageId);
-      }
-      deps.streams.detach(resumedSenderId, streamState);
-      execution?.dispose();
-    }
+    );
   };
 
   const approveTool = async (

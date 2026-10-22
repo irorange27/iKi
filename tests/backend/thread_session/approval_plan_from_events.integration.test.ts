@@ -285,6 +285,15 @@ describe('F3: the approval resume reads its plan from the session log', () => {
     );
     const result = await approvalsB.approveTool({ id: 212, send: vi.fn() }, approvalId, true);
     expect(result).toMatchObject({ success: true, awaitingApproval: false });
-    expect(result).toMatchObject({ text: 'resumed via fallback' });
+
+    // The fallback's answer must reach the log, which is what a reload replays.
+    const committed = getDb()
+      .prepare(
+        "SELECT payload FROM session_events WHERE thread_id = ? AND type = 'model_text_committed'"
+      )
+      .all('thread_f3_control') as Array<{ payload: string }>;
+    expect(committed.map(row => (JSON.parse(row.payload) as { text: string }).text).join('')).toBe(
+      'resumed via fallback'
+    );
   });
 });
