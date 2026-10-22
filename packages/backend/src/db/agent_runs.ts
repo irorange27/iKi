@@ -517,6 +517,34 @@ export const appendAgentRunStepAndUpdateRunIfStatus = (
   })();
 };
 
+/**
+ * Claim a run in one of the expected statuses and update it, without appending a
+ * step. Terminal transitions record the row alone: the step duplicated fields
+ * the row already carries.
+ */
+export const updateAgentRunIfStatus = (
+  runId: string,
+  updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>,
+  expectedStatuses: readonly AgentRunStatus[]
+): AgentRun | null => {
+  const db = getDb();
+  const placeholders = expectedStatuses.map(() => '?').join(', ');
+  return db.transaction(() => {
+    const claim = db
+      .prepare(
+        `UPDATE agent_runs SET updated_at = updated_at
+         WHERE id = ? AND status IN (${placeholders})`
+      )
+      .run(runId, ...expectedStatuses);
+    if (claim.changes === 0) return null;
+    const updated = updateAgentRun(runId, updates);
+    if (!updated) {
+      throw new Error('Cannot update missing agent run "' + runId + '"');
+    }
+    return updated;
+  })();
+};
+
 export const listAgentRunSteps = (runId: string): AgentRunStep[] => {
   const rows = getDb()
     .prepare('SELECT * FROM agent_run_steps WHERE run_id = ? ORDER BY step_index ASC')

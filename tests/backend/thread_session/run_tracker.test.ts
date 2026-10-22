@@ -134,6 +134,37 @@ describe('agent run tracker', () => {
     }
   });
 
+  it('records a failure on the run row without appending a step', () => {
+    const { parentId, threadId } = seedParent();
+    const tracker = buildTracker({ parentId, threadId });
+    const before = listAgentRunSteps(tracker.id).length;
+
+    tracker.markFailed({ message: 'boom', code: 'PROBE', retryable: true });
+
+    const run = getAgentRun(tracker.id)!;
+    expect(run.status).toBe('failed');
+    expect(run.error).toMatchObject({ message: 'boom', code: 'PROBE', retryable: true });
+    // The row holds the failure; a step would repeat the same three fields as a
+    // timeline "event", which is what made every failure look like a step.
+    expect(listAgentRunSteps(tracker.id)).toHaveLength(before);
+  });
+
+  it('claims a run conditionally without appending a step', () => {
+    const { parentId, threadId } = seedParent();
+    const tracker = buildTracker({ parentId, threadId });
+    const before = listAgentRunSteps(tracker.id).length;
+
+    expect(
+      tracker.markFailedIfStatus(['running'], { message: 'reclaimed', code: 'PROCESS_RESTART' })
+    ).not.toBeNull();
+    // A second claim cannot win, and neither attempt wrote a step.
+    expect(
+      tracker.markFailedIfStatus(['running'], { message: 'reclaimed again' })
+    ).toBeNull();
+    expect(getAgentRun(tracker.id)!.error).toMatchObject({ message: 'reclaimed' });
+    expect(listAgentRunSteps(tracker.id)).toHaveLength(before);
+  });
+
   it('refuses a status transition out of a terminal run, leaving the row completed', () => {
     const { parentId, threadId } = seedParent();
     const tracker = buildTracker({ parentId, threadId });

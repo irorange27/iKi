@@ -1,6 +1,6 @@
 import {
   appendAgentRunStepAndUpdateRun,
-  appendAgentRunStepAndUpdateRunIfStatus,
+  updateAgentRunIfStatus,
   createAgentRun,
   getAgentRun,
   updateAgentRun,
@@ -167,51 +167,6 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
         lastStepIndex: stepIndex,
       },
     });
-    return step;
-  };
-
-  const appendStepIfStatus = (
-    params: Parameters<typeof appendStep>[0],
-    updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>,
-    expectedStatuses: readonly AgentRunStatus[]
-  ): AgentRunStep | null => {
-    if (updates.status) {
-      for (const status of expectedStatuses) {
-        if (!ALLOWED_STATUS_TRANSITIONS[status].includes(updates.status)) {
-          throw new Error(
-            'Invalid agent run status transition: ' + status + ' -> ' + updates.status
-          );
-        }
-      }
-    }
-    const startedAt = toIsoNow();
-    const stepIndex = currentRun.working.lastStepIndex + 1;
-    const step: AgentRunStep = {
-      id: createPrefixedId('step'),
-      runId: currentRun.id,
-      stepIndex,
-      type: params.type,
-      status: params.status,
-      summary: params.summary,
-      input: params.input ?? null,
-      output: params.output ?? null,
-      startedAt,
-      finishedAt: startedAt,
-    };
-    const updated = appendAgentRunStepAndUpdateRunIfStatus(
-      step,
-      {
-        ...updates,
-        working: {
-          ...currentRun.working,
-          ...(updates.working ?? {}),
-          lastStepIndex: stepIndex,
-        },
-      },
-      expectedStatuses
-    );
-    if (!updated) return null;
-    currentRun = updated;
     return step;
   };
 
@@ -404,30 +359,20 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
       return currentRun;
     },
     markFailed: params => {
-      appendStep({
-        type: 'error',
-        status: 'failed',
-        summary: toSummary(params.message, 'Run failed'),
-        output: {
-          message: params.message,
-          ...(typeof params.code === 'string' ? { code: params.code } : {}),
-          ...(typeof params.retryable === 'boolean' ? { retryable: params.retryable } : {}),
-        },
-      }, failedState(params));
+      // The run row's `error` holds message/code/retryable; a step repeated the
+      // same three fields and rendered as a failure "event" on the timeline.
+      persist(failedState(params));
       return currentRun;
     },
     markFailedIfStatus: (expectedStatuses, params) => {
-      const claimed = appendStepIfStatus({
-        type: 'error',
-        status: 'failed',
-        summary: toSummary(params.message, 'Run failed'),
-        output: {
-          message: params.message,
-          ...(typeof params.code === 'string' ? { code: params.code } : {}),
-          ...(typeof params.retryable === 'boolean' ? { retryable: params.retryable } : {}),
-        },
-      }, failedState(params), expectedStatuses);
-      return claimed ? currentRun : null;
+      const claimed = updateAgentRunIfStatus(
+        currentRun.id,
+        failedState(params),
+        expectedStatuses
+      );
+      if (!claimed) return null;
+      currentRun = claimed;
+      return currentRun;
     },
     markCancelled: params => {
       // Same rule as markCompleted: the row carries the outcome, so no step.
