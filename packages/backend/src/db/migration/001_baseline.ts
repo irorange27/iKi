@@ -134,27 +134,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
         last_connected_at TEXT,
         last_error TEXT
       )`,
-  `CREATE TABLE IF NOT EXISTS proactive_tasks (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        prompt TEXT NOT NULL,
-        schedule_type TEXT NOT NULL DEFAULT 'interval',
-        interval_minutes INTEGER NOT NULL DEFAULT 60,
-        enabled INTEGER NOT NULL DEFAULT 1,
-        provider_type TEXT NOT NULL,
-        model TEXT NOT NULL,
-        tools TEXT,
-        thread_id TEXT,
-        notify INTEGER NOT NULL DEFAULT 1,
-        last_run_at TEXT,
-        next_run_at TEXT,
-        last_status TEXT,
-        last_output TEXT,
-        last_error TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL, cron_expression TEXT, schedule_timezone TEXT, tool_mode TEXT NOT NULL DEFAULT 'auto', provider_id TEXT,
-        FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE SET NULL
-      )`,
   `CREATE TABLE IF NOT EXISTS prompt_apps (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -176,13 +155,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
                 window_height INTEGER,
                 font_size INTEGER
             )`,
-  `CREATE TABLE IF NOT EXISTS workflow_profiles (
-        thread_id TEXT PRIMARY KEY,
-        profile TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        FOREIGN KEY (thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
-      )`,
   `CREATE TABLE IF NOT EXISTS workspaces (
                 id TEXT PRIMARY KEY,
                 path TEXT NOT NULL,
@@ -222,8 +194,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
         ON agent_run_eval_labels(run_id)`,
   `CREATE INDEX IF NOT EXISTS idx_eval_labels_step
         ON agent_run_eval_labels(step_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_proactive_tasks_enabled_next_run
-        ON proactive_tasks(enabled, next_run_at)`,
   `CREATE INDEX IF NOT EXISTS idx_chat_threads_updated_at
         ON chat_threads(updated_at DESC)`,
 ];

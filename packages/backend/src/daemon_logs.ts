@@ -4,7 +4,6 @@ import path from 'node:path';
 import type {
   DaemonLogEntry,
   DaemonLogsInfo,
-  NapCatMessagePreviewEntry,
 } from './types/config';
 import type {
   StructuredLogEntry,
@@ -20,11 +19,8 @@ import {
 import { getUserDataPath } from './platform';
 
 const MAX_BUFFER_ENTRIES = 300;
-const MAX_NAPCAT_MESSAGE_PREVIEWS = 80;
-const MAX_PREVIEW_TEXT_BYTES = 280;
 
 const logBuffer: DaemonLogEntry[] = [];
-const napcatPreviewBuffer: NapCatMessagePreviewEntry[] = [];
 
 type DaemonLoggerOptions = {
   module: string;
@@ -57,8 +53,6 @@ type DaemonLogger = {
 };
 
 const getDefaultLogFilePath = () => path.join(getUserDataPath(), 'logs', 'daemon.log');
-const getDefaultNapCatPreviewFilePath = () =>
-  path.join(getUserDataPath(), 'logs', 'napcat-preview.json');
 
 const isStructuredLogLevel = (level: unknown): level is StructuredLogLevel =>
   level === 'debug' || level === 'info' || level === 'warn' || level === 'error';
@@ -76,40 +70,13 @@ const pushToBuffer = (entry: DaemonLogEntry) => {
   }
 };
 
-const pushPreviewToBuffer = (entry: NapCatMessagePreviewEntry) => {
-  napcatPreviewBuffer.push(entry);
-  if (napcatPreviewBuffer.length > MAX_NAPCAT_MESSAGE_PREVIEWS) {
-    napcatPreviewBuffer.splice(0, napcatPreviewBuffer.length - MAX_NAPCAT_MESSAGE_PREVIEWS);
-  }
-};
-
 const ensureLogDir = (filePath: string) => {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-};
-
-const truncateUtf8 = (value: string, maxBytes: number): string => {
-  if (Buffer.byteLength(value, 'utf8') <= maxBytes) return value;
-
-  let result = '';
-  for (const char of value) {
-    const candidate = result + char;
-    if (Buffer.byteLength(candidate, 'utf8') > maxBytes) break;
-    result = candidate;
-  }
-
-  return `${result}[TRUNCATED]`;
 };
 
 const appendLogLine = (filePath: string, entry: StructuredLogEntry) => {
   ensureLogDir(filePath);
   fs.appendFileSync(filePath, `${JSON.stringify(entry)}\n`, { encoding: 'utf8' });
-};
-
-const writePreviewFile = (filePath: string, entries: NapCatMessagePreviewEntry[]) => {
-  ensureLogDir(filePath);
-  const tempPath = `${filePath}.tmp`;
-  fs.writeFileSync(tempPath, JSON.stringify(entries), { encoding: 'utf8' });
-  fs.renameSync(tempPath, filePath);
 };
 
 const toDaemonLogEntry = (entry: StructuredLogEntry, source?: string): DaemonLogEntry => ({
@@ -152,57 +119,6 @@ const toLegacyData = (details: unknown): Record<string, unknown> | undefined => 
   return sanitizeLogData(details as Record<string, unknown>);
 };
 
-const normalizeId = (value: unknown): string | undefined => {
-  if (typeof value === 'string' && value.trim()) return truncateUtf8(value.trim(), 64);
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  return undefined;
-};
-
-const normalizePreviewTimestamp = (value: unknown): string => {
-  if (typeof value === 'string') {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
-  }
-  return new Date().toISOString();
-};
-
-const normalizeNapCatPreviewEntry = (
-  entry: NapCatMessagePreviewEntry
-): NapCatMessagePreviewEntry | null => {
-  const textPreview = truncateUtf8(
-    String(sanitizeLogData(entry.textPreview ?? '') || '')
-      .replace(/\s+/g, ' ')
-      .trim(),
-    MAX_PREVIEW_TEXT_BYTES
-  );
-  const userId = normalizeId(entry.userId);
-  if (!textPreview || !userId) return null;
-
-  return {
-    receivedAt: normalizePreviewTimestamp(entry.receivedAt),
-    messageType: entry.messageType === 'group' ? 'group' : 'private',
-    userId,
-    ...(normalizeId(entry.groupId) ? { groupId: normalizeId(entry.groupId) } : {}),
-    ...(normalizeId(entry.selfId) ? { selfId: normalizeId(entry.selfId) } : {}),
-    ...(normalizeId(entry.messageId) ? { messageId: normalizeId(entry.messageId) } : {}),
-    textPreview,
-    mentionedSelf: Boolean(entry.mentionedSelf),
-    replyEligible: Boolean(entry.replyEligible),
-  };
-};
-
-const parseNapCatPreviewFile = (raw: string): NapCatMessagePreviewEntry[] => {
-  const parsed = JSON.parse(raw) as unknown;
-  if (!Array.isArray(parsed)) return [];
-  return parsed
-    .map(item =>
-      item && typeof item === 'object'
-        ? normalizeNapCatPreviewEntry(item as NapCatMessagePreviewEntry)
-        : null
-    )
-    .filter((entry): entry is NapCatMessagePreviewEntry => Boolean(entry));
-};
-
 export const createDaemonLogger = (options: DaemonLoggerOptions): DaemonLogger => {
   const module = normalizeModule(options.module);
   const source = options.source?.trim() || options.module.trim() || module;
@@ -236,29 +152,6 @@ export const createDaemonLogger = (options: DaemonLoggerOptions): DaemonLogger =
     error: createLegacyMethod('error'),
     event,
   };
-};
-
-export const recordNapCatMessagePreview = (
-  entry: NapCatMessagePreviewEntry,
-  userDataPath?: string
-): NapCatMessagePreviewEntry | null => {
-  const normalized = normalizeNapCatPreviewEntry(entry);
-  if (!normalized) return null;
-
-  pushPreviewToBuffer(normalized);
-
-  try {
-    writePreviewFile(
-      userDataPath
-        ? path.join(userDataPath, 'logs', 'napcat-preview.json')
-        : getDefaultNapCatPreviewFilePath(),
-      napcatPreviewBuffer
-    );
-  } catch {
-    // Intentionally ignored: the caller cannot act on it.
-  }
-
-  return normalized;
 };
 
 const parseLogLine = (line: string): DaemonLogEntry | null => {
@@ -317,27 +210,6 @@ const parseLogLine = (line: string): DaemonLogEntry | null => {
 export const getDaemonLogFilePath = (userDataPath?: string): string =>
   userDataPath ? path.join(userDataPath, 'logs', 'daemon.log') : getDefaultLogFilePath();
 
-const getNapCatPreviewFilePath = (userDataPath?: string): string =>
-  userDataPath ? path.join(userDataPath, 'logs', 'napcat-preview.json') : getDefaultNapCatPreviewFilePath();
-
-const readRecentNapCatMessagePreviews = (
-  limit = 20,
-  userDataPath?: string
-): NapCatMessagePreviewEntry[] => {
-  const normalizedLimit =
-    Number.isFinite(limit) && limit > 0
-      ? Math.min(Math.trunc(limit), MAX_NAPCAT_MESSAGE_PREVIEWS)
-      : 20;
-  const filePath = getNapCatPreviewFilePath(userDataPath);
-
-  try {
-    const raw = fs.readFileSync(filePath, 'utf8');
-    return parseNapCatPreviewFile(raw).slice(-normalizedLimit);
-  } catch {
-    return napcatPreviewBuffer.slice(-normalizedLimit);
-  }
-};
-
 export const daemonLog = {
   debug: (source: string, message: string, details?: unknown, userDataPath?: string) =>
     createDaemonLogger({ module: source, source, userDataPath }).debug(message, details),
@@ -351,7 +223,6 @@ export const daemonLog = {
 
 export const readRecentDaemonLogs = (limit = 120, userDataPath?: string): DaemonLogsInfo => {
   const filePath = getDaemonLogFilePath(userDataPath);
-  const napcatMessages = readRecentNapCatMessagePreviews(limit, userDataPath);
   try {
     const raw = fs.readFileSync(filePath, 'utf8');
     const entries = raw
@@ -362,13 +233,11 @@ export const readRecentDaemonLogs = (limit = 120, userDataPath?: string): Daemon
     return {
       filePath,
       entries: entries.slice(-Math.max(1, limit)),
-      napcatMessages,
     };
   } catch {
     return {
       filePath,
       entries: logBuffer.slice(-Math.max(1, limit)),
-      napcatMessages,
     };
   }
 };

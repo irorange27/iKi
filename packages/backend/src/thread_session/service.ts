@@ -217,11 +217,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
       return { success: false, error: `Cannot retry a run with status ${original.status}` };
     }
 
-    const recovered = await resumeHistoryOrRefusal(original, [
-      'chat-turn',
-      'proactive-task',
-      'awaiter-wake',
-    ]);
+    const recovered = await resumeHistoryOrRefusal(original, ['chat-turn', 'awaiter-wake']);
     if ('refusal' in recovered) return recovered.refusal;
 
     const retryResult = runs.retryRun(runId);

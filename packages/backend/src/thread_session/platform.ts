@@ -13,10 +13,3 @@ export const setChatServicePlatformDeps = (deps: ChatServicePlatformDeps): void 
 export const getChatServicePlatformDeps = (): ChatServicePlatformDeps => _platform;
 
 export const getCompanion = (): ChatCompanionBridge => _platform.companion ?? noopCompanionBridge;
-
-export const getAutoPinnedSkillIds = (threadId: string): string[] =>
-  _platform.getAutoPinnedSkillIds?.(threadId) ?? [];
-
-export const recordAutoSkillSelection = (params: { threadId: string; availableSkillIds: string[]; selectedSkillIds: string[]; timestamp?: string }): void => {
-  _platform.recordAutoSkillSelection?.(params);
-};

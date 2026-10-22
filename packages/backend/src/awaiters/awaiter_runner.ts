@@ -5,7 +5,6 @@ import { createLogger } from '@iki/backend/logger';
 import { parseAwaiterTriggerSpec, type Awaiter } from '@iki/backend/types/awaiters';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { toIsoNow } from '@iki/backend/utils/text';
-import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
 import { rebuildResumeHistoryFromEvents } from '@iki/backend/thread_session/run_rehydrator';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import { getErrorMessage } from '@iki/backend/utils/errors';
@@ -292,65 +291,6 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
 
     if (getAwaiterPostWakeDisposition(awaiterId) === 'suppress') {
       return buildSuppressedAwaiterResult(runId);
-    }
-
-    const bridgeDelivery = await deliverBridgeThreadMessage({
-      threadId: awaiter.thread_id,
-      text: messageText,
-    });
-
-    if (bridgeDelivery.handled && !bridgeDelivery.delivered) {
-      const deliveryError = `Failed to deliver ${bridgeDelivery.source || 'bridge'} message: ${
-        bridgeDelivery.error || 'Unknown error'
-      }`;
-
-      const deliveryFailureDisposition = transitionAwaiterIfStillWaking(awaiterId, {
-        status: 'failed',
-        last_wake_at: startedAt,
-        last_error: deliveryError,
-        next_wake_at: null,
-      });
-      if (deliveryFailureDisposition === 'suppress') {
-        return buildSuppressedAwaiterResult(runId);
-      }
-
-      const failedDeliveryMessage = createThreadMessage({
-        awaiter,
-        threadId: awaiter.thread_id,
-        kind: 'error',
-        stage: 'bridge-delivery',
-        startedAt,
-        runId,
-        text: [
-          `### Later Continuation Delivery Failed: ${awaiter.title}`,
-          `Wake: ${new Date(startedAt).toLocaleString()}`,
-          '',
-          'Generated output:',
-          outputText.trim() ? outputText : '_No output._',
-          '',
-          'Error:',
-          '```',
-          deliveryError,
-          '```',
-        ].join('\n'),
-      });
-
-      if (awaiter.notify) {
-        showDesktopNotification({
-          title: `Continuation failed: ${awaiter.title}`,
-          body: deliveryError.slice(0, 180),
-        });
-      }
-
-      sendPushEventToRenderers({
-        type: 'awaiter-result',
-        awaiterId: awaiter.id,
-        threadId: awaiter.thread_id,
-        status: 'failed',
-        runAt: startedAt,
-        message: failedDeliveryMessage,
-      });
-      return { success: false, error: deliveryError, runId };
     }
 
     const completionDisposition = transitionAwaiterIfStillWaking(awaiterId, {

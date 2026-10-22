@@ -110,22 +110,6 @@
         />
       </section>
 
-      <!-- 自动化: unattended entry points (QQ bridge, proactive tasks). -->
-      <section v-show="activeSection === 'automation'" class="settings-page">
-        <h2 class="settings-page-title">{{ t('settings.menu.bridges') }}</h2>
-        <NapCatSettings
-          :active="activeSection === 'automation'"
-          @config-change="autoSave"
-          @reset="resetBridgeSection"
-        />
-
-        <h2 class="settings-page-title">{{ t('settings.menu.tasks') }}</h2>
-        <SettingsTasksSection
-          :active="activeSection === 'automation'"
-          :providers="availableProvidersWithModels"
-        />
-      </section>
-
       <!-- Footer operabar -->
       <div class="settings-footer">
         <span v-if="saved && !providerDraftDirty" class="save-status">{{
@@ -143,7 +127,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { AlarmClock, Bot, Brain, Cog } from 'lucide-vue-next';
+import { Bot, Brain, Cog } from 'lucide-vue-next';
 
 import SettingsGeneralSection from '../components/settings/SettingsGeneralSection.vue';
 import SettingsUiSection from '../components/settings/SettingsUiSection.vue';
@@ -152,11 +136,9 @@ import SettingsKeybindingsSection from '../components/settings/SettingsKeybindin
 import SettingsDevSection from '../components/settings/SettingsDevSection.vue';
 import ProvidersSettings from '../components/settings/ProvidersSettings.vue';
 import McpSettings from '../components/settings/McpSettings.vue';
-import NapCatSettings from '../components/settings/NapCatSettings.vue';
 import SettingsColorSchemeSection from '../components/settings/SettingsColorSchemeSection.vue';
 import SettingsNetworkSection from '../components/settings/SettingsNetworkSection.vue';
 import SettingsSpeechSection from '../components/settings/SettingsSpeechSection.vue';
-import SettingsTasksSection from '../components/settings/SettingsTasksSection.vue';
 import SettingsUsageSection from '../components/settings/SettingsUsageSection.vue';
 import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.vue';
 import { useI18n } from '../i18n';
@@ -173,7 +155,7 @@ const electronAPI = getElectronAPI();
 const settingsViewLogger = createLogger({ module: 'settings_view' });
 const { t } = useI18n();
 
-const SETTINGS_SECTION_KEYS = new Set(['general', 'models', 'intelligence', 'automation']);
+const SETTINGS_SECTION_KEYS = new Set(['general', 'models', 'intelligence']);
 
 const SETTINGS_SECTION_ALIASES: Record<string, string> = {
   provider: 'models',
@@ -181,8 +163,6 @@ const SETTINGS_SECTION_ALIASES: Record<string, string> = {
   usage: 'models',
   memory: 'intelligence',
   skills: 'intelligence',
-  bridges: 'automation',
-  tasks: 'automation',
   ui: 'general',
   colorScheme: 'general',
   speech: 'general',
@@ -257,7 +237,6 @@ const menuItems = computed(() => [
   { key: 'general', label: t('settings.menu.general'), icon: Cog },
   { key: 'models', label: t('settings.menu.models'), icon: Bot },
   { key: 'intelligence', label: t('settings.menu.intelligence'), icon: Brain },
-  { key: 'automation', label: t('settings.menu.automation'), icon: AlarmClock },
 ]);
 
 const settingsTabId = (key: string) => `settings-tab-${key}`;
@@ -359,12 +338,6 @@ const resetColorSchemeSection = () => {
   config.value.general.themePresetId = defaults.general.themePresetId;
   config.value.themes = defaults.themes;
   autoSave();
-};
-
-const resetBridgeSection = async () => {
-  await configStore.resetSection('bridges');
-  await configStore.resetSection('daemon');
-  saved.value = true;
 };
 
 const saveAndClose = async () => {

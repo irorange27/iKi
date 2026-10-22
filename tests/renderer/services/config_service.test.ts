@@ -52,15 +52,6 @@ describe('configService', () => {
       status: 'ok',
       source: 'health',
       uptimeSeconds: 42,
-      bridges: {
-        napcat: {
-          state: 'disconnected',
-          activeConnectionCount: 0,
-          lastConnectedAt: null,
-          lastDisconnectedAt: null,
-          heartbeat: emptyHeartbeat,
-        },
-      },
     }));
     const getDaemonLogs = vi.fn(async (limit?: number) => ({ lines: [], limit: limit ?? 0 }));
     const controlDaemon = vi.fn(async (action: string) => ({ success: true, action }));
@@ -94,15 +85,6 @@ describe('configService', () => {
       status: 'ok',
       source: 'health',
       uptimeSeconds: 42,
-      bridges: {
-        napcat: {
-          state: 'disconnected',
-          activeConnectionCount: 0,
-          lastConnectedAt: null,
-          lastDisconnectedAt: null,
-          heartbeat: emptyHeartbeat,
-        },
-      },
     });
     expect(await configService.getDaemonLogs()).toEqual({ lines: [], limit: 120 });
     expect(await configService.getDaemonLogs(25)).toEqual({ lines: [], limit: 25 });

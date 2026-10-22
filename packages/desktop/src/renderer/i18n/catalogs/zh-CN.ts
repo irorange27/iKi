@@ -146,7 +146,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.runs.kind.error': '错误',
   'chat.runs.runKind.chat-turn': '对话轮次',
   'chat.runs.runKind.approval-resume': '审批续行',
-  'chat.runs.runKind.proactive-task': '定时任务',
+  
   'chat.runs.runKind.awaiter-wake': '唤醒',
   'chat.runs.runKind.delegated-agent': '子代理',
   'chat.runs.time': '时间',
@@ -433,18 +433,18 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.menu.general': '通用',
   'settings.menu.models': '模型与工具',
   'settings.menu.intelligence': '记忆与技能',
-  'settings.menu.automation': '自动化',
+  
   'settings.menu.security': '安全',
   'settings.menu.provider': '供应商',
   'settings.menu.mcp': 'MCP',
-  'settings.menu.bridges': '桥接',
+  
   'settings.menu.usage': '用量',
   'settings.menu.skills': '技能',
   'settings.menu.network': '网络',
   'settings.menu.ui': '界面',
   'settings.menu.colorScheme': '配色',
   'settings.menu.speech': '语音',
-  'settings.menu.tasks': '任务',
+  
   'settings.fallbackTitle': '设置',
   'settings.saved.all': '所有更改已保存',
   'settings.saved.unsaved': '有未保存更改',
@@ -621,165 +621,135 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.theme.field.warning.hint': '警告态',
   'settings.theme.field.danger.label': '危险',
   'settings.theme.field.danger.hint': '破坏性操作',
-  'settings.napcat.title': 'NapCat（QQ）',
-  'settings.napcat.description':
-    '配置 daemon 暴露的反向 WebSocket 桥接，路径为 /onebot/v11/ws。如果 NapCat 运行在 Docker 中，请使用宿主机可访问的 daemon 地址，而不是 localhost。',
-  'settings.napcat.enable': '启用 NapCat 反向 WebSocket 桥接',
-  'settings.napcat.accessTokenOptional': '访问令牌（可选）',
-  'settings.napcat.accessTokenPlaceholder': '留空则禁用桥接鉴权',
-  'settings.napcat.accessTokenHelp': '如果设置了访问令牌，NapCat 必须通过 ?access_token=... 连接。',
-  'settings.napcat.daemonHost': 'Daemon 主机',
-  'settings.napcat.daemonHostPlaceholder': '127.0.0.1',
-  'settings.napcat.daemonHostHelp':
-    '默认使用 127.0.0.1。只有在确实需要局域网 / Docker 访问时才使用 0.0.0.0。',
-  'settings.napcat.daemonPort': 'Daemon 端口',
-  'settings.napcat.daemonPortPlaceholder': '6127',
-  'settings.napcat.daemonRestartNotice':
-    '修改 daemon host/port 后，保存设置会重启桌面托管的 daemon。',
-  'settings.napcat.providerType': 'Provider 类型',
-  'settings.napcat.providerTypeAria': 'NapCat provider 类型',
-  'settings.napcat.providerAuto': '自动选择第一个已启用的 provider',
-  'settings.napcat.model': '模型',
-  'settings.napcat.modelPlaceholder': '留空则使用 provider 默认模型',
-  'settings.napcat.loadingProviders': '正在加载已启用的 providers...',
-  'settings.napcat.noProviders':
-    '没有可用且带模型元数据的已启用 provider。在至少配置一个 provider 之前，桥接无法生成回复。',
-  'settings.napcat.duplicateProviderType':
-    '多个已启用 provider 共享同一种 type。当前桥接会使用该 type 下第一个启用的 provider。',
-  'settings.napcat.requireMention': '群聊中必须 @mention 才回复',
-  'settings.napcat.allowedTools': '允许的工具（每行一个）',
-  'settings.napcat.toolsPlaceholder': 'web\nfetch',
-  'settings.napcat.toolsHelp': '留空则禁用 QQ 回复中的工具调用。',
-  'settings.napcat.connectionTitle': '运行时状态',
-  'settings.napcat.connectionDescription':
-    '把 daemon 健康状态、反向 WebSocket 传输层、heartbeat 活性分开展示。打开时每 5 秒自动刷新。',
-  'settings.napcat.refreshStatus': '刷新状态',
-  'settings.napcat.listening': '监听地址',
-  'settings.napcat.endpoint': '端点',
-  'settings.napcat.authentication': '鉴权',
-  'settings.napcat.transportLabel': '反向 WebSocket',
-  'settings.napcat.heartbeatLabel': 'Heartbeat',
-  'settings.napcat.activeConnections': '活动连接数',
-  'settings.napcat.lastConnectedLabel': '最近连接',
-  'settings.napcat.lastDisconnectedLabel': '最近断开',
-  'settings.napcat.lastHeartbeatLabel': '最近心跳',
-  'settings.napcat.connectionDiagnosisLabel': '诊断',
-  'settings.napcat.authRequired': '需要 Bearer token',
-  'settings.napcat.authNone': '不需要 token',
-  'settings.napcat.providerSummary.auto': '自动选择第一个已启用的 provider 和模型',
-  'settings.napcat.providerSummary.providerAndModel': ({ provider, model }) =>
-    `${asText(provider)} / ${asText(model)}`,
-  'settings.napcat.providerSummary.providerOnly': ({ provider }) =>
-    `${asText(provider)} / 默认模型`,
-  'settings.napcat.providerSummary.modelOnly': ({ model }) =>
-    `自动选择 provider / ${asText(model)}`,
-  'settings.napcat.toolsDisabled': '已禁用',
-  'settings.napcat.daemonChecking': '检查中',
-  'settings.napcat.daemonOnline': '在线',
-  'settings.napcat.daemonOffline': '离线',
-  'settings.napcat.daemonCheckingDetail': '正在检查 daemon 健康状态…',
-  'settings.napcat.daemonUnavailable': '无法获取 daemon 状态。',
-  'settings.napcat.daemonUptime': ({ seconds }) => `运行时长 ${asText(seconds)} 秒`,
-  'settings.napcat.daemonOfflineDetail': ({ error }) => `Daemon 不可达：${asText(error)}`,
-  'settings.napcat.daemonSource': ({ source }) => `当前使用 ${asText(source)} 地址信息。`,
-  'settings.napcat.daemonSource.health': '健康检查',
-  'settings.napcat.daemonSource.recorded': '记录值',
-  'settings.napcat.daemonSource.default': '默认值',
-  'settings.napcat.transportChecking': '检查中',
-  'settings.napcat.transportBlockedByDaemon': '被 Daemon 阻断',
-  'settings.napcat.transportConnected': '已连接',
-  'settings.napcat.transportDisconnected': '已断开',
-  'settings.napcat.transportWaiting': '等待 NapCat 连接',
-  'settings.napcat.transportDisabled': '已禁用',
-  'settings.napcat.transportUnavailable': '不可用',
-  'settings.napcat.transportCheckingDetail': '正在检查反向 WebSocket 传输层状态…',
-  'settings.napcat.transportBlockedByDaemonDetail':
-    '反向 WebSocket 当前无法连上，因为 daemon 离线或没有在配置端口监听。',
-  'settings.napcat.transportConnectedDetail': 'NapCat 反向 WebSocket 传输层已连接。',
-  'settings.napcat.transportDisconnectedDetail':
-    'Daemon 可访问，但 NapCat 还没有建立反向 WebSocket 连接。',
-  'settings.napcat.transportDisconnectedRecentlyDetail': ({ age }) =>
-    `NapCat 反向 WebSocket 当前已断开，最近一次会话关闭于 ${asText(age)} 前。`,
-  'settings.napcat.transportDisconnectedHistoricalDetail': ({ age }) =>
-    `NapCat 当前未连接，最近一次成功建立反向 WebSocket 是 ${asText(age)} 前。`,
-  'settings.napcat.transportDisabledDetail':
-    '配置中已禁用 bridge，因此不会接受反向 WebSocket 连接。',
-  'settings.napcat.transportUnavailableDetail':
-    '在 daemon 恢复响应之前，无法获取传输层运行时状态。',
-  'settings.napcat.transportUnknownDetail': 'Daemon 已在线，但没有上报反向 WebSocket 传输层状态。',
-  'settings.napcat.heartbeatChecking': '检查中',
-  'settings.napcat.heartbeatBlockedByDaemon': '被 Daemon 阻断',
-  'settings.napcat.heartbeatHealthy': '健康',
-  'settings.napcat.heartbeatWaitingForTransport': '等待传输层连接',
-  'settings.napcat.heartbeatUnobserved': '尚未观测到',
-  'settings.napcat.heartbeatStale': '心跳陈旧',
-  'settings.napcat.heartbeatUnhealthy': '心跳报告异常',
-  'settings.napcat.heartbeatDisabled': '已禁用',
-  'settings.napcat.heartbeatUnavailable': '不可用',
-  'settings.napcat.heartbeatCheckingDetail': '正在检查 NapCat heartbeat 活性…',
-  'settings.napcat.heartbeatBlockedByDaemonDetail':
-    '由于 daemon 离线或不可达，当前无法判断 heartbeat 活性。',
-  'settings.napcat.heartbeatHealthyDetail':
-    '最近一次健康 heartbeat 已确认反向 WebSocket 会话仍然存活。',
-  'settings.napcat.heartbeatWaitingForTransportDetail':
-    '只有在 NapCat 建立反向 WebSocket 之后，才会出现 heartbeat 数据。',
-  'settings.napcat.heartbeatUnobservedDetail':
-    '反向 WebSocket 传输层已经连通，但暂时还没有观测到 heartbeat。这可能只是首个间隔未到，也可能是当前没有按预期发送 heartbeat。',
-  'settings.napcat.heartbeatStaleDetail': ({ age, interval }) =>
-    `最近一次 heartbeat 距今 ${asText(age)}，预期间隔 ${asText(interval)}。`,
-  'settings.napcat.heartbeatUnhealthyDetail': 'NapCat heartbeat 上报 bot 会话当前不健康。',
-  'settings.napcat.heartbeatDisabledDetail': '配置中已禁用 bridge，因此不应期望 heartbeat 活性。',
-  'settings.napcat.heartbeatUnavailableDetail':
-    '在 daemon 恢复响应之前，无法获取 heartbeat 运行时状态。',
-  'settings.napcat.heartbeatUnknownDetail': 'Daemon 已在线，但没有上报 heartbeat 运行时状态。',
-  'settings.napcat.lastConnectedNever': '还没有成功连接过',
-  'settings.napcat.lastDisconnectedNever': '还没有记录到断开',
-  'settings.napcat.lastConnectionValue': ({ age }) => `${asText(age)} 前`,
-  'settings.napcat.lastHeartbeatDisabled': 'Bridge 已禁用',
-  'settings.napcat.lastHeartbeatNever': '尚未收到',
-  'settings.napcat.lastHeartbeatValue': ({ age, interval }) =>
-    `${asText(age)} 前 / 间隔 ${asText(interval)}`,
-  'settings.napcat.connectionDiagnosis.checking': '正在检查运行时状态',
-  'settings.napcat.connectionDiagnosis.daemonOffline': 'Daemon 已停止或不可达',
-  'settings.napcat.connectionDiagnosis.connected': '反向 WebSocket 已连接，heartbeat 也正常',
-  'settings.napcat.connectionDiagnosis.disconnected': ({ age }) =>
-    `反向 WebSocket 当前已断开，最近一次会话关闭于 ${asText(age)} 前`,
-  'settings.napcat.connectionDiagnosis.waitingForTransport':
-    'Daemon 正常，正在等待 NapCat 建立反向 WebSocket',
-  'settings.napcat.connectionDiagnosis.previouslyConnected': ({ age }) =>
-    `反向 WebSocket 当前未连接，但 NapCat 在 ${asText(age)} 前连通过`,
-  'settings.napcat.connectionDiagnosis.connectedWithoutHeartbeat':
-    '反向 WebSocket 已连接，但暂时还没观测到 heartbeat',
-  'settings.napcat.connectionDiagnosis.connectedHeartbeatStale':
-    '反向 WebSocket 已连接，但 heartbeat 已经陈旧',
-  'settings.napcat.connectionDiagnosis.connectedHeartbeatUnhealthy':
-    '反向 WebSocket 已连接，但 heartbeat 报告 NapCat 不健康',
-  'settings.napcat.connectionDiagnosis.bridgeDisabled': 'Bridge 已在配置中禁用',
-  'settings.napcat.connectionDiagnosis.bridgeUnknown': 'Daemon 已在线，但 bridge 运行时未上报',
-  'settings.napcat.embeddedOnly': '这些控制项只管理桌面托管的内嵌 daemon。',
-  'settings.napcat.runtimePathsTitle': '运行时路径',
-  'settings.napcat.runtimePathsDescription': '桌面应用和 daemon 应读取同一个配置数据库',
-  'settings.napcat.configDb': '配置数据库',
-  'settings.napcat.localUrl': '本地 NapCat URL',
-  'settings.napcat.dockerUrl': 'Docker NapCat URL',
-  'settings.napcat.runtimePathsHelp':
-    '如果 URL 已经包含 access_token=...，请把 NapCat 单独的 Token 字段留空，避免混用两条鉴权路径。',
-  'settings.napcat.recentLogsTitle': '最近日志',
-  'settings.napcat.recentLogsDescription':
-    '最近的 daemon 和 NapCat 事件，包括收到的 QQ 消息预览。打开时每 5 秒自动刷新。',
-  'settings.napcat.refreshLogs': '刷新日志',
-  'settings.napcat.logFile': '日志文件',
-  'settings.napcat.entries': '条目数',
-  'settings.napcat.qqMessages': 'QQ 消息',
-  'settings.napcat.loadingCount': '加载中…',
-  'settings.napcat.loadingLogs': '正在加载 daemon 日志…',
-  'settings.napcat.recentQqMessages': '最近 QQ 消息',
-  'settings.napcat.recentLogs': '最近日志',
-  'settings.napcat.noLogs': '还没有 daemon 日志或收到的 QQ 消息。',
-  'settings.napcat.reset': '重置桥接',
-  'settings.napcat.daemonLabel': 'Daemon',
-  'settings.napcat.toolsLabel': '工具',
-  'settings.napcat.error.providerApiUnavailable': 'Provider API 不可用。',
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   'settings.network.proxy.title': '代理',
   'settings.network.proxy.description':
     '当当前网络无法直接访问公网时，可以在这里为网页请求配置一条代理链路。',
@@ -929,86 +899,82 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.speech.progress.ready': '已可使用。',
   'settings.speech.progress.failed': '下载失败，请重试。',
   'settings.speech.progress.corrupted': '模型文件已损坏，建议重新下载。',
-  'settings.tasks.title': '主动任务',
-  'settings.tasks.description': '创建定时后台任务，并将结果推送到某个聊天线程中。',
-  'settings.tasks.namePlaceholder': '每日简报',
-  'settings.tasks.promptLabel': '提示词',
-  'settings.tasks.promptPlaceholder': '这个任务应该做什么？',
-  'settings.tasks.scheduleType': '调度类型',
-  'settings.tasks.scheduleTypeAria': '任务调度类型',
-  'settings.tasks.schedule.interval': '间隔（分钟）',
-  'settings.tasks.schedule.cron': 'Cron 表达式',
-  'settings.tasks.cronExpression': 'Cron 表达式',
-  'settings.tasks.everyMinutes': '每隔（分钟）',
-  'settings.tasks.cronPlaceholder': '*/15 * * * *',
-  'settings.tasks.cronHint': '5 段 cron（分 时 日 月 周）。例如：0 9 * * 1-5',
-  'settings.tasks.selectProvider': '选择一个 Provider',
-  'settings.tasks.noProviders': '当前没有可用 Provider。',
-  'settings.tasks.providerAria': '任务 Provider',
-  'settings.tasks.timezoneOptional': '时区（可选）',
-  'settings.tasks.timezonePlaceholder': '自动（本地时区）',
-  'settings.tasks.modelAria': '任务模型',
-  'settings.tasks.selectModel': '选择一个模型',
-  'settings.tasks.noModels': '当前没有可用模型。',
-  'settings.tasks.pushToThread': '推送到线程',
-  'settings.tasks.threadAria': '将任务输出推送到线程',
-  'settings.tasks.autoCreateThread': '自动创建专用线程',
-  'settings.tasks.toolStrategy': '工具策略',
-  'settings.tasks.toolStrategyAria': '任务工具策略',
-  'settings.tasks.toolMode.auto': '自动（由 agent 决定）',
-  'settings.tasks.toolMode.manual': '手动安全白名单',
-  'settings.tasks.toolMode.disabled': '禁用',
-  'settings.tasks.toolStrategyHint':
-    '自动模式会让任务 agent 自行判断何时使用安全内置工具以获取最新信息。',
-  'settings.tasks.allowedTools': '允许的工具（安全）',
-  'settings.tasks.disabledHint': '该任务将在不使用任何工具的情况下运行。',
-  'settings.tasks.autoHint': '当当前信息很重要时，该任务可以自主使用安全内置工具。',
-  'settings.tasks.desktopNotification': '桌面通知',
-  'settings.tasks.create': '创建任务',
-  'settings.tasks.creating': '创建中…',
-  'settings.tasks.existingTitle': '现有任务',
-  'settings.tasks.review.title': '最近运行结果',
-  'settings.tasks.review.description':
-    '最近完成的后台运行（定时任务与等待器），审阅代理自主完成的工作。',
-  'settings.tasks.review.empty': '还没有后台运行记录。',
-  'settings.tasks.review.openThread': '打开线程',
-  'settings.tasks.loading': '加载中…',
-  'settings.tasks.empty': '还没有任务。',
-  'settings.tasks.runNow': '立即运行',
-  'settings.tasks.running': '运行中…',
-  'settings.tasks.status.idle': '空闲',
-  'settings.tasks.status.running': '运行中',
-  'settings.tasks.status.success': '成功',
-  'settings.tasks.status.error': '错误',
-  'settings.tasks.notify': '通知',
-  'settings.tasks.cronShort': 'Cron',
-  'settings.tasks.tzShort': 'TZ',
-  'settings.tasks.local': '本地',
-  'settings.tasks.everyMinShort': '每隔（分）',
-  'settings.tasks.scheduleLabel': '调度：',
-  'settings.tasks.toolStrategyLabel': '工具策略：',
-  'settings.tasks.next': '下次：',
-  'settings.tasks.last': '上次：',
-  'settings.tasks.format.scheduleCron': ({ cron, timezone }) =>
-    `${asText(cron)}${asText(timezone) ? `（${asText(timezone)}）` : '（本地时间）'}`,
-  'settings.tasks.format.scheduleInterval': ({ minutes }) => `每隔 ${asText(minutes)} 分钟`,
-  'settings.tasks.format.toolAuto': '自动安全工具',
-  'settings.tasks.format.toolDisabled': '已禁用',
-  'settings.tasks.format.toolManual': ({ tools }) =>
-    asText(tools) ? `手动：${asText(tools)}` : '手动（未选择安全工具）',
-  'settings.tasks.error.loadFailed': ({ error }) => `加载任务失败：${asText(error)}`,
-  'settings.tasks.error.nameRequired': '任务名称不能为空。',
-  'settings.tasks.error.promptRequired': '任务提示词不能为空。',
-  'settings.tasks.error.intervalPositive': '间隔必须是正数（分钟）。',
-  'settings.tasks.error.cronRequired': 'Cron 表达式不能为空。',
-  'settings.tasks.error.providerRequired': '请选择一个 Provider。',
-  'settings.tasks.error.modelRequired': '请选择一个模型。',
-  'settings.tasks.error.safeToolRequired': '请至少选择一个安全工具，或改用自动/禁用模式。',
-  'settings.tasks.error.createFailed': ({ error }) => `创建任务失败：${asText(error)}`,
-  'settings.tasks.error.runFailed': ({ error }) => `运行任务失败：${asText(error)}`,
-  'settings.tasks.error.deleteFailed': ({ error }) => `删除任务失败：${asText(error)}`,
-  'settings.tasks.error.updateFailed': ({ error }) => `更新任务失败：${asText(error)}`,
-  'settings.tasks.confirmDelete': ({ name }) => `删除任务“${asText(name)}”？\n此操作不可撤销。`,
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   'settings.usage.title': '用量',
   'settings.usage.description': '按聊天工作流统计模型回复的 token 用量与预估花费。',
   'settings.usage.period': '时间范围',
@@ -1252,13 +1218,12 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.skills.noDescription': '没有描述',
   'settings.skills.viewContent': '查看内容',
   'settings.skills.contentTruncated': '显示内容已截断。',
-  'settings.skills.workflowTitle': '工作流优化',
-  'settings.skills.workflowEnable': '启用自优化工作流',
-  'settings.skills.workflowAutoPin': '按线程自动固定高频使用技能',
-  'settings.skills.workflowDescription':
-    'iKi 会学习某个线程里哪些技能持续有帮助，并在自动模式下保持它们被固定。这不会影响手动技能选择。',
-  'settings.skills.workflowResetting': '重置中…',
-  'settings.skills.workflowReset': '重置自动固定技能',
+  
+  
+  
+  
+  
+  
   'settings.skills.error.resetUnavailable': '工作流重置功能不可用。',
   'settings.skills.error.resetFailed': ({ error }) => `重置工作流数据失败：${asText(error)}`,
   'settings.skills.error.loadFailed': ({ error }) => `加载技能失败：${asText(error)}`,

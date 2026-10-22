@@ -19,11 +19,9 @@ const createMinimalApi = () => ({
     onUpdated: vi.fn(() => vi.fn()),
   },
   mcp: { list: vi.fn(async () => []), onUpdated: vi.fn(() => vi.fn()) },
-  napcat: { list: vi.fn(async () => []), onUpdated: vi.fn(() => vi.fn()) },
   skills: { list: vi.fn(async () => []) },
   speech: { status: vi.fn(async () => ({ available: false })) },
   memory: { getStatus: vi.fn(async () => ({})) },
-  tasks: { list: vi.fn(async () => []) },
   usage: { summary: vi.fn(async () => ({})) },
   companion: {
     getSnapshot: vi.fn(async () => null),

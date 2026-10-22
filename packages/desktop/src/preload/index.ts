@@ -16,7 +16,6 @@ import type {
   ProviderModelDiscoveryOverride,
 } from '@iki/backend/types/provider';
 import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/backend/types/chat_usage';
-import type { ProactiveTask } from '@iki/backend/types/tasks';
 import type { McpServerInput, McpServerSummary } from '@iki/backend/types/mcp';
 import type { AgentRun, AgentRunTrace, AgentRunTree } from '@iki/backend/types/agent_run';
 import type { DevToolsResolveRequest, DevToolsSourceResult } from '@iki/backend/types/devtools';
@@ -33,13 +32,11 @@ import type {
   ChatInvocationOptions,
   ElectronApi,
   PromptAppInput,
-  ProactiveTaskInput,
   ProviderInput,
   WorkspaceInput,
   ChatThreadInput,
   ChatMessageInput,
 } from '@iki/backend/types/electron_api';
-import { toPlainData } from '@iki/backend/utils/plain_clone';
 
 const subscribe = <T>(channel: string, callback: (payload: T) => void): (() => void) => {
   const handler = (_event: Electron.IpcRendererEvent, payload: T) => {
@@ -210,16 +207,6 @@ const electronApi: ElectronApi = {
   },
   workflow: {
     resetAutoPinnedSkills: () => ipcRenderer.invoke('workflow:reset-auto-skills'),
-  },
-  tasks: {
-    list: () => ipcRenderer.invoke('tasks:list'),
-    get: (id: string) => ipcRenderer.invoke('tasks:get', id),
-    create: (task: ProactiveTaskInput) => ipcRenderer.invoke('tasks:create', toPlainData(task)),
-    update: (id: string, updates: Partial<ProactiveTask>) =>
-      ipcRenderer.invoke('tasks:update', id, toPlainData(updates)),
-    delete: (id: string) => ipcRenderer.invoke('tasks:delete', id),
-    runNow: (id: string) => ipcRenderer.invoke('tasks:run-now', id),
-    onPush: (callback: (payload: unknown) => void) => subscribe('tasks:push', callback),
   },
   awaiters: {
     onPush: (callback: (payload: unknown) => void) => subscribe('awaiters:push', callback),

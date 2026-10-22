@@ -99,63 +99,6 @@ export const DeletePersonalSkillOutputSchema = z
   })
   .passthrough();
 
-const ProactiveTaskRecordOutputSchema = z
-  .object({
-    id: z.string().optional(),
-    name: z.string().optional(),
-    prompt: z.string().optional(),
-    schedule_type: z.enum(['interval', 'cron']).optional(),
-    interval_minutes: z.number().optional(),
-    cron_expression: z.string().nullable().optional(),
-    schedule_timezone: z.string().nullable().optional(),
-    schedule_summary: z.string().optional(),
-    enabled: z.boolean().optional(),
-    provider_type: z.string().optional(),
-    provider_id: z.string().nullable().optional(),
-    model: z.string().optional(),
-    tool_mode: z.enum(['auto', 'manual', 'disabled']).optional(),
-    tools: z.array(z.string()).optional(),
-    tool_summary: z.string().optional(),
-    thread_id: z.string().nullable().optional(),
-    notify: z.boolean().optional(),
-    last_run_at: z.string().nullable().optional(),
-    next_run_at: z.string().nullable().optional(),
-    last_status: z.enum(['idle', 'running', 'success', 'error']).nullable().optional(),
-    last_output: z.string().nullable().optional(),
-    last_error: z.string().nullable().optional(),
-    created_at: z.string().optional(),
-    updated_at: z.string().optional(),
-  })
-  .passthrough();
-
-export const ListProactiveTasksOutputSchema = z
-  .object({
-    tasks: z.array(ProactiveTaskRecordOutputSchema).optional(),
-    resultCount: z.number().optional(),
-  })
-  .passthrough();
-
-export const ReadProactiveTaskOutputSchema = z
-  .object({
-    task: ProactiveTaskRecordOutputSchema.nullable().optional(),
-  })
-  .passthrough();
-
-export const WriteProactiveTaskOutputSchema = z
-  .object({
-    action: z.enum(['created', 'updated']).optional(),
-    task: ProactiveTaskRecordOutputSchema.optional(),
-  })
-  .passthrough();
-
-export const DeleteProactiveTaskOutputSchema = z
-  .object({
-    deleted: z.boolean().optional(),
-    taskId: z.string().nullable().optional(),
-    taskName: z.string().nullable().optional(),
-  })
-  .passthrough();
-
 const AwaiterTriggerOutputSchema = z
   .object({
     kind: z.enum(['time_at', 'time_after']).optional(),

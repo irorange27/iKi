@@ -138,9 +138,6 @@ const createHarness = (clientOverrides: Partial<DaemonClientLike> = {}) => {
     approveTool: vi.fn(async () => ({ success: true })),
     stopStream: vi.fn(() => ({ success: true })),
   };
-  const napcatBridge = {
-    handleUpgrade: vi.fn(() => false),
-  };
   const logger = {
     event: loggerEventMock,
   };
@@ -158,7 +155,6 @@ const createHarness = (clientOverrides: Partial<DaemonClientLike> = {}) => {
     server: server as never,
     wss: wss as never,
     chatService: chatService as never,
-    napcatBridge: napcatBridge as never,
     sessions,
     wsSessions,
     nextSessionIdRef,
@@ -178,7 +174,6 @@ const createHarness = (clientOverrides: Partial<DaemonClientLike> = {}) => {
     ws,
     rawSocket,
     chatService,
-    napcatBridge,
     sessions,
     wsSessions,
     nextSessionIdRef,
@@ -212,7 +207,6 @@ describe('configureDaemonWebSockets', () => {
         approveTool: vi.fn(),
         stopStream: vi.fn(),
       } as never,
-      napcatBridge: { handleUpgrade: vi.fn(() => false) } as never,
       sessions: new Map(),
       wsSessions: new Map(),
       nextSessionIdRef: { current: 1 },
@@ -229,42 +223,6 @@ describe('configureDaemonWebSockets', () => {
     expect(rawSocket.write).toHaveBeenCalledWith('HTTP/1.1 401 Unauthorized\r\n\r\n');
     expect(rawSocket.destroy).toHaveBeenCalledTimes(1);
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
-  });
-
-  it('delegates non-chat upgrades to the NapCat bridge and otherwise destroys the socket', () => {
-    const server = createEmitter();
-    const wss = {
-      ...createEmitter(),
-      close: vi.fn(),
-      handleUpgrade: vi.fn(),
-    };
-    const napcatBridge = { handleUpgrade: vi.fn(() => true) };
-    const rawSocket = new FakeRawSocket();
-
-    configureDaemonWebSockets({
-      server: server as never,
-      wss: wss as never,
-      chatService: {
-        stream: vi.fn(),
-        approveTool: vi.fn(),
-        stopStream: vi.fn(),
-      } as never,
-      napcatBridge: napcatBridge as never,
-      sessions: new Map(),
-      wsSessions: new Map(),
-      nextSessionIdRef: { current: 1 },
-      logger: { event: loggerEventMock },
-    });
-
-    server.emit('upgrade', { url: '/onebot/v11/ws', headers: {} }, rawSocket, Buffer.alloc(0));
-
-    expect(napcatBridge.handleUpgrade).toHaveBeenCalledTimes(1);
-    expect(rawSocket.destroy).not.toHaveBeenCalled();
-
-    napcatBridge.handleUpgrade.mockReturnValueOnce(false);
-    server.emit('upgrade', { url: '/unknown', headers: {} }, rawSocket, Buffer.alloc(0));
-
-    expect(rawSocket.destroy).toHaveBeenCalledTimes(1);
   });
 
   it('creates a ready session on successful upgrade and cleans it up on close', () => {

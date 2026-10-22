@@ -31,10 +31,6 @@ vi.mock('@iki/backend/db/chat_thread', () => ({
   touchChatThread: vi.fn(),
 }));
 
-vi.mock('@iki/backend/bridge_dispatch', () => ({
-  deliverBridgeThreadMessage: vi.fn(),
-}));
-
 vi.mock('@iki/backend/db/agent_runs', () => ({
   getAgentRun: vi.fn(() => null),
   getLatestAgentRunCheckpoint: vi.fn(() => null),
@@ -58,7 +54,6 @@ import {
 } from '../../../../packages/desktop/src/main/services/awaiters/awaiters';
 import * as awaitersDb from '@iki/backend/db/awaiters';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
 import { chatService } from '../../../../packages/desktop/src/main/services/chat/service';
 
 const baseAwaiter = (overrides: Partial<Awaiter> = {}): Awaiter => ({
@@ -103,7 +98,6 @@ describe('runAwaiterWake', () => {
   const updateAwaiterIfStatusMock = vi.mocked(awaitersDb.updateAwaiterIfStatus);
   const reclaimStaleWakingAwaitersMock = vi.mocked(awaitersDb.reclaimStaleWakingAwaiters);
   const touchChatThreadMock = vi.mocked(chatThreadDb.touchChatThread);
-  const deliverBridgeThreadMessageMock = vi.mocked(deliverBridgeThreadMessage);
   const chatServiceMock = chatService as unknown as {
     getThread: ReturnType<typeof vi.fn>;
     createMessage: ReturnType<typeof vi.fn>;
@@ -114,10 +108,6 @@ describe('runAwaiterWake', () => {
     vi.clearAllMocks();
     updateAwaiterIfStatusMock.mockReturnValue({ changes: 1 } as { changes: number });
     reclaimStaleWakingAwaitersMock.mockReturnValue(0);
-    deliverBridgeThreadMessageMock.mockResolvedValue({
-      handled: false,
-      delivered: false,
-    });
   });
 
   afterEach(() => {
@@ -181,11 +171,6 @@ describe('runAwaiterWake', () => {
         },
       })
     );
-    expect(deliverBridgeThreadMessageMock).toHaveBeenCalledWith({
-      threadId: 'thread_1',
-      text: expect.stringContaining('Wake complete.'),
-    });
-
     const messageMetaRaw = chatServiceMock.createMessage.mock.calls.at(-1)?.[0]?.metadata;
     const messageMeta = messageMetaRaw ? JSON.parse(messageMetaRaw) : null;
     expect(messageMeta).toMatchObject({

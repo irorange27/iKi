@@ -39,10 +39,6 @@ const getBuiltinToolOrder = (toolName: string): number => {
     read_awaiter: 46,
     write_awaiter: 47,
     delete_awaiter: 48,
-    list_proactive_tasks: 60,
-    read_proactive_task: 61,
-    write_proactive_task: 62,
-    delete_proactive_task: 63,
   };
 
   return explicitOrder[toolName] ?? 100;

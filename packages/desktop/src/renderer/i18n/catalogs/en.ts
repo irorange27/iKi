@@ -146,7 +146,7 @@ export const en = defineCatalog({
   'chat.runs.kind.error': 'Error',
   'chat.runs.runKind.chat-turn': 'Chat turn',
   'chat.runs.runKind.approval-resume': 'Approval continuation',
-  'chat.runs.runKind.proactive-task': 'Scheduled task',
+  
   'chat.runs.runKind.awaiter-wake': 'Wake-up',
   'chat.runs.runKind.delegated-agent': 'Delegated agent',
   'chat.runs.time': 'Time',
@@ -448,18 +448,18 @@ export const en = defineCatalog({
   'settings.menu.general': 'General',
   'settings.menu.models': 'Models & Tools',
   'settings.menu.intelligence': 'Memory & Skills',
-  'settings.menu.automation': 'Automation',
+  
   'settings.menu.security': 'Security',
   'settings.menu.provider': 'Providers',
   'settings.menu.mcp': 'MCP',
-  'settings.menu.bridges': 'Bridges',
+  
   'settings.menu.usage': 'Usage',
   'settings.menu.skills': 'Skills',
   'settings.menu.network': 'Network',
   'settings.menu.ui': 'User Interface',
   'settings.menu.colorScheme': 'Color Scheme',
   'settings.menu.speech': 'Speech',
-  'settings.menu.tasks': 'Tasks',
+  
   'settings.fallbackTitle': 'Settings',
   'settings.saved.all': 'All changes saved',
   'settings.saved.unsaved': 'Unsaved changes',
@@ -650,172 +650,135 @@ export const en = defineCatalog({
   'settings.theme.field.warning.hint': 'Warnings',
   'settings.theme.field.danger.label': 'Danger',
   'settings.theme.field.danger.hint': 'Destructive actions',
-  'settings.napcat.title': 'NapCat (QQ)',
-  'settings.napcat.description':
-    'Configure the reverse WebSocket bridge exposed by the daemon at path /onebot/v11/ws. If NapCat runs in Docker, use a host-reachable daemon address instead of localhost.',
-  'settings.napcat.enable': 'Enable NapCat reverse WebSocket bridge',
-  'settings.napcat.accessTokenOptional': 'Access Token (optional)',
-  'settings.napcat.accessTokenPlaceholder': 'Leave empty to disable bridge auth',
-  'settings.napcat.accessTokenHelp': 'If set, NapCat must connect with ?access_token=....',
-  'settings.napcat.daemonHost': 'Daemon Host',
-  'settings.napcat.daemonHostPlaceholder': '127.0.0.1',
-  'settings.napcat.daemonHostHelp':
-    'Defaults to 127.0.0.1. Use 0.0.0.0 only when you intentionally need LAN/Docker access.',
-  'settings.napcat.daemonPort': 'Daemon Port',
-  'settings.napcat.daemonPortPlaceholder': '6127',
-  'settings.napcat.daemonRestartNotice':
-    'Changing daemon host/port will restart the desktop-managed daemon after saving settings.',
-  'settings.napcat.providerType': 'Provider Type',
-  'settings.napcat.providerTypeAria': 'NapCat provider type',
-  'settings.napcat.providerAuto': 'Auto-select first enabled provider',
-  'settings.napcat.model': 'Model',
-  'settings.napcat.modelPlaceholder': 'Leave empty to use the provider default',
-  'settings.napcat.loadingProviders': 'Loading enabled providers...',
-  'settings.napcat.noProviders':
-    'No enabled providers with model metadata are available. The bridge will not be able to generate replies until at least one provider is configured.',
-  'settings.napcat.duplicateProviderType':
-    'Multiple enabled providers share the same type. The bridge currently uses the first enabled provider for that type.',
-  'settings.napcat.requireMention': 'Require @mention in group chats before replying',
-  'settings.napcat.allowedTools': 'Allowed Tools (one per line)',
-  'settings.napcat.toolsPlaceholder': 'web\nfetch',
-  'settings.napcat.toolsHelp': 'Leave empty to disable tool use for QQ replies.',
-  'settings.napcat.connectionTitle': 'Runtime Status',
-  'settings.napcat.connectionDescription':
-    'Separates daemon health, reverse WebSocket transport, and heartbeat liveness. Auto-refreshes every 5s while open.',
-  'settings.napcat.refreshStatus': 'Refresh Status',
-  'settings.napcat.listening': 'Listening',
-  'settings.napcat.endpoint': 'Endpoint',
-  'settings.napcat.authentication': 'Authentication',
-  'settings.napcat.transportLabel': 'Reverse WebSocket',
-  'settings.napcat.heartbeatLabel': 'Heartbeat',
-  'settings.napcat.activeConnections': 'Active Connections',
-  'settings.napcat.lastConnectedLabel': 'Last Connected',
-  'settings.napcat.lastDisconnectedLabel': 'Last Disconnected',
-  'settings.napcat.lastHeartbeatLabel': 'Last Heartbeat',
-  'settings.napcat.connectionDiagnosisLabel': 'Diagnosis',
-  'settings.napcat.authRequired': 'Bearer token required',
-  'settings.napcat.authNone': 'No token required',
-  'settings.napcat.providerSummary.auto': 'Auto-select first enabled provider and model',
-  'settings.napcat.providerSummary.providerAndModel': ({ provider, model }) =>
-    `${asText(provider)} / ${asText(model)}`,
-  'settings.napcat.providerSummary.providerOnly': ({ provider }) =>
-    `${asText(provider)} / default model`,
-  'settings.napcat.providerSummary.modelOnly': ({ model }) =>
-    `Auto-select provider / ${asText(model)}`,
-  'settings.napcat.toolsDisabled': 'Disabled',
-  'settings.napcat.daemonChecking': 'Checking',
-  'settings.napcat.daemonOnline': 'Online',
-  'settings.napcat.daemonOffline': 'Offline',
-  'settings.napcat.daemonCheckingDetail': 'Checking daemon health...',
-  'settings.napcat.daemonUnavailable': 'Daemon status unavailable.',
-  'settings.napcat.daemonUptime': ({ seconds }) => `Uptime ${asText(seconds)}s`,
-  'settings.napcat.daemonOfflineDetail': ({ error }) => `Daemon is unreachable: ${asText(error)}`,
-  'settings.napcat.daemonSource': ({ source }) => `Using ${asText(source)} address information.`,
-  'settings.napcat.daemonSource.health': 'health',
-  'settings.napcat.daemonSource.recorded': 'recorded',
-  'settings.napcat.daemonSource.default': 'default',
-  'settings.napcat.transportChecking': 'Checking',
-  'settings.napcat.transportBlockedByDaemon': 'Blocked by Daemon',
-  'settings.napcat.transportConnected': 'Connected',
-  'settings.napcat.transportDisconnected': 'Disconnected',
-  'settings.napcat.transportWaiting': 'Waiting for NapCat',
-  'settings.napcat.transportDisabled': 'Disabled',
-  'settings.napcat.transportUnavailable': 'Unavailable',
-  'settings.napcat.transportCheckingDetail': 'Checking reverse WebSocket transport...',
-  'settings.napcat.transportBlockedByDaemonDetail':
-    'Reverse WebSocket transport cannot connect because the daemon is offline or not listening on the configured port.',
-  'settings.napcat.transportConnectedDetail': 'NapCat reverse WebSocket transport is connected.',
-  'settings.napcat.transportDisconnectedDetail':
-    'Daemon is reachable, but NapCat has not opened a reverse WebSocket yet.',
-  'settings.napcat.transportDisconnectedRecentlyDetail': ({ age }) =>
-    `NapCat reverse WebSocket is currently disconnected. The last session closed ${asText(age)} ago.`,
-  'settings.napcat.transportDisconnectedHistoricalDetail': ({ age }) =>
-    `NapCat is currently disconnected. The last successful reverse WebSocket connection was ${asText(age)} ago.`,
-  'settings.napcat.transportDisabledDetail':
-    'Bridge is disabled in config, so reverse WebSocket connections are not accepted.',
-  'settings.napcat.transportUnavailableDetail':
-    'Transport runtime is unavailable until the daemon responds.',
-  'settings.napcat.transportUnknownDetail':
-    'Daemon is online, but it did not report reverse WebSocket transport state.',
-  'settings.napcat.heartbeatChecking': 'Checking',
-  'settings.napcat.heartbeatBlockedByDaemon': 'Blocked by Daemon',
-  'settings.napcat.heartbeatHealthy': 'Healthy',
-  'settings.napcat.heartbeatWaitingForTransport': 'Waiting for transport',
-  'settings.napcat.heartbeatUnobserved': 'Not observed yet',
-  'settings.napcat.heartbeatStale': 'Stale',
-  'settings.napcat.heartbeatUnhealthy': 'Reported unhealthy',
-  'settings.napcat.heartbeatDisabled': 'Disabled',
-  'settings.napcat.heartbeatUnavailable': 'Unavailable',
-  'settings.napcat.heartbeatCheckingDetail': 'Checking NapCat heartbeat liveness...',
-  'settings.napcat.heartbeatBlockedByDaemonDetail':
-    'Heartbeat liveness is unavailable because the daemon is offline or unreachable.',
-  'settings.napcat.heartbeatHealthyDetail':
-    'A recent healthy NapCat heartbeat confirms the reverse WebSocket session is alive.',
-  'settings.napcat.heartbeatWaitingForTransportDetail':
-    'Heartbeat data is unavailable until NapCat opens a reverse WebSocket session.',
-  'settings.napcat.heartbeatUnobservedDetail':
-    'Reverse WebSocket transport is already connected. No heartbeat has been observed yet, which can happen before the first interval or when heartbeat is not emitted as expected.',
-  'settings.napcat.heartbeatStaleDetail': ({ age, interval }) =>
-    `Last heartbeat was ${asText(age)} ago (expected every ${asText(interval)}).`,
-  'settings.napcat.heartbeatUnhealthyDetail':
-    'NapCat heartbeat reported that the bot session is not healthy.',
-  'settings.napcat.heartbeatDisabledDetail':
-    'Bridge is disabled in config, so heartbeat liveness is not expected.',
-  'settings.napcat.heartbeatUnavailableDetail':
-    'Heartbeat runtime is unavailable until the daemon responds.',
-  'settings.napcat.heartbeatUnknownDetail':
-    'Daemon is online, but it did not report heartbeat runtime.',
-  'settings.napcat.lastConnectedNever': 'No successful session yet',
-  'settings.napcat.lastDisconnectedNever': 'No disconnect observed yet',
-  'settings.napcat.lastConnectionValue': ({ age }) => `${asText(age)} ago`,
-  'settings.napcat.lastHeartbeatDisabled': 'Bridge disabled',
-  'settings.napcat.lastHeartbeatNever': 'Not received yet',
-  'settings.napcat.lastHeartbeatValue': ({ age, interval }) =>
-    `${asText(age)} ago / ${asText(interval)} interval`,
-  'settings.napcat.connectionDiagnosis.checking': 'Checking runtime state',
-  'settings.napcat.connectionDiagnosis.daemonOffline': 'Daemon is down or unreachable',
-  'settings.napcat.connectionDiagnosis.connected':
-    'Reverse WebSocket is connected and heartbeat looks healthy',
-  'settings.napcat.connectionDiagnosis.disconnected': ({ age }) =>
-    `Reverse WebSocket is currently disconnected; the last session closed ${asText(age)} ago`,
-  'settings.napcat.connectionDiagnosis.waitingForTransport':
-    'Daemon is healthy; waiting for NapCat reverse WebSocket transport',
-  'settings.napcat.connectionDiagnosis.previouslyConnected': ({ age }) =>
-    `Reverse WebSocket is currently disconnected; NapCat last connected ${asText(age)} ago`,
-  'settings.napcat.connectionDiagnosis.connectedWithoutHeartbeat':
-    'Reverse WebSocket is connected; heartbeat has not been observed yet',
-  'settings.napcat.connectionDiagnosis.connectedHeartbeatStale':
-    'Reverse WebSocket is connected, but heartbeat is stale',
-  'settings.napcat.connectionDiagnosis.connectedHeartbeatUnhealthy':
-    'Reverse WebSocket is connected, but heartbeat reports NapCat as unhealthy',
-  'settings.napcat.connectionDiagnosis.bridgeDisabled': 'Bridge is disabled in config',
-  'settings.napcat.connectionDiagnosis.bridgeUnknown':
-    'Daemon is online, but bridge runtime was not reported',
-  'settings.napcat.embeddedOnly': 'These controls manage the desktop-managed embedded daemon only.',
-  'settings.napcat.runtimePathsTitle': 'Runtime Paths',
-  'settings.napcat.runtimePathsDescription':
-    'The desktop app and daemon should read the same config DB',
-  'settings.napcat.configDb': 'Config DB',
-  'settings.napcat.localUrl': 'Local NapCat URL',
-  'settings.napcat.dockerUrl': 'Docker NapCat URL',
-  'settings.napcat.runtimePathsHelp':
-    "When the URL already includes access_token=..., leave NapCat's separate Token field empty to avoid mixing two auth paths.",
-  'settings.napcat.recentLogsTitle': 'Recent Logs',
-  'settings.napcat.recentLogsDescription':
-    'Recent daemon and NapCat events, including inbound QQ message previews. Auto-refreshes every 5s while open.',
-  'settings.napcat.refreshLogs': 'Refresh Logs',
-  'settings.napcat.logFile': 'Log File',
-  'settings.napcat.entries': 'Entries',
-  'settings.napcat.qqMessages': 'QQ Messages',
-  'settings.napcat.loadingCount': 'Loading...',
-  'settings.napcat.loadingLogs': 'Loading daemon logs...',
-  'settings.napcat.recentQqMessages': 'Recent QQ Messages',
-  'settings.napcat.recentLogs': 'Recent Logs',
-  'settings.napcat.noLogs': 'No daemon logs or inbound QQ messages available yet.',
-  'settings.napcat.reset': 'Reset Bridges',
-  'settings.napcat.daemonLabel': 'Daemon',
-  'settings.napcat.toolsLabel': 'Tools',
-  'settings.napcat.error.providerApiUnavailable': 'Provider API is unavailable.',
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   'settings.network.proxy.title': 'Proxy',
   'settings.network.proxy.description':
     'Configure a proxy path for web requests when your current network cannot reach the public internet directly.',
@@ -969,89 +932,82 @@ export const en = defineCatalog({
   'settings.speech.progress.ready': 'Ready to use.',
   'settings.speech.progress.failed': 'Download failed. Please retry.',
   'settings.speech.progress.corrupted': 'Model file corrupted. Re-download recommended.',
-  'settings.tasks.title': 'Proactive Tasks',
-  'settings.tasks.description':
-    'Create scheduled tasks that run in the background and push results into a chat thread.',
-  'settings.tasks.namePlaceholder': 'Daily briefing',
-  'settings.tasks.promptLabel': 'Prompt',
-  'settings.tasks.promptPlaceholder': 'What should this task do?',
-  'settings.tasks.scheduleType': 'Schedule Type',
-  'settings.tasks.scheduleTypeAria': 'Task schedule type',
-  'settings.tasks.schedule.interval': 'Interval (minutes)',
-  'settings.tasks.schedule.cron': 'Cron expression',
-  'settings.tasks.cronExpression': 'Cron Expression',
-  'settings.tasks.everyMinutes': 'Every (minutes)',
-  'settings.tasks.cronPlaceholder': '*/15 * * * *',
-  'settings.tasks.cronHint': '5-field cron (min hour day month weekday). Example: 0 9 * * 1-5',
-  'settings.tasks.selectProvider': 'Select a provider',
-  'settings.tasks.noProviders': 'No providers available.',
-  'settings.tasks.providerAria': 'Task provider',
-  'settings.tasks.timezoneOptional': 'Time Zone (optional)',
-  'settings.tasks.timezonePlaceholder': 'Auto (local time zone)',
-  'settings.tasks.modelAria': 'Task model',
-  'settings.tasks.selectModel': 'Select a model',
-  'settings.tasks.noModels': 'No models available.',
-  'settings.tasks.pushToThread': 'Push To Thread',
-  'settings.tasks.threadAria': 'Push task output to thread',
-  'settings.tasks.autoCreateThread': 'Auto-create dedicated thread',
-  'settings.tasks.toolStrategy': 'Tool Strategy',
-  'settings.tasks.toolStrategyAria': 'Task tool strategy',
-  'settings.tasks.toolMode.auto': 'Auto (agent decides)',
-  'settings.tasks.toolMode.manual': 'Manual safe allowlist',
-  'settings.tasks.toolMode.disabled': 'Disabled',
-  'settings.tasks.toolStrategyHint':
-    'Auto lets the task agent decide when to use safe built-in tools for freshness.',
-  'settings.tasks.allowedTools': 'Allowed Tools (safe)',
-  'settings.tasks.disabledHint': 'This task will run without any tools.',
-  'settings.tasks.autoHint':
-    'This task may autonomously use safe built-in tools when current information matters.',
-  'settings.tasks.desktopNotification': 'Desktop notification',
-  'settings.tasks.create': 'Create Task',
-  'settings.tasks.creating': 'Creating...',
-  'settings.tasks.existingTitle': 'Existing Tasks',
-  'settings.tasks.review.title': 'Recent Run Results',
-  'settings.tasks.review.description':
-    'Latest completed background runs (scheduled tasks and waiters). Review what the agent did on its own.',
-  'settings.tasks.review.empty': 'No background runs yet.',
-  'settings.tasks.review.openThread': 'Open thread',
-  'settings.tasks.loading': 'Loading...',
-  'settings.tasks.empty': 'No tasks yet.',
-  'settings.tasks.runNow': 'Run now',
-  'settings.tasks.running': 'Running...',
-  'settings.tasks.status.idle': 'idle',
-  'settings.tasks.status.running': 'running',
-  'settings.tasks.status.success': 'success',
-  'settings.tasks.status.error': 'error',
-  'settings.tasks.notify': 'Notify',
-  'settings.tasks.cronShort': 'Cron',
-  'settings.tasks.tzShort': 'TZ',
-  'settings.tasks.local': 'Local',
-  'settings.tasks.everyMinShort': 'Every (min)',
-  'settings.tasks.scheduleLabel': 'Schedule:',
-  'settings.tasks.toolStrategyLabel': 'Tool Strategy:',
-  'settings.tasks.next': 'Next:',
-  'settings.tasks.last': 'Last:',
-  'settings.tasks.format.scheduleCron': ({ cron, timezone }) =>
-    `${asText(cron)}${asText(timezone) ? ` (${asText(timezone)})` : ' (local time)'}`,
-  'settings.tasks.format.scheduleInterval': ({ minutes }) => `Every ${asText(minutes)} min`,
-  'settings.tasks.format.toolAuto': 'Auto safe tools',
-  'settings.tasks.format.toolDisabled': 'Disabled',
-  'settings.tasks.format.toolManual': ({ tools }) =>
-    asText(tools) ? `Manual: ${asText(tools)}` : 'Manual (no safe tools)',
-  'settings.tasks.error.loadFailed': ({ error }) => `Failed to load tasks: ${asText(error)}`,
-  'settings.tasks.error.nameRequired': 'Task name is required.',
-  'settings.tasks.error.promptRequired': 'Task prompt is required.',
-  'settings.tasks.error.intervalPositive': 'Interval must be a positive number (minutes).',
-  'settings.tasks.error.cronRequired': 'Cron expression is required.',
-  'settings.tasks.error.providerRequired': 'Please select a provider.',
-  'settings.tasks.error.modelRequired': 'Please select a model.',
-  'settings.tasks.error.safeToolRequired': 'Select at least one safe tool or choose Auto/Disabled.',
-  'settings.tasks.error.createFailed': ({ error }) => `Failed to create task: ${asText(error)}`,
-  'settings.tasks.error.runFailed': ({ error }) => `Task run failed: ${asText(error)}`,
-  'settings.tasks.error.deleteFailed': ({ error }) => `Failed to delete task: ${asText(error)}`,
-  'settings.tasks.error.updateFailed': ({ error }) => `Failed to update task: ${asText(error)}`,
-  'settings.tasks.confirmDelete': ({ name }) =>
-    `Delete task "${asText(name)}"?\nThis cannot be undone.`,
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   'settings.usage.title': 'Usage',
   'settings.usage.description':
     'Token usage and estimated spend for model responses generated by chat workflows.',
@@ -1306,13 +1262,12 @@ export const en = defineCatalog({
   'settings.skills.noDescription': 'No description',
   'settings.skills.viewContent': 'View Content',
   'settings.skills.contentTruncated': 'Content truncated for display.',
-  'settings.skills.workflowTitle': 'Workflow Optimization',
-  'settings.skills.workflowEnable': 'Enable self-optimizing workflow',
-  'settings.skills.workflowAutoPin': 'Auto-pin frequently used skills per thread',
-  'settings.skills.workflowDescription':
-    'iKi learns which skills consistently help in a thread and keeps them pinned in auto mode. This never affects manual skill selection.',
-  'settings.skills.workflowResetting': 'Resetting...',
-  'settings.skills.workflowReset': 'Reset auto-pinned skills',
+  
+  
+  
+  
+  
+  
   'settings.skills.error.resetUnavailable': 'Workflow reset unavailable.',
   'settings.skills.error.resetFailed': ({ error }) =>
     `Failed to reset workflow data: ${asText(error)}`,

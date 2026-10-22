@@ -119,14 +119,7 @@ const { oldSrc, newSrc, oldOpacity, newOpacity, setInitial, setSprite } =
 
 const { playPhaseVoice, setMuted } = useCompanionVoice();
 
-const resolveSprite = (phase: string, nudgeKind?: string): string => {
-  if (phase === 'nudge') {
-    return nudgeKind === 'task-error'
-      ? PHASE_SPRITE['nudge-error']
-      : PHASE_SPRITE['nudge-success'];
-  }
-  return PHASE_SPRITE[phase] ?? DEFAULT_SPRITE;
-};
+const resolveSprite = (phase: string): string => PHASE_SPRITE[phase] ?? DEFAULT_SPRITE;
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -193,7 +186,7 @@ const restorePhaseSprite = () => {
   const src =
     snapshot.value.phase === 'idle'
       ? resolveIdleSprite()
-      : resolveSprite(snapshot.value.phase, snapshot.value.nudgeKind);
+      : resolveSprite(snapshot.value.phase);
   if (src) setSprite(src);
 };
 
@@ -236,9 +229,9 @@ watch(
     clearIdleRotation();
 
     const src =
-      phase === 'idle' ? resolveIdleSprite() : resolveSprite(phase, snapshot.value.nudgeKind);
+      phase === 'idle' ? resolveIdleSprite() : resolveSprite(phase);
     if (src) setSprite(src);
-    if (!reduceMotion.value) playPhaseVoice(phase, snapshot.value.nudgeKind);
+    if (!reduceMotion.value) playPhaseVoice(phase);
 
     if (phase === 'idle') scheduleIdleRotation();
     if (phase === 'thinking') startThinkingDepthCheck();
@@ -250,17 +243,6 @@ watch(
   (kind) => {
     if (kind === 'tool' && snapshot.value.phase === 'thinking') {
       toolPreviewCount += 1;
-    }
-  }
-);
-
-watch(
-  () => snapshot.value.nudgeKind,
-  (kind) => {
-    if (snapshot.value.phase === 'nudge') {
-      const src = resolveSprite('nudge', kind);
-      if (src) setSprite(src);
-      if (!reduceMotion.value) playPhaseVoice('nudge', kind);
     }
   }
 );
@@ -314,7 +296,7 @@ onMounted(async () => {
     const initial = await electronAPI?.companion?.getSnapshot?.();
     if (initial) {
       snapshot.value = initial;
-      const src = resolveSprite(initial.phase, initial.nudgeKind);
+      const src = resolveSprite(initial.phase);
       if (src) setInitial(src);
     }
   } catch (error) {

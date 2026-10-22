@@ -23,9 +23,7 @@ const { registerMocks, callOrder } = vi.hoisted(() => {
       registerDevToolsIpc: namedRegister('devtools'),
       registerUpdaterIpc: namedRegister('updater'),
       registerSkillsIpc: namedRegister('skills'),
-      registerWorkflowIpc: namedRegister('workflow'),
       registerSpeechIpc: namedRegister('speech'),
-      registerTasksIpc: namedRegister('tasks'),
       registerChatIpc: namedRegister('chat'),
     },
   };
@@ -70,14 +68,8 @@ vi.mock('../../../packages/desktop/src/main/ipc/updater', () => ({
 vi.mock('../../../packages/desktop/src/main/ipc/skills', () => ({
   registerSkillsIpc: registerMocks.registerSkillsIpc,
 }));
-vi.mock('../../../packages/desktop/src/main/ipc/workflow', () => ({
-  registerWorkflowIpc: registerMocks.registerWorkflowIpc,
-}));
 vi.mock('../../../packages/desktop/src/main/ipc/speech', () => ({
   registerSpeechIpc: registerMocks.registerSpeechIpc,
-}));
-vi.mock('../../../packages/desktop/src/main/ipc/tasks', () => ({
-  registerTasksIpc: registerMocks.registerTasksIpc,
 }));
 vi.mock('../../../packages/desktop/src/main/ipc/chat', () => ({
   registerChatIpc: registerMocks.registerChatIpc,
@@ -109,9 +101,7 @@ describe('main IPC registration', () => {
       'dev',
       'devtools',
       'skills',
-      'workflow',
       'speech',
-      'tasks',
       'chat',
     ]);
 

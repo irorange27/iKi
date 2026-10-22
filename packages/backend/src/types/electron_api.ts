@@ -16,7 +16,6 @@ import type {
 import type { ChatMessage, ChatThread, PromptApp, Workspace } from './chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from './chat_usage';
 import type { DevRuntimeStatus, DevToolsResolveRequest, DevToolsSourceResult } from './devtools';
-import type { ProactiveTask } from './tasks';
 import type { McpServerInput, McpServerSummary } from '@iki/backend/types/mcp';
 import type {
   SpeechStatus,
@@ -47,11 +46,6 @@ export type ChatThreadInput = Partial<ChatThread>;
 export type ChatMessageInput = Partial<ChatMessage>;
 export type WorkspaceInput = Partial<Workspace>;
 export type PromptAppInput = Partial<PromptApp>;
-
-export type ProactiveTaskInput = Omit<Partial<ProactiveTask>, 'tools'> &
-  Pick<ProactiveTask, 'name' | 'prompt' | 'provider_type' | 'model'> & {
-    tools?: string[] | string | null;
-  };
 
 export type RunStatusEvent = {
   runId: string;
@@ -268,20 +262,6 @@ export interface ElectronApi {
   };
   workflow: {
     resetAutoPinnedSkills: () => Promise<WindowActionResult>;
-  };
-  tasks: {
-    list: () => Promise<ProactiveTask[]>;
-    get: (id: string) => Promise<ProactiveTask | null>;
-    create: (
-      task: ProactiveTaskInput
-    ) => Promise<WindowActionResult & { task?: ProactiveTask | null }>;
-    update: (
-      id: string,
-      updates: Omit<Partial<ProactiveTask>, 'tools'> & { tools?: string[] | string | null }
-    ) => Promise<WindowActionResult & { task?: ProactiveTask | null }>;
-    delete: (id: string) => Promise<WindowActionResult>;
-    runNow: (id: string) => Promise<WindowActionResult>;
-    onPush: (callback: (payload: unknown) => void) => () => void;
   };
   awaiters: {
     onPush: (callback: (payload: unknown) => void) => () => void;

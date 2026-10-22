@@ -35,7 +35,7 @@ type DraftComposerSelection = {
 };
 
 type ThreadSessionRuntime = {
-  electronAPI: Pick<ElectronApi, 'chat' | 'toolModel' | 'tasks'>;
+  electronAPI: Pick<ElectronApi, 'chat' | 'toolModel'>;
   messageStore: ChatMessageStore;
   scrollToBottom: () => void;
   preferredDraftModel?: Pick<Ref<string | null | undefined>, 'value'>;
@@ -867,10 +867,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     void refreshThreads();
   };
 
-  const handleTaskPush = async (payload: unknown) => {
-    await handleThreadResultPush(payload, 'task-result');
-  };
-
   const handleAwaiterPush = async (payload: unknown) => {
     await handleThreadResultPush(payload, 'awaiter-result');
   };
@@ -905,7 +901,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     setApprovalPolicy,
     ensureWorkspaceForCurrentThread,
     handleAssistantMessagePersisted,
-    handleTaskPush,
     handleAwaiterPush,
   };
 });

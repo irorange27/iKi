@@ -1,7 +1,6 @@
 export type AgentRunKind =
   | 'chat-turn'
   | 'approval-resume'
-  | 'proactive-task'
   | 'awaiter-wake'
   | 'delegated-agent'
 
@@ -19,7 +18,6 @@ export type ReviewQueueItem = {
   status: AgentRunStatus;
   threadId?: string | null;
   threadTitle?: string;
-  taskName?: string;
   startedAt: string;
   updatedAt: string;
   summary: string;

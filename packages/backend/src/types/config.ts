@@ -1,4 +1,3 @@
-import type { WorkflowOptimizationConfig } from './workflow';
 import type { ThemeConfig } from '@iki/theme/types';
 import type {
   StructuredLogEntry,
@@ -16,34 +15,7 @@ export interface ConfigRuntimeInfo {
     defaultPort: number;
     configuredHost: string;
     configuredPort: number;
-    napcatWsPath: string;
-    localNapCatWsUrl: string;
-    dockerNapCatWsUrl: string;
   };
-}
-
-export type NapCatBridgeRuntimeState =
-  | 'disabled'
-  | 'disconnected'
-  | 'degraded'
-  | 'connected'
-  | 'unknown';
-
-export interface NapCatBridgeHeartbeatInfo {
-  lastReceivedAt: string | null;
-  intervalMs: number | null;
-  ageMs: number | null;
-  online: boolean | null;
-  good: boolean | null;
-  stale: boolean | null;
-}
-
-export interface NapCatBridgeStatusInfo {
-  state: NapCatBridgeRuntimeState;
-  activeConnectionCount: number | null;
-  lastConnectedAt: string | null;
-  lastDisconnectedAt: string | null;
-  heartbeat: NapCatBridgeHeartbeatInfo;
 }
 
 export interface DaemonStatusInfo {
@@ -53,9 +25,6 @@ export interface DaemonStatusInfo {
   status: string;
   source: 'health' | 'recorded' | 'default';
   uptimeSeconds: number | null;
-  bridges: {
-    napcat: NapCatBridgeStatusInfo;
-  };
   error?: string;
 }
 
@@ -67,22 +36,9 @@ export interface DaemonLogEntry extends Omit<StructuredLogEntry, 'level' | 'proc
   source: string;
 }
 
-export interface NapCatMessagePreviewEntry {
-  receivedAt: string;
-  messageType: 'private' | 'group';
-  userId: string;
-  groupId?: string;
-  selfId?: string;
-  messageId?: string;
-  textPreview: string;
-  mentionedSelf: boolean;
-  replyEligible: boolean;
-}
-
 export interface DaemonLogsInfo {
   filePath: string;
   entries: DaemonLogEntry[];
-  napcatMessages: NapCatMessagePreviewEntry[];
 }
 
 export type DaemonControlAction = 'start' | 'restart' | 'stop';
@@ -218,15 +174,4 @@ export interface AppConfig {
     host: string;
     port: number;
   };
-  bridges: {
-    napcat: {
-      enabled: boolean;
-      accessToken: string;
-      providerType: string;
-      model: string;
-      tools: string[];
-      requireMention: boolean;
-    };
-  };
-  workflowOptimization: WorkflowOptimizationConfig;
 }

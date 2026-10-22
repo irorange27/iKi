@@ -18,13 +18,6 @@ export interface ChatServicePlatformDeps {
     filePath?: string;
     error?: string;
   }>;
-  getAutoPinnedSkillIds?: (threadId: string) => string[];
-  recordAutoSkillSelection?: (params: {
-    threadId: string;
-    availableSkillIds: string[];
-    selectedSkillIds: string[];
-    timestamp?: string;
-  }) => void;
 }
 
 export const noopCompanionBridge: ChatCompanionBridge = {

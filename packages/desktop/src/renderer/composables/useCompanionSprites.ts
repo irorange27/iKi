@@ -11,12 +11,7 @@ export const PHASE_SPRITE: Record<string, string> = {
   dormant: spriteSrc(15),
   idle: spriteSrc(1),
   thinking: spriteSrc(8),
-  clarify: spriteSrc(19),
-  co_plan: spriteSrc(3),
-  stabilize: spriteSrc(7),
-  execute: spriteSrc(10),
-  'nudge-success': spriteSrc(5),
-  'nudge-error': spriteSrc(12),
+  nudge: spriteSrc(5),
 };
 
 export const DEFAULT_SPRITE = spriteSrc(1);
@@ -32,10 +27,5 @@ export const PHASE_VOICE: Record<string, string> = {
   dormant: voiceSrc(14),
   idle: voiceSrc(0),
   thinking: voiceSrc(7),
-  clarify: voiceSrc(18),
-  co_plan: voiceSrc(2),
-  stabilize: voiceSrc(6),
-  execute: voiceSrc(9),
-  'nudge-success': voiceSrc(4),
-  'nudge-error': voiceSrc(11),
+  nudge: voiceSrc(4),
 };

@@ -56,13 +56,13 @@ const {
 
   const createAppClientMock = vi.fn((input: Record<string, unknown>) => ({
     client: createClient({
-      id: String(input.id ?? 'client_napcat'),
-      token: `token_${String(input.id ?? 'client_napcat')}`,
+      id: String(input.id ?? 'client_system'),
+      token: `token_${String(input.id ?? 'client_system')}`,
       name: typeof input.name === 'string' ? input.name : undefined,
       scopes: Array.isArray(input.scopes) ? (input.scopes as string[]) : [],
       allowedTools: Array.isArray(input.allowedTools) ? (input.allowedTools as string[]) : [],
     }),
-    token: `token_${String(input.id ?? 'client_napcat')}`,
+    token: `token_${String(input.id ?? 'client_system')}`,
   }));
 
   const getAppClientByIdMock = vi.fn((id: string) => clientsById.get(id) ?? null);
@@ -101,7 +101,6 @@ vi.mock('@iki/backend/db/chat_thread', () => ({
 import {
   authenticateRequest,
   authenticateWebSocket,
-  ensureNapCatClient,
   getThreadOrError,
   hasScope,
   isFirstUserClientRegistration,
@@ -119,29 +118,12 @@ describe('server_shared', () => {
     resetState();
   });
 
-  it('creates the NapCat client when it is missing', () => {
-    expect(ensureNapCatClient()).toBe('client_napcat');
-    expect(createAppClientMock).toHaveBeenCalledWith({
-      id: 'client_napcat',
-      name: 'NapCat',
-      scopes: [],
-      allowedTools: [],
-    });
-  });
-
-  it('reuses the existing NapCat client when present', () => {
-    seedClient({ id: 'client_napcat', token: 'token_napcat', name: 'NapCat' });
-
-    expect(ensureNapCatClient()).toBe('client_napcat');
-    expect(createAppClientMock).not.toHaveBeenCalled();
-  });
-
   it('treats setup as first-user registration only when no non-system clients exist', () => {
-    seedClient({ id: 'client_napcat', token: 'token_napcat' });
-    expect(isFirstUserClientRegistration('client_napcat')).toBe(true);
+    seedClient({ id: 'client_system', token: 'token_system' });
+    expect(isFirstUserClientRegistration('client_system')).toBe(true);
 
     seedClient({ id: 'client_user', token: 'token_user' });
-    expect(isFirstUserClientRegistration('client_napcat')).toBe(false);
+    expect(isFirstUserClientRegistration('client_system')).toBe(false);
   });
 
   it('parses JSON request bodies and empty bodies', async () => {

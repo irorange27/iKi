@@ -1,7 +1,6 @@
 import { cleanupOldAgentRuns } from '@iki/backend/db/agent_runs';
 import { recoverStuckRunsOnStartup } from '@iki/backend/thread_session/run_recovery';
 import { createLogger } from '@iki/backend/logger';
-import { startProactiveTaskScheduler, stopProactiveTaskScheduler } from '../tasks/proactive_tasks';
 import { startAwaiterScheduler, stopAwaiterScheduler } from '../awaiters/awaiters';
 
 const runtimeLogger = createLogger({ module: 'background_runtime' });
@@ -65,7 +64,6 @@ export const startBackgroundRuntime = () => {
     });
   }
 
-  startProactiveTaskScheduler();
   startAwaiterScheduler();
 
   runTtlCleanup();
@@ -75,7 +73,6 @@ export const startBackgroundRuntime = () => {
 export const stopBackgroundRuntime = () => {
   if (!started) return;
   started = false;
-  stopProactiveTaskScheduler();
   stopAwaiterScheduler();
   if (cleanupInterval !== undefined) {
     clearInterval(cleanupInterval);

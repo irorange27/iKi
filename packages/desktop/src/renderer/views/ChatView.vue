@@ -415,7 +415,6 @@ const {
   ensureWorkspaceForCurrentThread,
   getCurrentThreadId,
   handleAssistantMessagePersisted,
-  handleTaskPush,
   handleAwaiterPush,
 } = threadSession;
 const selectThreadBase = threadSession.selectThread;
@@ -524,7 +523,6 @@ useChatViewLifecycle({
   refreshThreads,
   loadToolSources,
   electronAPI,
-  handleTaskPush,
   handleAwaiterPush,
 });
 

@@ -20,11 +20,9 @@ import { initializeDatabase } from '@iki/backend/db/database';
 import { applyAppLoggingConfig, withLogContext } from '@iki/backend/logger';
 import { getUserDataPath, setPlatformInfo } from '@iki/backend/platform';
 import { createChatService } from '@iki/backend/thread_session';
-import { createNapCatReverseBridge } from './napcat_adapter';
 import { readOrCreateBootstrapToken } from './bootstrap_token';
 import { createDaemonRequestHandler } from './server_http';
 import {
-  ensureNapCatClient,
   type DaemonSocket,
   type DaemonSocketServer,
   type WsSession,
@@ -103,11 +101,6 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
     const wsSessions = new Map<DaemonSocket, WsSession>();
     const nextSessionIdRef = { current: 1 };
     const bootstrapTokenRef = { current: bootstrapToken };
-    const napcatClientId = ensureNapCatClient();
-    const napcatBridge = createNapCatReverseBridge({
-      chatService,
-      clientId: napcatClientId,
-    });
     let startupSettled = false;
     let shuttingDown = false;
     let resolveReady: () => void = () => undefined;
@@ -123,8 +116,6 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
         port,
         userDataPath,
         bootstrapTokenRef,
-        napcatClientId,
-        getNapCatBridgeStatus: napcatBridge.getStatus,
         chatService,
         mcpManager,
         sessions,
@@ -156,7 +147,6 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
       shuttingDown = true;
       process.off('SIGINT', shutdown);
       process.off('SIGTERM', shutdown);
-      napcatBridge.dispose();
 
       void (async () => {
         try {
@@ -204,9 +194,6 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
         status: 'ok',
         source: 'health',
         uptimeSeconds: process.uptime(),
-        bridges: {
-          napcat: napcatBridge.getStatus(),
-        },
       }),
       shutdown,
       ready,
@@ -235,7 +222,6 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
       server,
       wss,
       chatService,
-      napcatBridge,
       sessions,
       wsSessions,
       nextSessionIdRef,

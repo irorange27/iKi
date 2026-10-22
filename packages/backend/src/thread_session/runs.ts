@@ -1,6 +1,5 @@
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import * as tasksDb from '@iki/backend/db/tasks';
 import type {
   AgentRun,
   AgentRunKind,
@@ -23,7 +22,7 @@ type ChatRunsDeps = {
   cancelPendingApprovalsForRun?: (runId: string) => number;
 };
 
-const REVIEW_QUEUE_KINDS: AgentRunKind[] = ['proactive-task', 'awaiter-wake'];
+const REVIEW_QUEUE_KINDS: AgentRunKind[] = ['awaiter-wake'];
 const SUMMARY_MAX_CHARS = 280;
 
 const runHasStartedFact = (threadId: string, runId: string): boolean =>
@@ -34,9 +33,6 @@ const runHasStartedFact = (threadId: string, runId: string): boolean =>
 
 const buildReviewQueueItem = (run: AgentRun): ReviewQueueItem => {
   const thread = run.threadId ? chatThreadDb.getChatThread(run.threadId) : null;
-  const metadata = (run.input?.metadata ?? {}) as Record<string, unknown>;
-  const taskId = typeof metadata.taskId === 'string' ? metadata.taskId : '';
-  const task = taskId ? tasksDb.getProactiveTask(taskId) : null;
   const summarySource = run.output?.text || run.working?.accumulatedText || '';
   const truncated =
     summarySource.length > SUMMARY_MAX_CHARS
@@ -49,7 +45,6 @@ const buildReviewQueueItem = (run: AgentRun): ReviewQueueItem => {
     status: run.status,
     threadId: run.threadId,
     threadTitle: thread?.title || undefined,
-    taskName: task?.name || taskId || undefined,
     startedAt: run.createdAt,
     updatedAt: run.updatedAt,
     summary: truncated,

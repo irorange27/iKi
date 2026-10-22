@@ -39,72 +39,6 @@ describe('preload task IPC payload serialization', () => {
     await loadPreload();
   });
 
-  it('serializes task update payloads before invoke', async () => {
-    invokeMock.mockResolvedValue({ success: true });
-
-    const toolsProxy = new Proxy(['web'], {});
-    const updatesProxy = new Proxy(
-      {
-        enabled: true,
-        tool_mode: 'disabled',
-        tools: toolsProxy,
-      },
-      {}
-    );
-
-    await exposedApi.tasks.update('task_1', updatesProxy);
-
-    expect(invokeMock).toHaveBeenCalledTimes(1);
-    const [channel, id, payload] = invokeMock.mock.calls[0];
-    expect(channel).toBe('tasks:update');
-    expect(id).toBe('task_1');
-    expect(payload).toEqual({
-      enabled: true,
-      tool_mode: 'disabled',
-      tools: ['web'],
-    });
-    expect(payload).not.toBe(updatesProxy);
-    expect(payload.tools).not.toBe(toolsProxy);
-  });
-
-  it('sanitizes Vue reactive task payloads so Electron can structured-clone them', async () => {
-    invokeMock.mockImplementation(async (_channel: string, payload: unknown) =>
-      structuredClone(payload)
-    );
-
-    const taskForm = ref({
-      name: 'Daily',
-      prompt: 'Summarize',
-      provider_type: 'deepseek',
-      model: 'deepseek-chat',
-      tool_mode: 'manual',
-      tools: ['web', 'fetch'],
-    });
-
-    await exposedApi.tasks.create({
-      name: taskForm.value.name,
-      prompt: taskForm.value.prompt,
-      provider_type: taskForm.value.provider_type,
-      model: taskForm.value.model,
-      tool_mode: taskForm.value.tool_mode,
-      tools: taskForm.value.tools,
-    });
-
-    expect(invokeMock).toHaveBeenCalledTimes(1);
-    const [channel, payload] = invokeMock.mock.calls[0];
-    expect(channel).toBe('tasks:create');
-    expect(() => structuredClone(payload)).not.toThrow();
-    expect(payload).toEqual({
-      name: 'Daily',
-      prompt: 'Summarize',
-      provider_type: 'deepseek',
-      model: 'deepseek-chat',
-      tool_mode: 'manual',
-      tools: ['web', 'fetch'],
-    });
-    expect(payload.tools).not.toBe(taskForm.value.tools);
-  });
-
   it('forwards window shadow updates over IPC', async () => {
     exposedApi.setWindowShadow(true);
 
@@ -131,7 +65,6 @@ describe('preload task IPC payload serialization', () => {
     const configUpdated = vi.fn();
     const updateStatusChanged = vi.fn();
     const chatChunk = vi.fn();
-    const taskPush = vi.fn();
     const awaiterPush = vi.fn();
     const speechProgress = vi.fn();
     const companionUpdated = vi.fn();
@@ -245,12 +178,6 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.skills.openSkill('skill_1');
     await exposedApi.skills.read('skill_1', { maxChars: 500 });
 
-    await exposedApi.workflow.resetAutoPinnedSkills();
-
-    await exposedApi.tasks.list();
-    await exposedApi.tasks.get('task_1');
-    await exposedApi.tasks.runNow('task_1');
-    exposedApi.tasks.onPush(taskPush);
     exposedApi.awaiters.onPush(awaiterPush);
 
     await exposedApi.mcp.list();
@@ -333,10 +260,6 @@ describe('preload task IPC payload serialization', () => {
         'skills:open-root',
         'skills:open-skill',
         'skills:read',
-        'workflow:reset-auto-skills',
-        'tasks:list',
-        'tasks:get',
-        'tasks:run-now',
         'mcp:list',
         'mcp:add',
         'mcp:update',
@@ -356,7 +279,6 @@ describe('preload task IPC payload serialization', () => {
         'providers:updated',
         'chat:ui-chunk',
         'speech:download-progress',
-        'tasks:push',
         'companion:updated',
       ])
     );

@@ -73,22 +73,19 @@ describe('createCompanionService', () => {
     expect(service.getSnapshot().phase).toBe('idle');
   });
 
-  it('emits a transient nudge and then settles back to idle', () => {
+  it('emits a transient reply-complete nudge and then settles back to idle', () => {
     const service = createCompanionService({
       getConfig: () => ({ general: { language: 'zh-CN' } }) as Partial<AppConfig>,
       listProviders: () => [createProvider({ models: '["gpt-4o-mini"]' })],
       listWindows: () => [],
     });
 
-    service.pushTaskNudge({
-      kind: 'task-success',
-      taskName: 'Daily digest',
-    });
+    service.notifyReplyComplete('Daily digest');
 
     expect(service.getSnapshot()).toMatchObject({
       phase: 'nudge',
-      label: '完成',
-      detail: 'Daily digest',
+      label: '回复完成',
+      detail: 'AI 已完成回复。 — Daily digest',
     });
 
     vi.advanceTimersByTime(12_000);

@@ -18,11 +18,6 @@ vi.mock('@iki/backend/logger', () => ({
   createLogger: () => ({ event: vi.fn() }),
 }));
 
-vi.mock('../../../../packages/desktop/src/main/services/tasks/proactive_tasks', () => ({
-  startProactiveTaskScheduler: vi.fn(),
-  stopProactiveTaskScheduler: vi.fn(),
-}));
-
 vi.mock('../../../../packages/desktop/src/main/services/awaiters/awaiters', () => ({
   startAwaiterScheduler: vi.fn(),
   stopAwaiterScheduler: vi.fn(),

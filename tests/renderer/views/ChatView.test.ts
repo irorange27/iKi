@@ -609,10 +609,10 @@ describe('ChatView', () => {
 
   it('shows an external-thread control-plane notice when viewing bridge-owned chats', async () => {
     currentThreadRef.value = {
-      id: 'napcat_10001_private_20002',
-      title: 'QQ User 20002',
-      client_id: 'client_napcat',
-      metadata: JSON.stringify({ source: 'napcat', message_type: 'private' }),
+      id: 'thread_zcode_20002',
+      title: 'Zcode User 20002',
+      client_id: 'client_zcode',
+      metadata: JSON.stringify({ source: 'zcode' }),
     };
     chatState.messages = [
       {
@@ -625,9 +625,9 @@ describe('ChatView', () => {
     const wrapper = await mountChatView();
 
     expect(wrapper.find('.thread-origin-chip').exists()).toBe(true);
-    expect(wrapper.find('.thread-origin-chip').text()).toContain('QQ private');
+    expect(wrapper.find('.thread-origin-chip').text()).toContain('External client');
     expect(wrapper.find('.thread-origin-banner').text()).toContain(
-      'Viewing QQ private in the desktop control plane.'
+      'Viewing External client in the desktop control plane.'
     );
     expect(wrapper.find('.thread-origin-banner').text()).toContain(
       'not delivered back to the external channel'

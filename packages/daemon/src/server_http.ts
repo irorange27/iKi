@@ -4,7 +4,6 @@ import { createAppClient } from '@iki/backend/db/app_clients';
 import type { McpManager } from '@iki/backend/mcp';
 import type { ChatTransportMessage } from '@iki/backend/thread_session';
 import type { ChatService } from '@iki/backend/thread_session';
-import type { NapCatBridgeStatusInfo } from '@iki/backend/types/config';
 import { rotateBootstrapToken } from './bootstrap_token';
 import {
   logDaemonHandlerFailure,
@@ -47,8 +46,6 @@ type CreateDaemonRequestHandlerDeps = {
   port: number;
   userDataPath: string;
   bootstrapTokenRef: { current: string };
-  napcatClientId: string;
-  getNapCatBridgeStatus: () => NapCatBridgeStatusInfo;
   chatService: ChatService;
   mcpManager: McpManager;
   sessions: Map<number, WsSession>;
@@ -111,9 +108,6 @@ export const createDaemonRequestHandler = (
           uptime: process.uptime(),
           host: deps.host,
           port: deps.port,
-          bridges: {
-            napcat: deps.getNapCatBridgeStatus(),
-          },
         });
         return;
       }

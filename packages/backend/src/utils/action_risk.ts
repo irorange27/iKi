@@ -11,8 +11,6 @@ const READ_TOOLS = new Set([
   'read_personal_skill',
   'list_awaiters',
   'read_awaiter',
-  'list_proactive_tasks',
-  'read_proactive_task',
 ]);
 
 const WORKSPACE_WRITE_TOOLS = new Set(['write_file', 'edit', 'undo_edit']);

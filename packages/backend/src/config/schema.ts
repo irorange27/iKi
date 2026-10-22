@@ -7,9 +7,7 @@ import { normalizeAppLocale } from '@iki/backend/i18n/locale';
 const booleanField = (value: boolean) => z.boolean().catch(value);
 const numberField = (value: number) => z.number().finite().catch(value);
 const intField = (value: number) => z.number().int().nonnegative().catch(value);
-const ratioField = (value: number) => z.number().min(0).max(1).catch(value);
 const stringField = (value: string) => z.string().catch(value);
-const stringArrayField = (value: string[]) => z.array(z.string()).catch(value);
 const toCatchRecord = (value: AppConfig): Record<string, unknown> =>
   Object.entries(value).reduce<Record<string, unknown>>((record, [key, entryValue]) => {
     record[key] = entryValue;
@@ -192,33 +190,6 @@ const DaemonSchema = z
   })
   .catch(DEFAULT_APP_CONFIG.daemon);
 
-const BridgesSchema = z
-  .object({
-    napcat: z
-      .object({
-        enabled: booleanField(DEFAULT_APP_CONFIG.bridges.napcat.enabled),
-        accessToken: stringField(DEFAULT_APP_CONFIG.bridges.napcat.accessToken),
-        providerType: stringField(DEFAULT_APP_CONFIG.bridges.napcat.providerType),
-        model: stringField(DEFAULT_APP_CONFIG.bridges.napcat.model),
-        tools: stringArrayField(DEFAULT_APP_CONFIG.bridges.napcat.tools),
-        requireMention: booleanField(DEFAULT_APP_CONFIG.bridges.napcat.requireMention),
-      })
-      .catch(DEFAULT_APP_CONFIG.bridges.napcat),
-  })
-  .catch(DEFAULT_APP_CONFIG.bridges);
-
-const WorkflowOptimizationSchema = z
-  .object({
-    enabled: booleanField(DEFAULT_APP_CONFIG.workflowOptimization.enabled),
-    autoPinSkills: booleanField(DEFAULT_APP_CONFIG.workflowOptimization.autoPinSkills),
-    minAutoSkillRuns: intField(DEFAULT_APP_CONFIG.workflowOptimization.minAutoSkillRuns),
-    minSkillSelections: intField(DEFAULT_APP_CONFIG.workflowOptimization.minSkillSelections),
-    pinConfidence: ratioField(DEFAULT_APP_CONFIG.workflowOptimization.pinConfidence),
-    unpinConfidence: ratioField(DEFAULT_APP_CONFIG.workflowOptimization.unpinConfidence),
-    maxPinnedSkills: intField(DEFAULT_APP_CONFIG.workflowOptimization.maxPinnedSkills),
-  })
-  .catch(DEFAULT_APP_CONFIG.workflowOptimization);
-
 export const AppConfigSchema = z
   .object({
     general: GeneralSchema,
@@ -234,8 +205,6 @@ export const AppConfigSchema = z
     toolExecution: ToolExecutionSchema,
     mcp: McpSchema,
     daemon: DaemonSchema,
-    bridges: BridgesSchema,
-    workflowOptimization: WorkflowOptimizationSchema,
   })
   .passthrough()
   .catch(toCatchRecord(DEFAULT_APP_CONFIG));

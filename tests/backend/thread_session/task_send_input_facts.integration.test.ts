@@ -58,7 +58,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
   let service: ReturnType<typeof createChatService>;
   const target = { id: 3, send: vi.fn() };
 
-  const taskSend = (threadId: string, kind: 'proactive-task' | 'awaiter-wake') =>
+  const taskSend = (threadId: string, kind: 'awaiter-wake') =>
     service.send({
       providerType: 'openai',
       model: 'resume-model',
@@ -74,12 +74,12 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
   const seedRun = (
     runId: string,
     threadId: string,
-    kind: 'proactive-task' | 'delegated-agent'
+    kind: 'awaiter-wake' | 'delegated-agent'
   ) => {
     agentRunDb.createAgentRun({
       id: runId,
       kind,
-      status: kind === 'proactive-task' ? 'blocked' : 'failed',
+      status: kind === 'awaiter-wake' ? 'blocked' : 'failed',
       threadId,
       rootRunId: runId,
       providerType: 'openai',
@@ -161,7 +161,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
 
   it('records the accepted input of an id-less send as a fact (run id + system config)', async () => {
     generateSingleShotMock.mockResolvedValue(singleShotResult('task done'));
-    const result = (await taskSend('thread_task139', 'proactive-task')) as { runId?: string };
+    const result = (await taskSend('thread_task139', 'awaiter-wake')) as { runId?: string };
     expect(result).toMatchObject({ success: true, runId: expect.any(String) });
 
     const view = rebuildThreadViewFromEvents('thread_task139');
@@ -178,7 +178,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     expect(JSON.stringify(payload.message)).toContain(TASK_TEXT);
     expect(payload.messageId).toBe(`input_${result.runId}`);
     const started = view.events.find(event => event.type === TURN_STARTED);
-    expect((started!.payload as { kind?: string }).kind).toBe('proactive-task');
+    expect((started!.payload as { kind?: string }).kind).toBe('awaiter-wake');
   });
 
   it('records the same facts for an awaiter wake', async () => {
@@ -197,14 +197,14 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     expect((started!.payload as { kind?: string }).kind).toBe('awaiter-wake');
   });
 
-  it('a failed proactive-task run retries as a proactive-task run of the recorded task', async () => {
+  it('a failed awaiter-wake run retries as an awaiter-wake run of the recorded task', async () => {
     generateSingleShotMock.mockRejectedValueOnce(new Error('provider down'));
-    const failed = (await taskSend('thread_retry139', 'proactive-task')) as { runId?: string };
+    const failed = (await taskSend('thread_retry139', 'awaiter-wake')) as { runId?: string };
     expect(failed).toMatchObject({ success: false, runId: expect.any(String) });
     const failedRunId = failed.runId!;
     expect(agentRunDb.getAgentRun(failedRunId)).toMatchObject({
       status: 'failed',
-      kind: 'proactive-task',
+      kind: 'awaiter-wake',
     });
 
     callPiChatMock.mockImplementation(
@@ -221,7 +221,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     expect(retry).toMatchObject({ success: true, newRunId: expect.any(String) });
 
     expect(agentRunDb.getAgentRun(retry.newRunId!)).toMatchObject({
-      kind: 'proactive-task',
+      kind: 'awaiter-wake',
       status: 'completed',
     });
 
@@ -233,12 +233,12 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     const completedKinds = view.turns
       .filter(turn => turn.status === 'completed')
       .map(turn => turn.kind);
-    expect(completedKinds).toContain('proactive-task');
+    expect(completedKinds).toContain('awaiter-wake');
     expect(view.events.filter(event => event.type === INPUT_ACCEPTED)).toHaveLength(1);
   });
 
   it('resumeRun still refuses wake/task rows — blocked task rows recover via the approval flow', async () => {
-    seedRun('run_blocked_139', 'thread_refuse139', 'proactive-task');
+    seedRun('run_blocked_139', 'thread_refuse139', 'awaiter-wake');
     seedInputFact('thread_refuse139', TASK_TEXT);
     const result = await service.resumeRun(target, 'run_blocked_139');
     expect(result).toMatchObject({ success: false });
@@ -255,12 +255,12 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
 
   it('a retry whose replay tail was recorded for a LATER send refuses instead of re-running the wrong task', async () => {
     generateSingleShotMock.mockRejectedValueOnce(new Error('provider down'));
-    const failedA = (await taskSend('thread_retry139', 'proactive-task')) as { runId?: string };
+    const failedA = (await taskSend('thread_retry139', 'awaiter-wake')) as { runId?: string };
     expect(failedA).toMatchObject({ success: false });
     const runAId = failedA.runId!;
 
     generateSingleShotMock.mockRejectedValueOnce(new Error('provider still down'));
-    await taskSend('thread_retry139', 'proactive-task');
+    await taskSend('thread_retry139', 'awaiter-wake');
 
     const retryA = await service.retryAndExecute(target, runAId);
     expect(retryA).toMatchObject({ success: false });
@@ -269,7 +269,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
 
   it('a retried successor passes the attribution join through its ancestry', async () => {
     generateSingleShotMock.mockRejectedValueOnce(new Error('provider down'));
-    const failed = (await taskSend('thread_retry139', 'proactive-task')) as { runId?: string };
+    const failed = (await taskSend('thread_retry139', 'awaiter-wake')) as { runId?: string };
     const runAId = failed.runId!;
 
     const firstRetry = (await service.retryAndExecute(target, runAId)) as { newRunId?: string };
@@ -286,7 +286,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     );
     const secondRetry = await service.retryAndExecute(target, successorId);
     expect(secondRetry).toMatchObject({ success: true, newRunId: expect.any(String) });
-    expect(agentRunDb.getAgentRun(secondRetry.newRunId!)).toMatchObject({ kind: 'proactive-task' });
+    expect(agentRunDb.getAgentRun(secondRetry.newRunId!)).toMatchObject({ kind: 'awaiter-wake' });
   });
 
   it('the system-prompt binding follows the LAST input fact and resets on malformed data', () => {
@@ -349,7 +349,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
       ],
       threadId: 'thread_unrepr139',
       tools: [],
-      runConfig: { kind: 'proactive-task' },
+      runConfig: { kind: 'awaiter-wake' },
     });
     const view = rebuildThreadViewFromEvents('thread_unrepr139');
     expect(view.events.filter(event => event.type === INPUT_ACCEPTED)).toHaveLength(0);

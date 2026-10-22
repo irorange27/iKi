@@ -128,23 +128,18 @@ describe('Sidebar', () => {
       threads: [
         visibleThread,
         {
-          id: 'napcat_thread_1',
-          title: 'NapCat Prefix',
+          id: 'thread_external_client',
+          title: 'External Client Thread',
           updated_at: '2026-03-22T00:00:00.000Z',
+          client_id: 'client_zcode',
           metadata: '{}',
         },
         {
-          id: 'thread_napcat_client',
-          title: 'NapCat Client',
+          id: 'thread_external_source',
+          title: 'External Source Thread',
           updated_at: '2026-03-22T00:00:00.000Z',
-          client_id: 'client_napcat',
-          metadata: '{}',
-        },
-        {
-          id: 'thread_napcat_source',
-          title: 'NapCat Source',
-          updated_at: '2026-03-22T00:00:00.000Z',
-          metadata: JSON.stringify({ source: 'napcat' }),
+          client_id: 'client_remote',
+          metadata: JSON.stringify({ source: 'zcode' }),
         },
       ],
     });
@@ -162,11 +157,11 @@ describe('Sidebar', () => {
 
   it('reveals external chats from the footer menu in a dedicated section', async () => {
     const externalThread = {
-      id: 'napcat_10001_group_30003',
-      title: 'QQ Group 30003',
+      id: 'thread_zcode_group',
+      title: 'Zcode Group',
       updated_at: '2026-03-22T00:00:00.000Z',
-      client_id: 'client_napcat',
-      metadata: JSON.stringify({ source: 'napcat', message_type: 'group' }),
+      client_id: 'client_zcode',
+      metadata: JSON.stringify({ source: 'zcode' }),
     };
 
     const { wrapper } = await mountSidebar({
@@ -191,16 +186,16 @@ describe('Sidebar', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('External Chats');
-    expect(wrapper.text()).toContain('QQ Group 30003');
-    expect(wrapper.text()).toContain('NapCat');
-    expect(wrapper.text()).toContain('QQ group');
+    expect(wrapper.text()).toContain('Zcode Group');
+    expect(wrapper.text()).toContain('Zcode');
+    expect(wrapper.text()).toContain('External client');
 
     const externalButton = wrapper.find('.chat-item-external');
     expect(externalButton.exists()).toBe(true);
 
     await externalButton.trigger('click');
 
-    expect(wrapper.emitted('thread-selected')).toEqual([['napcat_10001_group_30003']]);
+    expect(wrapper.emitted('thread-selected')).toEqual([['thread_zcode_group']]);
   });
 
   it('opens the footer menu on hover', async () => {

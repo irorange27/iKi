@@ -7,7 +7,6 @@ export * from './skill_tools';
 export * from './web_tools';
 export * from './element_source_tool';
 export * from './schemas';
-export * from './proactive_task_tools';
 export * from './awaiter_tools';
 export * from './plan_tools';
 
@@ -32,12 +31,6 @@ import {
   ReadPersonalSkillTool,
   WritePersonalSkillTool,
 } from './skill_tools';
-import {
-  DeleteProactiveTaskTool,
-  ListProactiveTasksTool,
-  ReadProactiveTaskTool,
-  WriteProactiveTaskTool,
-} from './proactive_task_tools';
 import {
   DeleteAwaiterTool,
   ListAwaitersTool,
@@ -71,10 +64,6 @@ const buildStandardTools = () => [
   new WritePersonalSkillTool(),
   new DeletePersonalSkillTool(),
   new PlanTool(),
-  new ListProactiveTasksTool(),
-  new ReadProactiveTaskTool(),
-  new WriteProactiveTaskTool(),
-  new DeleteProactiveTaskTool(),
   new ListAwaitersTool(),
   new ReadAwaiterTool(),
   new WriteAwaiterTool(),

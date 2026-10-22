@@ -20,11 +20,7 @@ export type ToolPayloadKind =
   | 'list_awaiters'
   | 'read_awaiter'
   | 'write_awaiter'
-  | 'delete_awaiter'
-  | 'list_proactive_tasks'
-  | 'read_proactive_task'
-  | 'write_proactive_task'
-  | 'delete_proactive_task';
+  | 'delete_awaiter';
 
 export type ToolPayloadRecord = Record<string, unknown>;
 
@@ -52,10 +48,6 @@ const TOOL_PAYLOAD_KINDS = {
   read_awaiter: true,
   write_awaiter: true,
   delete_awaiter: true,
-  list_proactive_tasks: true,
-  read_proactive_task: true,
-  write_proactive_task: true,
-  delete_proactive_task: true,
 } satisfies Record<ToolPayloadKind, true>;
 
 const TOOL_PAYLOAD_ALIASES: Record<string, ToolPayloadKind> = {

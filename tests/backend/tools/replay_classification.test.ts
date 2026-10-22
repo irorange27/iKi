@@ -17,12 +17,6 @@ import {
 } from '@iki/backend/tools/skill_tools';
 import { PlanTool } from '@iki/backend/tools/plan_tools';
 import {
-  ListProactiveTasksTool,
-  ReadProactiveTaskTool,
-  WriteProactiveTaskTool,
-  DeleteProactiveTaskTool,
-} from '@iki/backend/tools/proactive_task_tools';
-import {
   ListAwaitersTool,
   ReadAwaiterTool,
   WriteAwaiterTool,
@@ -38,8 +32,6 @@ const TABLE: ReadonlyArray<[tool: BaseTool, replay: 'safe' | 'unsafe', why: stri
   [new ReadPersonalSkillTool(), 'safe', 'reads one row'],
   [new LoadSkillTool(), 'safe', 'loads skill text into context'],
   [new PlanTool(), 'safe', 'pure computation over its own args'],
-  [new ListProactiveTasksTool(), 'safe', 'lists rows'],
-  [new ReadProactiveTaskTool(), 'safe', 'reads one row'],
   [new ListAwaitersTool(), 'safe', 'lists rows'],
   [new ReadAwaiterTool(), 'safe', 'reads one row'],
 
@@ -51,8 +43,6 @@ const TABLE: ReadonlyArray<[tool: BaseTool, replay: 'safe' | 'unsafe', why: stri
   [new DelegatedAgentTool(), 'unsafe', 'runs a whole child turn'],
   [new WritePersonalSkillTool(), 'unsafe', 'writes a row'],
   [new DeletePersonalSkillTool(), 'unsafe', 'deletes a row'],
-  [new WriteProactiveTaskTool(), 'unsafe', 'writes a row'],
-  [new DeleteProactiveTaskTool(), 'unsafe', 'deletes a row'],
   [new WriteAwaiterTool(), 'unsafe', 'writes a row'],
   [new DeleteAwaiterTool(), 'unsafe', 'deletes a row'],
 ];

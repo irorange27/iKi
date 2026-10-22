@@ -5,14 +5,10 @@ export function useCompanionVoice() {
   const muted = ref(false);
   let currentAudio: HTMLAudioElement | null = null;
 
-  const playPhaseVoice = (phase: string, nudgeKind?: string) => {
+  const playPhaseVoice = (phase: string) => {
     if (muted.value) return;
 
-    const key = phase === 'nudge'
-      ? (nudgeKind === 'task-error' ? 'nudge-error' : 'nudge-success')
-      : phase;
-
-    const src = PHASE_VOICE[key];
+    const src = PHASE_VOICE[phase];
     if (!src) return;
 
     if (currentAudio) {

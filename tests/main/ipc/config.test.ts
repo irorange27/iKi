@@ -45,16 +45,6 @@ const {
         message: `log tail ${limit}`,
       },
     ],
-    napcatMessages: [
-      {
-        receivedAt: '2026-03-19T00:01:00.000Z',
-        messageType: 'private',
-        userId: '20002',
-        textPreview: 'hello from qq',
-        mentionedSelf: true,
-        replyEligible: true,
-      },
-    ],
   })),
   applyAppUpdateConfigMock: vi.fn(),
   applyDesktopDaemonConfigUpdateMock: vi.fn(async () => undefined),
@@ -119,11 +109,6 @@ vi.mock('@iki/backend/db/database', () => ({
 
 vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(() => ({
-    bridges: {
-      napcat: {
-        enabled: true,
-      },
-    },
     daemon: {
       host: '',
       port: 6127,
@@ -184,29 +169,7 @@ beforeEach(() => {
   getDesktopEmbeddedDaemonStatusMock.mockReturnValue(null);
 });
 
-const emptyHeartbeat = {
-  lastReceivedAt: null,
-  intervalMs: null,
-  ageMs: null,
-  online: null,
-  good: null,
-  stale: null,
-};
-
-const emptyBridgeHistory = {
-  lastConnectedAt: null,
-  lastDisconnectedAt: null,
-};
-
-const installHealthResponse = (
-  uptimeSeconds: number,
-  bridge: Record<string, unknown> = {
-    state: 'disconnected',
-    activeConnectionCount: 0,
-    ...emptyBridgeHistory,
-    heartbeat: emptyHeartbeat,
-  }
-) => {
+const installHealthResponse = (uptimeSeconds: number) => {
   httpGetMock.mockImplementation(
     (_options: unknown, callback: (response: HttpResponseMock) => void) => {
       const response: HttpResponseMock = {
@@ -220,9 +183,6 @@ const installHealthResponse = (
                 host: '127.0.0.1',
                 port: 6131,
                 uptime: uptimeSeconds,
-                bridges: {
-                  napcat: bridge,
-                },
               })
             );
           }
@@ -243,7 +203,7 @@ const installHealthResponse = (
 };
 
 describe('config IPC', () => {
-  it('returns runtime info for daemon and NapCat settings', async () => {
+  it('returns runtime info for daemon settings', async () => {
     const handler = ipcHandlers.get('config:get-runtime-info');
     if (!handler) throw new Error('config:get-runtime-info handler not registered');
 
@@ -257,9 +217,6 @@ describe('config IPC', () => {
         defaultPort: 6127,
         configuredHost: '127.0.0.1',
         configuredPort: 6127,
-        napcatWsPath: '/onebot/v11/ws',
-        localNapCatWsUrl: 'ws://127.0.0.1:6127/onebot/v11/ws',
-        dockerNapCatWsUrl: 'ws://host.docker.internal:6127/onebot/v11/ws',
       },
     });
   });
@@ -279,14 +236,6 @@ describe('config IPC', () => {
       status: 'ok',
       source: 'health',
       uptimeSeconds: 42,
-      bridges: {
-        napcat: {
-          state: 'disconnected',
-          activeConnectionCount: 0,
-          ...emptyBridgeHistory,
-          heartbeat: emptyHeartbeat,
-        },
-      },
     });
   });
 
@@ -298,22 +247,6 @@ describe('config IPC', () => {
       status: 'ok',
       source: 'health',
       uptimeSeconds: 84,
-      bridges: {
-        napcat: {
-          state: 'connected',
-          activeConnectionCount: 1,
-          lastConnectedAt: '2026-04-22T00:00:00.000Z',
-          lastDisconnectedAt: '2026-04-21T23:59:00.000Z',
-          heartbeat: {
-            lastReceivedAt: '2026-04-22T00:00:00.000Z',
-            intervalMs: 5000,
-            ageMs: 1200,
-            online: true,
-            good: true,
-            stale: false,
-          },
-        },
-      },
     });
 
     const handler = ipcHandlers.get('config:get-daemon-status');
@@ -329,92 +262,6 @@ describe('config IPC', () => {
       status: 'ok',
       source: 'health',
       uptimeSeconds: 84,
-      bridges: {
-        napcat: {
-          state: 'connected',
-          activeConnectionCount: 1,
-          lastConnectedAt: '2026-04-22T00:00:00.000Z',
-          lastDisconnectedAt: '2026-04-21T23:59:00.000Z',
-          heartbeat: {
-            lastReceivedAt: '2026-04-22T00:00:00.000Z',
-            intervalMs: 5000,
-            ageMs: 1200,
-            online: true,
-            good: true,
-            stale: false,
-          },
-        },
-      },
-    });
-  });
-
-  it('falls back to unknown NapCat runtime when daemon health omits bridge details', async () => {
-    installHealthResponse(42, {});
-
-    const handler = ipcHandlers.get('config:get-daemon-status');
-    if (!handler) throw new Error('config:get-daemon-status handler not registered');
-
-    const result = await handler(null);
-
-    expect(result).toEqual({
-      online: true,
-      host: '127.0.0.1',
-      port: 6131,
-      status: 'ok',
-      source: 'health',
-      uptimeSeconds: 42,
-      bridges: {
-        napcat: {
-          state: 'unknown',
-          activeConnectionCount: null,
-          ...emptyBridgeHistory,
-          heartbeat: emptyHeartbeat,
-        },
-      },
-    });
-  });
-
-  it('preserves heartbeat-backed degraded bridge runtime from daemon health', async () => {
-    installHealthResponse(42, {
-      state: 'degraded',
-      activeConnectionCount: 1,
-      heartbeat: {
-        lastReceivedAt: '2026-04-22T00:00:00.000Z',
-        intervalMs: 5000,
-        ageMs: 11000,
-        online: true,
-        good: true,
-        stale: true,
-      },
-    });
-
-    const handler = ipcHandlers.get('config:get-daemon-status');
-    if (!handler) throw new Error('config:get-daemon-status handler not registered');
-
-    const result = await handler(null);
-
-    expect(result).toEqual({
-      online: true,
-      host: '127.0.0.1',
-      port: 6131,
-      status: 'ok',
-      source: 'health',
-      uptimeSeconds: 42,
-      bridges: {
-        napcat: {
-          state: 'degraded',
-          activeConnectionCount: 1,
-          ...emptyBridgeHistory,
-          heartbeat: {
-            lastReceivedAt: '2026-04-22T00:00:00.000Z',
-            intervalMs: 5000,
-            ageMs: 11000,
-            online: true,
-            good: true,
-            stale: true,
-          },
-        },
-      },
     });
   });
 
@@ -433,16 +280,6 @@ describe('config IPC', () => {
           level: 'info',
           source: 'daemon',
           message: 'log tail 50',
-        },
-      ],
-      napcatMessages: [
-        {
-          receivedAt: '2026-03-19T00:01:00.000Z',
-          messageType: 'private',
-          userId: '20002',
-          textPreview: 'hello from qq',
-          mentionedSelf: true,
-          replyEligible: true,
         },
       ],
     });
@@ -468,14 +305,6 @@ describe('config IPC', () => {
         status: 'ok',
         source: 'health',
         uptimeSeconds: 99,
-        bridges: {
-          napcat: {
-            state: 'disconnected',
-            activeConnectionCount: 0,
-            ...emptyBridgeHistory,
-            heartbeat: emptyHeartbeat,
-          },
-        },
       },
       embeddedRunning: true,
     });

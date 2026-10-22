@@ -35,10 +35,6 @@ const TEST_TOOL_NAMES = [
   'read_awaiter',
   'write_awaiter',
   'delete_awaiter',
-  'list_proactive_tasks',
-  'read_proactive_task',
-  'write_proactive_task',
-  'delete_proactive_task',
   'write_personal_skill',
 ];
 
@@ -177,25 +173,6 @@ describe('resolveToolNames', () => {
 
     expect(result.mode).toBe('auto');
     expect(result.resolvedTools).toEqual(['plan']);
-  });
-
-  it('includes proactive task management tools in auto mode for task-management turns', async () => {
-    registerTool({ name: 'list_proactive_tasks', source: { kind: 'builtin' } });
-    registerTool({ name: 'read_proactive_task', source: { kind: 'builtin' } });
-    registerTool({ name: 'write_proactive_task', source: { kind: 'builtin' } });
-    registerTool({ name: 'delete_proactive_task', source: { kind: 'builtin' } });
-
-    const result = await resolveToolNames({
-      inputMessages: [],
-    });
-
-    expect(result.mode).toBe('auto');
-    expect(result.resolvedTools).toEqual([
-      'list_proactive_tasks',
-      'read_proactive_task',
-      'write_proactive_task',
-      'delete_proactive_task',
-    ]);
   });
 
   it('includes awaiter management tools in auto mode for continue-later turns', async () => {

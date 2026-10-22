@@ -15,9 +15,19 @@ const makeFakeDb = (): SqliteDatabase =>
     prepare: (sql: string) => ({
       get: (...params: string[]) => {
         if (sql.includes('sqlite_master')) {
+          // Two shapes: "name = ?" (does this table exist) and
+          // "name NOT IN (...)" (is this a pre-baseline database).
+          if (sql.includes('NOT IN')) {
+            const excluded = new Set(params);
+            const found = [...dbState.tables].find(table => !excluded.has(table));
+            return found ? { name: found } : undefined;
+          }
           const table = params[0];
-          if (table) return dbState.tables.has(table) ? { name: table } : undefined;
-          return dbState.tables.size > 0 ? { name: [...dbState.tables][0] } : undefined;
+          return dbState.tables.has(table) ? { name: table } : undefined;
+        }
+        if (sql.includes('FROM migrations WHERE name')) {
+          const name = params[0];
+          return dbState.executed.has(name) ? { name } : undefined;
         }
         return undefined;
       },

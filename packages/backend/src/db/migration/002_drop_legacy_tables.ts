@@ -5,6 +5,8 @@ import type { Migration } from './runner';
 // some by the pre-squash migration sequence; both kinds can survive in a database
 // that predates this file, so drop them by name rather than assuming absence.
 const LEGACY_TABLES = [
+  'proactive_tasks',
+  'workflow_profiles',
   'tool_call_approvals',
   'tool_call_approval_sessions',
   'chat_tool_approvals',

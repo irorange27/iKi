@@ -11,7 +11,6 @@ import { selectSkillsWithAgent } from '../provider/skill_selection';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import type { ChatInputMessage } from './types';
 import { toLlmChatMessages } from '@iki/backend/message/ui_messages';
-import { getAutoPinnedSkillIds, recordAutoSkillSelection } from './platform';
 
 const chatSkillsLogger = createLogger({ module: 'chat_skills' });
 
@@ -29,7 +28,6 @@ export const resolveSkillsSystemPrompt = async (params: {
   const normalizedThreadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
 
   let pinnedSkillIds: string[] = [];
-  let autoPinnedSkillIds: string[] = [];
   if (normalizedThreadId) {
     try {
       const thread = chatThreadDb.getChatThread(normalizedThreadId);
@@ -47,8 +45,6 @@ export const resolveSkillsSystemPrompt = async (params: {
         },
       });
     }
-
-    autoPinnedSkillIds = getAutoPinnedSkillIds(normalizedThreadId);
   }
 
   let normalizedSkillIds = normalizeSkillIds(params.skillIds);
@@ -98,17 +94,8 @@ export const resolveSkillsSystemPrompt = async (params: {
           })
         : null) ?? [];
 
-    if (normalizedThreadId && toolModel && availableSkillCatalog.length > 0) {
-      recordAutoSkillSelection({
-        threadId: normalizedThreadId,
-        availableSkillIds: availableSkillCatalog.map(skill => skill.id),
-        selectedSkillIds: autoSelectedSkillIds,
-      });
-    }
-
     const union = new Set<string>();
     for (const id of pinnedSkillIds) union.add(id);
-    for (const id of autoPinnedSkillIds) union.add(id);
     for (const id of autoSelectedSkillIds) union.add(id);
     normalizedSkillIds = Array.from(union);
   }

@@ -26,7 +26,7 @@ const createRun = (overrides: Record<string, unknown>) => {
   const id = overrides.id as string;
   agentRunDb.createAgentRun({
     id,
-    kind: 'proactive-task',
+    kind: 'awaiter-wake',
     status: 'completed',
     threadId: 'thread_review_1',
     rootRunId: id,
@@ -35,7 +35,7 @@ const createRun = (overrides: Record<string, unknown>) => {
     systemPrompt: '',
     enabledTools: [],
     availableSkillIds: [],
-    input: { messages: [], metadata: { source: 'proactive-task', taskId: 'task_1', reason: 'schedule' } },
+    input: { messages: [], metadata: { source: 'awaiter', awaiterId: 'awaiter_1' } },
     working: { modelMessages: [], accumulatedText: '', pendingApprovalIds: [], lastStepIndex: 0 },
     output: null,
     error: null,
@@ -98,7 +98,6 @@ describe('listReviewQueue', () => {
 
     const ok = items.find(item => item.runId === 'run_ok')!;
     expect(ok.threadTitle).toBe('Automation thread');
-    expect(ok.taskName).toBe('task_1'); // falls back to the raw id when the task row is gone
     expect(ok.summary).toBe('Summary of what the agent did.');
 
     const failed = items.find(item => item.runId === 'run_failed')!;

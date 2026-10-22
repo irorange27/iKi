@@ -40,7 +40,6 @@ const {
   writeFileSyncMock,
   daemonLoggerEventMock,
   applyAppLoggingConfigMock,
-  createNapCatReverseBridgeMock,
   createServerMock,
   getRequestHandler,
   resetHttpHarness,
@@ -212,10 +211,6 @@ const {
     'read_personal_skill',
     'write_personal_skill',
     'delete_personal_skill',
-    'list_proactive_tasks',
-    'read_proactive_task',
-    'write_proactive_task',
-    'delete_proactive_task',
     'mcp:*',
   ];
   const getDefaultAllowedToolsMock = vi.fn(() => [...defaultAllowedTools]);
@@ -253,25 +248,6 @@ const {
     return requestedIds.filter(serverId => allowedTools.includes(`mcp:server:${serverId}`));
   });
 
-  const napCatBridgeMock = {
-    handleUpgrade: vi.fn(() => false),
-    getStatus: vi.fn(() => ({
-      state: 'disconnected',
-      activeConnectionCount: 0,
-      lastConnectedAt: null,
-      lastDisconnectedAt: null,
-      heartbeat: {
-        lastReceivedAt: null,
-        intervalMs: null,
-        ageMs: null,
-        online: null,
-        good: null,
-        stale: null,
-      },
-    })),
-    dispose: vi.fn(),
-  };
-  const createNapCatReverseBridgeMock = vi.fn(() => napCatBridgeMock);
 
   return {
     resetAppClientState,
@@ -301,7 +277,6 @@ const {
     writeFileSyncMock,
     daemonLoggerEventMock,
     applyAppLoggingConfigMock,
-    createNapCatReverseBridgeMock,
     createServerMock,
     getRequestHandler,
     resetHttpHarness,
@@ -380,10 +355,6 @@ vi.mock('@iki/backend/db/app_clients', () => ({
   getAppClientByToken: getAppClientByTokenMock,
   listAppClients: listAppClientsMock,
   touchAppClient: touchAppClientMock,
-}));
-
-vi.mock('@iki/daemon/napcat_adapter', () => ({
-  createNapCatReverseBridge: createNapCatReverseBridgeMock,
 }));
 
 vi.mock('@iki/daemon/bootstrap_token', () => ({
@@ -569,16 +540,10 @@ describe('daemon server', () => {
 
     expect(result.status).toBe(401);
     expect(result.json).toEqual({ success: false, error: 'Invalid setup token' });
-    expect(createAppClientMock).toHaveBeenCalledTimes(1);
-    expect(createAppClientMock).toHaveBeenCalledWith({
-      id: 'client_napcat',
-      name: 'NapCat',
-      scopes: [],
-      allowedTools: [],
-    });
+    expect(createAppClientMock).not.toHaveBeenCalled();
   });
 
-  it('rotates setup tokens on first non-NapCat registration without reassigning legacy desktop threads', async () => {
+  it('rotates setup tokens on first client registration without reassigning legacy desktop threads', async () => {
     const started = await startTestDaemon();
 
     const first = await requestJson(started, '/v1/clients/register', {
@@ -642,10 +607,6 @@ describe('daemon server', () => {
         'read_personal_skill',
         'write_personal_skill',
         'delete_personal_skill',
-        'list_proactive_tasks',
-        'read_proactive_task',
-        'write_proactive_task',
-        'delete_proactive_task',
         'mcp:*',
       ],
     });
@@ -665,7 +626,7 @@ describe('daemon server', () => {
       success: false,
       error: 'Invalid input: expected object, received array',
     });
-    expect(createAppClientMock).toHaveBeenCalledTimes(1);
+    expect(createAppClientMock).not.toHaveBeenCalled();
   });
 
   it('rejects chat thread listing without auth and when chat:read scope is missing', async () => {
@@ -1340,8 +1301,6 @@ describe('daemon server', () => {
     started.shutdown();
     started.shutdown();
 
-    expect(createNapCatReverseBridgeMock).toHaveBeenCalledTimes(1);
-    expect(createNapCatReverseBridgeMock.mock.results[0]?.value.dispose).toHaveBeenCalledTimes(1);
     expect(process.off).toHaveBeenCalledWith('SIGINT', expect.any(Function));
     expect(process.off).toHaveBeenCalledWith('SIGTERM', expect.any(Function));
     expect(started.server.close).toHaveBeenCalledTimes(1);
@@ -1360,7 +1319,6 @@ describe('daemon server', () => {
 
     await expect(started.ready).rejects.toThrow('EADDRINUSE');
     expect(writeFileSyncMock).not.toHaveBeenCalled();
-    expect(createNapCatReverseBridgeMock.mock.results[0]?.value.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('records the daemon location once listening succeeds', async () => {

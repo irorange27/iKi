@@ -102,25 +102,6 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     host: DEFAULT_DAEMON_HOST,
     port: DEFAULT_DAEMON_PORT,
   },
-  bridges: {
-    napcat: {
-      enabled: false,
-      accessToken: '',
-      providerType: '',
-      model: '',
-      tools: [],
-      requireMention: true,
-    },
-  },
-  workflowOptimization: {
-    enabled: true,
-    autoPinSkills: true,
-    minAutoSkillRuns: 6,
-    minSkillSelections: 3,
-    pinConfidence: 0.6,
-    unpinConfidence: 0.4,
-    maxPinnedSkills: 4,
-  },
 };
 
 export const createDefaultAppConfig = (): AppConfig => clonePlainData(DEFAULT_APP_CONFIG);
@@ -231,18 +212,6 @@ export const mergeAppConfigWithBase = (
     daemon: {
       ...base.daemon,
       ...(rawConfig.daemon ?? {}),
-    },
-    bridges: {
-      ...base.bridges,
-      ...(rawConfig.bridges ?? {}),
-      napcat: {
-        ...base.bridges.napcat,
-        ...((rawConfig.bridges ?? {}).napcat ?? {}),
-      },
-    },
-    workflowOptimization: {
-      ...base.workflowOptimization,
-      ...(rawConfig.workflowOptimization ?? {}),
     },
   };
 };
