@@ -1,11 +1,34 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { generateChatWithModelMessagesMock, getModelGenerationSettingsMock, resolvePersonaPromptMock } =
+  vi.hoisted(() => ({
+    generateChatWithModelMessagesMock: vi.fn(),
+    getModelGenerationSettingsMock: vi.fn(() => ({})),
+    resolvePersonaPromptMock: vi.fn(() => 'persona prompt'),
+  }));
+
+vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
+  return {
+    ...actual,
+    generateChatWithModelMessages: generateChatWithModelMessagesMock,
+    getModelGenerationSettings: getModelGenerationSettingsMock,
+    resolvePersonaPrompt: resolvePersonaPromptMock,
+  };
+});
 
 import {
   buildTranscript,
   extractJsonCandidate,
-  LlmCatalogSelectionRuntime,
+  selectCatalog,
   tryParseJson,
 } from '@iki/backend/runtimes/catalog_selection_runtime';
+
+const toolModel = { providerType: 'deepseek', model: 'deepseek-flash' };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe('catalog_selection_runtime', () => {
   it('extracts trimmed JSON from fenced output', () => {
@@ -46,7 +69,7 @@ describe('catalog_selection_runtime', () => {
   });
 });
 
-describe('LlmCatalogSelectionRuntime failure contract', () => {
+describe('selectCatalog failure contract', () => {
   const catalogRequest = () =>
     ({
       messages: [{ role: 'user' as const, content: 'list the files' }],
@@ -61,43 +84,28 @@ describe('LlmCatalogSelectionRuntime failure contract', () => {
       logLabel: 'ToolSelection',
     }) as never;
 
-  const runtimeWith = (generate: () => Promise<{ response: string }>) =>
-    new LlmCatalogSelectionRuntime({
-      getToolModel: () => ({ providerType: 'deepseek', model: 'deepseek-flash' }),
-      createGenerator: () => ({ generate }) as never,
-    });
-
   it('returns null when the auxiliary call fails, so callers fall back', async () => {
-    const runtime = runtimeWith(async () => {
-      throw new Error('Insufficient Balance');
-    });
+    generateChatWithModelMessagesMock.mockRejectedValue(new Error('Insufficient Balance'));
 
-    await expect(runtime.run(catalogRequest())).resolves.toBeNull();
+    await expect(selectCatalog(catalogRequest(), () => toolModel)).resolves.toBeNull();
   });
 
-  it('returns null when no tool model is configured', async () => {
-    const runtime = new LlmCatalogSelectionRuntime({
-      getToolModel: () => null,
-      createGenerator: () => ({ generate: async () => ({ response: '[]' }) }) as never,
-    });
-
-    await expect(runtime.run(catalogRequest())).resolves.toBeNull();
+  it('returns null when no tool model is configured, without calling the model', async () => {
+    await expect(selectCatalog(catalogRequest(), () => null)).resolves.toBeNull();
+    expect(generateChatWithModelMessagesMock).not.toHaveBeenCalled();
   });
 
   it('keeps a deliberate empty selection as []', async () => {
-    const runtime = new LlmCatalogSelectionRuntime({
-      getToolModel: () => ({ providerType: 'deepseek', model: 'deepseek-flash' }),
-      createGenerator: () =>
-        ({
-          generate: async () => ({ response: '[]' }),
-        }) as never,
-    });
+    generateChatWithModelMessagesMock.mockResolvedValue({ text: '[]' });
 
     await expect(
-      runtime.run({
-        ...(catalogRequest() as Record<string, unknown>),
-        parseSelection: (raw: string) => JSON.parse(raw || '[]'),
-      } as never)
+      selectCatalog(
+        {
+          ...(catalogRequest() as Record<string, unknown>),
+          parseSelection: (raw: string) => JSON.parse(raw || '[]'),
+        } as never,
+        () => toolModel
+      )
     ).resolves.toEqual([]);
   });
 });

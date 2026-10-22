@@ -1,8 +1,7 @@
 import { getProviders } from '../db/providers';
 import { getAppConfig } from '../config';
 import { createLogger } from '@iki/backend/logger';
-import { LlmTitleRuntime } from '../runtimes/title_runtime';
-import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
+import { generateConversationTitle } from '../runtimes/title_runtime';
 import { generateChatWithModelMessages } from '../provider/llm/factory';
 import { parseModelList } from '@iki/backend/utils/provider_models';
 
@@ -184,15 +183,5 @@ export const testToolModelLatency = async (
   };
 };
 
-export { LlmTitleRuntime };
-
-export const generateTitle = async (conversationContent: string): Promise<string | null> => {
-  const trimmed = conversationContent.trim();
-  if (!trimmed) return null;
-
-  const runtime = new LlmTitleRuntime({
-    getToolModel,
-    createGenerator: createSimplePromptTextGenerator,
-  });
-  return runtime.run(trimmed);
-};
+export const generateTitle = async (conversationContent: string): Promise<string | null> =>
+  generateConversationTitle(conversationContent, getToolModel);

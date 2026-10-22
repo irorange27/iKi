@@ -1,6 +1,6 @@
 import { createLogger } from '@iki/backend/logger';
 import type { ToolModelConfig } from '../provider/tool_model';
-import { type PromptTextGenerator, type PromptTextGeneratorConfig } from './prompt_text_generator';
+import { generatePromptText } from './prompt_text_generator';
 import { normalizeWhitespace } from '@iki/backend/utils/text';
 
 export type SelectionMessage = {
@@ -19,11 +19,6 @@ export type CatalogSelectionRequest<T> = {
   maxInputChars: number;
   maxOutputTokens: number;
   logLabel: string;
-};
-
-export type LlmCatalogSelectionRuntimeDeps = {
-  getToolModel: () => ToolModelConfig | null;
-  createGenerator: (config?: PromptTextGeneratorConfig) => PromptTextGenerator;
 };
 
 const formatRole = (role: SelectionMessage['role']) =>
@@ -96,53 +91,53 @@ export const tryParseJson = (raw: string): unknown => {
   return null;
 };
 
-export class LlmCatalogSelectionRuntime {
-  constructor(private readonly deps: LlmCatalogSelectionRuntimeDeps) {}
-
-  async run<T>(request: CatalogSelectionRequest<T>): Promise<string[] | null> {
-    const toolModel = this.deps.getToolModel();
-    if (!toolModel) {
-      return null;
-    }
-
-    const transcript = buildTranscript(request.messages, {
-      maxMessages: request.maxMessages,
-      maxInputChars: request.maxInputChars,
-    });
-    if (!transcript.trim() || request.availableCatalog.length === 0) {
-      return null;
-    }
-
-    const catalogText = request.buildCatalogText(request.availableCatalog);
-    const prompt = request.buildPrompt(catalogText, transcript);
-
-    const generator = this.deps.createGenerator({
-      enabled: true,
-      providerType: toolModel.providerType,
-      model: toolModel.model,
-      systemPrompt: request.systemPrompt,
-      temperature: 0,
-      maxTokens: request.maxOutputTokens,
-      maxIterations: 1,
-      enableTools: false,
-    });
-
-    try {
-      const result = await generator.generate(prompt);
-      return request.parseSelection(result.response || '', request.availableCatalog);
-    } catch (error) {
-      catalogSelectionLogger.event({
-        level: 'warn',
-        event: 'catalog.selection',
-        outcome: 'failed',
-        error,
-        data: {
-          label: request.logLabel,
-          available_catalog_count: request.availableCatalog.length,
-          message_count: request.messages.length,
-        },
-      });
-      return null;
-    }
+export const selectCatalog = async <T>(
+  request: CatalogSelectionRequest<T>,
+  getToolModel: () => ToolModelConfig | null
+): Promise<string[] | null> => {
+  const toolModel = getToolModel();
+  if (!toolModel) {
+    return null;
   }
-}
+
+  const transcript = buildTranscript(request.messages, {
+    maxMessages: request.maxMessages,
+    maxInputChars: request.maxInputChars,
+  });
+  if (!transcript.trim() || request.availableCatalog.length === 0) {
+    return null;
+  }
+
+  const catalogText = request.buildCatalogText(request.availableCatalog);
+  const prompt = request.buildPrompt(catalogText, transcript);
+
+  try {
+    const generated = await generatePromptText(
+      {
+        enabled: true,
+        providerType: toolModel.providerType,
+        model: toolModel.model,
+        systemPrompt: request.systemPrompt,
+        temperature: 0,
+        maxTokens: request.maxOutputTokens,
+        maxIterations: 1,
+        enableTools: false,
+      },
+      prompt
+    );
+    return request.parseSelection(generated || '', request.availableCatalog);
+  } catch (error) {
+    catalogSelectionLogger.event({
+      level: 'warn',
+      event: 'catalog.selection',
+      outcome: 'failed',
+      error,
+      data: {
+        label: request.logLabel,
+        available_catalog_count: request.availableCatalog.length,
+        message_count: request.messages.length,
+      },
+    });
+    return null;
+  }
+};

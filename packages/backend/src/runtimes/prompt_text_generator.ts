@@ -1,69 +1,47 @@
 import { appendUserPromptToHistory } from '@iki/backend/message/model_history';
 import { buildPromptContext } from '@iki/backend/message/prompt_context';
-import {
-  loadAgentConfig,
-  validateAgentConfig,
-} from '../agent/config';
-import type { AgentConfig, AgentResult, PartialAgentConfig } from '@iki/backend/agent/types';
+import { loadAgentConfig, validateAgentConfig } from '../agent/config';
+import type { PartialAgentConfig } from '@iki/backend/agent/types';
 import { generateChatWithModelMessages, getModelGenerationSettings } from '../provider/llm/factory';
 
-export type PromptTextGeneratorResult = Pick<AgentResult, 'response'>;
-
-export interface PromptTextGenerator {
-  generate(prompt: string, abortSignal?: AbortSignal): Promise<PromptTextGeneratorResult>;
-}
-
 export type PromptTextGeneratorConfig = PartialAgentConfig & {
-
   threadId?: string;
 };
 
-export type PromptTextGeneratorFactory = (
-  config?: PromptTextGeneratorConfig
-) => PromptTextGenerator;
+export const generatePromptText = async (
+  config: PromptTextGeneratorConfig | undefined,
+  prompt: string,
+  abortSignal?: AbortSignal
+): Promise<string> => {
+  const resolved = loadAgentConfig(config);
+  validateAgentConfig(resolved);
 
-export class SimplePromptTextGenerator implements PromptTextGenerator {
-  private readonly config: AgentConfig;
-  private readonly threadId?: string;
+  const history = appendUserPromptToHistory([], prompt);
+  const { systemPrompt, messages } = buildPromptContext(resolved, history);
 
-  constructor(config?: PromptTextGeneratorConfig) {
-    this.config = loadAgentConfig(config);
-    this.threadId = config?.threadId;
-  }
+  const generationSettings = getModelGenerationSettings({
+    providerType: resolved.providerType,
+    modelId: resolved.model,
+    providerId: resolved.providerId,
+    temperature: resolved.temperature,
+  });
 
-  async generate(prompt: string, abortSignal?: AbortSignal): Promise<PromptTextGeneratorResult> {
-    validateAgentConfig(this.config);
+  const result = await generateChatWithModelMessages({
+    providerType: resolved.providerType,
+    providerId: resolved.providerId,
+    modelId: resolved.model,
+    messages,
+    auxSystemInstruction: systemPrompt,
+    ...(typeof generationSettings.temperature === 'number'
+      ? { temperature: generationSettings.temperature }
+      : {}),
+    ...(generationSettings.providerOptions
+      ? { providerOptions: generationSettings.providerOptions }
+      : {}),
+    ...(typeof resolved.maxTokens === 'number' ? { maxOutputTokens: resolved.maxTokens } : {}),
+    ...(config?.threadId ? { threadId: config.threadId } : {}),
+    ...(abortSignal ? { abortSignal } : {}),
+  });
 
-    const history = appendUserPromptToHistory([], prompt);
-    const { systemPrompt, messages } = buildPromptContext(this.config, history);
-
-    const generationSettings = getModelGenerationSettings({
-      providerType: this.config.providerType,
-      modelId: this.config.model,
-      providerId: this.config.providerId,
-      temperature: this.config.temperature,
-    });
-    const result = await generateChatWithModelMessages({
-      providerType: this.config.providerType,
-      providerId: this.config.providerId,
-      modelId: this.config.model,
-      messages,
-      auxSystemInstruction: systemPrompt,
-      ...(typeof generationSettings.temperature === 'number'
-        ? { temperature: generationSettings.temperature }
-        : {}),
-      ...(generationSettings.providerOptions
-        ? { providerOptions: generationSettings.providerOptions }
-        : {}),
-      ...(typeof this.config.maxTokens === 'number' ? { maxOutputTokens: this.config.maxTokens } : {}),
-      ...(this.threadId ? { threadId: this.threadId } : {}),
-      ...(abortSignal ? { abortSignal } : {}),
-    });
-
-    return { response: result.text };
-  }
-}
-
-export const createSimplePromptTextGenerator: PromptTextGeneratorFactory = (
-  config?: PromptTextGeneratorConfig
-) => new SimplePromptTextGenerator(config);
+  return result.text;
+};

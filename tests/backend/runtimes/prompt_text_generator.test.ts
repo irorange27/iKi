@@ -27,7 +27,7 @@ vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-import { createSimplePromptTextGenerator } from '@iki/backend/runtimes/prompt_text_generator';
+import { generatePromptText } from '@iki/backend/runtimes/prompt_text_generator';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -41,21 +41,24 @@ beforeEach(() => {
   });
 });
 
-describe('SimplePromptTextGenerator', () => {
+describe('generatePromptText', () => {
   it('routes through the factory entry with its own system as the exact override (#126)', async () => {
     generateChatWithModelMessagesMock.mockResolvedValue({ text: 'generated text' });
 
-    const generator = createSimplePromptTextGenerator({
-      enabled: true,
-      providerType: 'openai',
-      model: 'gpt-4o-mini',
-      systemPrompt: 'system prompt',
-      temperature: 0.4,
-      maxTokens: 256,
-      enableTools: false,
-    });
-
-    await expect(generator.generate('hello')).resolves.toEqual({ response: 'generated text' });
+    await expect(
+      generatePromptText(
+        {
+          enabled: true,
+          providerType: 'openai',
+          model: 'gpt-4o-mini',
+          systemPrompt: 'system prompt',
+          temperature: 0.4,
+          maxTokens: 256,
+          enableTools: false,
+        },
+        'hello'
+      )
+    ).resolves.toBe('generated text');
 
     expect(generateChatWithModelMessagesMock).toHaveBeenCalledTimes(1);
     const options = generateChatWithModelMessagesMock.mock.calls[0][0] as Record<string, unknown>;
@@ -72,16 +75,18 @@ describe('SimplePromptTextGenerator', () => {
     generateChatWithModelMessagesMock.mockResolvedValue({ text: 'ok' });
     const controller = new AbortController();
 
-    const generator = createSimplePromptTextGenerator({
-      enabled: true,
-      providerType: 'openai',
-      model: 'gpt-4o-mini',
-      systemPrompt: 'system prompt',
-      enableTools: false,
-      threadId: 'thread_1',
-    });
-
-    await generator.generate('hello', controller.signal);
+    await generatePromptText(
+      {
+        enabled: true,
+        providerType: 'openai',
+        model: 'gpt-4o-mini',
+        systemPrompt: 'system prompt',
+        enableTools: false,
+        threadId: 'thread_1',
+      },
+      'hello',
+      controller.signal
+    );
 
     const options = generateChatWithModelMessagesMock.mock.calls[0][0] as Record<string, unknown>;
     expect(options.threadId).toBe('thread_1');
@@ -93,13 +98,17 @@ describe('SimplePromptTextGenerator', () => {
 
   it('propagates factory failures', async () => {
     generateChatWithModelMessagesMock.mockRejectedValue(new Error('provider down'));
-    const generator = createSimplePromptTextGenerator({
-      enabled: true,
-      providerType: 'openai',
-      model: 'gpt-4o-mini',
-      systemPrompt: 'system prompt',
-      enableTools: false,
-    });
-    await expect(generator.generate('hello')).rejects.toThrow('provider down');
+    await expect(
+      generatePromptText(
+        {
+          enabled: true,
+          providerType: 'openai',
+          model: 'gpt-4o-mini',
+          systemPrompt: 'system prompt',
+          enableTools: false,
+        },
+        'hello'
+      )
+    ).rejects.toThrow('provider down');
   });
 });
