@@ -2,7 +2,8 @@ import * as tasksDb from '@iki/backend/db/tasks';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import { createLogger } from '@iki/backend/logger';
-import { clampIntervalMinutes, computeNextRunAt } from '@iki/backend/tasks/task_schedule';
+import { computeNextRunAt } from '@iki/backend/tasks/task_schedule';
+import { formatTaskSchedule, formatTaskToolStrategy } from '@iki/backend/tasks/task_summary';
 import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
 import {
   filterSafeProactiveTaskTools,
@@ -51,29 +52,6 @@ const clipText = (value: string | null | undefined, maxChars: number): string =>
   if (!trimmed) return '';
   if (trimmed.length <= maxChars) return trimmed;
   return `${trimmed.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
-};
-
-const formatTaskSchedule = (task: {
-  schedule_type?: string;
-  interval_minutes: number;
-  cron_expression?: string | null;
-  schedule_timezone?: string | null;
-}): string =>
-  task.schedule_type === 'cron'
-    ? `${task.cron_expression || 'cron'}${task.schedule_timezone ? ` (${task.schedule_timezone})` : ' (local time)'}`
-    : `every ${clampIntervalMinutes(task.interval_minutes)} minute(s)`;
-
-const formatTaskToolStrategy = (
-  task: Pick<ProactiveTask, 'tools' | 'tool_mode'>
-): string => {
-  const toolMode = inferProactiveTaskToolMode(task);
-  if (toolMode === 'auto')
-    return 'Agent decides automatically using the safe built-in tool catalog.';
-  if (toolMode === 'disabled') return 'Tools disabled; run as plain model reasoning only.';
-  const tools = filterSafeProactiveTaskTools(parseProactiveTaskTools(task.tools));
-  return tools.length > 0
-    ? `Manual safe tools: ${tools.join(', ')}`
-    : 'Manual tool mode configured, but no safe tools remain enabled.';
 };
 
 const PROACTIVE_TASK_AGENT_SYSTEM_PROMPT = [

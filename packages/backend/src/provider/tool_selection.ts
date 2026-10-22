@@ -1,4 +1,5 @@
 import {
+  canonicalizeSelection,
   normalizeWhitespace,
   selectCatalogWithAgent,
   tryParseJson,
@@ -49,12 +50,6 @@ const SYSTEM_PROMPT =
   '- Never invent tool names not present in the catalog.\n' +
   `- Choose at most ${MAX_TOOLS_SELECTED} tools.\n`;
 
-const normalizeToolName = (value: string, canonicalByLower: Map<string, string>): string | null => {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  return canonicalByLower.get(trimmed.toLowerCase()) ?? null;
-};
-
 const parseToolNames = (raw: string, availableTools: ToolCatalogItem[]): string[] => {
   const parsed = tryParseJson(raw);
   if (!parsed) return [];
@@ -64,20 +59,8 @@ const parseToolNames = (raw: string, availableTools: ToolCatalogItem[]): string[
     canonicalByLower.set(tool.name.toLowerCase(), tool.name);
   }
 
-  const fromArray = (values: unknown[]): string[] => {
-    const selected: string[] = [];
-    const seen = new Set<string>();
-    for (const value of values) {
-      if (typeof value !== 'string') continue;
-      const normalized = normalizeToolName(value, canonicalByLower);
-      if (!normalized) continue;
-      if (seen.has(normalized)) continue;
-      seen.add(normalized);
-      selected.push(normalized);
-      if (selected.length >= MAX_TOOLS_SELECTED) break;
-    }
-    return selected;
-  };
+  const fromArray = (values: unknown[]): string[] =>
+    canonicalizeSelection(values, canonicalByLower, MAX_TOOLS_SELECTED);
 
   if (Array.isArray(parsed)) {
     return fromArray(parsed);

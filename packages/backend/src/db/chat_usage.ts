@@ -1,4 +1,5 @@
 import { getDb } from './database';
+import { clampNonNegativeInteger, clampNonNegativeNumber } from '@iki/backend/utils/text';
 import type {
   ChatUsageDailyPoint,
   ChatUsageEvent,
@@ -20,16 +21,6 @@ type UsageAggregateRow = {
   cacheWriteTokens: number;
   reasoningTokens: number;
   estimatedCostUsd: number;
-};
-
-const clampInteger = (value: unknown): number => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
-  return Math.max(0, Math.trunc(value));
-};
-
-const clampCost = (value: unknown): number => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
-  return Math.max(0, value);
 };
 
 const sanitizeSource = (value: unknown): string => {
@@ -66,14 +57,14 @@ const buildWhereClause = (
 };
 
 const mapAggregateRow = (row?: Partial<UsageAggregateRow>): ChatUsageTotals => ({
-  messageCount: clampInteger(row?.messageCount),
-  inputTokens: clampInteger(row?.inputTokens),
-  outputTokens: clampInteger(row?.outputTokens),
-  totalTokens: clampInteger(row?.totalTokens),
-  cacheReadTokens: clampInteger(row?.cacheReadTokens),
-  cacheWriteTokens: clampInteger(row?.cacheWriteTokens),
-  reasoningTokens: clampInteger(row?.reasoningTokens),
-  estimatedCostUsd: clampCost(row?.estimatedCostUsd),
+  messageCount: clampNonNegativeInteger(row?.messageCount),
+  inputTokens: clampNonNegativeInteger(row?.inputTokens),
+  outputTokens: clampNonNegativeInteger(row?.outputTokens),
+  totalTokens: clampNonNegativeInteger(row?.totalTokens),
+  cacheReadTokens: clampNonNegativeInteger(row?.cacheReadTokens),
+  cacheWriteTokens: clampNonNegativeInteger(row?.cacheWriteTokens),
+  reasoningTokens: clampNonNegativeInteger(row?.reasoningTokens),
+  estimatedCostUsd: clampNonNegativeNumber(row?.estimatedCostUsd),
 });
 
 export const addChatUsageEvent = (
@@ -139,13 +130,13 @@ export const addChatUsageEvent = (
       typeof input.message_id === 'string' && input.message_id.trim() ? input.message_id : null,
     provider_type: input.provider_type,
     model: input.model,
-    input_tokens: clampInteger(input.input_tokens),
-    output_tokens: clampInteger(input.output_tokens),
-    total_tokens: clampInteger(input.total_tokens),
-    cache_read_tokens: clampInteger(input.cache_read_tokens),
-    cache_write_tokens: clampInteger(input.cache_write_tokens),
-    reasoning_tokens: clampInteger(input.reasoning_tokens),
-    estimated_cost_usd: clampCost(input.estimated_cost_usd),
+    input_tokens: clampNonNegativeInteger(input.input_tokens),
+    output_tokens: clampNonNegativeInteger(input.output_tokens),
+    total_tokens: clampNonNegativeInteger(input.total_tokens),
+    cache_read_tokens: clampNonNegativeInteger(input.cache_read_tokens),
+    cache_write_tokens: clampNonNegativeInteger(input.cache_write_tokens),
+    reasoning_tokens: clampNonNegativeInteger(input.reasoning_tokens),
+    estimated_cost_usd: clampNonNegativeNumber(input.estimated_cost_usd),
     source: sanitizeSource(input.source),
     metadata: typeof input.metadata === 'string' && input.metadata.trim() ? input.metadata : '{}',
     created_at: input.created_at,

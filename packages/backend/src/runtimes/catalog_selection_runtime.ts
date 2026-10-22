@@ -56,6 +56,28 @@ export const extractJsonCandidate = (raw: string): string => {
   return (fencedMatch ? (fencedMatch[1] ?? '').trim() : trimmed).trim();
 };
 
+export const canonicalizeSelection = (
+  values: unknown[],
+  canonicalByLower: Map<string, string>,
+  maxSelected: number
+): string[] => {
+  const selected: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const canonical = canonicalByLower.get(trimmed.toLowerCase());
+    if (!canonical || seen.has(canonical)) continue;
+    seen.add(canonical);
+    selected.push(canonical);
+    if (selected.length >= maxSelected) break;
+  }
+
+  return selected;
+};
+
 export const tryParseJson = (raw: string): unknown => {
   const candidate = extractJsonCandidate(raw);
   if (!candidate) return null;

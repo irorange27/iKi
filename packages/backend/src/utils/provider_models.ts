@@ -1,4 +1,5 @@
 import type { JsonValue } from '../types/provider';
+import { normalizeOptionalString } from './text';
 
 import type { ProviderModelOptions, ProviderModelOptionsMap } from '../types/provider';
 
@@ -37,12 +38,6 @@ const normalizeOptionalBoolean = (value: unknown): boolean | null => {
     return value;
   }
   return null;
-};
-
-const normalizeOptionalString = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
 };
 
 type ModelsDevLimitRecord = {

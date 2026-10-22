@@ -6,6 +6,27 @@ export const normalizeWhitespace = (value: unknown): string =>
 export const normalizeOptionalWhitespace = (value: unknown): string | null =>
   normalizeWhitespace(value) || null;
 
+export const normalizeOptionalString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+export const normalizeOptionalProviderId = (value: unknown): string | null => {
+  if (value === null) return null;
+  return normalizeWhitespace(value) || null;
+};
+
+export const clampNonNegativeInteger = (value: unknown): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.trunc(value));
+};
+
+export const clampNonNegativeNumber = (value: unknown): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, value);
+};
+
 const truncateText = (value: string, maxChars?: number): string => {
   if (typeof maxChars !== 'number' || !Number.isFinite(maxChars) || maxChars <= 0) {
     return value;

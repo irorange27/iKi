@@ -10,6 +10,7 @@ import type {
   ThreadWorktreeResult,
 } from '@iki/backend/types/worktree';
 import { getUserDataPath } from '../platform';
+import { normalizeOptionalString } from '@iki/backend/utils/text';
 import { THREAD_WORKTREE_WORKSPACE_PREFIX } from './worktree_ids';
 
 export { THREAD_WORKTREE_WORKSPACE_PREFIX };
@@ -58,12 +59,6 @@ export const isGitRepository = async (dir: string): Promise<boolean> => {
   }
 };
 
-const normalizeWorkspaceIdInput = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
 export const createThreadWorktree = async (
   threadId: string,
   repoWorkspaceId?: string | null
@@ -79,7 +74,7 @@ export const createThreadWorktree = async (
   }
 
   const repoWorkspaceIdNormalized =
-    normalizeWorkspaceIdInput(repoWorkspaceId) ?? normalizeWorkspaceIdInput(thread.workspace_id);
+    normalizeOptionalString(repoWorkspaceId) ?? normalizeOptionalString(thread.workspace_id);
   if (!repoWorkspaceIdNormalized) {
     return { ok: false, error: 'Select a workspace folder before creating an isolated worktree.' };
   }

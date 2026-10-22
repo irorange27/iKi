@@ -12,18 +12,13 @@ import { getDb } from '@iki/backend/db/database';
 import { createLogger } from '@iki/backend/logger';
 import type { ChatMessage, ChatThread } from '@iki/backend/types/chat';
 import { isObjectRecord } from '@iki/backend/utils/guards';
+import { normalizeOptionalString } from '@iki/backend/utils/text';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { ensureThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/git_worktree';
 import { sanitizeUiMessageJsonForStorage } from '@iki/backend/message/ui_message_codec';
 
 const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
-
-const normalizedString = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
 
 const normalizeFlag = (value: unknown): number => {
   if (typeof value === 'number') return value ? 1 : 0;
@@ -67,20 +62,20 @@ const normalizeThreadInput = (
     title:
       overrides?.title ||
       (typeof thread.title === 'string' && thread.title.trim() ? thread.title : 'New Chat'),
-    model: normalizedString(thread.model) ?? undefined,
-    reasoning_effort: normalizedString(thread.reasoning_effort) || 'medium',
+    model: normalizeOptionalString(thread.model) ?? undefined,
+    reasoning_effort: normalizeOptionalString(thread.reasoning_effort) || 'medium',
     metadata:
       typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
     is_generating: false,
-    client_id: normalizedString(thread.client_id) ?? undefined,
-    prompt_app_id: normalizedString(thread.prompt_app_id) ?? undefined,
-    tools: normalizedString(thread.tools) ?? undefined,
+    client_id: normalizeOptionalString(thread.client_id) ?? undefined,
+    prompt_app_id: normalizeOptionalString(thread.prompt_app_id) ?? undefined,
+    tools: normalizeOptionalString(thread.tools) ?? undefined,
     is_favorited: normalizeFlag(thread.is_favorited),
     is_incognito: normalizeFlag(thread.is_incognito),
-    workspace_id: normalizedString(thread.workspace_id) ?? undefined,
+    workspace_id: normalizeOptionalString(thread.workspace_id) ?? undefined,
     enable_artifacts: normalizeFlag(thread.enable_artifacts),
-    artifact_workspace_id: normalizedString(thread.artifact_workspace_id) ?? undefined,
-    skill_ids: normalizedString(thread.skill_ids) ?? undefined,
+    artifact_workspace_id: normalizeOptionalString(thread.artifact_workspace_id) ?? undefined,
+    skill_ids: normalizeOptionalString(thread.skill_ids) ?? undefined,
   };
 };
 
@@ -120,8 +115,8 @@ export const createChatPersistence = () => {
     const thread = isObjectRecord(input) ? (input as Partial<ChatThread>) : {};
     const hasWorkspaceUpdate = Object.prototype.hasOwnProperty.call(thread, 'workspace_id');
     const existingThread = hasWorkspaceUpdate ? chatThreadDb.getChatThread(id) : null;
-    const nextWorkspaceId = hasWorkspaceUpdate ? normalizedString(thread.workspace_id) : null;
-    const currentWorkspaceId = normalizedString(existingThread?.workspace_id);
+    const nextWorkspaceId = hasWorkspaceUpdate ? normalizeOptionalString(thread.workspace_id) : null;
+    const currentWorkspaceId = normalizeOptionalString(existingThread?.workspace_id);
     const workspaceChanged = hasWorkspaceUpdate && nextWorkspaceId !== currentWorkspaceId;
 
     const guardedWorkspaceChange =

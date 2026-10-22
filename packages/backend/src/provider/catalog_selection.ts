@@ -1,5 +1,6 @@
 import {
   buildTranscript,
+  canonicalizeSelection,
   extractJsonCandidate,
   selectCatalog,
   tryParseJson,
@@ -12,7 +13,7 @@ import { getToolModel } from './tool_model';
 export type { CatalogSelectionRequest as CatalogSelectorParams };
 export type { SelectionMessage };
 export { normalizeWhitespace };
-export { buildTranscript, extractJsonCandidate, tryParseJson };
+export { buildTranscript, canonicalizeSelection, extractJsonCandidate, tryParseJson };
 
 export const selectCatalogWithAgent = async <T>(
   params: CatalogSelectionRequest<T>

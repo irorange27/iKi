@@ -10,7 +10,11 @@ import {
   type ProactiveTaskToolMode,
 } from '@iki/backend/types/tasks';
 import { createPrefixedId } from '@iki/backend/utils/id';
-import { clampListLimit, normalizeWhitespace } from '@iki/backend/utils/text';
+import {
+  clampListLimit,
+  normalizeOptionalProviderId,
+  normalizeWhitespace,
+} from '@iki/backend/utils/text';
 import {
   clampIntervalMinutes,
   computeNextRunAt,
@@ -19,6 +23,7 @@ import {
   normalizeScheduleType,
   validateCronExpression,
 } from './task_schedule';
+import { formatTaskSchedule, formatTaskToolStrategy } from './task_summary';
 
 export type ProactiveTaskReference = {
   id?: string | null;
@@ -59,34 +64,6 @@ const validateManualTools = (tools: string[]) => {
   }
 
   return safeTools;
-};
-
-const normalizeProviderId = (value: unknown): string | null => {
-  if (value === null) return null;
-  const trimmed = normalizeWhitespace(value);
-  return trimmed || null;
-};
-
-const formatTaskSchedule = (task: {
-  schedule_type?: string;
-  interval_minutes: number;
-  cron_expression?: string | null;
-  schedule_timezone?: string | null;
-}): string =>
-  task.schedule_type === 'cron'
-    ? `${task.cron_expression || 'cron'}${task.schedule_timezone ? ` (${task.schedule_timezone})` : ' (local time)'}`
-    : `every ${clampIntervalMinutes(task.interval_minutes)} minute(s)`;
-
-const formatTaskToolStrategy = (task: Pick<ProactiveTask, 'tool_mode' | 'tools'>): string => {
-  const toolMode = inferProactiveTaskToolMode(task);
-  if (toolMode === 'auto')
-    return 'Agent decides automatically using the safe built-in tool catalog.';
-  if (toolMode === 'disabled') return 'Tools disabled; run as plain model reasoning only.';
-
-  const tools = filterSafeProactiveTaskTools(parseProactiveTaskTools(task.tools));
-  return tools.length > 0
-    ? `Manual safe tools: ${tools.join(', ')}`
-    : 'Manual tool mode configured, but no safe tools remain enabled.';
 };
 
 const toProactiveTaskRecord = (task: ProactiveTask): ProactiveTaskRecord => ({
@@ -168,7 +145,7 @@ export const createProactiveTask = (input: ProactiveTaskCreateInput): ProactiveT
   const name = normalizeWhitespace(input.name);
   const prompt = normalizeWhitespace(input.prompt);
   const provider_type = normalizeWhitespace(input.provider_type);
-  const provider_id = normalizeProviderId(input.provider_id);
+  const provider_id = normalizeOptionalProviderId(input.provider_id);
   const model = normalizeWhitespace(input.model);
   const enabled = input.enabled !== false;
   const notify = input.notify !== false;
@@ -270,7 +247,7 @@ export const updateProactiveTask = (
     nextUpdates.provider_type = providerType;
   }
   if (hasProviderId) {
-    nextUpdates.provider_id = normalizeProviderId(updates.provider_id);
+    nextUpdates.provider_id = normalizeOptionalProviderId(updates.provider_id);
   }
   if (hasModel) {
     const model = normalizeWhitespace(updates.model);

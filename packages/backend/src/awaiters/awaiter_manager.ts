@@ -7,7 +7,12 @@ import {
   type AwaiterTriggerSpec,
 } from '@iki/backend/types/awaiters';
 import { createPrefixedId } from '@iki/backend/utils/id';
-import { clampListLimit, normalizeWhitespace, toIsoNow } from '@iki/backend/utils/text';
+import {
+  clampListLimit,
+  normalizeOptionalProviderId,
+  normalizeWhitespace,
+  toIsoNow,
+} from '@iki/backend/utils/text';
 import {
   computeAwaiterNextWakeAt,
   formatAwaiterTriggerSummary,
@@ -32,12 +37,6 @@ export type AwaiterUpdateInput = Omit<Partial<Awaiter>, 'trigger_spec_json'> & {
 export type AwaiterRecord = Omit<Awaiter, 'trigger_spec_json' | 'resume_context_json'> & {
   trigger_spec: AwaiterTriggerSpec | null;
   trigger_summary: string;
-};
-
-const normalizeProviderId = (value: unknown): string | null => {
-  if (value === null) return null;
-  const trimmed = normalizeWhitespace(value);
-  return trimmed || null;
 };
 
 const normalizeNullableText = (value: unknown): string | null => {
@@ -134,7 +133,7 @@ export const createAwaiter = (input: AwaiterCreateInput): Awaiter => {
   const instruction = normalizeWhitespace(input.instruction);
   const threadId = normalizeWhitespace(input.thread_id);
   const providerType = normalizeWhitespace(input.provider_type);
-  const providerId = normalizeProviderId(input.provider_id);
+  const providerId = normalizeOptionalProviderId(input.provider_id);
   const model = normalizeWhitespace(input.model);
   const notify = input.notify !== false;
   const trigger = normalizeTriggerOrThrow(input.trigger, nowIso);
@@ -216,7 +215,7 @@ export const updateAwaiter = (
     nextUpdates.provider_type = providerType;
   }
   if (hasProviderId) {
-    nextUpdates.provider_id = normalizeProviderId(updates.provider_id);
+    nextUpdates.provider_id = normalizeOptionalProviderId(updates.provider_id);
   }
   if (hasModel) {
     const model = normalizeWhitespace(updates.model);

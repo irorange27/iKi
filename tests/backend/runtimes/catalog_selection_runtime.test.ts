@@ -19,6 +19,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
 
 import {
   buildTranscript,
+  canonicalizeSelection,
   extractJsonCandidate,
   selectCatalog,
   tryParseJson,
@@ -66,6 +67,34 @@ describe('catalog_selection_runtime', () => {
     );
 
     expect(transcript).toBe('Assistant: second reply\nUser: third request');
+  });
+});
+
+describe('canonicalizeSelection', () => {
+  const canonicalByLower = new Map([
+    ['read_file', 'read_file'],
+    ['shell', 'shell'],
+  ]);
+
+  it('maps a case-insensitive name to its canonical spelling', () => {
+    expect(canonicalizeSelection(['READ_FILE', ' shell '], canonicalByLower, 6)).toEqual([
+      'read_file',
+      'shell',
+    ]);
+  });
+
+  it('drops unknown names, non-strings, and blanks', () => {
+    expect(canonicalizeSelection(['nope', 7, null, '  ', {}], canonicalByLower, 6)).toEqual([]);
+  });
+
+  it('keeps one entry per canonical name even when spellings differ', () => {
+    expect(canonicalizeSelection(['read_file', 'READ_FILE', 'Read_File'], canonicalByLower, 6)).toEqual(
+      ['read_file']
+    );
+  });
+
+  it('stops at the selection cap', () => {
+    expect(canonicalizeSelection(['read_file', 'shell'], canonicalByLower, 1)).toEqual(['read_file']);
   });
 });
 
