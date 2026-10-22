@@ -38,10 +38,24 @@ module.exports = {
     },
     {
       name: 'agent-below-session-and-orchestration',
-      comment: 'R3 (loop+harness only; turn_prep -> thread_session shared-module debt is deferred, see factoring doc)',
+      comment: 'R3 (loop+harness only)',
       severity: 'error',
       from: { path: '^packages/backend/src/agent/' },
       to: { path: '^packages/backend/src/(turn_prep|thread_session)' },
+    },
+    {
+      name: 'turn-prep-below-session',
+      comment: 'R5 (stage F2): thread_session capabilities reach turn_prep only as injected ports (skills prompt, identity profile, continuity retrieval, continuity persist). The session composition roots own the real implementations.',
+      severity: 'error',
+      from: { path: '^packages/backend/src/turn_prep' },
+      to: { path: '^packages/backend/src/thread_session' },
+    },
+    {
+      name: 'db-migration-above-database',
+      comment: 'The bootstrap handle flows down: database.ts opens the file and passes it into initializeMigrations(db); migration modules must never reach back for the getDb singleton (that edge is the module-level import cycle).',
+      severity: 'error',
+      from: { path: '^packages/backend/src/db/migration' },
+      to: { path: '^packages/backend/src/db/database.ts$' },
     },
     {
       name: 'session-reads-no-global-config',
@@ -59,6 +73,16 @@ module.exports = {
         path: '^packages/backend/src',
         pathNot:
           '^packages/backend/src/(types|utils|constants|logging|message|i18n)/|^packages/backend/src/config/defaults\\.ts$|^packages/backend/src/network/proxy\\.ts$|^packages/backend/src/workspaces/worktree_ids\\.ts$|^packages/backend/src/workspaces/thread_mode\\.ts$',
+      },
+    },
+    {
+      name: 'renderer-no-schema-heavy-closure',
+      comment: 'R7 (P1): R5 only sees a renderer module\'s DIRECT edges, so a whitelisted backend module that reaches a heavy one smuggles the closure into the bundle (that is how tools/schemas got shipped — one transitive hop, 1.6 MB). Flag transitive reach too: nothing under renderer/ may arrive at tools/, provider/, thread_session/ or agent/ at any depth (`reachable: true` = indirect hops count as well as direct ones). db/ is deliberately absent: the one route there (Sidebar -> message/thread_content_search -> db/) is a type-only import that Vite erases, and R5 keeps governing it. Run with --ts-pre-compilation-deps to inspect type-only edges as well.',
+      severity: 'error',
+      from: { path: '^packages/desktop/src/renderer' },
+      to: {
+        path: '^packages/backend/src/(tools|provider|thread_session|agent)',
+        reachable: true,
       },
     },
     {

@@ -15,13 +15,7 @@ import type {
 } from '@iki/backend/types/provider';
 import type { ChatMessage, ChatThread, PromptApp, Workspace } from './chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from './chat_usage';
-import type {
-  AffectStateEntry,
-  LongMemoryEntry,
-  LongMemorySearchResult,
-  ShortMemoryEntry,
-} from './memory';
-import type { ProactiveTask } from './tasks';
+import type { DevRuntimeStatus, DevToolsResolveRequest, DevToolsSourceResult } from './devtools';
 import type { McpServerInput, McpServerSummary } from '@iki/backend/types/mcp';
 import type {
   SpeechStatus,
@@ -32,9 +26,15 @@ import type {
   WhisperNodeModelInfo,
 } from './speech';
 import type { SkillSource, SkillSummary } from './skill';
-import type { TaskPlan } from './task_plan';
 import type { AppUpdateStatus } from './update';
-import type { AgentRun, AgentEvalLabel, AgentRunStatus, AgentRunTrace, AgentRunTree, ReviewQueueItem } from '@iki/backend/types/agent_run';
+import type {
+  AgentRun,
+  AgentEvalLabel,
+  AgentRunStatus,
+  AgentRunTrace,
+  AgentRunTree,
+  ReviewQueueItem,
+} from '@iki/backend/types/agent_run';
 import type { CompanionSnapshot } from './companion';
 import type { ChatInvocationOptions, ChatInvocationResult } from './chat_invocation';
 export type { ChatInvocationOptions, ChatInvocationResult };
@@ -47,43 +47,11 @@ export type ChatMessageInput = Partial<ChatMessage>;
 export type WorkspaceInput = Partial<Workspace>;
 export type PromptAppInput = Partial<PromptApp>;
 
-export type ShortMemoryInput = {
-  thread_id: string;
-  message_id: string;
-  role: string;
-  content: string;
-  emotion?: unknown;
-  importance?: number;
-};
-
-export type LongMemoryInput = {
-  thread_id: string;
-  summary: string;
-  source_message_ids?: string[];
-  emotion?: unknown;
-  tags?: string[];
-  metadata?: unknown;
-};
-
-export type ProactiveTaskInput = Omit<Partial<ProactiveTask>, 'tools'> &
-  Pick<ProactiveTask, 'name' | 'prompt' | 'provider_type' | 'model'> & {
-    tools?: string[] | string | null;
-  };
-
 export type RunStatusEvent = {
   runId: string;
   status: AgentRunStatus;
   threadId?: string | null;
   timestamp: string;
-};
-
-export type AcpAuthMethod = {
-  id: string;
-  name: string;
-  description?: string | null;
-  type: 'env_var' | 'terminal' | 'agent';
-  link?: string | null;
-  vars?: Array<{ name: string; description?: string | null; secret?: boolean }>;
 };
 
 export type ToolModelConfig = {
@@ -154,7 +122,6 @@ export interface ElectronApi {
     check: () => Promise<AppUpdateStatus>;
     install: () => Promise<void>;
     onStatusChanged: (callback: (status: AppUpdateStatus) => void) => () => void;
-    removeAllListeners: () => void;
   };
   providers: {
     list: () => Promise<Provider[]>;
@@ -170,24 +137,16 @@ export interface ElectronApi {
       providerId?: string,
       providerOverride?: ProviderModelDiscoveryOverride | null
     ) => Promise<ProviderModelDescriptor[]>;
-    getAcpAuthMethods: (
-      providerType: string,
-      providerId?: string,
-      providerOverride?: ProviderModelDiscoveryOverride | null
-    ) => Promise<AcpAuthMethod[]>;
     isProviderConfigured: (providerType: string, providerId?: string) => Promise<boolean>;
-    send: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stream: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stopStream: () => Promise<ChatInvocationResult>;
     steerStream: (threadId: string | undefined, message: string) => Promise<ChatInvocationResult>;
     onUiChunk: (callback: (chunk: unknown) => void) => () => void;
     approveTool: (approvalId: string, approved: boolean) => Promise<ChatInvocationResult>;
     onRunStatus: (callback: (event: RunStatusEvent) => void) => () => void;
-    removeAllListeners: () => void;
     threads: {
       list: () => Promise<ChatThread[]>;
       get: (id: string) => Promise<ChatThread | null>;
-      getTodoPlan: (threadId: string) => Promise<TaskPlan | null>;
       create: (thread: ChatThreadInput) => Promise<ChatThread>;
       clear: (id: string, thread: ChatThreadInput) => Promise<ChatThread | null>;
       update: (id: string, thread: ChatThreadInput) => Promise<unknown>;
@@ -203,59 +162,42 @@ export interface ElectronApi {
     messages: {
       list: (threadId: string) => Promise<ChatMessage[]>;
       get: (id: string) => Promise<ChatMessage | null>;
-      create: (message: ChatMessageInput) => Promise<ChatMessage | null>;
       update: (id: string, message: ChatMessageInput) => Promise<unknown>;
-      delete: (id: string) => Promise<unknown>;
+
+      truncateAfter: (
+        threadId: string,
+        messageId: string
+      ) => Promise<{ success: boolean; deletedIds: string[]; error?: string }>;
     };
     runs: {
       list: (threadId: string) => Promise<AgentRun[]>;
       getTrace: (runId: string) => Promise<AgentRunTrace | null>;
-      trajectory: (runId: string) => Promise<import('@iki/backend/types/atif').AtifTrajectory | null>;
+      trajectory: (
+        runId: string
+      ) => Promise<import('@iki/backend/types/atif').AtifTrajectory | null>;
       getTree: (rootRunId: string) => Promise<AgentRunTree>;
       cancel: (runId: string) => Promise<{ success: boolean; error?: string }>;
-      retry: (runId: string) => Promise<{ success: boolean; error?: string; newRunId?: string }>;
-      retryAndExecute: (runId: string) => Promise<{ success: boolean; error?: string; newRunId?: string }>;
+      retryAndExecute: (
+        runId: string
+      ) => Promise<{ success: boolean; error?: string; newRunId?: string }>;
       resume: (runId: string) => Promise<{ success: boolean; error?: string }>;
-      listByStatus: (statuses: string[], opts?: { limit?: number; clientId?: string }) => Promise<AgentRun[]>;
       reviewQueue: (limit?: number) => Promise<ReviewQueueItem[]>;
       eval: {
-        exportTrace: (runId: string) => Promise<{ success: boolean; filePath?: string; error?: string }>;
-        exportRunTrajectory: (
+        exportTrace: (
           runId: string
-        ) => Promise<import('@iki/backend/types/atif').AtifTrajectoryExportResult>;
-        addLabel: (input: { runId: string; stepId?: string | null; label: string; note?: string | null }) => Promise<AgentEvalLabel>;
+        ) => Promise<{ success: boolean; filePath?: string; error?: string }>;
+        addLabel: (input: {
+          runId: string;
+          stepId?: string | null;
+          label: string;
+          note?: string | null;
+        }) => Promise<AgentEvalLabel>;
         listLabels: (runId: string) => Promise<AgentEvalLabel[]>;
         deleteLabel: (labelId: string) => Promise<{ success: boolean }>;
       };
     };
     usage: {
       summary: (period?: ChatUsagePeriod) => Promise<ChatUsageSummary>;
-    };
-  };
-  memory: {
-    short: {
-      list: (threadId: string, limit?: number) => Promise<ShortMemoryEntry[]>;
-      add: (entry: ShortMemoryInput) => Promise<unknown>;
-      listAll: (limit?: number) => Promise<ShortMemoryEntry[]>;
-    };
-    long: {
-      add: (entry: LongMemoryInput) => Promise<unknown>;
-      update: (id: string, updates: Partial<LongMemoryInput>) => Promise<unknown>;
-      delete: (id: string) => Promise<unknown>;
-      list: (threadId: string, limit?: number) => Promise<LongMemoryEntry[]>;
-      listAll: (limit?: number) => Promise<LongMemoryEntry[]>;
-      search: (
-        threadId: string,
-        query: string,
-        options?: Record<string, unknown>
-      ) => Promise<LongMemorySearchResult[]>;
-      searchAll: (
-        query: string,
-        options?: Record<string, unknown>
-      ) => Promise<LongMemorySearchResult[]>;
-    };
-    affect: {
-      get: (threadId: string) => Promise<AffectStateEntry | null>;
     };
   };
   workspaces: {
@@ -309,7 +251,6 @@ export interface ElectronApi {
     listModels: () => Promise<WhisperNodeModelInfo[]>;
     downloadModel: (modelName: string) => Promise<WhisperNodeDownloadResult>;
     onDownloadProgress: (callback: (payload: WhisperNodeDownloadProgress) => void) => () => void;
-    removeAllListeners: () => void;
   };
   skills: {
     list: () => Promise<SkillSummary[]>;
@@ -321,24 +262,8 @@ export interface ElectronApi {
   workflow: {
     resetAutoPinnedSkills: () => Promise<WindowActionResult>;
   };
-  tasks: {
-    list: () => Promise<ProactiveTask[]>;
-    get: (id: string) => Promise<ProactiveTask | null>;
-    create: (
-      task: ProactiveTaskInput
-    ) => Promise<WindowActionResult & { task?: ProactiveTask | null }>;
-    update: (
-      id: string,
-      updates: Omit<Partial<ProactiveTask>, 'tools'> & { tools?: string[] | string | null }
-    ) => Promise<WindowActionResult & { task?: ProactiveTask | null }>;
-    delete: (id: string) => Promise<WindowActionResult>;
-    runNow: (id: string) => Promise<WindowActionResult>;
-    onPush: (callback: (payload: unknown) => void) => () => void;
-    removeAllListeners: () => void;
-  };
   awaiters: {
     onPush: (callback: (payload: unknown) => void) => () => void;
-    removeAllListeners: () => void;
   };
   mcp: {
     list: () => Promise<McpServerSummary[]>;
@@ -355,10 +280,28 @@ export interface ElectronApi {
     openMainWindow: () => Promise<WindowActionResult>;
     disable: () => Promise<WindowActionResult>;
   };
+
+  dev: {
+    getStatus: () => Promise<DevRuntimeStatus>;
+    restartApp: () => Promise<{ ok: boolean; reason?: string }>;
+  };
+
+  devtools: {
+    installRecorder: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
+    probeElement: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
+    resolveElement: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
+  };
   openSettings: (section?: string) => void;
-  /** Focus the main window and switch its chat view to the given thread. */
+
   focusThread: (threadId: string) => void;
-  onFocusThread: (callback: (threadId: string) => void) => void;
+  onFocusThread: (callback: (threadId: string) => void) => () => void;
   closeWindow: () => void;
   setWindowShadow: (enabled: boolean) => void;
+
+  windowControls?: {
+    minimize: () => void;
+    toggleMaximize: () => void;
+    onFullscreenChange: (callback: (fullscreen: boolean) => void) => () => void;
+    onFocusChange: (callback: (focused: boolean) => void) => () => void;
+  };
 }

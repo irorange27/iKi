@@ -1,10 +1,7 @@
 import { computed, onMounted, ref } from 'vue';
 
 import { useI18n } from '../i18n';
-import { ACP_PROVIDER_TYPE } from '@iki/backend/constants/acp';
 import type { BuiltInProvider } from '@iki/backend/types/settings';
-import type { ProviderModelDiscoveryOverride } from '@iki/backend/types/provider';
-import type { McpServerSummary, McpTransport } from '@iki/backend/types/mcp';
 import { BUILTIN_PROVIDERS } from '@iki/backend/constants/ProvidersSettings';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import {
@@ -12,22 +9,16 @@ import {
   serializeProviderModelOptionsMap,
 } from '@iki/backend/utils/provider_models';
 import { createLogger } from '../logger';
-import { getProviderDisplayName } from '../modules/providers/provider_display';
 import { useProviderDrafts, type ProviderRecord } from './useProviderDrafts';
 import { useProvidersSettingsEditor } from './useProvidersSettingsEditor';
 import { useProviderModelOptionsEditor } from './useProviderModelOptionsEditor';
-import { getElectronAPI, getElectronApiSliceMethod } from '../services/electron_api';
+import { confirmAction } from './useConfirm';
+import { getElectronAPI } from '../services/electron_api';
 import type {
-  AcpMcpServerEntry,
-  ProviderSelectOption,
   ProviderSupportLink,
   SidebarProvider,
 } from '../components/settings/providers/provider_settings_shared';
-import {
-  arrayEquals,
-  arraySetEquals,
-  normalizeSelectedAcpMcpServerIds,
-} from '../components/settings/providers/provider_settings_shared';
+import { arrayEquals } from '../components/settings/providers/provider_settings_shared';
 import {
   buildProviderBaseUrlHelp,
   buildProviderSupportLink,
@@ -37,19 +28,13 @@ import {
 
 export const useProvidersSettings = () => {
   const electronAPI = getElectronAPI();
-  const listMcpServers = getElectronApiSliceMethod('mcp', 'list');
   const providersSettingsLogger = createLogger({ module: 'providers_settings' });
   const { t } = useI18n();
 
   const providers = ref<ProviderRecord[]>([]);
-  const mcpServers = ref<McpServerSummary[]>([]);
-  const mcpServersLoading = ref(false);
-  const mcpServersError = ref('');
   const providerSearchQuery = ref('');
   const selectedProviderId = ref<string | null>(null);
   const isFetchingModels = ref(false);
-  const isFetchingAcpAuthMethods = ref(false);
-  const acpAuthMethods = ref<Array<{ id: string; name: string; description?: string | null; type: string; link?: string | null; vars?: Array<{ name: string; description?: string | null; secret?: boolean }> }>>([]);
   const modelsPanelOpen = ref(false);
 
   const {
@@ -120,43 +105,28 @@ export const useProvidersSettings = () => {
     selectedProviderId,
   });
 
-  const buildSelectedAcpModelDiscoveryOverride = (): ProviderModelDiscoveryOverride | null => {
-    const draft = selectedProviderDraft.value;
-    if (!isSelectedAcpProvider.value || !draft) return null;
-
-    const command = draft.acp_command.trim();
-    if (!command) return null;
-
-    const providerId = selectedProviderConfig.value?.id;
-
-    return {
-      ...(providerId ? { id: providerId } : {}),
-      type: ACP_PROVIDER_TYPE,
-      acp_command: command,
-      acp_args: draft.acp_args.trim() || '',
-      acp_mcp_server_ids:
-        draft.acp_mcp_server_ids.length > 0 ? JSON.stringify(draft.acp_mcp_server_ids) : '',
-      acp_auth_method_id: draft.acp_auth_method_id.trim() || '',
-      acp_api_provider_id: draft.acp_api_provider_id.trim() || '',
-    };
-  };
-
   const fetchLatestModels = async () => {
     if (!selectedProviderId.value) return;
 
     isFetchingModels.value = true;
     try {
-      const providerLookupKey = selectedProviderConfig.value?.type || selectedProviderId.value;
-      const providerOverride = buildSelectedAcpModelDiscoveryOverride();
+      const draft = selectedProviderDraft.value;
+      const config = selectedProviderConfig.value;
+      const providerLookupKey = config?.type || selectedProviderId.value;
+
+      const baseUrl = draft?.base_url.trim() || selectedProviderInfo.value?.defaultBaseUrl || '';
+      const apiKey = draft?.api_key.trim() || '';
+      const providerOverride =
+        baseUrl || apiKey ? { base_url: baseUrl, ...(apiKey ? { api_key: apiKey } : {}) } : null;
+
       const fetched = await electronAPI.chat.getModels(
         providerLookupKey,
-        selectedProviderConfig.value?.id,
+        config?.id,
         providerOverride
       );
       if (fetched && fetched.length > 0) {
         const modelIds = fetched.map(model => model.id);
         setFetchedModels(modelIds);
-        const config = selectedProviderConfig.value;
         if (config) {
           await electronAPI.providers.update(config.id, {
             available_models: JSON.stringify(modelIds),
@@ -175,35 +145,6 @@ export const useProvidersSettings = () => {
       });
     } finally {
       isFetchingModels.value = false;
-    }
-  };
-
-  const fetchAcpAuthMethods = async () => {
-    if (!selectedProviderId.value) return;
-
-    isFetchingAcpAuthMethods.value = true;
-    try {
-      const providerLookupKey = selectedProviderConfig.value?.type || selectedProviderId.value;
-      const providerOverride = buildSelectedAcpModelDiscoveryOverride();
-      const methods = await electronAPI.chat.getAcpAuthMethods(
-        providerLookupKey,
-        selectedProviderConfig.value?.id,
-        providerOverride
-      );
-      acpAuthMethods.value = methods ?? [];
-    } catch (error) {
-      providersSettingsLogger.event({
-        level: 'error',
-        event: 'providers.acp.auth_methods.fetch',
-        outcome: 'failed',
-        error,
-        entity: {
-          provider_id: selectedProviderId.value,
-        },
-      });
-      acpAuthMethods.value = [];
-    } finally {
-      isFetchingAcpAuthMethods.value = false;
     }
   };
 
@@ -232,35 +173,6 @@ export const useProvidersSettings = () => {
     if (!selectedProviderId.value) return false;
     return Boolean(dynamicModels.value[selectedProviderId.value]);
   });
-
-  const formatMcpTransport = (transport: McpTransport): string =>
-    transport === 'stdio'
-      ? t('settings.mcp.transport.stdioShort')
-      : transport === 'sse'
-        ? 'SSE'
-        : t('settings.mcp.transport.httpShort');
-
-  const loadMcpServers = async () => {
-    if (!listMcpServers) {
-      mcpServers.value = [];
-      mcpServersError.value = '';
-      return;
-    }
-
-    mcpServersLoading.value = true;
-    mcpServersError.value = '';
-    try {
-      const list = await listMcpServers();
-      mcpServers.value = Array.isArray(list) ? list : [];
-    } catch (error) {
-      mcpServers.value = [];
-      mcpServersError.value = t('settings.mcp.error.loadFailed', {
-        error: getErrorMessage(error),
-      });
-    } finally {
-      mcpServersLoading.value = false;
-    }
-  };
 
   const addModel = (payload: { modelId: string; displayName: string }) => {
     const modelId = payload.modelId.trim();
@@ -305,98 +217,13 @@ export const useProvidersSettings = () => {
     return selectedProviderInfo.value?.requiresApiKey !== false;
   });
 
-  const isSelectedAcpProvider = computed(() => selectedProviderInfo.value?.id === ACP_PROVIDER_TYPE);
-
-  const acpCredentialProviderOptions = computed<ProviderSelectOption[]>(() => {
-    const options: ProviderSelectOption[] = [
-      {
-        value: '',
-        label: t('settings.providers.acp.apiProviderAuto'),
-      },
-    ];
-
-    const currentProviderId = selectedProviderConfig.value?.id;
-    for (const provider of providers.value) {
-      if (!provider.enabled) continue;
-      if (provider.type === ACP_PROVIDER_TYPE) continue;
-      if (currentProviderId && provider.id === currentProviderId) continue;
-
-      options.push({
-        value: provider.id,
-        label: `${getProviderDisplayName(provider)} (${provider.id})`,
-      });
-    }
-
-    return options;
-  });
-
-  const acpMcpServerEntries = computed<AcpMcpServerEntry[]>(() => {
-    const selectedIds = normalizeSelectedAcpMcpServerIds(
-      selectedProviderDraft.value?.acp_mcp_server_ids ?? []
-    );
-    const knownById = new Map(mcpServers.value.map(server => [server.id, server]));
-    const entries: AcpMcpServerEntry[] = [...mcpServers.value]
-      .sort((left, right) => {
-        if (left.enabled !== right.enabled) {
-          return left.enabled ? -1 : 1;
-        }
-        return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
-      })
-      .map(server => ({
-        id: server.id,
-        name: server.name,
-        meta: `${formatMcpTransport(server.transport)} · ${
-          server.enabled
-            ? t('settings.providers.acp.mcpServersEnabled')
-            : t('settings.providers.acp.mcpServersDisabled')
-        }`,
-        enabled: server.enabled,
-        missing: false,
-      }));
-
-    for (const serverId of selectedIds) {
-      if (knownById.has(serverId)) continue;
-      entries.push({
-        id: serverId,
-        name: t('settings.providers.acp.mcpServersMissingName', { id: serverId }),
-        meta: t('settings.providers.acp.mcpServersMissing'),
-        enabled: false,
-        missing: true,
-      });
-    }
-
-    return entries;
-  });
-
   const selectedProviderSupportLink = computed<ProviderSupportLink | null>(() => {
     return buildProviderSupportLink(selectedProviderInfo.value, t);
   });
 
   const selectedProviderBaseUrlHelp = computed(() => {
-    return buildProviderBaseUrlHelp(selectedProviderInfo.value, ACP_PROVIDER_TYPE, t);
+    return buildProviderBaseUrlHelp(selectedProviderInfo.value, t);
   });
-
-  const updateSelectedAcpApiProviderId = (providerId: string) => {
-    if (!selectedProviderDraft.value) return;
-    selectedProviderDraft.value.acp_api_provider_id = providerId;
-  };
-
-  const updateSelectedAcpAuthMethodId = (methodId: string) => {
-    if (!selectedProviderDraft.value) return;
-    selectedProviderDraft.value.acp_auth_method_id = methodId;
-  };
-
-  const toggleSelectedAcpMcpServer = (serverId: string, checked: boolean) => {
-    if (!selectedProviderDraft.value) return;
-
-    const next = new Set(selectedProviderDraft.value.acp_mcp_server_ids);
-    if (checked) {
-      next.add(serverId);
-    } else {
-      next.delete(serverId);
-    }
-    selectedProviderDraft.value.acp_mcp_server_ids = normalizeSelectedAcpMcpServerIds([...next]);
-  };
 
   const isSelectedProviderDirty = computed(() => {
     const draft = selectedProviderDraft.value;
@@ -406,11 +233,6 @@ export const useProvidersSettings = () => {
     return (
       draft.api_key !== snapshot.api_key ||
       draft.base_url.trim() !== snapshot.base_url ||
-      draft.acp_command.trim() !== snapshot.acp_command ||
-      draft.acp_args.trim() !== snapshot.acp_args ||
-      !arraySetEquals(draft.acp_mcp_server_ids, snapshot.acp_mcp_server_ids) ||
-      draft.acp_auth_method_id.trim() !== snapshot.acp_auth_method_id ||
-      draft.acp_api_provider_id.trim() !== snapshot.acp_api_provider_id ||
       draft.enabled !== snapshot.enabled ||
       !arrayEquals(selectedModelsList.value, snapshot.models) ||
       !arrayEquals(selectedDraftAvailableModels.value, snapshot.availableModels) ||
@@ -429,10 +251,6 @@ export const useProvidersSettings = () => {
       return false;
     }
 
-    if (draft.enabled && isSelectedAcpProvider.value && draft.acp_command.trim().length === 0) {
-      return false;
-    }
-
     return true;
   });
 
@@ -441,10 +259,6 @@ export const useProvidersSettings = () => {
     modelsPanelOpen.value = false;
     closeModelOptionsEditor();
     ensureProviderDraft(providerId);
-
-    if (providerId === ACP_PROVIDER_TYPE) {
-      void loadMcpServers();
-    }
   };
 
   const toggleModelsPanel = () => {
@@ -452,13 +266,21 @@ export const useProvidersSettings = () => {
 
     if (
       modelsPanelOpen.value &&
-      isSelectedAcpProvider.value &&
       !isFetchingModels.value &&
-      availableModelsList.value.length === 0 &&
-      selectedProviderDraft.value?.acp_command.trim()
+      availableModelsList.value.length === 0
     ) {
       void fetchLatestModels();
     }
+  };
+
+  
+  const flushPendingProviderDraft = async (): Promise<boolean> => {
+    if (!isSelectedProviderDirty.value || !canSaveSelectedProvider.value) {
+      return false;
+    }
+
+    await saveProviderConfig();
+    return true;
   };
 
   const saveProviderConfig = async () => {
@@ -478,17 +300,6 @@ export const useProvidersSettings = () => {
     );
     const normalizedBaseUrl =
       draft.base_url.trim() || selectedProviderInfo.value.defaultBaseUrl || '';
-    const normalizedAcpMcpServerIds = normalizeSelectedAcpMcpServerIds(draft.acp_mcp_server_ids);
-    const acpConfigPatch = isSelectedAcpProvider.value
-      ? {
-          acp_command: draft.acp_command.trim(),
-          acp_args: draft.acp_args.trim() || null,
-          acp_mcp_server_ids:
-            normalizedAcpMcpServerIds.length > 0 ? JSON.stringify(normalizedAcpMcpServerIds) : null,
-          acp_auth_method_id: draft.acp_auth_method_id.trim() || null,
-          acp_api_provider_id: draft.acp_api_provider_id.trim() || null,
-        }
-      : {};
 
     try {
       if (existingConfig) {
@@ -498,7 +309,6 @@ export const useProvidersSettings = () => {
             : {}),
           api_key: draft.api_key.trim(),
           base_url: normalizedBaseUrl,
-          ...acpConfigPatch,
           enabled: draft.enabled,
           models: JSON.stringify(modelsToSave),
           model_options: modelOptionsToSave,
@@ -509,11 +319,6 @@ export const useProvidersSettings = () => {
         const hasMeaningfulDraft =
           draft.api_key.trim().length > 0 ||
           draft.base_url.trim().length > 0 ||
-          draft.acp_command.trim().length > 0 ||
-          draft.acp_args.trim().length > 0 ||
-          normalizedAcpMcpServerIds.length > 0 ||
-          draft.acp_auth_method_id.trim().length > 0 ||
-          draft.acp_api_provider_id.trim().length > 0 ||
           modelsToSave.length > 0 ||
           availableToSave.length > 0 ||
           draft.enabled;
@@ -528,7 +333,6 @@ export const useProvidersSettings = () => {
           type: builtIn.id,
           api_key: draft.api_key.trim(),
           base_url: normalizedBaseUrl,
-          ...acpConfigPatch,
           models: JSON.stringify(modelsToSave),
           model_options: modelOptionsToSave,
           enabled: draft.enabled,
@@ -557,39 +361,35 @@ export const useProvidersSettings = () => {
     const config = selectedProviderConfig.value;
     if (!config) return;
 
-    if (confirm(t('settings.providers.confirmRemove'))) {
-      await electronAPI.providers.delete(config.id);
-      await loadProviders();
-      resetSelectedProviderDraft();
-    }
+    const confirmed = await confirmAction({
+      message: t('settings.providers.confirmRemove'),
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    await electronAPI.providers.delete(config.id);
+    await loadProviders();
+    resetSelectedProviderDraft();
   };
 
   onMounted(() => {
     void loadProviders();
-    void loadMcpServers();
   });
 
   return {
-    acpAuthMethods,
-    acpCredentialProviderOptions,
-    acpMcpServerEntries,
     addCustomProvider,
     addModel,
     availableModelsList,
     canSaveSelectedProvider,
     closeModelOptionsEditor,
-    fetchAcpAuthMethods,
     editingProvider,
     editingProviderApiFormat,
     fetchLatestModels,
+    flushPendingProviderDraft,
     hasDynamicModels,
-    isFetchingAcpAuthMethods,
     isFetchingModels,
     isProviderConfigured,
-    isSelectedAcpProvider,
     isSelectedProviderDirty,
-    mcpServersError,
-    mcpServersLoading,
     modelOptionsEditor,
     modelsPanelOpen,
     openModelOptionsEditor,
@@ -615,11 +415,8 @@ export const useProvidersSettings = () => {
     t,
     toggleModel,
     toggleModelsPanel,
-    toggleSelectedAcpMcpServer,
     toggleSelectedProviderApiKeyVisibility,
     updateEditingProviderApiFormatSelection,
     updateEditingProviderTypeSelection,
-    updateSelectedAcpApiProviderId,
-    updateSelectedAcpAuthMethodId,
   };
 };

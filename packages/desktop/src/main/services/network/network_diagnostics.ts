@@ -239,7 +239,7 @@ export const testNetworkConnectivity = async (
     try {
       await ses.setProxy({ mode: 'direct' });
     } catch {
-      // Ignore cleanup failures for the ephemeral diagnostics session.
+      /* empty: error is not actionable here */
     }
   }
 };

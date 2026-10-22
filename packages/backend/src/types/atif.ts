@@ -1,8 +1,4 @@
-/**
- * ATIF (Agent Trajectory Interchange Format, v1.8) wire types, shared by the
- * exporter (thread_session/atif_export.ts), the UI trajectory viewer and the
- * electron_api surface. Kept dependency-free so renderer code can import them.
- */
+
 
 export type AtifToolCall = {
   tool_call_id: string;

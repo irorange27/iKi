@@ -11,10 +11,8 @@ export const registerChatIpc = (): void => {
   if (chatIpcRegistered) return;
   chatIpcRegistered = true;
 
-  // Chat Thread Management
   ipcMain.handle('chat:threads:list', () => chatService.listThreads());
   ipcMain.handle('chat:threads:get', (_, id) => chatService.getThread(id));
-  ipcMain.handle('chat:threads:todo:get', (_, threadId) => chatService.getThreadTodoPlan(threadId));
   ipcMain.handle('chat:threads:create', (_, thread) => chatService.createThread(thread));
   ipcMain.handle('chat:threads:clear', (_, id, thread) => chatService.clearThread(id, thread));
   ipcMain.handle('chat:threads:update', (_, id, thread) => chatService.updateThread(id, thread));
@@ -23,14 +21,14 @@ export const registerChatIpc = (): void => {
   );
   ipcMain.handle('chat:threads:delete', (_, id) => chatService.deleteThread(id));
 
-  // Chat Message Management
   ipcMain.handle('chat:messages:list', (_, threadId) => chatService.listMessages(threadId));
   ipcMain.handle('chat:messages:get', (_, id) => chatService.getMessage(id));
-  ipcMain.handle('chat:messages:create', (_, message) => chatService.createMessage(message));
   ipcMain.handle('chat:messages:update', (_, id, message) =>
     chatService.updateMessage(id, message)
   );
-  ipcMain.handle('chat:messages:delete', (_, id) => chatService.deleteMessage(id));
+  ipcMain.handle('chat:messages:truncate-after', (_, threadId, messageId) =>
+    chatService.truncateAfterMessage(threadId, messageId)
+  );
   ipcMain.handle('chat:runs:list', (_, threadId: string) =>
     toPlainData(chatService.listRuns(threadId))
   );
@@ -43,17 +41,11 @@ export const registerChatIpc = (): void => {
   ipcMain.handle('chat:runs:tree:get', (_, rootRunId: string) =>
     toPlainData(chatService.getRunTree(rootRunId))
   );
-  ipcMain.handle('chat:runs:list-by-status', (_, statuses: string[], opts?: { clientId?: string; limit?: number }) =>
-    toPlainData(chatService.listRunsByStatus(statuses as import('@iki/backend/types/agent_run').AgentRunStatus[], opts))
-  );
   ipcMain.handle('chat:runs:review-queue', (_, limit?: number) =>
     toPlainData(chatService.listReviewQueue(limit))
   );
   ipcMain.handle('chat:runs:cancel', (_, runId: string) =>
     chatService.cancelRun(runId)
-  );
-  ipcMain.handle('chat:runs:retry', (_, runId: string) =>
-    chatService.retryRun(runId)
   );
   ipcMain.handle('chat:runs:retry-and-execute', async (event, runId: string) => {
     const target = toChatStreamTarget(event.sender);
@@ -64,7 +56,6 @@ export const registerChatIpc = (): void => {
     return await chatService.resumeRun(target, runId);
   });
 
-  // Chat/LLM Integration
   ipcMain.handle(
     'chat:getModels',
     async (
@@ -81,28 +72,12 @@ export const registerChatIpc = (): void => {
     return chatService.isProviderConfigured(providerType, providerId);
   });
 
-  ipcMain.handle(
-    'chat:acp:auth-methods',
-    async (
-      _,
-      providerType: string,
-      providerId?: string,
-      providerOverride?: Record<string, unknown> | null
-    ) => {
-      return await chatService.getAcpAuthMethods(providerType, providerId, providerOverride ?? null);
-    }
-  );
-
   ipcMain.handle('chat:stop-stream', event => {
     return chatService.stopStream(event.sender.id);
   });
 
   ipcMain.handle('chat:steer-stream', (event, threadId: string | undefined, message: string) => {
     return chatService.steerStream(event.sender.id, threadId, message);
-  });
-
-  ipcMain.handle('chat:send', async (_, options) => {
-    return await chatService.send(options);
   });
 
   ipcMain.handle('chat:stream', async (event, options) => {
@@ -115,12 +90,8 @@ export const registerChatIpc = (): void => {
     return await chatService.approveTool(target, approvalId, approved);
   });
 
-  // Agent Evaluation
   ipcMain.handle('chat:eval:export-trace', async (_, runId: string) => {
     return chatService.eval.exportTrace(runId);
-  });
-  ipcMain.handle('chat:eval:export-run-trajectory', async (_, runId: string) => {
-    return chatService.eval.exportRunTrajectory(runId);
   });
   ipcMain.handle('chat:eval:add-label', (_, input) => {
     return chatService.eval.addLabel(input);

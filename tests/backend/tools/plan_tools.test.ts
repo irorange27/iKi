@@ -5,7 +5,6 @@ import { PlanTool } from '@iki/backend/tools/plan_tools';
 describe('PlanTool', () => {
   const tool = new PlanTool();
 
-
   it('accepts a valid plan and returns formatted output', async () => {
     const result = (await tool.execute({
       steps: [

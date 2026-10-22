@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
-import type { UIMessage } from 'ai';
+import type { ChatUiMessage as UIMessage } from '@iki/backend/message/message_parts';
 
 import ChatMessageParts from '../../../packages/desktop/src/renderer/components/chat/ChatMessageParts.vue';
 
@@ -117,7 +117,6 @@ describe('ChatMessageParts', () => {
       },
     });
 
-    // Settled tool calls group into a single summary; no per-call cards.
     expect(wrapper.findAll('.tool-call-group')).toHaveLength(1);
     expect(wrapper.find('.tool-call-group-rows').exists()).toBe(false);
     expect(wrapper.find('.tool-result-content').exists()).toBe(false);
@@ -234,8 +233,6 @@ describe('ChatMessageParts', () => {
 
     await wrapper.setProps({ message: mountMessage('Hello world') });
 
-    // Stable render key: the delta must patch the text node, not remount the
-    // segment (which would discard rendered markdown/hljs output per delta).
     expect(wrapper.find('.message-text').element).toBe(segment);
     expect(wrapper.find('.message-text').text()).toBe('Hello world');
   });
@@ -264,8 +261,6 @@ describe('ChatMessageParts', () => {
       message: mountMessage({ type: 'text', text: 'Hello **world**' }),
     });
 
-    // Branch switch (plain interpolation → VueMarkdown) must be an in-place
-    // patch under the same key, not a segment remount.
     expect(wrapper.find('.message-part').element).toBe(segment);
     expect(wrapper.find('.markdown-content').exists()).toBe(true);
   });

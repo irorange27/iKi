@@ -1,5 +1,4 @@
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import type { AffectState } from '@iki/backend/affect/affect_state';
 import { createLogger } from '@iki/backend/logger';
 import {
   buildSkillsMetadataSystemPrompt,
@@ -11,8 +10,7 @@ import { getToolModel } from '../provider/tool_model';
 import { selectSkillsWithAgent } from '../provider/skill_selection';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import type { ChatInputMessage } from './types';
-import { toLlmChatMessages } from './ui_messages';
-import { getAutoPinnedSkillIds, recordAutoSkillSelection } from './platform';
+import { toLlmChatMessages } from '@iki/backend/message/ui_messages';
 
 const chatSkillsLogger = createLogger({ module: 'chat_skills' });
 
@@ -21,7 +19,6 @@ export const resolveSkillsSystemPrompt = async (params: {
   threadId?: string;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
-  affectState?: AffectState | null;
 }): Promise<{
   skillsSystemPrompt: string;
   usedSkills: SkillSummary[];
@@ -31,7 +28,6 @@ export const resolveSkillsSystemPrompt = async (params: {
   const normalizedThreadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
 
   let pinnedSkillIds: string[] = [];
-  let autoPinnedSkillIds: string[] = [];
   if (normalizedThreadId) {
     try {
       const thread = chatThreadDb.getChatThread(normalizedThreadId);
@@ -49,20 +45,17 @@ export const resolveSkillsSystemPrompt = async (params: {
         },
       });
     }
-
-    autoPinnedSkillIds = getAutoPinnedSkillIds(normalizedThreadId);
   }
 
   let normalizedSkillIds = normalizeSkillIds(params.skillIds);
   let availableSkills: SkillSummary[] = [];
 
   if (skillMode === 'manual') {
-    // Manual mode: use explicit skills if provided, otherwise fall back to pinned thread skills.
+
     if (normalizedSkillIds.length === 0 && !Array.isArray(params.skillIds)) {
       normalizedSkillIds = pinnedSkillIds;
     }
 
-    // Persist explicit selection (including empty array to clear pinned skills).
     if (normalizedThreadId && Array.isArray(params.skillIds)) {
       try {
         chatThreadDb.updateChatThread(normalizedThreadId, {
@@ -81,7 +74,7 @@ export const resolveSkillsSystemPrompt = async (params: {
       }
     }
   } else {
-    // Auto mode: pick relevant skills per message using tool model, plus pinned thread skills.
+
     availableSkills = await listSkills();
     const availableSkillCatalog = availableSkills.map(skill => ({
       id: skill.id,
@@ -91,27 +84,18 @@ export const resolveSkillsSystemPrompt = async (params: {
     }));
 
     const toolModel = getToolModel();
+
     const autoSelectedSkillIds =
-      toolModel && availableSkillCatalog.length > 0
+      (toolModel && availableSkillCatalog.length > 0
         ? await selectSkillsWithAgent({
             messages: toLlmChatMessages(params.inputMessages),
             availableSkills: availableSkillCatalog,
             formatCatalogItem: formatSkillMetadataForPrompt,
-            affectState: params.affectState,
           })
-        : [];
-
-    if (normalizedThreadId && toolModel && availableSkillCatalog.length > 0) {
-      recordAutoSkillSelection({
-        threadId: normalizedThreadId,
-        availableSkillIds: availableSkillCatalog.map(skill => skill.id),
-        selectedSkillIds: autoSelectedSkillIds,
-      });
-    }
+        : null) ?? [];
 
     const union = new Set<string>();
     for (const id of pinnedSkillIds) union.add(id);
-    for (const id of autoPinnedSkillIds) union.add(id);
     for (const id of autoSelectedSkillIds) union.add(id);
     normalizedSkillIds = Array.from(union);
   }

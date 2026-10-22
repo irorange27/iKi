@@ -36,12 +36,10 @@ const {
   readRequestedMcpServerIdsMock,
   resolveMcpServerIdsForClientMock,
   resolveToolsForClientMock,
-  searchLongMemoryAcrossThreadsMock,
   mkdirSyncMock,
   writeFileSyncMock,
   daemonLoggerEventMock,
   applyAppLoggingConfigMock,
-  createNapCatReverseBridgeMock,
   createServerMock,
   getRequestHandler,
   resetHttpHarness,
@@ -171,7 +169,7 @@ const {
     listThreads: vi.fn(() => []),
     createThread: vi.fn((thread: Record<string, unknown>) => ({ id: 'thread_new', ...thread })),
     listMessages: vi.fn(() => []),
-    createMessageWithProcessing: vi.fn(async (message: Record<string, unknown>) => ({
+    createMessage: vi.fn((message: Record<string, unknown>) => ({
       id: 'msg_new',
       ...message,
     })),
@@ -200,7 +198,6 @@ const {
     updateServer: vi.fn(async (_id: string, input: unknown) => input),
   };
   const getMcpManagerMock = vi.fn(() => mcpManagerMock);
-  const searchLongMemoryAcrossThreadsMock = vi.fn(() => []);
   const defaultAllowedTools = [
     'web',
     'fetch',
@@ -214,15 +211,6 @@ const {
     'read_personal_skill',
     'write_personal_skill',
     'delete_personal_skill',
-    'todo',
-    'list_todo_lists',
-    'read_todo_list',
-    'write_todo_list',
-    'delete_todo_list',
-    'list_proactive_tasks',
-    'read_proactive_task',
-    'write_proactive_task',
-    'delete_proactive_task',
     'mcp:*',
   ];
   const getDefaultAllowedToolsMock = vi.fn(() => [...defaultAllowedTools]);
@@ -260,25 +248,6 @@ const {
     return requestedIds.filter(serverId => allowedTools.includes(`mcp:server:${serverId}`));
   });
 
-  const napCatBridgeMock = {
-    handleUpgrade: vi.fn(() => false),
-    getStatus: vi.fn(() => ({
-      state: 'disconnected',
-      activeConnectionCount: 0,
-      lastConnectedAt: null,
-      lastDisconnectedAt: null,
-      heartbeat: {
-        lastReceivedAt: null,
-        intervalMs: null,
-        ageMs: null,
-        online: null,
-        good: null,
-        stale: null,
-      },
-    })),
-    dispose: vi.fn(),
-  };
-  const createNapCatReverseBridgeMock = vi.fn(() => napCatBridgeMock);
 
   return {
     resetAppClientState,
@@ -304,12 +273,10 @@ const {
     readRequestedMcpServerIdsMock,
     resolveMcpServerIdsForClientMock,
     resolveToolsForClientMock,
-    searchLongMemoryAcrossThreadsMock,
-    mkdirSyncMock,
+      mkdirSyncMock,
     writeFileSyncMock,
     daemonLoggerEventMock,
     applyAppLoggingConfigMock,
-    createNapCatReverseBridgeMock,
     createServerMock,
     getRequestHandler,
     resetHttpHarness,
@@ -382,22 +349,12 @@ vi.mock('@iki/backend/db/chat_thread', () => ({
   getChatThread: getChatThreadMock,
 }));
 
-vi.mock('@iki/backend/db/memory', () => ({
-  listShortMemory: vi.fn(() => []),
-  listLongMemory: vi.fn(() => []),
-  searchLongMemoryAcrossThreads: searchLongMemoryAcrossThreadsMock,
-}));
-
 vi.mock('@iki/backend/db/app_clients', () => ({
   createAppClient: createAppClientMock,
   getAppClientById: getAppClientByIdMock,
   getAppClientByToken: getAppClientByTokenMock,
   listAppClients: listAppClientsMock,
   touchAppClient: touchAppClientMock,
-}));
-
-vi.mock('@iki/daemon/napcat_adapter', () => ({
-  createNapCatReverseBridge: createNapCatReverseBridgeMock,
 }));
 
 vi.mock('@iki/daemon/bootstrap_token', () => ({
@@ -555,8 +512,6 @@ describe('daemon server', () => {
     vi.clearAllMocks();
     chatServiceMock.listThreads.mockReturnValue([]);
     chatServiceMock.listMessages.mockReturnValue([]);
-    chatServiceMock.send.mockResolvedValue({ success: true });
-    searchLongMemoryAcrossThreadsMock.mockReturnValue([]);
     mcpManagerMock.addServer.mockImplementation(async (input: unknown) => input);
     getChatThreadMock.mockReset();
     getChatThreadMock.mockReturnValue(null);
@@ -584,16 +539,10 @@ describe('daemon server', () => {
 
     expect(result.status).toBe(401);
     expect(result.json).toEqual({ success: false, error: 'Invalid setup token' });
-    expect(createAppClientMock).toHaveBeenCalledTimes(1);
-    expect(createAppClientMock).toHaveBeenCalledWith({
-      id: 'client_napcat',
-      name: 'NapCat',
-      scopes: [],
-      allowedTools: [],
-    });
+    expect(createAppClientMock).not.toHaveBeenCalled();
   });
 
-  it('rotates setup tokens on first non-NapCat registration without reassigning legacy desktop threads', async () => {
+  it('rotates setup tokens on first client registration without reassigning legacy desktop threads', async () => {
     const started = await startTestDaemon();
 
     const first = await requestJson(started, '/v1/clients/register', {
@@ -639,8 +588,6 @@ describe('daemon server', () => {
       scopes: [
         'chat:read',
         'chat:write',
-        'memory:read',
-        'memory:write',
         'tools:run',
         'tools:approve',
         'mcp:read',
@@ -659,15 +606,6 @@ describe('daemon server', () => {
         'read_personal_skill',
         'write_personal_skill',
         'delete_personal_skill',
-        'todo',
-        'list_todo_lists',
-        'read_todo_list',
-        'write_todo_list',
-        'delete_todo_list',
-        'list_proactive_tasks',
-        'read_proactive_task',
-        'write_proactive_task',
-        'delete_proactive_task',
         'mcp:*',
       ],
     });
@@ -687,7 +625,7 @@ describe('daemon server', () => {
       success: false,
       error: 'Invalid input: expected object, received array',
     });
-    expect(createAppClientMock).toHaveBeenCalledTimes(1);
+    expect(createAppClientMock).not.toHaveBeenCalled();
   });
 
   it('rejects chat thread listing without auth and when chat:read scope is missing', async () => {
@@ -740,10 +678,194 @@ describe('daemon server', () => {
     });
   });
 
+  it('exposes the thread workspace binding so a headless client can verify it', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({ scopes: ['chat:read'] });
+
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_bound',
+      client_id: issued.client.id,
+      title: 'Bound',
+      workspace_id: 'ws-dogfood',
+    });
+    chatServiceMock.listThreads.mockReturnValue([
+      {
+        id: 'thread_bound',
+        client_id: issued.client.id,
+        title: 'Bound',
+        workspace_id: 'ws-dogfood',
+      },
+    ]);
+
+    const single = await requestJson(started, '/v1/chat/threads/thread_bound', {
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+    });
+
+    expect(single.status).toBe(200);
+    expect(single.json).toEqual({
+      success: true,
+      thread: expect.objectContaining({
+        id: 'thread_bound',
+        workspace_id: 'ws-dogfood',
+      }),
+    });
+
+    const list = await requestJson(started, '/v1/chat/threads', {
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+    });
+
+    expect(list.status).toBe(200);
+    expect(list.json).toEqual({
+      success: true,
+      threads: [
+        expect.objectContaining({ id: 'thread_bound', workspace_id: 'ws-dogfood' }),
+      ],
+    });
+  });
+
+  it('creates a thread already bound to a workspace and rejects a malformed binding', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({ scopes: ['chat:write'] });
+
+    const result = await requestJson(started, '/v1/chat/threads', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+      body: { title: 'Dogfood', workspace_id: '  ws-dogfood  ' },
+    });
+
+    expect(result.status).toBe(200);
+    expect(chatServiceMock.createThread).toHaveBeenCalledWith({
+      title: 'Dogfood',
+      workspace_id: 'ws-dogfood',
+      client_id: issued.client.id,
+    });
+    expect(result.json).toEqual({
+      success: true,
+      thread: expect.objectContaining({ workspace_id: 'ws-dogfood' }),
+    });
+
+    const rejected = await requestJson(started, '/v1/chat/threads', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+      body: { title: 'Bad', workspace_id: 123 },
+    });
+
+    expect(rejected.status).toBe(400);
+    expect(rejected.json).toEqual({
+      success: false,
+      error: expect.stringContaining('workspace_id'),
+    });
+    expect(chatServiceMock.createThread).toHaveBeenCalledTimes(1);
+  });
+
+  it('exposes the thread workspace binding so a headless client can verify it', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({ scopes: ['chat:read'] });
+
+    getChatThreadMock.mockReturnValue({
+      id: 'thread_bound',
+      client_id: issued.client.id,
+      title: 'Bound',
+      workspace_id: 'ws-dogfood',
+    });
+    chatServiceMock.listThreads.mockReturnValue([
+      {
+        id: 'thread_bound',
+        client_id: issued.client.id,
+        title: 'Bound',
+        workspace_id: 'ws-dogfood',
+      },
+    ]);
+
+    const single = await requestJson(started, '/v1/chat/threads/thread_bound', {
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+    });
+
+    expect(single.status).toBe(200);
+    expect(single.json).toEqual({
+      success: true,
+      thread: expect.objectContaining({
+        id: 'thread_bound',
+        workspace_id: 'ws-dogfood',
+      }),
+    });
+
+    const list = await requestJson(started, '/v1/chat/threads', {
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+    });
+
+    expect(list.status).toBe(200);
+    expect(list.json).toEqual({
+      success: true,
+      threads: [
+        expect.objectContaining({ id: 'thread_bound', workspace_id: 'ws-dogfood' }),
+      ],
+    });
+  });
+
+  it('creates a thread already bound to a workspace and rejects a malformed binding', async () => {
+    const started = await startTestDaemon();
+    const issued = issueClient({ scopes: ['chat:write'] });
+
+    const result = await requestJson(started, '/v1/chat/threads', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+      body: { title: 'Dogfood', workspace_id: '  ws-dogfood  ' },
+    });
+
+    expect(result.status).toBe(200);
+    expect(chatServiceMock.createThread).toHaveBeenCalledWith({
+      title: 'Dogfood',
+      workspace_id: 'ws-dogfood',
+      client_id: issued.client.id,
+    });
+    expect(result.json).toEqual({
+      success: true,
+      thread: expect.objectContaining({ workspace_id: 'ws-dogfood' }),
+    });
+
+    const rejected = await requestJson(started, '/v1/chat/threads', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${issued.token}`,
+        'X-Iki-Client': issued.client.id,
+      },
+      body: { title: 'Bad', workspace_id: 123 },
+    });
+
+    expect(rejected.status).toBe(400);
+    expect(rejected.json).toEqual({
+      success: false,
+      error: expect.stringContaining('workspace_id'),
+    });
+    expect(chatServiceMock.createThread).toHaveBeenCalledTimes(1);
+  });
+
   it('answers CORS preflight requests without requiring authentication', async () => {
     const started = await startTestDaemon();
 
-    const result = await requestJson(started, '/v1/chat/send', {
+    const result = await requestJson(started, '/v1/chat/threads', {
       method: 'OPTIONS',
     });
 
@@ -751,7 +873,7 @@ describe('daemon server', () => {
     expect(result.headers.get('access-control-allow-origin')).toBe('*');
     expect(result.headers.get('access-control-allow-methods')).toContain('OPTIONS');
     expect(getAppClientByTokenMock).not.toHaveBeenCalled();
-    expect(chatServiceMock.send).not.toHaveBeenCalled();
+    expect(chatServiceMock.listThreads).not.toHaveBeenCalled();
   });
 
   it('forces new chat threads to belong to the authenticated client', async () => {
@@ -848,7 +970,6 @@ describe('daemon server', () => {
         thread_id: 'thread_owned',
         role: 'user',
         content: 'hello',
-        await_emotion_analysis: true,
       },
     });
 
@@ -860,150 +981,20 @@ describe('daemon server', () => {
         thread_id: 'thread_owned',
       }),
     });
-    expect(chatServiceMock.createMessageWithProcessing).toHaveBeenCalledWith(
+    expect(chatServiceMock.createMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         thread_id: 'thread_owned',
         message: {
           role: 'user',
           content: 'hello',
         },
-      }),
-      { waitForEmotionAnalysis: true }
-    );
-  });
-
-  it('rejects chat send when tools are requested without tools:run scope', async () => {
-    const started = await startTestDaemon();
-    const issued = issueClient({
-      scopes: ['chat:write'],
-      allowedTools: ['web', 'mcp:server:docs'],
-    });
-
-    getChatThreadMock.mockReturnValueOnce({
-      id: 'thread_scope',
-      client_id: issued.client.id,
-      title: 'Scope',
-    });
-
-    const result = await requestJson(started, '/v1/chat/send', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${issued.token}`,
-        'X-Iki-Client': issued.client.id,
-      },
-      body: {
-        providerType: 'openai',
-        model: 'gpt-4.1',
-        messages: [],
-        thread_id: 'thread_scope',
-        tools: ['web'],
-      },
-    });
-
-    expect(result.status).toBe(403);
-    expect(result.json).toEqual({
-      success: false,
-      error: 'Missing tools:run scope',
-    });
-    expect(chatServiceMock.send).not.toHaveBeenCalled();
-  });
-
-  it('blocks cross-client thread sends and forwards authorized tool/mcp selections to chatService.send', async () => {
-    const started = await startTestDaemon();
-    const issued = issueClient({
-      scopes: ['chat:write', 'tools:run'],
-      allowedTools: ['web', 'mcp:server:docs'],
-    });
-
-    getChatThreadMock.mockReturnValueOnce({
-      id: 'thread_foreign',
-      client_id: 'client_other',
-      title: 'Foreign',
-    });
-
-    const denied = await requestJson(started, '/v1/chat/send', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${issued.token}`,
-        'X-Iki-Client': issued.client.id,
-      },
-      body: {
-        providerType: 'openai',
-        model: 'gpt-4.1',
-        messages: [],
-        thread_id: 'thread_foreign',
-      },
-    });
-
-    expect(denied.status).toBe(403);
-    expect(denied.json).toEqual({
-      success: false,
-      error: 'Thread access denied',
-    });
-
-    getChatThreadMock.mockReturnValueOnce({
-      id: 'thread_owned',
-      client_id: issued.client.id,
-      title: 'Owned',
-    });
-    chatServiceMock.send.mockResolvedValueOnce({ success: true, answer: 'ok' });
-
-    const allowed = await requestJson(started, '/v1/chat/send', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${issued.token}`,
-        'X-Iki-Client': issued.client.id,
-      },
-      body: {
-        providerType: 'openai',
-        model: 'gpt-4.1',
-        messages: [{ role: 'user', content: 'hello' }],
-        thread_id: 'thread_owned',
-        tools: ['web', 'shell'],
-        mcpServerIds: ['docs', 'other'],
-        skillIds: ['skill_1'],
-        skillMode: 'manual',
-        experimental_context: {
-          affect_mode: 'explicit_policy',
-          context_mode: 'benchmark_clean',
-        },
-      },
-    });
-
-    expect(allowed.status).toBe(200);
-    expect(allowed.json).toEqual({ success: true, answer: 'ok' });
-    expect(resolveToolsForClientMock).toHaveBeenCalledWith(
-      ['web', 'shell'],
-      ['web', 'mcp:server:docs']
-    );
-    expect(readRequestedMcpServerIdsMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        mcpServerIds: ['docs', 'other'],
       })
     );
-    expect(resolveMcpServerIdsForClientMock).toHaveBeenCalledWith(
-      ['docs', 'other'],
-      ['web', 'mcp:server:docs']
-    );
-    expect(chatServiceMock.send).toHaveBeenCalledWith({
-      providerType: 'openai',
-      model: 'gpt-4.1',
-      messages: [{ role: 'user', content: 'hello' }],
-      tools: ['web'],
-      mcpServerIds: ['docs'],
-      skillIds: ['skill_1'],
-      skillMode: 'manual',
-      threadId: 'thread_owned',
-      experimentalContext: {
-        affectMode: 'explicit_policy',
-        contextMode: 'benchmark_clean',
-      },
-    });
   });
 
-  it('rejects invalid search payload types instead of coercing them', async () => {
+  it('serves no memory routes: the subsystem is removed', async () => {
     const started = await startTestDaemon();
-    const issued = issueClient({ scopes: ['memory:read'] });
+    const issued = issueClient({ scopes: ['chat:read'] });
 
     const result = await requestJson(started, '/v1/memory/search', {
       method: 'POST',
@@ -1011,18 +1002,10 @@ describe('daemon server', () => {
         Authorization: `Bearer ${issued.token}`,
         'X-Iki-Client': issued.client.id,
       },
-      body: {
-        query: 'memory',
-        include_incognito: 'yes',
-      },
+      body: { query: 'anything' },
     });
 
-    expect(result.status).toBe(400);
-    expect(result.json).toEqual({
-      success: false,
-      error: 'include_incognito: Invalid input: expected boolean, received string',
-    });
-    expect(searchLongMemoryAcrossThreadsMock).not.toHaveBeenCalled();
+    expect(result.status).toBe(404);
   });
 
   it('rejects invalid MCP server payloads before reaching the manager', async () => {
@@ -1047,53 +1030,6 @@ describe('daemon server', () => {
       error: 'base_url: base_url is required for remote servers',
     });
     expect(mcpManagerMock.addServer).not.toHaveBeenCalled();
-  });
-
-  it('logs and returns 500 when chat send fails after payload validation', async () => {
-    const started = await startTestDaemon();
-    const issued = issueClient({
-      scopes: ['chat:write'],
-      allowedTools: [],
-    });
-    chatServiceMock.send.mockRejectedValueOnce(new Error('provider offline'));
-    getChatThreadMock.mockReturnValue({
-      id: 'thread_send_fail',
-      client_id: issued.client.id,
-      title: 'Fail',
-    });
-
-    const result = await requestJson(started, '/v1/chat/send', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${issued.token}`,
-        'X-Iki-Client': issued.client.id,
-      },
-      body: {
-        providerType: 'openai',
-        model: 'gpt-4.1',
-        messages: [],
-        thread_id: 'thread_send_fail',
-      },
-    });
-
-    expect(result.status).toBe(500);
-    expect(result.json).toEqual({
-      success: false,
-      error: 'Internal server error',
-    });
-    expect(daemonLoggerEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        level: 'error',
-        event: 'daemon.server.http.request',
-        outcome: 'failed',
-        message: 'Daemon HTTP request failed unexpectedly.',
-        data: {
-          method: 'POST',
-          path: '/v1/chat/send',
-          client_id: issued.client.id,
-        },
-      })
-    );
   });
 
   it('surfaces MCP connect action failures from the manager', async () => {
@@ -1189,8 +1125,6 @@ describe('daemon server', () => {
     started.shutdown();
     started.shutdown();
 
-    expect(createNapCatReverseBridgeMock).toHaveBeenCalledTimes(1);
-    expect(createNapCatReverseBridgeMock.mock.results[0]?.value.dispose).toHaveBeenCalledTimes(1);
     expect(process.off).toHaveBeenCalledWith('SIGINT', expect.any(Function));
     expect(process.off).toHaveBeenCalledWith('SIGTERM', expect.any(Function));
     expect(started.server.close).toHaveBeenCalledTimes(1);
@@ -1209,166 +1143,31 @@ describe('daemon server', () => {
 
     await expect(started.ready).rejects.toThrow('EADDRINUSE');
     expect(writeFileSyncMock).not.toHaveBeenCalled();
-    expect(createNapCatReverseBridgeMock.mock.results[0]?.value.dispose).toHaveBeenCalledTimes(1);
   });
 
-  describe('rate limiting', () => {
-    let fakeNow: number;
-    let dateNowSpy: ReturnType<typeof vi.spyOn>;
+  it('records the daemon location once listening succeeds', async () => {
+    const started = await startTestDaemon();
+    startedDaemons.push(started);
 
-    beforeEach(() => {
-      fakeNow = 1_700_000_000_000;
-      dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => fakeNow);
-    });
-
-    afterEach(() => {
-      dateNowSpy.mockRestore();
-    });
-
-    it('allows requests up to the rate limit then rejects with 429', async () => {
-      const started = await startTestDaemon();
-      const issued = issueClient({ scopes: ['chat:write'], allowedTools: [] });
-
-      getChatThreadMock.mockReturnValue({
-        id: 'thread_rate',
-        client_id: null,
-        title: 'Rate',
-      });
-
-      chatServiceMock.send.mockResolvedValue({ success: true, answer: 'ok' });
-
-      const doSend = () =>
-        requestJson(started, '/v1/chat/send', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${issued.token}`,
-            'X-Iki-Client': issued.client.id,
-          },
-          body: {
-            providerType: 'openai',
-            model: 'gpt-4.1',
-            messages: [],
-            thread_id: 'thread_rate',
-          },
-        });
-
-      // First 30 requests should succeed (rate limit is 30/min for chat/send)
-      for (let i = 0; i < 30; i++) {
-        const result = await doSend();
-        expect(result.status).toBe(200);
-        expect(result.json.success).toBe(true);
-      }
-
-      // 31st request should be rate limited
-      const blocked = await doSend();
-      expect(blocked.status).toBe(429);
-      expect(blocked.json).toEqual({
-        success: false,
-        error: 'Too many requests',
-      });
-      expect(Number(blocked.headers.get('retry-after'))).toBe(60);
-
-      // Advance time past the window
-      fakeNow += 60_001;
-
-      // Next request should succeed again
-      const retry = await doSend();
-      expect(retry.status).toBe(200);
-      expect(retry.json.success).toBe(true);
-    });
-
-    it('maintains independent rate limits per client', async () => {
-      const started = await startTestDaemon();
-      const client1 = issueClient({ scopes: ['chat:write'], allowedTools: [] });
-      const client2 = issueClient({
-        scopes: ['chat:write'],
-        allowedTools: [],
-        name: 'Client 2',
-      });
-
-      getChatThreadMock.mockReturnValue({
-        id: 'thread_rate',
-        client_id: null,
-        title: 'Rate',
-      });
-
-      chatServiceMock.send.mockResolvedValue({ success: true, answer: 'ok' });
-
-      const doSend = (client: ReturnType<typeof issueClient>) =>
-        requestJson(started, '/v1/chat/send', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${client.token}`,
-            'X-Iki-Client': client.client.id,
-          },
-          body: {
-            providerType: 'openai',
-            model: 'gpt-4.1',
-            messages: [],
-            thread_id: 'thread_rate',
-          },
-        });
-
-      // Exhaust client1's limit
-      for (let i = 0; i < 30; i++) {
-        await doSend(client1);
-      }
-
-      // client1 should be blocked
-      const blocked1 = await doSend(client1);
-      expect(blocked1.status).toBe(429);
-
-      // client2 should still be allowed
-      const allowed2 = await doSend(client2);
-      expect(allowed2.status).toBe(200);
-      expect(allowed2.json.success).toBe(true);
-    });
-
-    it('does not rate-limit the health endpoint', async () => {
-      const started = await startTestDaemon();
-      const issued = issueClient({ scopes: ['chat:write'], allowedTools: [] });
-
-      // Health endpoint should always succeed regardless of chat rate limits
-      for (let i = 0; i < 50; i++) {
-        const result = await requestJson(started, '/v1/health');
-        expect(result.status).toBe(200);
-      }
-
-      // Exhaust chat send limit
-      for (let i = 0; i < 30; i++) {
-        await requestJson(started, '/v1/chat/send', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${issued.token}`,
-            'X-Iki-Client': issued.client.id,
-          },
-          body: {
-            providerType: 'openai',
-            model: 'gpt-4.1',
-            messages: [],
-          },
-        });
-      }
-
-      // Chat send blocked
-      const blocked = await requestJson(started, '/v1/chat/send', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${issued.token}`,
-          'X-Iki-Client': issued.client.id,
-        },
-        body: {
-          providerType: 'openai',
-          model: 'gpt-4.1',
-          messages: [],
-        },
-      });
-      expect(blocked.status).toBe(429);
-
-      // Health still works
-      const health = await requestJson(started, '/v1/health');
-      expect(health.status).toBe(200);
-      expect(health.json.status).toBe('ok');
-    });
+    const written = writeFileSyncMock.mock.calls.map(call => String(call[0]));
+    expect(written.some(p => p.endsWith('daemon.port'))).toBe(true);
+    expect(written.some(p => p.endsWith('daemon.host'))).toBe(true);
   });
+
+  it('survives an unwritable userData dir instead of crashing the process', async () => {
+    writeFileSyncMock.mockImplementation(() => {
+      throw Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' });
+    });
+
+    const started = startDaemonServer({ host: '127.0.0.1', port: 16199 });
+    startedDaemons.push(started);
+
+    expect(started.port).toBe(16199);
+    const skipped = daemonLoggerEventMock.mock.calls.filter(
+      call => call[0]?.event === 'daemon.server.state_file'
+    );
+    expect(skipped.length).toBeGreaterThanOrEqual(2);
+    expect(skipped[0][0].level).toBe('warn');
+  });
+
 });

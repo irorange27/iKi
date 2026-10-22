@@ -18,15 +18,10 @@ import {
   type WsSession,
 } from './server_shared';
 
-type NapCatBridgeLike = {
-  handleUpgrade: (req: http.IncomingMessage, socket: unknown, head: Buffer) => boolean;
-};
-
 type ConfigureDaemonWebSocketsDeps = {
   server: http.Server;
   wss: DaemonSocketServer;
   chatService: ChatService;
-  napcatBridge: NapCatBridgeLike;
   sessions: Map<number, WsSession>;
   wsSessions: Map<DaemonSocket, WsSession>;
   nextSessionIdRef: { current: number };
@@ -117,10 +112,6 @@ export const configureDaemonWebSockets = (deps: ConfigureDaemonWebSocketsDeps) =
         sendDaemonPayload(ws, { type: 'ready', connection_id: id });
         deps.wss.emit('connection', ws, req);
       });
-      return;
-    }
-
-    if (deps.napcatBridge.handleUpgrade(req, socket, head)) {
       return;
     }
 

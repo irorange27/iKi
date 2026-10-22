@@ -10,7 +10,6 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
   chatServiceMock: {
     listThreads: vi.fn(() => [{ id: 'thread_1' }]),
     getThread: vi.fn((id: string) => ({ id })),
-    getThreadTodoPlan: vi.fn((threadId: string) => ({ thread_id: threadId, items: [] })),
     createThread: vi.fn((thread: Record<string, unknown>) => ({ id: 'thread_new', ...thread })),
     clearThread: vi.fn((id: string, thread: Record<string, unknown>) => ({ id, ...thread })),
     updateThread: vi.fn((id: string, thread: Record<string, unknown>) => ({ id, ...thread })),
@@ -19,7 +18,12 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
     getMessage: vi.fn((id: string) => ({ id })),
     createMessage: vi.fn((message: Record<string, unknown>) => ({ id: 'message_new', ...message })),
     updateMessage: vi.fn((id: string, message: Record<string, unknown>) => ({ id, ...message })),
-    deleteMessage: vi.fn((id: string) => ({ success: true, id })),
+    truncateAfterMessage: vi.fn((threadId: string, messageId: string) => ({
+      success: true,
+      threadId,
+      messageId,
+      deletedIds: [],
+    })),
     listRuns: vi.fn((threadId: string) => [{ id: 'run_1', threadId }]),
     getRunTrace: vi.fn((runId: string) => ({
       run: { id: runId },
@@ -38,7 +42,6 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
       },
     ]),
     isProviderConfigured: vi.fn((providerType: string) => providerType === 'openai'),
-    getAcpAuthMethods: vi.fn(async () => [{ id: 'agent', name: 'agent', type: 'agent' }]),
     stopStream: vi.fn((senderId: number) => ({ success: true, senderId })),
     send: vi.fn(async (options: Record<string, unknown>) => ({ success: true, options })),
     stream: vi.fn(async (target: unknown, options: Record<string, unknown>) => ({
@@ -78,9 +81,6 @@ describe('chat IPC', () => {
 
     registerChatIpc();
 
-    // Namespace invariant instead of a full channel mirror: every registered
-    // handler must belong to the chat IPC surface. Exact channel lists are the
-    // registration code's own concern.
     const channels = [...ipcHandlers.keys()];
     expect(channels.length).toBeGreaterThan(0);
     expect(channels.every(channel => channel.startsWith('chat:'))).toBe(true);
@@ -99,7 +99,6 @@ describe('chat IPC', () => {
     const event = { sender };
     const threadPayload = { title: 'Thread' };
     const messagePayload = { thread_id: 'thread_1', message: '{}' };
-    const sendPayload = { providerType: 'openai', model: 'gpt-4.1', messages: [] };
     const streamPayload = {
       providerType: 'openai',
       model: 'gpt-4.1',
@@ -110,10 +109,6 @@ describe('chat IPC', () => {
     expect(await ipcHandlers.get('chat:threads:list')?.(null)).toEqual([{ id: 'thread_1' }]);
     expect(await ipcHandlers.get('chat:threads:get')?.(null, 'thread_1')).toEqual({
       id: 'thread_1',
-    });
-    expect(await ipcHandlers.get('chat:threads:todo:get')?.(null, 'thread_1')).toEqual({
-      thread_id: 'thread_1',
-      items: [],
     });
     expect(await ipcHandlers.get('chat:threads:create')?.(null, threadPayload)).toEqual({
       id: 'thread_new',
@@ -140,11 +135,6 @@ describe('chat IPC', () => {
     expect(await ipcHandlers.get('chat:messages:get')?.(null, 'message_1')).toEqual({
       id: 'message_1',
     });
-    expect(await ipcHandlers.get('chat:messages:create')?.(null, messagePayload)).toEqual({
-      id: 'message_new',
-      thread_id: 'thread_1',
-      message: '{}',
-    });
     expect(
       await ipcHandlers.get('chat:messages:update')?.(null, 'message_1', messagePayload)
     ).toEqual({
@@ -152,10 +142,10 @@ describe('chat IPC', () => {
       thread_id: 'thread_1',
       message: '{}',
     });
-    expect(await ipcHandlers.get('chat:messages:delete')?.(null, 'message_1')).toEqual({
-      success: true,
-      id: 'message_1',
-    });
+    expect(
+      await ipcHandlers.get('chat:messages:truncate-after')?.(null, 'thread_1', 'message_1')
+    ).toEqual({ success: true, threadId: 'thread_1', messageId: 'message_1', deletedIds: [] });
+    expect(chatServiceMock.truncateAfterMessage).toHaveBeenCalledWith('thread_1', 'message_1');
     expect(await ipcHandlers.get('chat:runs:list')?.(null, 'thread_1')).toEqual([
       { id: 'run_1', threadId: 'thread_1' },
     ]);
@@ -184,10 +174,6 @@ describe('chat IPC', () => {
       success: true,
       senderId: 77,
     });
-    expect(await ipcHandlers.get('chat:send')?.(null, sendPayload)).toEqual({
-      success: true,
-      options: sendPayload,
-    });
     expect(await ipcHandlers.get('chat:stream')?.(event, streamPayload)).toEqual({
       success: true,
       target: sender,
@@ -206,23 +192,19 @@ describe('chat IPC', () => {
 
     expect(chatServiceMock.listThreads).toHaveBeenCalledTimes(1);
     expect(chatServiceMock.getThread).toHaveBeenCalledWith('thread_1');
-    expect(chatServiceMock.getThreadTodoPlan).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.createThread).toHaveBeenCalledWith(threadPayload);
     expect(chatServiceMock.clearThread).toHaveBeenCalledWith('thread_1', threadPayload);
     expect(chatServiceMock.updateThread).toHaveBeenCalledWith('thread_1', threadPayload);
     expect(chatServiceMock.deleteThread).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.listMessages).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.getMessage).toHaveBeenCalledWith('message_1');
-    expect(chatServiceMock.createMessage).toHaveBeenCalledWith(messagePayload);
     expect(chatServiceMock.updateMessage).toHaveBeenCalledWith('message_1', messagePayload);
-    expect(chatServiceMock.deleteMessage).toHaveBeenCalledWith('message_1');
     expect(chatServiceMock.listRuns).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.getRunTrace).toHaveBeenCalledWith('run_1');
     expect(chatServiceMock.getRunTree).toHaveBeenCalledWith('run_root_1');
     expect(chatServiceMock.getModels).toHaveBeenCalledWith('openai', undefined, null);
     expect(chatServiceMock.isProviderConfigured).toHaveBeenCalledWith('openai', undefined);
     expect(chatServiceMock.stopStream).toHaveBeenCalledWith(77);
-    expect(chatServiceMock.send).toHaveBeenCalledWith(sendPayload);
     expect(chatServiceMock.stream).toHaveBeenCalledWith(sender, streamPayload);
     expect(chatServiceMock.approveTool).toHaveBeenCalledWith(sender, 'approval_1', true);
     expect(chatServiceMock.getUsageSummary).toHaveBeenCalledWith('30d');

@@ -16,8 +16,6 @@ import type {
   DaemonControlResult,
   DaemonLogsInfo,
   DaemonStatusInfo,
-  NapCatBridgeHeartbeatInfo,
-  NapCatBridgeStatusInfo,
   NetworkDiagnosticResult,
 } from '@iki/backend/types/config';
 import {
@@ -31,10 +29,8 @@ import {
 import { testNetworkConnectivity } from '../services/network/network_diagnostics';
 import { applyAppUpdateConfig } from '../services/update/auto_update_service';
 import {
-  buildNapCatWsUrl,
   DEFAULT_DAEMON_HOST,
   DEFAULT_DAEMON_PORT,
-  NAPCAT_REVERSE_WS_PATH,
 } from '@iki/backend/constants/daemon';
 import { getAllBrowserWindows } from '../utils/browser_windows';
 import { companionService } from '../services/companion/companion_service';
@@ -120,104 +116,10 @@ const requestDaemonHealth = (port: number): Promise<{ statusCode: number; body: 
     req.on('error', reject);
   });
 
-const buildFallbackNapCatHeartbeatStatus = (): NapCatBridgeHeartbeatInfo => ({
-  lastReceivedAt: null,
-  intervalMs: null,
-  ageMs: null,
-  online: null,
-  good: null,
-  stale: null,
-});
-
-const buildFallbackNapCatBridgeStatus = (config: AppConfig): NapCatBridgeStatusInfo => ({
-  state: config.bridges?.napcat?.enabled ? 'unknown' : 'disabled',
-  activeConnectionCount: null,
-  lastConnectedAt: null,
-  lastDisconnectedAt: null,
-  heartbeat: buildFallbackNapCatHeartbeatStatus(),
-});
-
-const normalizeOptionalIsoTimestamp = (value: unknown, fallback: string | null): string | null => {
-  if (typeof value !== 'string') return fallback;
-  const trimmed = value.trim();
-  return trimmed || null;
-};
-
-const normalizeNapCatHeartbeatStatus = (
-  value: unknown,
-  fallback: NapCatBridgeHeartbeatInfo
-): NapCatBridgeHeartbeatInfo => {
-  if (!value || typeof value !== 'object') return fallback;
-
-  const lastReceivedAt = Reflect.get(value, 'lastReceivedAt');
-  const intervalMs = Reflect.get(value, 'intervalMs');
-  const ageMs = Reflect.get(value, 'ageMs');
-  const online = Reflect.get(value, 'online');
-  const good = Reflect.get(value, 'good');
-  const stale = Reflect.get(value, 'stale');
-
-  return {
-    lastReceivedAt:
-      typeof lastReceivedAt === 'string' && lastReceivedAt.trim() ? lastReceivedAt : null,
-    intervalMs:
-      typeof intervalMs === 'number' && Number.isFinite(intervalMs) && intervalMs >= 0
-        ? Math.trunc(intervalMs)
-        : fallback.intervalMs,
-    ageMs:
-      typeof ageMs === 'number' && Number.isFinite(ageMs) && ageMs >= 0 ? Math.trunc(ageMs) : null,
-    online: typeof online === 'boolean' ? online : null,
-    good: typeof good === 'boolean' ? good : null,
-    stale: typeof stale === 'boolean' ? stale : null,
-  };
-};
-
-const normalizeNapCatBridgeStatus = (
-  value: unknown,
-  fallback: NapCatBridgeStatusInfo
-): NapCatBridgeStatusInfo => {
-  if (!value || typeof value !== 'object') return fallback;
-
-  const rawState = Reflect.get(value, 'state');
-  const state =
-    rawState === 'disabled' ||
-    rawState === 'disconnected' ||
-    rawState === 'degraded' ||
-    rawState === 'connected' ||
-    rawState === 'unknown'
-      ? rawState
-      : fallback.state;
-  const rawCount = Reflect.get(value, 'activeConnectionCount');
-  const activeConnectionCount =
-    typeof rawCount === 'number' && Number.isFinite(rawCount) && rawCount >= 0
-      ? Math.trunc(rawCount)
-      : fallback.activeConnectionCount;
-  const lastConnectedAt = normalizeOptionalIsoTimestamp(
-    Reflect.get(value, 'lastConnectedAt'),
-    fallback.lastConnectedAt
-  );
-  const lastDisconnectedAt = normalizeOptionalIsoTimestamp(
-    Reflect.get(value, 'lastDisconnectedAt'),
-    fallback.lastDisconnectedAt
-  );
-  const heartbeat = normalizeNapCatHeartbeatStatus(
-    Reflect.get(value, 'heartbeat'),
-    fallback.heartbeat
-  );
-
-  return {
-    state,
-    activeConnectionCount,
-    lastConnectedAt,
-    lastDisconnectedAt,
-    heartbeat,
-  };
-};
-
 const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
   const userDataPath = app.getPath('userData');
   const config = loadConfig();
   const recorded = readRecordedDaemonLocation(userDataPath, config);
-  const fallbackNapCatBridgeStatus = buildFallbackNapCatBridgeStatus(config);
   const embeddedStatus = getDesktopEmbeddedDaemonStatus();
 
   if (embeddedStatus) {
@@ -225,12 +127,6 @@ const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
       ...embeddedStatus,
       host: embeddedStatus.host || recorded.host,
       port: Number.isFinite(embeddedStatus.port) ? embeddedStatus.port : recorded.port,
-      bridges: {
-        napcat: normalizeNapCatBridgeStatus(
-          embeddedStatus.bridges?.napcat,
-          fallbackNapCatBridgeStatus
-        ),
-      },
     };
   }
 
@@ -244,9 +140,6 @@ const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
         status: 'offline',
         source: recorded.source,
         uptimeSeconds: null,
-        bridges: {
-          napcat: fallbackNapCatBridgeStatus,
-        },
         error: `Health check returned HTTP ${health.statusCode}`,
       };
     }
@@ -256,9 +149,6 @@ const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
       port?: number;
       status?: string;
       uptime?: number;
-      bridges?: {
-        napcat?: unknown;
-      };
     };
 
     return {
@@ -274,9 +164,6 @@ const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
         typeof payload.uptime === 'number' && Number.isFinite(payload.uptime)
           ? payload.uptime
           : null,
-      bridges: {
-        napcat: normalizeNapCatBridgeStatus(payload.bridges?.napcat, fallbackNapCatBridgeStatus),
-      },
     };
   } catch (error) {
     return {
@@ -286,9 +173,6 @@ const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
       status: 'offline',
       source: recorded.source,
       uptimeSeconds: null,
-      bridges: {
-        napcat: fallbackNapCatBridgeStatus,
-      },
       error: error instanceof Error ? error.message : 'Failed to contact daemon',
     };
   }
@@ -307,9 +191,6 @@ const getRuntimeInfo = (): ConfigRuntimeInfo => {
       defaultPort: DEFAULT_DAEMON_PORT,
       configuredHost,
       configuredPort,
-      napcatWsPath: NAPCAT_REVERSE_WS_PATH,
-      localNapCatWsUrl: buildNapCatWsUrl(configuredHost, configuredPort),
-      dockerNapCatWsUrl: buildNapCatWsUrl('host.docker.internal', configuredPort),
     },
   };
 };
@@ -453,7 +334,6 @@ export const registerConfigIpc = (): void => {
   if (configIpcRegistered) return;
   configIpcRegistered = true;
 
-  // Keep migration colocated with config bootstrap so main.ts doesn't have to manage it.
   migrateLegacyConfig();
 
   ipcMain.handle('config:get', () => {
@@ -509,7 +389,7 @@ export const registerConfigIpc = (): void => {
       try {
         win.webContents.send('config:updated', normalized);
       } catch {
-        // window may have been destroyed since enumeration
+        /* empty: error is not actionable here */
       }
     }
 

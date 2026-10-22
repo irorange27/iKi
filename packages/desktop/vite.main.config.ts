@@ -10,7 +10,6 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: '@iki/backend/', replacement: path.join(ROOT, 'packages/backend/src/') },
-      { find: '@iki/backend', replacement: path.join(ROOT, 'packages/backend/src/index.ts') },
       { find: '@iki/theme/', replacement: path.join(ROOT, 'packages/theme/src/') },
       { find: '@iki/theme', replacement: path.join(ROOT, 'packages/theme/src/index.ts') },
       { find: '@iki/daemon/', replacement: path.join(ROOT, 'packages/daemon/src/') },
@@ -25,6 +24,10 @@ export default defineConfig({
   },
   build: {
     sourcemap: true,
+    // The DevTools element→source bridge reads renderer sourcemaps with
+    // source-map-js; keep it a runtime dependency instead of inlining it into
+    // the main bundle, where runtime_packaging's require scan would miss its
+    // transitive files.
     rollupOptions: {
       external: [...VITE_EXTERNAL_RUNTIME_DEPS],
     },

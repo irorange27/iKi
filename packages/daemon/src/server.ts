@@ -7,7 +7,11 @@ import { createRequire } from 'node:module';
 import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { startTurnHarness } from '@iki/backend/agent/harness';
+import {
+  finalizeHarnessTurn,
+  finalizeTurnFailure,
+} from '@iki/backend/thread_session/turn_finalize';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { registerStandardTools } from '@iki/backend/tools';
 import { getMcpManager } from '@iki/backend/mcp';
@@ -16,11 +20,9 @@ import { initializeDatabase } from '@iki/backend/db/database';
 import { applyAppLoggingConfig, withLogContext } from '@iki/backend/logger';
 import { getUserDataPath, setPlatformInfo } from '@iki/backend/platform';
 import { createChatService } from '@iki/backend/thread_session';
-import { createNapCatReverseBridge } from './napcat_adapter';
 import { readOrCreateBootstrapToken } from './bootstrap_token';
 import { createDaemonRequestHandler } from './server_http';
 import {
-  ensureNapCatClient,
   type DaemonSocket,
   type DaemonSocketServer,
   type WsSession,
@@ -41,14 +43,23 @@ const ensureUserDataDir = () => {
   return userDataPath;
 };
 
-const writePortFile = (userDataPath: string, port: number) => {
-  const portPath = path.join(userDataPath, 'daemon.port');
-  fs.writeFileSync(portPath, String(port), { encoding: 'utf8' });
-};
-
-const writeHostFile = (userDataPath: string, host: string) => {
-  const hostPath = path.join(userDataPath, 'daemon.host');
-  fs.writeFileSync(hostPath, host, { encoding: 'utf8' });
+const writeOptionalFile = (
+  filePath: string,
+  contents: string,
+  logger: ReturnType<typeof createDaemonLogger>
+) => {
+  try {
+    fs.writeFileSync(filePath, contents, { encoding: 'utf8' });
+  } catch (error) {
+    logger.event({
+      level: 'warn',
+      event: 'daemon.server.state_file',
+      outcome: 'skipped',
+      message: `Could not write ${path.basename(filePath)}; continuing without it.`,
+      error,
+      entity: { path: filePath },
+    });
+  }
 };
 
 export const startDaemonServer = (options?: { port?: number; host?: string }) => {
@@ -75,7 +86,11 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
       delegatedAgentRuntime: {
         createRunTracker: createAgentRunTracker,
         getConversationToolModel: getToolModel,
-        createHarness: startTurnHarness,
+        createHarness: startPiTurnHarness,
+        finalize: {
+          finalizeFailure: finalizeTurnFailure,
+          finalizeSuccess: finalizeHarnessTurn,
+        },
       },
     });
     const mcpManager = getMcpManager();
@@ -86,11 +101,6 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
     const wsSessions = new Map<DaemonSocket, WsSession>();
     const nextSessionIdRef = { current: 1 };
     const bootstrapTokenRef = { current: bootstrapToken };
-    const napcatClientId = ensureNapCatClient();
-    const napcatBridge = createNapCatReverseBridge({
-      chatService,
-      clientId: napcatClientId,
-    });
     let startupSettled = false;
     let shuttingDown = false;
     let resolveReady: () => void = () => undefined;
@@ -106,8 +116,6 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
         port,
         userDataPath,
         bootstrapTokenRef,
-        napcatClientId,
-        getNapCatBridgeStatus: napcatBridge.getStatus,
         chatService,
         mcpManager,
         sessions,
@@ -139,7 +147,6 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
       shuttingDown = true;
       process.off('SIGINT', shutdown);
       process.off('SIGTERM', shutdown);
-      napcatBridge.dispose();
 
       void (async () => {
         try {
@@ -187,9 +194,6 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
         status: 'ok',
         source: 'health',
         uptimeSeconds: process.uptime(),
-        bridges: {
-          napcat: napcatBridge.getStatus(),
-        },
       }),
       shutdown,
       ready,
@@ -218,7 +222,6 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
       server,
       wss,
       chatService,
-      napcatBridge,
       sessions,
       wsSessions,
       nextSessionIdRef,
@@ -227,8 +230,8 @@ export const startDaemonServer = (options?: { port?: number; host?: string }) =>
 
     server.listen(port, host, () => {
       started.port = resolveListeningPort();
-      writePortFile(userDataPath, started.port);
-      writeHostFile(userDataPath, host);
+      writeOptionalFile(path.join(userDataPath, 'daemon.port'), String(started.port), serverLogger);
+      writeOptionalFile(path.join(userDataPath, 'daemon.host'), host, serverLogger);
       serverLogger.event({
         level: 'info',
         event: 'daemon.server.listen',

@@ -1,10 +1,8 @@
 export type AgentRunKind =
   | 'chat-turn'
   | 'approval-resume'
-  | 'proactive-task'
   | 'awaiter-wake'
   | 'delegated-agent'
-  | 'handoff-resume';
 
 export type AgentRunStatus =
   | 'queued'
@@ -14,20 +12,29 @@ export type AgentRunStatus =
   | 'failed'
   | 'cancelled';
 
-/** A finished background run (proactive task / awaiter wake) surfaced for review. */
 export type ReviewQueueItem = {
   runId: string;
   kind: AgentRunKind;
   status: AgentRunStatus;
   threadId?: string | null;
   threadTitle?: string;
-  taskName?: string;
   startedAt: string;
   updatedAt: string;
   summary: string;
   error?: string;
 };
 
+/**
+ * `finalize` and `approval-response` are retained for rows written before those
+ * transitions stopped appending a step. Nothing writes either any more.
+ *
+ * A terminal transition (completion, cancellation, approval resume) records the
+ * run row alone: the step duplicated `output.text` and made every turn look like
+ * it ended in a separate event. An approval decision is recorded as the
+ * `approval_decided` session-log fact, which already carries the approval id,
+ * the decision and the reason — the step was a second copy of the same three
+ * fields under a "Decision" label.
+ */
 export type AgentRunStepType =
   | 'model'
   | 'tool-call'
@@ -40,16 +47,6 @@ export type AgentRunStepType =
 
 export type AgentRunStepStatus = 'started' | 'completed' | 'failed';
 
-export type AgentRunCheckpointReason =
-  | 'step-completed'
-  | 'approval-requested'
-  | 'approval-answered'
-  | 'child-run-spawned'
-  | 'run-completed'
-  | 'run-cancelled'
-  | 'run-failed'
-  | 'periodic';
-
 export type AgentRunInput = {
   prompt?: string;
   messages?: unknown[];
@@ -57,7 +54,6 @@ export type AgentRunInput = {
 };
 
 export type AgentRunWorkingState = {
-  modelMessages: unknown[];
   accumulatedText: string;
   pendingApprovalIds: string[];
   lastStepIndex: number;
@@ -67,6 +63,8 @@ export type AgentRunOutput = {
   text?: string;
   finishReason?: string;
   usage?: Record<string, unknown>;
+
+  pendingToolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
 };
 
 export type AgentRunError = {
@@ -109,19 +107,9 @@ export interface AgentRunStep {
   finishedAt?: string | null;
 }
 
-export interface AgentRunCheckpoint {
-  id: string;
-  runId: string;
-  stepIndex: number;
-  reason: AgentRunCheckpointReason;
-  snapshot: AgentRun;
-  createdAt: string;
-}
-
 export interface AgentRunTrace {
   run: AgentRun;
   steps: AgentRunStep[];
-  latestCheckpoint?: AgentRunCheckpoint | null;
   children: AgentRun[];
 }
 

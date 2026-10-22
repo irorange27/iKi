@@ -1,9 +1,4 @@
-/**
- * Build a safe SET clause for UPDATE statements.
- * Only keys in the allowedColumns set are interpolated as column names;
- * unknown keys are silently dropped to prevent SQL injection via dynamic
- * column name interpolation.
- */
+
 export const buildSetClause = (
   record: Record<string, unknown>,
   allowedColumns: ReadonlySet<string>

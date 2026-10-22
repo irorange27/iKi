@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { isRetryableError } from '@iki/backend/utils/errors';
 
 describe('isRetryableError', () => {
-  // Rate limit errors
   it('matches "rate limit" in message', () => {
     expect(isRetryableError(new Error('Rate limit exceeded'))).toBe(true);
   });
@@ -12,7 +11,6 @@ describe('isRetryableError', () => {
     expect(isRetryableError(new Error('Too many requests'))).toBe(true);
   });
 
-  // Server errors
   it('matches HTTP 503', () => {
     expect(isRetryableError(new Error('503 Service Unavailable'))).toBe(true);
   });
@@ -29,12 +27,10 @@ describe('isRetryableError', () => {
     expect(isRetryableError(new Error('Server is overloaded'))).toBe(true);
   });
 
-  // Timeout errors
   it('matches "timeout" in message', () => {
     expect(isRetryableError(new Error('Request timeout'))).toBe(true);
   });
 
-  // Network errors
   it('matches "econnrefused" in message', () => {
     expect(isRetryableError(new Error('connect ECONNREFUSED'))).toBe(true);
   });
@@ -55,19 +51,16 @@ describe('isRetryableError', () => {
     expect(isRetryableError(new Error('fetch failed'))).toBe(true);
   });
 
-  // Case insensitivity
   it('handles uppercase variants', () => {
     expect(isRetryableError(new Error('RATE LIMIT'))).toBe(true);
     expect(isRetryableError(new Error('TOO MANY REQUESTS'))).toBe(true);
     expect(isRetryableError(new Error('INTERNAL SERVER ERROR'))).toBe(true);
   });
 
-  // Realistic provider error shapes
   it('recognizes error objects with message property (not Error instances)', () => {
     expect(isRetryableError({ message: 'rate limit hit' })).toBe(true);
   });
 
-  // Non-retryable errors
   it('rejects AbortError', () => {
     const error = new Error('The operation was aborted');
     error.name = 'AbortError';
@@ -101,7 +94,6 @@ describe('isRetryableError', () => {
     expect(isRetryableError('rate limit')).toBe(false);
   });
 
-  // Edge cases: numbers embedded in message
   it('matches retryable codes appearing anywhere in the message', () => {
     expect(isRetryableError(new Error('Got status 429 from upstream'))).toBe(true);
     expect(isRetryableError(new Error('Upstream returned 503'))).toBe(true);

@@ -39,14 +39,10 @@ On first launch, add a provider (OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, Oll
 ## Features
 
 - **Multi-provider chat** — one chat surface for OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, Ollama, and ACP-backed agents. Conversations persist in local SQLite.
-- **Tool calling** — read, write, edit, and delete files; run shell commands; search the web; manage todo lists; write personal skill instructions; delegate work to sub-agents. Destructive operations require approval. File and shell tools are scoped to a selected workspace directory.
-- **Daemon mode** — a headless HTTP + WebSocket server exposes the same chat and tool surface to external clients, including a QQ bot via the built-in NapCat reverse bridge.
-- **Proactive tasks** — cron-scheduled prompts that trigger the model on a timer.
+- **Tool calling** — read, write, edit, and delete files; run shell commands; search the web; write personal skill instructions; delegate work to sub-agents. Destructive operations require approval. File and shell tools are scoped to a selected workspace directory.
+- **Daemon mode** — a headless HTTP + WebSocket server exposes the same chat and tool surface to external clients.
 - **Awaiters** — one-shot deferred reminders that continue a thread later.
-- **Continuity** — user-declared facts injected into future prompts.
-- **Long-term memory** — embedding-based semantic search over stored text entries.
 - **Companion overlay** — a small desktop window showing the agent's current phase.
-- **Affect analysis** — model-inferred emotional state from user messages, optionally gating tool approval.
 
 ## Privacy
 

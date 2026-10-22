@@ -15,16 +15,15 @@ const { registerMocks, callOrder } = vi.hoisted(() => {
       registerConfigIpc: namedRegister('config'),
       registerProvidersIpc: namedRegister('providers'),
       registerMcpIpc: namedRegister('mcp'),
-      registerMemoryIpc: namedRegister('memory'),
       registerWorkspacesIpc: namedRegister('workspaces'),
       registerPromptAppsIpc: namedRegister('prompt_apps'),
       registerToolModelIpc: namedRegister('tool_model'),
       registerToolsIpc: namedRegister('tools'),
+      registerDevIpc: namedRegister('dev'),
+      registerDevToolsIpc: namedRegister('devtools'),
       registerUpdaterIpc: namedRegister('updater'),
       registerSkillsIpc: namedRegister('skills'),
-      registerWorkflowIpc: namedRegister('workflow'),
       registerSpeechIpc: namedRegister('speech'),
-      registerTasksIpc: namedRegister('tasks'),
       registerChatIpc: namedRegister('chat'),
     },
   };
@@ -45,9 +44,6 @@ vi.mock('../../../packages/desktop/src/main/ipc/providers', () => ({
 vi.mock('../../../packages/desktop/src/main/ipc/mcp', () => ({
   registerMcpIpc: registerMocks.registerMcpIpc,
 }));
-vi.mock('../../../packages/desktop/src/main/ipc/memory', () => ({
-  registerMemoryIpc: registerMocks.registerMemoryIpc,
-}));
 vi.mock('../../../packages/desktop/src/main/ipc/workspaces', () => ({
   registerWorkspacesIpc: registerMocks.registerWorkspacesIpc,
 }));
@@ -60,20 +56,20 @@ vi.mock('../../../packages/desktop/src/main/ipc/tool_model', () => ({
 vi.mock('../../../packages/desktop/src/main/ipc/tools', () => ({
   registerToolsIpc: registerMocks.registerToolsIpc,
 }));
+vi.mock('../../../packages/desktop/src/main/ipc/dev', () => ({
+  registerDevIpc: registerMocks.registerDevIpc,
+}));
+vi.mock('../../../packages/desktop/src/main/ipc/devtools', () => ({
+  registerDevToolsIpc: registerMocks.registerDevToolsIpc,
+}));
 vi.mock('../../../packages/desktop/src/main/ipc/updater', () => ({
   registerUpdaterIpc: registerMocks.registerUpdaterIpc,
 }));
 vi.mock('../../../packages/desktop/src/main/ipc/skills', () => ({
   registerSkillsIpc: registerMocks.registerSkillsIpc,
 }));
-vi.mock('../../../packages/desktop/src/main/ipc/workflow', () => ({
-  registerWorkflowIpc: registerMocks.registerWorkflowIpc,
-}));
 vi.mock('../../../packages/desktop/src/main/ipc/speech', () => ({
   registerSpeechIpc: registerMocks.registerSpeechIpc,
-}));
-vi.mock('../../../packages/desktop/src/main/ipc/tasks', () => ({
-  registerTasksIpc: registerMocks.registerTasksIpc,
 }));
 vi.mock('../../../packages/desktop/src/main/ipc/chat', () => ({
   registerChatIpc: registerMocks.registerChatIpc,
@@ -98,15 +94,14 @@ describe('main IPC registration', () => {
       'updater',
       'providers',
       'mcp',
-      'memory',
       'workspaces',
       'prompt_apps',
       'tool_model',
       'tools',
+      'dev',
+      'devtools',
       'skills',
-      'workflow',
       'speech',
-      'tasks',
       'chat',
     ]);
 

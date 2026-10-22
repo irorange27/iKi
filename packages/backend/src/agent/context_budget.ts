@@ -1,8 +1,7 @@
 import { countTokens, decode, encode } from 'gpt-tokenizer';
-import type { ModelMessage } from 'ai';
+import type { ModelMessage } from '../message/model_history';
 
 import type { AgentTool } from './types';
-
 
 const MESSAGE_OVERHEAD_TOKENS = 4;
 const TOOL_MESSAGE_OVERHEAD_TOKENS = 8;
@@ -47,7 +46,6 @@ export const clipTextToTokenBudget = (
   return { text: `${truncated}${TRUNCATION_SUFFIX}`, truncated: true };
 };
 
-/** Estimated tokens of the JSON schemas sent to the provider, split by origin. */
 export const estimateToolSchemaTokens = (tools: AgentTool[]): { builtin: number; mcp: number } => {
   const totals = { builtin: 0, mcp: 0 };
   for (const tool of tools) {
@@ -63,21 +61,38 @@ export const estimateToolSchemaTokens = (tools: AgentTool[]): { builtin: number;
   return totals;
 };
 
-export const AUTO_COMPACT_THRESHOLD = 0.8;
-export const AUTO_COMPACT_KEEP_RATIO = 0.5;
+const AUTO_COMPACT_THRESHOLD = 0.8;
+export const AUTO_COMPACT_KEEP_RATIO = 0.2;
+const AUTO_COMPACT_RETAIN_FLOOR_TOKENS = 1200;
 
-/** Plan a prefix replacement at complete tool-exchange boundaries; the caller must summarize omitted messages. */
 export const autoCompactHistory = (params: {
   history: ModelMessage[];
   maxInputTokens?: number;
   threshold?: number;
   keepRatio?: number;
+
+  retainTokens?: number;
 }): { history: ModelMessage[]; omitted: ModelMessage[]; compacted: boolean; droppedCount: number } => {
-  const { history, maxInputTokens, threshold = AUTO_COMPACT_THRESHOLD, keepRatio = AUTO_COMPACT_KEEP_RATIO } = params;
+  const {
+    history,
+    maxInputTokens,
+    threshold = AUTO_COMPACT_THRESHOLD,
+    keepRatio = AUTO_COMPACT_KEEP_RATIO,
+    retainTokens,
+  } = params;
   const unchanged = { history, omitted: [] as ModelMessage[], compacted: false, droppedCount: 0 };
   if (!maxInputTokens || !Number.isFinite(maxInputTokens) || maxInputTokens <= 0) return unchanged;
   const total = history.reduce((sum, message) => sum + estimateMessageTokens(message), 0);
   if (total <= maxInputTokens * threshold) return unchanged;
+
+  // Retention is the larger of the ratio share and the floor, capped below the
+  // trigger so a pass always reclaims something. Without the cap a tiny window
+  // could retain more than it triggers at, and compaction would loop forever.
+  const triggerTokens = maxInputTokens * threshold;
+  const retainTarget = Math.min(
+    Math.max(maxInputTokens * keepRatio, retainTokens ?? AUTO_COMPACT_RETAIN_FLOOR_TOKENS),
+    triggerTokens * 0.9
+  );
   const systems = history.filter(message => message.role === 'system');
   const conversation = history.filter(message => message.role !== 'system');
   const lastUser = conversation.findLastIndex(message => message.role === 'user');
@@ -90,7 +105,7 @@ export const autoCompactHistory = (params: {
     const next = boundaries[i];
     const added = conversation.slice(next, start).filter(message => !protectedUser.includes(message))
       .reduce((sum, message) => sum + estimateMessageTokens(message), 0);
-    if (tokens + added > maxInputTokens * keepRatio) break;
+    if (tokens + added > retainTarget) break;
     tokens += added;
     start = next;
   }

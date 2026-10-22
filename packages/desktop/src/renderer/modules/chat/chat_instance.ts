@@ -1,8 +1,8 @@
-import { computed, ref } from 'vue';
-import { AbstractChat, type ChatState, type ChatStatus } from 'ai';
+import { computed, ref, shallowRef } from 'vue';
+import type { UiChatStatus } from '@iki/backend/message/ui_protocol';
+import { IkiChat, type ChatStateAdapter } from './iki_chat';
 
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
-import { isDynamicToolPart } from '@iki/backend/message/message_parts';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../../logger';
@@ -10,20 +10,8 @@ import { recordToolChunkTiming } from './tool_ui_state';
 import { createToolApprovalController } from './tool_approval_controller';
 import { createIpcChatTransport, type IpcChatTransport } from './ipc_chat_transport';
 import { createChatMessageStore, type ChatMessageStore } from './chat_message_store';
-import { createUiMessagePersistence, type UiMessagePersistence } from './ui_message_persistence';
 
 const chatInstanceLogger = createLogger({ module: 'chat_instance' });
-
-class IkiChat extends AbstractChat<ChatUiMessage> {}
-
-/** A message worth persisting mid-turn: any tool activity (results, approvals). */
-const hasToolActivity = (message: ChatUiMessage | undefined): boolean =>
-  Boolean(
-    message &&
-      message.role === 'assistant' &&
-      Array.isArray(message.parts) &&
-      message.parts.some(part => isDynamicToolPart(part))
-  );
 
 const hasRenderableContent = (message: ChatUiMessage | undefined): boolean => {
   if (!message || !Array.isArray(message.parts)) return false;
@@ -34,20 +22,14 @@ const hasRenderableContent = (message: ChatUiMessage | undefined): boolean => {
   });
 };
 
-/**
- * Reactive ChatState with in-place array mutations: the renderer message
- * store holds a reference to the same array, so the SDK's message swaps are
- * spliced rather than reassigned. Every mutation triggers Vue reactivity
- * through the shared ref.
- */
 export const createReactiveChatState = (
   onWrite: (message: ChatUiMessage) => void
-): { state: ChatState<ChatUiMessage>; messagesArray: ChatUiMessage[] } => {
-  const messagesRef = ref<ChatUiMessage[]>([]);
-  const statusRef = ref<ChatStatus>('ready');
+): { state: ChatStateAdapter; messagesArray: ChatUiMessage[] } => {
+  const messagesRef = shallowRef<ChatUiMessage[]>([]);
+  const statusRef = ref<UiChatStatus>('ready');
   const errorRef = ref<Error | undefined>(undefined);
 
-  const state: ChatState<ChatUiMessage> = {
+  const state: ChatStateAdapter = {
     get status() {
       return statusRef.value;
     },
@@ -75,10 +57,6 @@ export const createReactiveChatState = (
     },
     replaceMessage: (index, message) => {
       if (index < 0 || index >= messagesRef.value.length) return;
-      // Tripwire for the streaming-render regression class: writing the
-      // identical reference back keeps prop-driven children shallow-equal and
-      // their computeds stale (empty chat bubbles). Only a fresh clone per
-      // write re-renders; warn loudly if that invariant regresses.
       if (messagesRef.value[index] === message) {
         chatInstanceLogger.event({
           level: 'warn',
@@ -88,15 +66,10 @@ export const createReactiveChatState = (
             'Identical message reference written back; prop-driven message components will not re-render.',
         });
       }
-      // The SDK passes the same accumulating raw object every write and mutates
-      // its parts off-proxy, so splicing that reference back in leaves the
-      // child component's props identical and its segments computed stale.
-      // A fresh shallow clone per write gives Vue a new reactive proxy to
-      // invalidate on; the parts array itself is still the SDK's live state.
       messagesRef.value.splice(index, 1, { ...message });
       onWrite(message);
     },
-    snapshot: <T>(thing: T): T => thing,
+    snapshot: (thing: ChatUiMessage[]): ChatUiMessage[] => thing,
   };
 
   return { state, messagesArray: messagesRef.value };
@@ -104,11 +77,6 @@ export const createReactiveChatState = (
 
 export type ChatInstance = ReturnType<typeof createChatInstance>;
 
-/**
- * Composition root of the renderer chat runtime: the SDK chat instance over
- * the IPC transport, the message-store view, persistence hooks, and the
- * approval controller. One per window; created once by the chat view.
- */
 export const createChatInstance = (deps: {
   electronAPI: Pick<ElectronApi, 'chat'>;
   generateId: () => string;
@@ -119,53 +87,12 @@ export const createChatInstance = (deps: {
   }) => Promise<void> | void;
   onStreamActivity?: () => void;
 }) => {
-  const persistence: UiMessagePersistence = createUiMessagePersistence({
-    electronAPI: deps.electronAPI,
-  });
   const transport: IpcChatTransport = createIpcChatTransport({
     electronAPI: deps.electronAPI,
   });
 
-  const persistAssistantMessage = async (message: ChatUiMessage, source: string) => {
-    // The stream-bound thread wins (approval resumes re-bind it); fall back
-    // to the thread the view currently shows.
-    const threadId = transport.getBoundThreadId() || deps.getCurrentThreadId();
-    if (!threadId) return;
-
-    const messageIndex = messageStore.findIndexById(message.id);
-    const parentMessage =
-      messageIndex >= 0 ? messageStore.findLatestUserBefore(messageIndex) : undefined;
-    const parentId =
-      parentMessage && typeof parentMessage.id === 'string' ? parentMessage.id : undefined;
-
-    try {
-      await persistence.upsertUiMessage({ message, threadId, parentId, source });
-    } catch (error) {
-      chatInstanceLogger.event({
-        level: 'warn',
-        event: 'chat.assistant.persist',
-        outcome: 'failed',
-        error,
-        entity: { thread_id: threadId },
-      });
-    }
-  };
-
-  let midTurnPersistTimer: ReturnType<typeof setTimeout> | null = null;
-  const scheduleMidTurnPersist = (message: ChatUiMessage) => {
-    if (!hasToolActivity(message)) return;
-    if (midTurnPersistTimer) clearTimeout(midTurnPersistTimer);
-    // Trailing debounce; the captured object is the live SDK state message,
-    // so the timer persists the freshest accumulated shape.
-    midTurnPersistTimer = setTimeout(() => {
-      midTurnPersistTimer = null;
-      void persistAssistantMessage(message, 'tool-progress');
-    }, 300);
-  };
-
-  const { state, messagesArray } = createReactiveChatState(message => {
+  const { state, messagesArray } = createReactiveChatState(() => {
     deps.onStreamActivity?.();
-    scheduleMidTurnPersist(message);
   });
 
   const messageStore: ChatMessageStore = createChatMessageStore({ messages: messagesArray });
@@ -175,36 +102,44 @@ export const createChatInstance = (deps: {
     generateId: deps.generateId,
     transport,
     state,
+    chatId: 'iki-chat',
     onError: error => {
       chatInstanceLogger.event({
         level: 'error',
         event: 'chat.stream',
         outcome: 'failed',
         message: error.message,
+        data: {
+          chunk_traces: transport.getRecentTraces(),
+          message_parts: messageStore.messages.map(message => ({
+            id: message.id,
+            parts: (message.parts ?? [])
+              .map(part => {
+                if (!isObjectRecord(part)) return 'unknown';
+                const record = part as { type?: unknown; toolCallId?: unknown; state?: unknown };
+                const descriptor = [String(record.type ?? 'unknown')];
+                if (typeof record.toolCallId === 'string') descriptor.push(`:${record.toolCallId}`);
+                if (typeof record.state === 'string') descriptor.push(`/${record.state}`);
+                return descriptor.join('');
+              })
+              .join(','),
+          })),
+        },
       });
     },
     onFinish: ({ message, isAbort, isError }) => {
-      if (midTurnPersistTimer) {
-        clearTimeout(midTurnPersistTimer);
-        midTurnPersistTimer = null;
-      }
-
       if (!hasRenderableContent(message)) {
         messageStore.removeById(message.id);
         return;
       }
 
-      const finalize = async () => {
-        await persistAssistantMessage(message, isAbort ? 'assistant-abort' : 'assistant-response');
-        if (isError || isAbort) return;
-        const threadId = transport.getBoundThreadId() || deps.getCurrentThreadId();
-        if (!threadId) return;
-        await deps.onAssistantMessagePersisted?.({
-          threadId,
-          messagesSnapshot: messageStore.snapshot(),
-        });
-      };
-      void finalize();
+      if (isError || isAbort) return;
+      const threadId = transport.getBoundThreadId() || deps.getCurrentThreadId();
+      if (!threadId) return;
+      void deps.onAssistantMessagePersisted?.({
+        threadId,
+        messagesSnapshot: messageStore.snapshot(),
+      });
     },
   });
 
@@ -222,8 +157,7 @@ export const createChatInstance = (deps: {
     chat,
     transport,
     messageStore,
-    persistence,
-    status: computed<ChatStatus>(() => state.status),
+    status: computed<UiChatStatus>(() => state.status),
     error: computed<Error | undefined>(() => state.error),
     activeAssistantMessageId,
     isApprovalProcessing: approvals.isApprovalProcessing,

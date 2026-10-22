@@ -4,6 +4,8 @@ import { asCount, asText, defineLocaleCatalog } from '../shared';
 export const zhCN = defineLocaleCatalog<typeof en>({
   'common.save': '保存',
   'common.close': '关闭',
+  'common.minimize': '最小化',
+  'common.zoom': '缩放',
   'common.cancel': '取消',
   'common.confirm': '确认',
   'common.reset': '重置',
@@ -46,21 +48,25 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'common.start': '开始',
   'common.stop': '停止',
   'common.restart': '重启',
+  'dev.hint': '开发模式',
+  'dev.restart.title': '重启应用',
+  'dev.restart.description':
+    '改动主进程 / preload / 工具代码后需要重启才生效。渲染进程（.vue、样式）保存即热更新，不用重启。',
+  'dev.restart.action': '重启',
+  'dev.restart.hot': '当前由 Vite 提供渲染进程，热更新已开启。',
+  'dev.restart.noHot': '当前不是 dev server 提供的渲染进程，保存后需要 Cmd/Ctrl+R 刷新。',
+  'dev.restart.coming': '正在重启…',
+  'dev.slash.name': '重启应用',
+  'dev.slash.description': '重启 iKi 使主进程改动生效（开发模式）。',
+  'dev.slash.executed': '重启中…',
+  'dev.slash.devOnly': '只有开发模式（pnpm run app:dev）才能重启应用。',
   'common.local': '本地',
   'common.default': '默认',
   'common.none': '无',
   'common.addFolder': '添加文件夹',
-  'common.loading': '加载中...',
+  'common.loading': '加载中…',
   'language.english': 'English',
   'language.chineseSimplified': '简体中文',
-  'chat.autonomous.triggerTitle': '自治代理模式',
-  'chat.autonomous.chip': '自动',
-  'chat.autonomous.title': '自治模式',
-  'chat.autonomous.description': '让代理跨多步持续工作,无需等待你的输入。',
-  'chat.autonomous.enabled': '已启用',
-  'chat.autonomous.disabled': '已停用',
-  'chat.autonomous.activeDescription': '代理将按设定的迭代数自行推进。',
-  'chat.autonomous.maxIterations': '最大迭代数:',
   'chat.reasoning.triggerTitle': '推理力度',
   'chat.reasoning.title': '推理力度',
   'chat.reasoning.chip': '推理',
@@ -76,6 +82,14 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.newChat': '新对话',
   'chat.messagesCount': ({ count }) => `${asCount(count)} 条消息`,
   'chat.welcome.settings': '设置',
+  'chat.welcome.workspace.label': '工作区',
+  'chat.welcome.workspace.none': '不使用工作区',
+  'chat.welcome.workspace.loading': '加载中…',
+  'chat.welcome.workspace.browse': '选择文件夹…',
+  'chat.welcome.workspace.picking': '选择中…',
+  'chat.welcome.workspace.hint': '选一个文件夹，文件与 shell 工具才有可执行的位置。',
+  'chat.workspace.selectorLabel': '此对话的工作区',
+  'chat.workspace.browse': '选择工作区文件夹',
   'chat.welcome.prompt.blank': '空白开始',
   'chat.welcome.prompt.project': '看看我的项目',
   'chat.welcome.prompt.paste': '帮我整理一段内容',
@@ -132,10 +146,9 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.runs.kind.error': '错误',
   'chat.runs.runKind.chat-turn': '对话轮次',
   'chat.runs.runKind.approval-resume': '审批续行',
-  'chat.runs.runKind.proactive-task': '定时任务',
+  
   'chat.runs.runKind.awaiter-wake': '唤醒',
   'chat.runs.runKind.delegated-agent': '子代理',
-  'chat.runs.runKind.handoff-resume': '交接续行',
   'chat.runs.time': '时间',
   'chat.runs.timeHint': '切换操作顺序与记录时间。滚轮缩放，右键拖动平移。',
   'chat.runs.runs': '运行',
@@ -191,7 +204,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.runs.detail.title': '记录',
   'chat.runs.detail.empty': '选中一行或一条色条以查看详情。',
   'chat.runs.detail.started': '开始于',
-  'chat.runs.loading': '加载中...',
+  'chat.runs.loading': '加载中…',
   'chat.runs.trace.reasoning': '思考过程',
   'chat.runs.trace.observation': '工具输出',
   'chat.runs.empty': '该会话暂无执行轨迹',
@@ -205,7 +218,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.runs.status.completed': '已完成',
   'chat.runs.status.failed': '失败',
   'chat.runs.status.cancelled': '已取消',
-  'chat.runs.trace.loading': '加载执行轨迹中...',
+  'chat.runs.trace.loading': '加载执行轨迹中…',
   'chat.runs.trace.empty': '暂无步骤记录',
   'chat.runs.trace.steps': ({ count }) => `${asCount(count)} 步`,
   'chat.runs.trace.promptTokens': ({ count }) => `↑ ${asCount(count)} tok`,
@@ -221,11 +234,9 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.eval.label.partial': '部分正确',
   'chat.eval.label.note': '备注',
   'chat.input.placeholder': '向 iKi 提问， 输入 / 使用命令， $ 使用技能',
-  'chat.input.placeholder.skillInvocation': ({ skill }) =>
-    `继续描述要让 ${asText(skill)} 做什么...`,
-  'chat.input.placeholder.promptInvocation': ({ name }) => `继续补充 ${asText(name)} 的请求内容...`,
-  'chat.input.placeholder.commandInvocation': ({ name }) =>
-    `继续补充 ${asText(name)} 的可选参数...`,
+  'chat.input.placeholder.skillInvocation': ({ skill }) => `继续描述要让 ${asText(skill)} 做什么…`,
+  'chat.input.placeholder.promptInvocation': ({ name }) => `继续补充 ${asText(name)} 的请求内容…`,
+  'chat.input.placeholder.commandInvocation': ({ name }) => `继续补充 ${asText(name)} 的可选参数…`,
   'chat.input.contextUsage': '上下文使用量',
   'chat.input.enableIncognito': '开启无痕模式',
   'chat.input.disableIncognito': '关闭无痕模式',
@@ -233,6 +244,10 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.input.incognitoOff': '无痕模式已关闭，此聊天会使用记忆。',
   'chat.input.voiceStart': '开始语音输入',
   'chat.input.voiceStop': '停止语音输入',
+  'chat.input.working': '运行中',
+  'chat.input.workingDetail': '正在执行这一轮。',
+  'chat.input.awaitingApproval': '等待审批',
+  'chat.input.awaitingApprovalDetail': '这一轮已暂停，等待你批准工具调用。',
   'chat.input.send': '发送消息',
   'chat.input.stopGeneration': '停止生成',
   'chat.input.stopFailed': '停止生成失败，请重试。',
@@ -276,7 +291,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.input.slash.help.name': '帮助',
   'chat.input.slash.help.description': '显示可用的斜杠指令。',
   'chat.input.slash.help.executed':
-    '输入 / 可浏览指令。内置指令：/new、/clear、/incognito、/init、/help。',
+    '输入 / 可浏览指令。内置指令：/new、/clear、/incognito、/init、/restart、/help。',
   'chat.input.slash.init.name': '初始化 IKI.md',
   'chat.input.slash.init.description': '在当前工作区创建项目 agent 指令文件（IKI.md）。',
   'chat.input.slash.init.created': ({ path }) =>
@@ -305,8 +320,6 @@ export const zhCN = defineLocaleCatalog<typeof en>({
     `校验 ${asText(provider)} Provider 配置失败，请重试。`,
   'chat.provider.configureApiKey': ({ provider }) =>
     `请先在设置中配置 ${asText(provider)} 的 API Key。`,
-  'chat.provider.configureCommand': ({ provider }) =>
-    `请先在设置中配置 ${asText(provider)} 的 ACP 命令。`,
   'chat.provider.modelRequired': ({ provider }) =>
     `请先在设置中为 ${asText(provider)} 添加至少一个模型。`,
   'chat.thread.newTitle': '新对话',
@@ -314,18 +327,19 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.external.notice': ({ channel }) =>
     `正在桌面控制台中查看 ${asText(channel)}。你在这里发送的消息只会保留在 iKi 本地，不会回传到外部频道。`,
   'chat.model.selectModel': '选择模型',
+  'chat.model.menuModel': '模型',
+  'chat.model.menuBack': '返回',
   'chat.model.trigger.choose': '选择模型',
-  'chat.model.searchPlaceholder': '搜索模型...',
+  'chat.model.searchPlaceholder': '搜索模型…',
   'chat.model.noProviders': '还没有可用的 Provider。',
   'chat.model.noProviderMetadata': '没有已启用的 Provider 暴露模型元数据。',
+  'chat.model.noModelsForProvider': '还没有启用任何模型。请到 设置 → 模型与工具 中启用。',
   'chat.model.noMatchingModels': ({ query }) => `没有匹配“${asText(query)}”的模型。`,
   'chat.workspace.title': '工作区',
-  'chat.workspace.adding': '添加中...',
+  'chat.workspace.adding': '添加中…',
   'chat.workspace.noWorkspace': '不绑定工作区',
   'chat.workspace.noneVisible': '当前没有可见工作区。',
   'chat.workspace.switchTitle': '切换项目',
-  'chat.references.affect': '情绪',
-  'chat.references.memories': ({ count }) => `${asCount(count)} 条记忆`,
   'chat.references.tools': ({ count }) => `${asCount(count)} 个工具`,
   'chat.references.skills': ({ count }) => `${asCount(count)} 个技能`,
   'chat.references.toolTooltip': ({ names }) =>
@@ -334,11 +348,6 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.references.loadedSkills': ({ names }) => `已加载技能：${asText(names)}`,
   'chat.references.selectedNotLoaded': ({ names }) => `已选择但未加载：${asText(names)}`,
   'chat.references.selectionMode': ({ mode }) => `选择模式：${asText(mode)}`,
-  'chat.references.memoryQuery': ({ query }) => `记忆检索词：${asText(query)}`,
-  'chat.references.memoryFallback': '本次回复使用了记忆引用',
-  'chat.references.noAffect': '没有情绪信号',
-  'chat.references.confidence': ({ value }) => `置信度 ${asText(value)}`,
-  'chat.references.guarded': '已触发保护',
   'chat.contextUsage.tokenCount': ({ value }) => `${asText(value)} tok`,
   'chat.contextUsage.headerWithBudget': ({ used, budget, percent }) =>
     `上下文使用量：${asText(used)} / ${asText(budget)} tok${asText(percent) ? `（${asText(percent)}）` : ''}`,
@@ -352,7 +361,6 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'chat.contextUsage.category.messages': '消息',
   'chat.contextUsage.category.systemPrompt': '系统提示词',
   'chat.contextUsage.category.skills': '技能',
-  'chat.contextUsage.category.memory': '记忆',
   'chat.contextUsage.category.tools': '系统工具',
   'chat.contextUsage.category.mcpTools': 'MCP 工具',
   'chat.contextUsage.category.other': '其他',
@@ -388,21 +396,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'toolCall.task': '任务',
   'toolCall.path': '路径',
   'toolCall.executionPlan': '执行计划',
-  'toolCall.todoList': '待办列表',
-  'toolCall.todoLists': '待办列表',
   'toolCall.input': '输入',
-  'toolCall.allTodoLists': '全部待办列表',
-  'chat.todoPlan.progress': ({ completed, total }) =>
-    `已完成 ${asText(completed)} / ${asText(total)} 项任务`,
-  'chat.todoPlan.current': '当前进行中',
-  'chat.todoPlan.noCurrentTask': '当前没有进行中的任务。',
-  'chat.todoPlan.empty': '当前还没有计划项。',
-  'chat.todoPlan.pending': '待处理',
-  'chat.todoPlan.inProgress': '进行中',
-  'chat.todoPlan.completed': '已完成',
-  'chat.todoPlan.inProgressCount': ({ count }) => `进行中 ${asText(count)}`,
-  'chat.todoPlan.pendingCount': ({ count }) => `待处理 ${asText(count)}`,
-  'chat.todoPlan.completedCount': ({ count }) => `已完成 ${asText(count)}`,
   'toolCall.meta.cwd': ({ value }) => `cwd：${asText(value)}`,
   'toolCall.meta.timeout': ({ value }) => `超时：${asText(value)} ms`,
   'toolCall.meta.limit': ({ value }) => `数量上限：${asText(value)}`,
@@ -437,30 +431,34 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.select.emptyText': '当前没有可选项。',
   'settings.select.ariaLabel': '请选择一项',
   'settings.menu.general': '通用',
+  'settings.menu.models': '模型与工具',
+  'settings.menu.intelligence': '记忆与技能',
+  
+  'settings.menu.security': '安全',
   'settings.menu.provider': '供应商',
   'settings.menu.mcp': 'MCP',
-  'settings.menu.bridges': '桥接',
+  
   'settings.menu.usage': '用量',
   'settings.menu.skills': '技能',
-  'settings.menu.memory': '记忆',
   'settings.menu.network': '网络',
   'settings.menu.ui': '界面',
   'settings.menu.colorScheme': '配色',
   'settings.menu.speech': '语音',
-  'settings.menu.tasks': '任务',
+  
   'settings.fallbackTitle': '设置',
   'settings.saved.all': '所有更改已保存',
   'settings.saved.unsaved': '有未保存更改',
   'settings.footer.close': '关闭',
   'settings.footer.save': '保存',
+  'settings.common.advanced': '高级',
   'settings.general.toolModel.title': '工具模型',
   'settings.general.toolModel.description':
     '用于与你主聊天模型分离的后台 AI 任务。如果你想要更快、更便宜的运行，建议手动选择更快、成本更低的非 reasoning 模型。',
   'settings.general.toolModel.select': '选择工具模型',
   'settings.general.toolModel.test': '测试',
-  'settings.general.toolModel.testing': '测试中...',
+  'settings.general.toolModel.testing': '测试中…',
   'settings.general.toolModel.usedFor':
-    '线程标题生成、工具选择、参数提取、记忆操作以及其他后台任务。',
+    '线程标题生成、工具选择、参数提取以及其他后台任务。',
   'settings.general.toolModel.unconfigured': '未配置',
   'settings.general.toolModel.latencyFailed': ({ error }) =>
     `延迟测试失败：${asText(error) || '未知错误'}`,
@@ -499,7 +497,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
     '已打包的 Windows 和 macOS 版本可以检查已发布的 GitHub Release，并在后台下载更新。',
   'settings.general.updates.loadingDescription': '正在从桌面运行时读取当前更新状态。',
   'settings.general.updates.checkNow': '立即检查',
-  'settings.general.updates.checking': '检查中...',
+  'settings.general.updates.checking': '检查中…',
   'settings.general.updates.restartNow': '重启安装',
   'settings.general.updates.unsupportedTitle': '当前无法自动更新',
   'settings.general.updates.unsupportedPlatform':
@@ -559,7 +557,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.theme.title': '配色',
   'settings.theme.description': '选择主题预设、搜索主题库，或设计你自己的 Base46 配色界面。',
   'settings.theme.currentPreset': '当前预设',
-  'settings.theme.searchPlaceholder': '搜索主题...',
+  'settings.theme.searchPlaceholder': '搜索主题…',
   'settings.theme.customTitle': '自定义主题',
   'settings.theme.customDescription': '创建、编辑并管理你自己的 Base46 衍生配色方案。',
   'settings.theme.create': '创建主题',
@@ -623,275 +621,135 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.theme.field.warning.hint': '警告态',
   'settings.theme.field.danger.label': '危险',
   'settings.theme.field.danger.hint': '破坏性操作',
-  'settings.memory.retrievalTitle': '记忆检索',
-  'settings.memory.enable': '启用记忆',
-  'settings.memory.retrievalDescription': '启用记忆后，长期记忆会自动注入到对话上下文中。',
-  'settings.memory.maxRetrievedMemories': '最大检索记忆数',
-  'settings.memory.maxRetrievedHint': '注入到当前对话上下文中的相关记忆数量上限（1-20）。',
-  'settings.memory.similarityThreshold': '相似度阈值',
-  'settings.memory.loose': '宽松（0%）',
-  'settings.memory.strict': '严格（100%）',
-  'settings.memory.similarityHint': '记忆被检索所需的最低相似度分数。值越高，匹配越严格。',
-  'settings.memory.summarizationTitle': '记忆总结',
-  'settings.memory.autoSummarize': '自动总结对话',
-  'settings.memory.summarizationDescription': '自动从对话中提取并保存重要信息，生成新的记忆。',
-  'settings.memory.embeddingModelTitle': '嵌入模型',
-  'settings.memory.embeddingModelDescription':
-    '选择长期记忆语义检索使用的嵌入模型。自动检测会优先使用已配置的 embedding provider；如果没有可用 provider，则退回本地 hash 检索。',
-  'settings.memory.embeddingModelSelect': '嵌入模型',
-  'settings.memory.embeddingModelAria': '记忆嵌入模型',
-  'settings.memory.embeddingModelAutoDetect': '自动检测（推荐）',
-  'settings.memory.embeddingModelHint':
-    '切换该设置不会立刻重写所有记忆向量。已有记忆会在后续检索中按需懒刷新。',
-  'settings.memory.contextTitle': '上下文组装',
-  'settings.memory.contextEnable': '启用上下文预算',
-  'settings.memory.contextDescription':
-    '将较长线程压缩为滚动摘要加最近消息，并按估算 token 预算限制技能 / 记忆上下文。',
-  'settings.memory.recentRawMessages': '最近原始消息数',
-  'settings.memory.recentHistoryBudget': '最近历史预算（token）',
-  'settings.memory.summaryTriggerMessages': '触发摘要的消息数',
-  'settings.memory.recentExcludedFromSummary': '摘要中排除的最近消息数',
-  'settings.memory.threadSummaryBudget': '线程摘要预算（token）',
-  'settings.memory.memoryBudget': '记忆预算（token）',
-  'settings.memory.skillBudget': '技能预算（token）',
-  'settings.memory.emotionTitle': '情绪上下文',
-  'settings.memory.emotionEnable': '启用情绪分析',
-  'settings.memory.emotionDescription':
-    '从最近的用户消息推断情感信号，用于引导语气和节奏。情绪事件不会存储消息正文。',
-  'settings.memory.injectEmotionToAgent': '将情绪上下文注入到 Agent',
-  'settings.memory.realtimeAnalysis': '后台分析当前消息',
-  'settings.memory.realtimeDescription':
-    '会在后台预热当前消息的情绪分析，不阻塞本次回复，供后续持久化和后续轮次复用。',
-  'settings.memory.minimumConfidence': '最低置信度',
-  'settings.memory.higherValuesConservative': '值越高，情绪上下文会越保守。',
-  'settings.memory.minimumSamples': '最少样本数',
-  'settings.memory.windowSize': '窗口大小',
-  'settings.memory.windowSizeHint': '用于计算情绪状态的最近消息数量。',
-  'settings.memory.halfLifeMinutes': '半衰期（分钟）',
-  'settings.memory.maxAgeMinutes': '最大保留时长（分钟）',
-  'settings.memory.includeNeutralSignals': '包含中性信号',
-  'settings.memory.toolGuardTitle': '工具护栏',
-  'settings.memory.toolGuardEnable': '启用基于情绪的护栏',
-  'settings.memory.toolGuardDescription': '当检测到高唤醒度且负向效价时，要求审批或抑制自动工具。',
-  'settings.memory.toolGuardRequireApproval': '所有工具都要求审批',
-  'settings.memory.toolGuardDisableAuto': '进入护栏状态时禁用自动工具',
-  'settings.memory.toolGuardConfidenceThreshold': '护栏置信度阈值',
-  'settings.memory.toolGuardArousalThreshold': '护栏唤醒度阈值',
-  'settings.memory.toolGuardValenceThreshold': '护栏效价阈值',
-  'settings.memory.viewerTitle': '记忆查看器',
-  'settings.memory.viewerDescription': '按聊天线程或跨全部线程查看长期记忆，以及长期记忆搜索结果。',
-  'settings.memory.threadPlaceholder': '选择一个线程',
-  'settings.memory.noThreadsAvailable': '没有可用线程。',
-  'settings.memory.viewerThreadAria': '记忆查看线程',
-  'settings.memory.editorThreadAria': '新长期记忆所属线程',
-  'settings.memory.loading': '加载中...',
-  'settings.memory.noChatThreads': '还没有聊天线程。开始聊天后才会生成记忆条目。',
-  'settings.memory.affectTitle': '情感状态',
-  'settings.memory.loadingAffect': '正在加载情感状态...',
-  'settings.memory.emotionDisabled': '情绪分析未启用。',
-  'settings.memory.selectThreadForAffect': '选择一个线程以查看情感状态。',
-  'settings.memory.noAffectState': '还没有情感状态。',
-  'settings.memory.affectPrimary': ({ label, confidence }) =>
-    `主情绪：${asText(label)}（置信度 ${asText(confidence)}）`,
-  'settings.memory.affectValenceArousal': ({ valence, arousal }) =>
-    `效价：${asText(valence)} · 唤醒度：${asText(arousal)}`,
-  'settings.memory.affectSamples': ({ sampleCount, windowSize }) =>
-    `样本：${asText(sampleCount)} / ${asText(windowSize)}`,
-  'settings.memory.affectWindow': ({ startAt, endAt }) =>
-    `窗口：${asText(startAt)} → ${asText(endAt)}`,
-  'settings.memory.newLongMemory': '新长期记忆',
-  'settings.memory.summaryPlaceholder': '添加一个持久的用户事实、偏好或项目细节。',
-  'settings.memory.addMemory': '添加记忆',
-  'settings.memory.saving': '保存中...',
-  'settings.memory.chooseThreadToCreate': '请选择一个线程以启用手动创建记忆。',
-  'settings.memory.longMemory': '长期记忆',
-  'settings.memory.loadingLongMemory': '正在加载长期记忆...',
-  'settings.memory.noLongMemory': '没有长期记忆条目。',
-  'settings.memory.tags': '标签',
-  'settings.memory.emotion': '情绪',
-  'settings.memory.searchLongMemory': '搜索长期记忆',
-  'settings.memory.searchPlaceholder': '搜索长期记忆...',
-  'settings.memory.searching': '搜索中...',
-  'settings.memory.enterQuery': '输入查询内容后再搜索。',
-  'settings.memory.noSearchResults': '没有搜索结果。',
-  'settings.memory.score': ({ value }) => `得分 ${asText(value)}`,
-  'settings.memory.unknownThread': '未知线程',
-  'settings.memory.allThreads': '全部线程',
-  'settings.memory.na': '无',
-  'settings.memory.role.user': '用户',
-  'settings.memory.role.assistant': '助手',
-  'settings.memory.role.system': '系统',
-  'settings.memory.role.tool': '工具',
-  'settings.memory.error.loadThreads': ({ error }) => `加载线程失败：${asText(error)}`,
-  'settings.memory.error.loadMemory': ({ error }) => `加载记忆失败：${asText(error)}`,
-  'settings.memory.error.loadAffect': ({ error }) => `加载情感状态失败：${asText(error)}`,
-  'settings.memory.error.searchFailed': ({ error }) => `搜索失败：${asText(error)}`,
-  'settings.memory.error.selectThread': '请为新记忆选择一个线程。',
-  'settings.memory.error.summaryRequired': '摘要不能为空。',
-  'settings.memory.error.addFailed': ({ error }) => `添加记忆失败：${asText(error)}`,
-  'settings.memory.error.updateFailed': ({ error }) => `更新记忆失败：${asText(error)}`,
-  'settings.memory.error.deleteFailed': ({ error }) => `删除记忆失败：${asText(error)}`,
-  'settings.memory.confirmDelete': '删除这条长期记忆？此操作无法撤销。',
-  'settings.memory.reset': '重置记忆',
-  'settings.napcat.title': 'NapCat（QQ）',
-  'settings.napcat.description':
-    '配置 daemon 暴露的反向 WebSocket 桥接，路径为 /onebot/v11/ws。如果 NapCat 运行在 Docker 中，请使用宿主机可访问的 daemon 地址，而不是 localhost。',
-  'settings.napcat.enable': '启用 NapCat 反向 WebSocket 桥接',
-  'settings.napcat.accessTokenOptional': '访问令牌（可选）',
-  'settings.napcat.accessTokenPlaceholder': '留空则禁用桥接鉴权',
-  'settings.napcat.accessTokenHelp': '如果设置了访问令牌，NapCat 必须通过 ?access_token=... 连接。',
-  'settings.napcat.daemonHost': 'Daemon 主机',
-  'settings.napcat.daemonHostPlaceholder': '127.0.0.1',
-  'settings.napcat.daemonHostHelp':
-    '默认使用 127.0.0.1。只有在确实需要局域网 / Docker 访问时才使用 0.0.0.0。',
-  'settings.napcat.daemonPort': 'Daemon 端口',
-  'settings.napcat.daemonPortPlaceholder': '6127',
-  'settings.napcat.daemonRestartNotice':
-    '修改 daemon host/port 后，保存设置会重启桌面托管的 daemon。',
-  'settings.napcat.providerType': 'Provider 类型',
-  'settings.napcat.providerTypeAria': 'NapCat provider 类型',
-  'settings.napcat.providerAuto': '自动选择第一个已启用的 provider',
-  'settings.napcat.model': '模型',
-  'settings.napcat.modelPlaceholder': '留空则使用 provider 默认模型',
-  'settings.napcat.loadingProviders': '正在加载已启用的 providers...',
-  'settings.napcat.noProviders':
-    '没有可用且带模型元数据的已启用 provider。在至少配置一个 provider 之前，桥接无法生成回复。',
-  'settings.napcat.duplicateProviderType':
-    '多个已启用 provider 共享同一种 type。当前桥接会使用该 type 下第一个启用的 provider。',
-  'settings.napcat.requireMention': '群聊中必须 @mention 才回复',
-  'settings.napcat.allowedTools': '允许的工具（每行一个）',
-  'settings.napcat.toolsPlaceholder': 'web\nfetch',
-  'settings.napcat.toolsHelp': '留空则禁用 QQ 回复中的工具调用。',
-  'settings.napcat.connectionTitle': '运行时状态',
-  'settings.napcat.connectionDescription':
-    '把 daemon 健康状态、反向 WebSocket 传输层、heartbeat 活性分开展示。打开时每 5 秒自动刷新。',
-  'settings.napcat.refreshStatus': '刷新状态',
-  'settings.napcat.listening': '监听地址',
-  'settings.napcat.endpoint': '端点',
-  'settings.napcat.authentication': '鉴权',
-  'settings.napcat.transportLabel': '反向 WebSocket',
-  'settings.napcat.heartbeatLabel': 'Heartbeat',
-  'settings.napcat.activeConnections': '活动连接数',
-  'settings.napcat.lastConnectedLabel': '最近连接',
-  'settings.napcat.lastDisconnectedLabel': '最近断开',
-  'settings.napcat.lastHeartbeatLabel': '最近心跳',
-  'settings.napcat.connectionDiagnosisLabel': '诊断',
-  'settings.napcat.authRequired': '需要 Bearer token',
-  'settings.napcat.authNone': '不需要 token',
-  'settings.napcat.providerSummary.auto': '自动选择第一个已启用的 provider 和模型',
-  'settings.napcat.providerSummary.providerAndModel': ({ provider, model }) =>
-    `${asText(provider)} / ${asText(model)}`,
-  'settings.napcat.providerSummary.providerOnly': ({ provider }) =>
-    `${asText(provider)} / 默认模型`,
-  'settings.napcat.providerSummary.modelOnly': ({ model }) =>
-    `自动选择 provider / ${asText(model)}`,
-  'settings.napcat.toolsDisabled': '已禁用',
-  'settings.napcat.daemonChecking': '检查中',
-  'settings.napcat.daemonOnline': '在线',
-  'settings.napcat.daemonOffline': '离线',
-  'settings.napcat.daemonCheckingDetail': '正在检查 daemon 健康状态...',
-  'settings.napcat.daemonUnavailable': '无法获取 daemon 状态。',
-  'settings.napcat.daemonUptime': ({ seconds }) => `运行时长 ${asText(seconds)} 秒`,
-  'settings.napcat.daemonOfflineDetail': ({ error }) => `Daemon 不可达：${asText(error)}`,
-  'settings.napcat.daemonSource': ({ source }) => `当前使用 ${asText(source)} 地址信息。`,
-  'settings.napcat.daemonSource.health': '健康检查',
-  'settings.napcat.daemonSource.recorded': '记录值',
-  'settings.napcat.daemonSource.default': '默认值',
-  'settings.napcat.transportChecking': '检查中',
-  'settings.napcat.transportBlockedByDaemon': '被 Daemon 阻断',
-  'settings.napcat.transportConnected': '已连接',
-  'settings.napcat.transportDisconnected': '已断开',
-  'settings.napcat.transportWaiting': '等待 NapCat 连接',
-  'settings.napcat.transportDisabled': '已禁用',
-  'settings.napcat.transportUnavailable': '不可用',
-  'settings.napcat.transportCheckingDetail': '正在检查反向 WebSocket 传输层状态...',
-  'settings.napcat.transportBlockedByDaemonDetail':
-    '反向 WebSocket 当前无法连上，因为 daemon 离线或没有在配置端口监听。',
-  'settings.napcat.transportConnectedDetail': 'NapCat 反向 WebSocket 传输层已连接。',
-  'settings.napcat.transportDisconnectedDetail':
-    'Daemon 可访问，但 NapCat 还没有建立反向 WebSocket 连接。',
-  'settings.napcat.transportDisconnectedRecentlyDetail': ({ age }) =>
-    `NapCat 反向 WebSocket 当前已断开，最近一次会话关闭于 ${asText(age)} 前。`,
-  'settings.napcat.transportDisconnectedHistoricalDetail': ({ age }) =>
-    `NapCat 当前未连接，最近一次成功建立反向 WebSocket 是 ${asText(age)} 前。`,
-  'settings.napcat.transportDisabledDetail':
-    '配置中已禁用 bridge，因此不会接受反向 WebSocket 连接。',
-  'settings.napcat.transportUnavailableDetail':
-    '在 daemon 恢复响应之前，无法获取传输层运行时状态。',
-  'settings.napcat.transportUnknownDetail': 'Daemon 已在线，但没有上报反向 WebSocket 传输层状态。',
-  'settings.napcat.heartbeatChecking': '检查中',
-  'settings.napcat.heartbeatBlockedByDaemon': '被 Daemon 阻断',
-  'settings.napcat.heartbeatHealthy': '健康',
-  'settings.napcat.heartbeatWaitingForTransport': '等待传输层连接',
-  'settings.napcat.heartbeatUnobserved': '尚未观测到',
-  'settings.napcat.heartbeatStale': '心跳陈旧',
-  'settings.napcat.heartbeatUnhealthy': '心跳报告异常',
-  'settings.napcat.heartbeatDisabled': '已禁用',
-  'settings.napcat.heartbeatUnavailable': '不可用',
-  'settings.napcat.heartbeatCheckingDetail': '正在检查 NapCat heartbeat 活性...',
-  'settings.napcat.heartbeatBlockedByDaemonDetail':
-    '由于 daemon 离线或不可达，当前无法判断 heartbeat 活性。',
-  'settings.napcat.heartbeatHealthyDetail':
-    '最近一次健康 heartbeat 已确认反向 WebSocket 会话仍然存活。',
-  'settings.napcat.heartbeatWaitingForTransportDetail':
-    '只有在 NapCat 建立反向 WebSocket 之后，才会出现 heartbeat 数据。',
-  'settings.napcat.heartbeatUnobservedDetail':
-    '反向 WebSocket 传输层已经连通，但暂时还没有观测到 heartbeat。这可能只是首个间隔未到，也可能是当前没有按预期发送 heartbeat。',
-  'settings.napcat.heartbeatStaleDetail': ({ age, interval }) =>
-    `最近一次 heartbeat 距今 ${asText(age)}，预期间隔 ${asText(interval)}。`,
-  'settings.napcat.heartbeatUnhealthyDetail': 'NapCat heartbeat 上报 bot 会话当前不健康。',
-  'settings.napcat.heartbeatDisabledDetail': '配置中已禁用 bridge，因此不应期望 heartbeat 活性。',
-  'settings.napcat.heartbeatUnavailableDetail':
-    '在 daemon 恢复响应之前，无法获取 heartbeat 运行时状态。',
-  'settings.napcat.heartbeatUnknownDetail': 'Daemon 已在线，但没有上报 heartbeat 运行时状态。',
-  'settings.napcat.lastConnectedNever': '还没有成功连接过',
-  'settings.napcat.lastDisconnectedNever': '还没有记录到断开',
-  'settings.napcat.lastConnectionValue': ({ age }) => `${asText(age)} 前`,
-  'settings.napcat.lastHeartbeatDisabled': 'Bridge 已禁用',
-  'settings.napcat.lastHeartbeatNever': '尚未收到',
-  'settings.napcat.lastHeartbeatValue': ({ age, interval }) =>
-    `${asText(age)} 前 / 间隔 ${asText(interval)}`,
-  'settings.napcat.connectionDiagnosis.checking': '正在检查运行时状态',
-  'settings.napcat.connectionDiagnosis.daemonOffline': 'Daemon 已停止或不可达',
-  'settings.napcat.connectionDiagnosis.connected': '反向 WebSocket 已连接，heartbeat 也正常',
-  'settings.napcat.connectionDiagnosis.disconnected': ({ age }) =>
-    `反向 WebSocket 当前已断开，最近一次会话关闭于 ${asText(age)} 前`,
-  'settings.napcat.connectionDiagnosis.waitingForTransport':
-    'Daemon 正常，正在等待 NapCat 建立反向 WebSocket',
-  'settings.napcat.connectionDiagnosis.previouslyConnected': ({ age }) =>
-    `反向 WebSocket 当前未连接，但 NapCat 在 ${asText(age)} 前连通过`,
-  'settings.napcat.connectionDiagnosis.connectedWithoutHeartbeat':
-    '反向 WebSocket 已连接，但暂时还没观测到 heartbeat',
-  'settings.napcat.connectionDiagnosis.connectedHeartbeatStale':
-    '反向 WebSocket 已连接，但 heartbeat 已经陈旧',
-  'settings.napcat.connectionDiagnosis.connectedHeartbeatUnhealthy':
-    '反向 WebSocket 已连接，但 heartbeat 报告 NapCat 不健康',
-  'settings.napcat.connectionDiagnosis.bridgeDisabled': 'Bridge 已在配置中禁用',
-  'settings.napcat.connectionDiagnosis.bridgeUnknown': 'Daemon 已在线，但 bridge 运行时未上报',
-  'settings.napcat.embeddedOnly': '这些控制项只管理桌面托管的内嵌 daemon。',
-  'settings.napcat.runtimePathsTitle': '运行时路径',
-  'settings.napcat.runtimePathsDescription': '桌面应用和 daemon 应读取同一个配置数据库',
-  'settings.napcat.configDb': '配置数据库',
-  'settings.napcat.localUrl': '本地 NapCat URL',
-  'settings.napcat.dockerUrl': 'Docker NapCat URL',
-  'settings.napcat.runtimePathsHelp':
-    '如果 URL 已经包含 access_token=...，请把 NapCat 单独的 Token 字段留空，避免混用两条鉴权路径。',
-  'settings.napcat.recentLogsTitle': '最近日志',
-  'settings.napcat.recentLogsDescription':
-    '最近的 daemon 和 NapCat 事件，包括收到的 QQ 消息预览。打开时每 5 秒自动刷新。',
-  'settings.napcat.refreshLogs': '刷新日志',
-  'settings.napcat.logFile': '日志文件',
-  'settings.napcat.entries': '条目数',
-  'settings.napcat.qqMessages': 'QQ 消息',
-  'settings.napcat.loadingCount': '加载中...',
-  'settings.napcat.loadingLogs': '正在加载 daemon 日志...',
-  'settings.napcat.recentQqMessages': '最近 QQ 消息',
-  'settings.napcat.recentLogs': '最近日志',
-  'settings.napcat.noLogs': '还没有 daemon 日志或收到的 QQ 消息。',
-  'settings.napcat.reset': '重置桥接',
-  'settings.napcat.daemonLabel': 'Daemon',
-  'settings.napcat.toolsLabel': '工具',
-  'settings.napcat.error.providerApiUnavailable': 'Provider API 不可用。',
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   'settings.network.proxy.title': '代理',
   'settings.network.proxy.description':
     '当当前网络无法直接访问公网时，可以在这里为网页请求配置一条代理链路。',
@@ -929,7 +787,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
     '在继续网页搜索相关操作之前，先用当前网络设置做一次快速连通性检查。',
   'settings.network.diagnostics.usesDraft':
     '测试会直接使用这里当前显示的值，包括还没完成自动保存的编辑。',
-  'settings.network.diagnostics.testing': '测试中...',
+  'settings.network.diagnostics.testing': '测试中…',
   'settings.network.diagnostics.testAction': '测试连接',
   'settings.network.diagnostics.successTitle': '网络已就绪',
   'settings.network.diagnostics.partialTitle': '部分连通',
@@ -999,7 +857,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.speech.downloadModels': '下载模型',
   'settings.speech.refreshModels': '刷新',
   'settings.speech.loadingModels': '加载中',
-  'settings.speech.loadingModelsLong': '正在加载模型...',
+  'settings.speech.loadingModelsLong': '正在加载模型…',
   'settings.speech.downloadHint':
     '点击“下载并使用”即可拉取模型并自动切换。whisper-node 需要本地模型文件以及可用的 make 工具链。大型模型下载和编译可能需要一些时间。',
   'settings.speech.recognitionLanguage': '识别语言',
@@ -1010,7 +868,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.speech.provider.openai': 'OpenAI（语音）',
   'settings.speech.provider.whisperNode': 'whisper-node（本地）',
   'settings.speech.status.disabledTitle': '语音输入已关闭',
-  'settings.speech.status.checkingTitle': '正在检查语音状态...',
+  'settings.speech.status.checkingTitle': '正在检查语音状态…',
   'settings.speech.status.readyTitle': '语音输入已就绪',
   'settings.speech.status.notReadyTitle': '语音输入未就绪',
   'settings.speech.status.enableToUseVoice': '启用语音输入后才能使用语音功能。',
@@ -1041,86 +899,82 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.speech.progress.ready': '已可使用。',
   'settings.speech.progress.failed': '下载失败，请重试。',
   'settings.speech.progress.corrupted': '模型文件已损坏，建议重新下载。',
-  'settings.tasks.title': '主动任务',
-  'settings.tasks.description': '创建定时后台任务，并将结果推送到某个聊天线程中。',
-  'settings.tasks.namePlaceholder': '每日简报',
-  'settings.tasks.promptLabel': '提示词',
-  'settings.tasks.promptPlaceholder': '这个任务应该做什么？',
-  'settings.tasks.scheduleType': '调度类型',
-  'settings.tasks.scheduleTypeAria': '任务调度类型',
-  'settings.tasks.schedule.interval': '间隔（分钟）',
-  'settings.tasks.schedule.cron': 'Cron 表达式',
-  'settings.tasks.cronExpression': 'Cron 表达式',
-  'settings.tasks.everyMinutes': '每隔（分钟）',
-  'settings.tasks.cronPlaceholder': '*/15 * * * *',
-  'settings.tasks.cronHint': '5 段 cron（分 时 日 月 周）。例如：0 9 * * 1-5',
-  'settings.tasks.selectProvider': '选择一个 Provider',
-  'settings.tasks.noProviders': '当前没有可用 Provider。',
-  'settings.tasks.providerAria': '任务 Provider',
-  'settings.tasks.timezoneOptional': '时区（可选）',
-  'settings.tasks.timezonePlaceholder': '自动（本地时区）',
-  'settings.tasks.modelAria': '任务模型',
-  'settings.tasks.selectModel': '选择一个模型',
-  'settings.tasks.noModels': '当前没有可用模型。',
-  'settings.tasks.pushToThread': '推送到线程',
-  'settings.tasks.threadAria': '将任务输出推送到线程',
-  'settings.tasks.autoCreateThread': '自动创建专用线程',
-  'settings.tasks.toolStrategy': '工具策略',
-  'settings.tasks.toolStrategyAria': '任务工具策略',
-  'settings.tasks.toolMode.auto': '自动（由 agent 决定）',
-  'settings.tasks.toolMode.manual': '手动安全白名单',
-  'settings.tasks.toolMode.disabled': '禁用',
-  'settings.tasks.toolStrategyHint':
-    '自动模式会让任务 agent 自行判断何时使用安全内置工具以获取最新信息。',
-  'settings.tasks.allowedTools': '允许的工具（安全）',
-  'settings.tasks.disabledHint': '该任务将在不使用任何工具的情况下运行。',
-  'settings.tasks.autoHint': '当当前信息很重要时，该任务可以自主使用安全内置工具。',
-  'settings.tasks.desktopNotification': '桌面通知',
-  'settings.tasks.create': '创建任务',
-  'settings.tasks.creating': '创建中...',
-  'settings.tasks.existingTitle': '现有任务',
-  'settings.tasks.review.title': '最近运行结果',
-  'settings.tasks.review.description':
-    '最近完成的后台运行（定时任务与等待器），审阅代理自主完成的工作。',
-  'settings.tasks.review.empty': '还没有后台运行记录。',
-  'settings.tasks.review.openThread': '打开线程',
-  'settings.tasks.loading': '加载中...',
-  'settings.tasks.empty': '还没有任务。',
-  'settings.tasks.runNow': '立即运行',
-  'settings.tasks.running': '运行中...',
-  'settings.tasks.status.idle': '空闲',
-  'settings.tasks.status.running': '运行中',
-  'settings.tasks.status.success': '成功',
-  'settings.tasks.status.error': '错误',
-  'settings.tasks.notify': '通知',
-  'settings.tasks.cronShort': 'Cron',
-  'settings.tasks.tzShort': 'TZ',
-  'settings.tasks.local': '本地',
-  'settings.tasks.everyMinShort': '每隔（分）',
-  'settings.tasks.scheduleLabel': '调度：',
-  'settings.tasks.toolStrategyLabel': '工具策略：',
-  'settings.tasks.next': '下次：',
-  'settings.tasks.last': '上次：',
-  'settings.tasks.format.scheduleCron': ({ cron, timezone }) =>
-    `${asText(cron)}${asText(timezone) ? `（${asText(timezone)}）` : '（本地时间）'}`,
-  'settings.tasks.format.scheduleInterval': ({ minutes }) => `每隔 ${asText(minutes)} 分钟`,
-  'settings.tasks.format.toolAuto': '自动安全工具',
-  'settings.tasks.format.toolDisabled': '已禁用',
-  'settings.tasks.format.toolManual': ({ tools }) =>
-    asText(tools) ? `手动：${asText(tools)}` : '手动（未选择安全工具）',
-  'settings.tasks.error.loadFailed': ({ error }) => `加载任务失败：${asText(error)}`,
-  'settings.tasks.error.nameRequired': '任务名称不能为空。',
-  'settings.tasks.error.promptRequired': '任务提示词不能为空。',
-  'settings.tasks.error.intervalPositive': '间隔必须是正数（分钟）。',
-  'settings.tasks.error.cronRequired': 'Cron 表达式不能为空。',
-  'settings.tasks.error.providerRequired': '请选择一个 Provider。',
-  'settings.tasks.error.modelRequired': '请选择一个模型。',
-  'settings.tasks.error.safeToolRequired': '请至少选择一个安全工具，或改用自动/禁用模式。',
-  'settings.tasks.error.createFailed': ({ error }) => `创建任务失败：${asText(error)}`,
-  'settings.tasks.error.runFailed': ({ error }) => `运行任务失败：${asText(error)}`,
-  'settings.tasks.error.deleteFailed': ({ error }) => `删除任务失败：${asText(error)}`,
-  'settings.tasks.error.updateFailed': ({ error }) => `更新任务失败：${asText(error)}`,
-  'settings.tasks.confirmDelete': ({ name }) => `删除任务“${asText(name)}”？\n此操作不可撤销。`,
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   'settings.usage.title': '用量',
   'settings.usage.description': '按聊天工作流统计模型回复的 token 用量与预估花费。',
   'settings.usage.period': '时间范围',
@@ -1130,7 +984,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.usage.period.90d': '最近 90 天',
   'settings.usage.period.365d': '最近一年',
   'settings.usage.period.all': '全部时间',
-  'settings.usage.loading': '正在加载用量...',
+  'settings.usage.loading': '正在加载用量…',
   'settings.usage.totalCost': '总花费',
   'settings.usage.messages': '消息数',
   'settings.usage.inputTokens': '输入 Token',
@@ -1139,7 +993,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.usage.cacheWrite': '缓存写入',
   'settings.usage.heatmapTitle': '活跃热力图',
   'settings.usage.heatmapDescription': '过去一年内的 token 活跃情况。',
-  'settings.usage.loadingHeatmap': '正在加载热力图...',
+  'settings.usage.loadingHeatmap': '正在加载热力图…',
   'settings.usage.empty': '还没有用量数据。',
   'settings.usage.heatmapFooter': ({ tokens }) => `过去一年共 ${asText(tokens)} token`,
   'settings.usage.heatmapLegend': '少 ▪▪▪▪ 多',
@@ -1147,7 +1001,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
     `${asText(date)}：${asText(tokens)} token，${asText(messages)} 条消息`,
   'settings.usage.costOverTime': '成本趋势',
   'settings.usage.costOverTimeDescription': '所选时间窗口内的月度预估花费。',
-  'settings.usage.loadingChart': '正在加载图表...',
+  'settings.usage.loadingChart': '正在加载图表…',
   'settings.usage.noCostData': '这个时间段内没有成本数据。',
   'settings.usage.monthBarTitle': ({ month, cost }) => `${asText(month)}：${asText(cost)}`,
   'settings.usage.error.unavailable': '用量服务不可用。',
@@ -1169,10 +1023,10 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.providers.availableModels': '发现的模型',
   'settings.providers.fetchModels': '获取',
   'settings.providers.fetchModelsTitle': '从当前 Provider 或客户端刷新可用模型列表。',
-  'settings.providers.fetchingModels': '获取中...',
+  'settings.providers.fetchingModels': '获取中…',
   'settings.providers.selectionCount': ({ selected, total }) =>
     `共 ${asText(total)} 个模型 · 已启用 ${asText(selected)} 个`,
-  'settings.providers.modelSearchPlaceholder': '搜索模型...',
+  'settings.providers.modelSearchPlaceholder': '搜索模型…',
   'settings.providers.modelAddIdPlaceholder': 'Model ID',
   'settings.providers.modelAddDisplayNamePlaceholder': '显示名称（可选）',
   'settings.providers.modelAdd': '添加',
@@ -1201,13 +1055,13 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.providers.modal.apiFormat.defaultDescription':
     '在 iKi 当前实现里，这个选项会向你配置的 Base URL 发送 OpenAI-compatible 的 Chat Completions 请求。',
   'settings.providers.modal.apiFormat.chatCompletionsAdapter':
-    '运行时适配器：AI SDK OpenAI-compatible provider。',
+    '运行时适配器：Pi-AI（OpenAI Chat Completions 方言）。',
   'settings.providers.modal.apiFormat.responsesAdapter':
-    '运行时适配器：AI SDK OpenAI Responses provider，并使用你配置的自定义 Base URL。',
+    '运行时适配器：Pi-AI（OpenAI Responses 方言），使用你配置的 Base URL。',
   'settings.providers.modal.apiFormat.anthropicAdapter':
-    '运行时适配器：AI SDK Anthropic provider，并使用你配置的自定义 Base URL。',
+    '运行时适配器：Pi-AI（Anthropic Messages 方言），使用你配置的 Base URL。',
   'settings.providers.modal.apiFormat.defaultAdapter':
-    '运行时适配器：AI SDK OpenAI-compatible provider，并使用你配置的自定义 Base URL。',
+    '运行时适配器：Pi-AI（OpenAI Chat Completions 方言），使用你配置的 Base URL。',
   'settings.providers.modal.apiKeyPlaceholder': '输入 API Key',
   'settings.providers.modal.baseUrl': 'Base URL',
   'settings.providers.modal.baseUrlPlaceholder': 'https://api.example.com/v1',
@@ -1225,33 +1079,6 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.providers.baseUrlHelp.optionalOverride': '可选，用于覆盖 Provider 默认端点。',
   'settings.providers.baseUrlHelp.useDefault': ({ name }) =>
     `留空以使用默认的 ${asText(name)} API 端点。`,
-  'settings.providers.acp.command': 'Command',
-  'settings.providers.acp.commandPlaceholder': '例如：codex-acp',
-  'settings.providers.acp.commandHelp':
-    '用于通过 ACP 启动 Codex CLI 的可执行命令。请把命令本体和参数分开填写。',
-  'settings.providers.acp.args': 'Arguments',
-  'settings.providers.acp.argsPlaceholder': '--profile default\n--sandbox workspace-write',
-  'settings.providers.acp.argsHelp':
-    '这里按 shell 风格填写参数即可（支持引号）；如果需要精确 argv 顺序，也可以直接粘贴 JSON 字符串数组。',
-  'settings.providers.acp.apiProvider': 'API Provider',
-  'settings.providers.acp.apiProviderAuto': 'None（使用内置认证）',
-  'settings.providers.acp.apiProviderHelp':
-    '只有在 Codex CLI 需要复用某个已有 Provider 的 API 凭据时才选择这里；留空即可使用内置认证。',
-  'settings.providers.acp.authMethodId': 'Authentication Method',
-  'settings.providers.acp.authMethodPlaceholder': '可选的 authentication method id',
-  'settings.providers.acp.authMethodHelp':
-    '可选。当 Codex CLI 暴露多个登录方式时，可在这里指定默认使用的 ACP authentication method id。',
-  'settings.providers.acp.authMethodAuto': '自动（无偏好）',
-  'settings.providers.acp.discoverAuthMethods': '发现',
-  'settings.providers.acp.mcpServers': 'MCP Servers',
-  'settings.providers.acp.mcpServersHelp': '选择这个 Codex CLI 会话应连接哪些已配置的 MCP 服务器。',
-  'settings.providers.acp.mcpServersEmpty': '还没有配置 MCP 服务器。请先到 Settings -> MCP 添加。',
-  'settings.providers.acp.mcpServersEnabled': '已启用',
-  'settings.providers.acp.mcpServersDisabled': '已在 MCP 设置中禁用',
-  'settings.providers.acp.mcpServersMissing': '已保存的服务器已不存在',
-  'settings.providers.acp.mcpServersMissingName': ({ id }) => `不可用服务器（${asText(id)}）`,
-  'settings.providers.acp.baseUrlHelp':
-    '可选。会把 OpenAI 兼容的 Base URL 注入到 ACP 命令环境中，适用于 Codex / OpenAI 风格适配器。',
   'settings.providers.promptModelName': '输入模型名称：',
   'settings.providers.confirmRemove': '确定要移除这个 Provider 配置吗？',
   'settings.providers.modelOptions.edit': '模型选项',
@@ -1284,22 +1111,19 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.providers.modelOptions.summary.contextWindow': ({ count }) => `${asText(count)} 上下文`,
   'settings.providers.modelOptions.errors.invalidJson': 'Provider 选项必须是有效的 JSON。',
   'settings.providers.modelOptions.errors.objectRequired': 'Provider 选项 JSON 必须是一个对象。',
-  'settings.providers.description.openai': '通过 AI SDK 的 OpenAI Provider 使用官方 OpenAI 模型',
-  'settings.providers.description.anthropic':
-    '通过 AI SDK 的 Anthropic Provider 使用官方 Claude 模型',
+  'settings.providers.description.openai': '通过 Pi-AI 供应层使用官方 OpenAI 模型',
+  'settings.providers.description.anthropic': '通过 Pi-AI 供应层使用官方 Claude 模型',
   'settings.providers.description.deepseek': 'DeepSeek AI 模型，具备更强的推理能力',
   'settings.providers.description.kimi': 'Moonshot AI 模型，例如支持超长上下文的 Kimi',
-  'settings.providers.description.minimax': '通过 AI SDK 的 MiniMax Provider 使用官方 MiniMax 模型',
+  'settings.providers.description.minimax': '通过 Pi-AI 供应层使用官方 MiniMax 模型',
   'settings.providers.description.ollama': '通过 Ollama 在本地运行开源大模型',
-  'settings.providers.description.acp':
-    '通过 Agent Client Protocol 对接 Codex CLI，并兼容 Claude Code、Gemini 等其他 ACP agent',
   'settings.mcp.title': 'MCP（Model Context Protocol）',
   'settings.mcp.description':
-    '连接外部工具服务器，并将它们的工具暴露给 iKi。远程服务器默认禁用，需要显式开启。',
+    '连接外部工具服务器，并将它们的工具暴露给 iKi。远程服务器默认禁用，需要显式启用。',
   'settings.mcp.enable': '启用 MCP',
   'settings.mcp.connectOnStartup': '启动时连接已启用服务器',
   'settings.mcp.allowRemoteServers': '允许远程 MCP 服务器（HTTP/SSE）',
-  'settings.mcp.remoteBlocked': '远程服务器默认被阻止，只有开启此开关后才允许连接。',
+  'settings.mcp.remoteBlocked': '远程服务器默认被阻止，只有启用此开关后才允许连接。',
   'settings.mcp.defaultApprovalMode': '默认审批模式',
   'settings.mcp.defaultApprovalModeAria': '默认审批模式',
   'settings.mcp.requestTimeoutMs': '请求超时（毫秒）',
@@ -1308,7 +1132,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.mcp.configuredCount': ({ count }) => `已配置 ${asCount(count)} 个`,
   'settings.mcp.addServer': '添加服务器',
   'settings.mcp.loading': '加载中',
-  'settings.mcp.loadingServers': '正在加载 MCP 服务器...',
+  'settings.mcp.loadingServers': '正在加载 MCP 服务器…',
   'settings.mcp.empty': '还没有配置 MCP 服务器。',
   'settings.mcp.refreshTools': '刷新工具',
   'settings.mcp.connect': '连接',
@@ -1344,7 +1168,7 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.mcp.form.headersPlaceholder': 'Authorization=Bearer ...',
   'settings.mcp.form.remoteDisabled':
     '远程 HTTP/SSE 服务器当前被禁用。启用“允许远程 MCP 服务器”后才能连接非本地 URL。',
-  'settings.mcp.form.saving': '保存中...',
+  'settings.mcp.form.saving': '保存中…',
   'settings.mcp.form.save': '保存服务器',
   'settings.mcp.approval.safeOnly': '除只读工具外都要求审批（推荐）',
   'settings.mcp.approval.always': '始终要求审批',
@@ -1382,29 +1206,54 @@ export const zhCN = defineLocaleCatalog<typeof en>({
   'settings.mcp.confirmDelete': ({ name }) => `删除 MCP 服务器“${asText(name)}”？`,
   'settings.skills.title': '技能',
   'settings.skills.availableCount': ({ count }) => `共有 ${asCount(count)} 个技能可用`,
-  'settings.skills.refreshing': '刷新中...',
+  'settings.skills.refreshing': '刷新中…',
   'settings.skills.description':
     '技能是从本地 SKILL.md 文件加载的指令包。把你的自定义技能放到 Personal skills 文件夹后，它们就会显示在这里。',
   'settings.skills.source.personal': '个人',
   'settings.skills.source.codex': 'Codex',
-  'settings.skills.searchPlaceholder': '按名称、描述或 id 搜索技能...',
+  'settings.skills.searchPlaceholder': '按名称、描述或 id 搜索技能…',
   'settings.skills.empty': '没有找到技能。',
   'settings.skills.group.personal': '个人技能',
   'settings.skills.group.codex': 'Codex 技能',
   'settings.skills.noDescription': '没有描述',
   'settings.skills.viewContent': '查看内容',
   'settings.skills.contentTruncated': '显示内容已截断。',
-  'settings.skills.workflowTitle': '工作流优化',
-  'settings.skills.workflowEnable': '启用自优化工作流',
-  'settings.skills.workflowAutoPin': '按线程自动固定高频使用技能',
-  'settings.skills.workflowDescription':
-    'iKi 会学习某个线程里哪些技能持续有帮助，并在自动模式下保持它们被固定。这不会影响手动技能选择。',
-  'settings.skills.workflowResetting': '重置中...',
-  'settings.skills.workflowReset': '重置自动固定技能',
+  
+  
+  
+  
+  
+  
   'settings.skills.error.resetUnavailable': '工作流重置功能不可用。',
   'settings.skills.error.resetFailed': ({ error }) => `重置工作流数据失败：${asText(error)}`,
   'settings.skills.error.loadFailed': ({ error }) => `加载技能失败：${asText(error)}`,
   'settings.skills.error.openFolderFailed': ({ error }) => `打开技能文件夹失败：${asText(error)}`,
   'settings.skills.error.openSkillFailed': ({ error }) => `打开技能目录失败：${asText(error)}`,
   'settings.skills.error.readFailed': ({ error }) => `读取技能内容失败：${asText(error)}`,
+
+  'a11y.skipToConversation': '跳到对话内容',
+  'a11y.skipToComposer': '跳到输入框',
+  'a11y.conversationLandmark': '对话内容',
+  'a11y.settingsNav': '设置分类',
+  'a11y.settingsContent': '设置内容',
+  'a11y.closeDialog': '关闭对话框',
+  'a11y.messageActions': '消息操作',
+  'a11y.attachedImages': '已附加的图片',
+  'a11y.viewImage': '打开图片预览',
+  'a11y.assistantReplying': '助手正在回复',
+  'a11y.toolApprovalRequired': '执行工具需要批准',
+  'a11y.densityOption': ({ name }) => `界面密度：${asText(name)}`,
+  'a11y.modelEnabled': ({ model }) => `启用模型 ${asText(model)}`,
+  'a11y.showApiKey': '显示 API Key',
+  'a11y.hideApiKey': '隐藏 API Key',
+  'a11y.composerInput': '消息输入框',
+  'a11y.searchChats': '搜索对话',
+  'a11y.searchModels': '搜索模型',
+  'a11y.searchProviders': '搜索 Provider',
+  'a11y.searchThemes': '搜索主题',
+  'a11y.searchSkills': '搜索技能',
+  'a11y.modelIdInput': '要添加的模型 ID',
+  'a11y.modelDisplayNameInput': '要添加模型的显示名称',
+  'a11y.settingsSectionTab': ({ name }) => `设置分类：${asText(name)}`,
+  'a11y.turnPreviewCard': ({ role }) => `${asText(role)} 消息预览`,
 });

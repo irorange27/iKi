@@ -1,29 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { AffectState } from '@iki/backend/affect/affect_state';
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
-import { normalizeWhitespace } from '@iki/backend/utils/text';
-import type { ModelCapability } from '@iki/backend/utils/provider_models';
-import { resolveSkillsSystemPrompt } from '../thread_session/skills';
-import { getAssistantProfileContextMessage, retrieveRelevantContinuity } from '../thread_session/platform';
-import { getPromptFromMessage } from '../thread_session/ui_messages';
-import type { ContinuityMemoryPreview } from '@iki/backend/chat_platform';
-import type { ChatMemory } from '../thread_session/memory';
-import type {
-  AssembleChatContextParams,
-  ContextConfig,
-  ContextReportBlock,
-  IdentityContext,
-  MemoryContext,
-  SkillContext,
-} from './context_types';
-import {
-  buildDroppedBlock,
-  clipTextToTokenBudget,
-  estimateTextTokens,
-} from './context_helpers';
-import type { ChatInputMessage } from '../thread_session/types';
+import type { ContextConfig, IdentityContext, SkillContext } from './context_types';
+import { buildDroppedBlock, clipTextToTokenBudget, estimateTextTokens } from './context_helpers';
+import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 
 const AGENT_INSTRUCTIONS_FILENAMES = ['AGENTS.md', 'IKI.md'];
 
@@ -34,40 +15,50 @@ const hasMeaningfulContent = (value: string): boolean => {
   return stripped.length > 0;
 };
 
-export const readAgentInstructions = (threadId?: string): string => {
-  if (!threadId) return '';
+export const readAgentInstructionsForSelection = (
+  selection: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null | undefined
+): string => {
+  if (!selection) return '';
 
-  const selection = getThreadWorkspaceSelection(threadId);
-  const workspacePath = selection?.workspace?.path;
+  const workspacePath = selection.workspace?.path;
   if (!workspacePath) return '';
 
   try {
-    const filename = AGENT_INSTRUCTIONS_FILENAMES.find(name => fs.existsSync(path.join(workspacePath, name)));
+    const filename = AGENT_INSTRUCTIONS_FILENAMES.find(name =>
+      fs.existsSync(path.join(workspacePath, name))
+    );
     if (!filename) return '';
     const filePath = path.join(workspacePath, filename);
     const raw = fs.readFileSync(filePath, 'utf8');
     const cleaned = stripHtmlComments(raw).trim();
     if (!hasMeaningfulContent(cleaned)) return '';
-    return [
-      `Project agent instructions (from ${filename}):`,
-      cleaned,
-    ].join('\n');
+    return [`Project agent instructions (from ${filename}):`, cleaned].join('\n');
   } catch {
     return '';
   }
+};
+
+export const readAgentInstructions = (threadId?: string): string => {
+  if (!threadId) return '';
+  return readAgentInstructionsForSelection(getThreadWorkspaceSelection(threadId));
 };
 
 export const buildIdentityContext = (
   workspaceSystemMessage: ((threadId?: string) => string) | undefined,
   threadId: string | undefined,
   contextConfig: ContextConfig,
-  modelCapability?: ModelCapability | null,
-  agentInstructions?: string
+  agentInstructions: string
 ): IdentityContext => {
-  const profile = clipTextToTokenBudget(getAssistantProfileContextMessage().trim(), contextConfig.maxIdentityTokens);
+
+  const identityText = [
+    workspaceSystemMessage?.(threadId)?.trim() ?? '',
+    agentInstructions?.trim() ?? '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   const identityClip = {
-    text: [profile.text, workspaceSystemMessage?.(threadId)?.trim() ?? '', agentInstructions?.trim() ?? ''].filter(Boolean).join('\n\n'),
-    truncated: profile.truncated,
+    text: clipTextToTokenBudget(identityText, contextConfig.maxIdentityTokens).text,
+    truncated: clipTextToTokenBudget(identityText, contextConfig.maxIdentityTokens).truncated,
   };
 
   return {
@@ -86,196 +77,21 @@ export const buildIdentityContext = (
   };
 };
 
-const toMemoryDisplayEntry = (result: ContinuityMemoryPreview | Record<string, unknown>) => ({
-  summary: typeof result.summary === 'string' ? result.summary : '',
-  score: typeof result.score === 'number' ? result.score : Number(result.score || 0),
-  updated_at: typeof result.updated_at === 'string' ? result.updated_at : undefined,
-});
-
-export const buildDroppedMemoryContext = (reason: string): MemoryContext => ({
-  systemMessage: '',
-  block: {
-    kind: 'memory',
-    status: 'dropped',
-    estimatedTokens: 0,
-    charCount: 0,
-    reason,
-  },
-});
-
-const buildMemorySystemMessage = (
-  results: Array<{ summary: string; score: number; updated_at?: string }>
-): string => {
-  if (!results.length) return '';
-  const lines = results.map(entry => {
-    const score = Number.isFinite(entry.score) ? entry.score.toFixed(3) : '0.000';
-    const dateText = entry.updated_at ? new Date(entry.updated_at).toLocaleDateString() : '';
-    const summary = normalizeWhitespace(entry.summary);
-    return dateText ? `- (${score}, ${dateText}) ${summary}` : `- (${score}) ${summary}`;
-  });
-  return ['Long-term memory (use only if relevant; ignore if unrelated):', ...lines].join('\n');
-};
-
-const buildCombinedMemorySystemMessage = (sections: string[]): string =>
-  sections
-    .map(section => section.trim())
-    .filter(Boolean)
-    .join('\n\n');
-
-const buildContinuityMemorySystemMessage = (
-  entries: Array<{ summary: string; score: number; updated_at?: string }>
-): string => {
-  if (!entries.length) return '';
-  const lines = entries.map(entry => {
-    const score = Number.isFinite(entry.score) ? entry.score.toFixed(3) : '0.000';
-    const dateText = entry.updated_at ? new Date(entry.updated_at).toLocaleDateString() : '';
-    const summary = normalizeWhitespace(entry.summary);
-    return dateText ? `- (${score}, ${dateText}) ${summary}` : `- (${score}) ${summary}`;
-  });
-  return ['Durable continuity context (use only if relevant):', ...lines].join('\n');
-};
-
-export const buildMemoryContext = async (params: {
-  threadId?: string;
-  query: string;
-  memory: ChatMemory;
-  contextConfig: ContextConfig;
-  modelCapability?: ModelCapability | null;
-  onMemoryRetrieved?: AssembleChatContextParams['onMemoryRetrieved'];
-}): Promise<MemoryContext> => {
-  if (!params.query.trim()) {
-    return buildDroppedMemoryContext('no user query available');
-  }
-
-  const continuityPayload = retrieveRelevantContinuity(params.query);
-  const archiveMemoryPayload =
-    params.threadId && params.query.trim()
-      ? await params.memory.retrieveRelevantMemory(params.threadId, params.query)
-      : null;
-
-  if (!continuityPayload && !archiveMemoryPayload) {
-    return buildDroppedMemoryContext('no relevant continuity or archive memory retrieved');
-  }
-
-  let continuityResults = [...(continuityPayload?.results ?? [])];
-  let archiveMemoryResults = [...(archiveMemoryPayload?.results ?? [])];
-  const originalResultCount = continuityResults.length + archiveMemoryResults.length;
-  let memoryResults = [...continuityResults, ...archiveMemoryResults];
-  let memorySystemMessage = buildCombinedMemorySystemMessage([
-    continuityResults.length > 0
-      ? buildContinuityMemorySystemMessage(continuityResults.map(toMemoryDisplayEntry))
-      : '',
-    archiveMemoryResults.length > 0
-      ? buildMemorySystemMessage(archiveMemoryResults.map(toMemoryDisplayEntry))
-      : '',
-  ]);
-
-  while (
-    memoryResults.length > 1 &&
-    estimateTextTokens(memorySystemMessage) >
-      params.contextConfig.maxMemoryTokens
-  ) {
-    if (archiveMemoryResults.length > 0) {
-      archiveMemoryResults = archiveMemoryResults.slice(0, -1);
-    } else {
-      continuityResults = continuityResults.slice(0, -1);
-    }
-    memoryResults = [...continuityResults, ...archiveMemoryResults];
-    memorySystemMessage = buildCombinedMemorySystemMessage([
-      continuityResults.length > 0
-        ? buildContinuityMemorySystemMessage(continuityResults.map(toMemoryDisplayEntry))
-        : '',
-      archiveMemoryResults.length > 0
-        ? buildMemorySystemMessage(archiveMemoryResults.map(toMemoryDisplayEntry))
-        : '',
-    ]);
-  }
-
-  const memoryClip = clipTextToTokenBudget(
-    memorySystemMessage,
-    params.contextConfig.maxMemoryTokens
-  );
-  params.onMemoryRetrieved?.({
-    query: continuityPayload?.query || archiveMemoryPayload?.query || params.query,
-    results: memoryResults as unknown as Record<string, unknown>[],
-    systemMessage: memoryClip.text,
-  });
-
-  return {
-    systemMessage: memoryClip.text,
-    block: {
-      kind: 'memory',
-      status: memoryClip.text
-        ? memoryClip.truncated || memoryResults.length < originalResultCount
-          ? 'truncated'
-          : 'included'
-        : 'dropped',
-      estimatedTokens: estimateTextTokens(memoryClip.text),
-      charCount: memoryClip.text.length,
-      ...(memoryClip.text
-        ? memoryClip.truncated
-          ? { reason: 'memory block clipped to context budget' }
-          : memoryResults.length < originalResultCount
-            ? { reason: 'continuity or archive memory items reduced to fit context budget' }
-            : {}
-        : { reason: 'no relevant continuity or archive memory retrieved' }),
-      sourceCount: memoryResults.length,
-    },
-  };
-};
-
-export const resolveAffectMessage = (
-  params: Pick<AssembleChatContextParams, 'affectContextMode' | 'realtimeAffectMessage' | 'threadId'>,
-  memory: ChatMemory
-): { message: string; droppedReason?: string } => {
-  if (params.affectContextMode === 'disabled') {
-    return {
-      message: '',
-      droppedReason: 'disabled for experiment no_affect mode',
-    };
-  }
-
-  if (params.realtimeAffectMessage?.trim()) {
-    return { message: params.realtimeAffectMessage.trim() };
-  }
-
-  return {
-    message: params.threadId ? memory.getAffectContextMessage(params.threadId) : '',
-  };
-};
-
-export const buildAffectBlock = (
-  affectMessage: string,
-  modelCapability?: ModelCapability | null,
-  droppedReason?: string
-): ContextReportBlock => ({
-  kind: 'affect',
-  status: affectMessage ? 'included' : 'dropped',
-  estimatedTokens: estimateTextTokens(affectMessage),
-  charCount: affectMessage.length,
-  ...(affectMessage ? {} : { reason: droppedReason || 'no affect context available' }),
-});
-
 export const buildSkillContext = async (params: {
   inputMessages: ChatInputMessage[];
   threadId?: string;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
-  affectState?: AffectState | null;
   contextConfig: ContextConfig;
-  modelCapability?: ModelCapability | null;
+  resolveSkillsSystemPrompt: typeof import('../thread_session/skills').resolveSkillsSystemPrompt;
 }): Promise<SkillContext> => {
-  const { skillsSystemPrompt, usedSkills, skillMode } = await resolveSkillsSystemPrompt({
+  const { skillsSystemPrompt, usedSkills, skillMode } = await params.resolveSkillsSystemPrompt({
     inputMessages: params.inputMessages,
     threadId: params.threadId,
     skillIds: params.skillIds,
     skillMode: params.skillMode,
-    affectState: params.affectState,
   });
-  const skillClip = clipTextToTokenBudget(
-    skillsSystemPrompt,
-    params.contextConfig.maxSkillTokens
-  );
+  const skillClip = clipTextToTokenBudget(skillsSystemPrompt, params.contextConfig.maxSkillTokens);
 
   return {
     systemMessage: skillClip.text,
@@ -294,11 +110,6 @@ export const buildSkillContext = async (params: {
       sourceCount: usedSkills.length,
     },
   };
-};
-
-export const buildQueryFromMessages = (messages: ChatInputMessage[]): string => {
-  const lastMessage = messages[messages.length - 1];
-  return getPromptFromMessage(lastMessage);
 };
 
 export { buildDroppedBlock };

@@ -3,30 +3,21 @@
     <div class="config-group">
       <h3>{{ t('settings.mcp.title') }}</h3>
       <p class="group-description">{{ t('settings.mcp.description') }}</p>
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="config.mcp.enabled"
-          @change="updateMcp('enabled', ($event.target as HTMLInputElement).checked)"
-        />
-        {{ t('settings.mcp.enable') }}
-      </label>
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="config.mcp.connectOnStartup"
-          @change="updateMcp('connectOnStartup', ($event.target as HTMLInputElement).checked)"
-        />
-        {{ t('settings.mcp.connectOnStartup') }}
-      </label>
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="config.mcp.allowRemoteServers"
-          @change="updateMcp('allowRemoteServers', ($event.target as HTMLInputElement).checked)"
-        />
-        {{ t('settings.mcp.allowRemoteServers') }}
-      </label>
+      <SettingsSwitch
+        :model-value="config.mcp.enabled"
+        :title="t('settings.mcp.enable')"
+        @update:model-value="updateMcp('enabled', $event)"
+      />
+      <SettingsSwitch
+        :model-value="config.mcp.connectOnStartup"
+        :title="t('settings.mcp.connectOnStartup')"
+        @update:model-value="updateMcp('connectOnStartup', $event)"
+      />
+      <SettingsSwitch
+        :model-value="config.mcp.allowRemoteServers"
+        :title="t('settings.mcp.allowRemoteServers')"
+        @update:model-value="updateMcp('allowRemoteServers', $event)"
+      />
       <p v-if="!config.mcp.allowRemoteServers" class="group-description warning-text">
         {{ t('settings.mcp.remoteBlocked') }}
       </p>
@@ -202,10 +193,7 @@
             @update:model-value="updateFormTransportSelection"
           />
         </label>
-        <label class="checkbox-label">
-          <input type="checkbox" v-model="form.enabled" />
-          {{ t('common.enabled') }}
-        </label>
+        <SettingsSwitch v-model="form.enabled" :title="t('common.enabled')" />
         <label class="input-label">
           <span>{{ t('settings.mcp.form.approvalOverride') }}</span>
           <SettingsSelect
@@ -313,6 +301,7 @@
 </template>
 
 <script setup lang="ts">
+import SettingsSwitch from './SettingsSwitch.vue';
 import { RefreshCw } from 'lucide-vue-next';
 
 import SettingsSelect from './SettingsSelect.vue';

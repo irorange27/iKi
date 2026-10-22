@@ -215,7 +215,6 @@ describe('McpManager transport construction', () => {
   });
 });
 
-
 describe('McpManager execution boundaries', () => {
   afterEach(() => vi.restoreAllMocks());
 

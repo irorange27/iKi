@@ -1,23 +1,7 @@
 <template>
   <div v-if="hasSummary" class="chat-message-references">
     <div class="reference-summary">
-      <span v-if="affectSummary.label" class="reference-summary-item" :title="affectTooltip">
-        <Heart :size="14" class="reference-summary-icon" />
-        {{ t('chat.references.affect') }}
-      </span>
-      <span
-        v-if="memorySummary.items.length > 0"
-        class="reference-summary-item"
-        :title="memoryTooltip"
-      >
-        <Brain :size="14" class="reference-summary-icon" />
-        {{ t('chat.references.memories', { count: memorySummary.items.length }) }}
-      </span>
-      <span
-        v-if="toolSummary.kindCount > 0"
-        class="reference-summary-item"
-        :title="toolTooltip"
-      >
+      <span v-if="toolSummary.kindCount > 0" class="reference-summary-item" :title="toolTooltip">
         <Wrench :size="14" class="reference-summary-icon" />
         {{ t('chat.references.tools', { count: toolSummary.kindCount }) }}
       </span>
@@ -35,7 +19,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Brain, Heart, Sparkles, Wrench } from 'lucide-vue-next';
+import { Sparkles, Wrench } from 'lucide-vue-next';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import { useI18n } from '../../i18n';
 
@@ -50,15 +34,10 @@ const { t } = useI18n();
 const summaries = computed(() => getReferenceSummaries(props.message));
 const toolSummary = computed(() => summaries.value.tool);
 const skillSummary = computed(() => summaries.value.skill);
-const memorySummary = computed(() => summaries.value.memory);
-const affectSummary = computed(() => summaries.value.affect);
 const hasSummary = computed(
   () =>
     props.message.role === 'assistant' &&
-    (toolSummary.value.callCount > 0 ||
-      skillSummary.value.items.length > 0 ||
-      memorySummary.value.items.length > 0 ||
-      Boolean(affectSummary.value.label))
+    (toolSummary.value.callCount > 0 || skillSummary.value.items.length > 0)
 );
 
 const toolTooltip = computed(() => {
@@ -85,30 +64,6 @@ const skillTooltip = computed(() => {
   }
   return lines.join('\n');
 });
-
-const memoryTooltip = computed(() =>
-  memorySummary.value.query
-    ? t('chat.references.memoryQuery', { query: memorySummary.value.query })
-    : t('chat.references.memoryFallback')
-);
-
-const affectTooltip = computed(() => {
-  if (!affectSummary.value.label) return t('chat.references.noAffect');
-  const details: string[] = [affectSummary.value.label];
-  if (affectSummary.value.confidence !== null) {
-    details.push(
-      t('chat.references.confidence', {
-        value: formatPercent(affectSummary.value.confidence),
-      })
-    );
-  }
-  if (affectSummary.value.guardActive) {
-    details.push(t('chat.references.guarded'));
-  }
-  return details.join(' · ');
-});
-
-const formatPercent = (value: number): string => `${Math.round(value * 100)}%`;
 </script>
 
 <style scoped>

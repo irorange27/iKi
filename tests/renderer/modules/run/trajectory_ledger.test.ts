@@ -85,7 +85,34 @@ it('does not invent a growing duration for an unfinished audit record in a termi
   expect(ledger.durationMs).toBe(3000);
 });
 
-it('distinguishes completed inference output from the final aggregate record', () => {
+it('shows a repeated system prompt once across turns', () => {
+  const withPrompt = (id: string, createdAt: string, prompt: string): AgentRunTrace =>
+    ({
+      run: { ...run(id, createdAt, at(9)), systemPrompt: prompt } as AgentRun,
+      steps: [],
+      children: [],
+    }) as AgentRunTrace;
+
+  const ledgers = buildTurnLedgers([
+    withPrompt('run_a', at(0), 'same prompt'),
+    withPrompt('run_b', at(1), 'same prompt'),
+    withPrompt('run_c', at(2), 'different prompt'),
+  ]);
+
+  const systemRows = ledgers.map(ledger =>
+    ledger.entries.filter(entry => entry.type === 'system')
+  );
+  // The first turn introduces the prompt; the second repeats it and shows
+  // nothing; the third changes it and shows the new one.
+  expect(systemRows[0]).toHaveLength(1);
+  expect(systemRows[1]).toHaveLength(0);
+  expect(systemRows[2]).toHaveLength(1);
+  expect(systemRows[2][0]!.summary).toContain('changed');
+  expect(systemRows[2][0]!.summary).toContain('different prompt');
+});
+
+
+it('shows the inference step as the answer, with no separate completion row', () => {
   const [ledger] = buildTurnLedgers([
     trace('ended', at(0), at(3), [
       step({
@@ -99,17 +126,28 @@ it('distinguishes completed inference output from the final aggregate record', (
           ],
         },
       }),
-      step({
-        stepIndex: 1,
-        startedAt: at(2),
-        summary: 'Run completed successfully',
-        output: { text: 'answer' },
-      }),
     ]),
   ]);
-  expect(ledger.entries.map(entry => entry.type)).toEqual(['model', 'finalize']);
+  // Completion records the run row, not a step, so a finished turn is one row.
+  expect(ledger.entries.map(entry => entry.type)).toEqual(['model']);
   expect(ledger.entries[0].summary).toBe('answer');
   expect(ledger.entries[0].reasoning).toBe('reason');
-  expect(ledger.entries[1].summary).toBe('Run completed successfully');
+});
+
+it('still labels a legacy completion step with its own type, not "finalize"', () => {
+  // Rows written before completion stopped appending a step are still in old
+  // databases. They carry type "model" and no `inference`; the projection used
+  // to rename them to "finalize", which is what made every turn look like it
+  // ended in a separate event.
+  const [ledger] = buildTurnLedgers([
+    trace('legacy', at(0), at(3), [
+      step({ stepIndex: 0, startedAt: at(1), output: { inference: true, content: [{ type: 'text', text: 'answer' }] } }),
+      step({ stepIndex: 1, startedAt: at(2), summary: 'Run completed successfully', output: { text: 'answer' } }),
+    ]),
+  ]);
+  expect(ledger.entries.map(entry => entry.type)).toEqual(['model', 'model']);
+  // The summary follows the step's own text, which is the same answer the
+  // inference row already showed — that duplication is why it read as noise.
+  expect(ledger.entries[1].summary).toBe('answer');
   expect(ledger.entries[1].step?.output).toEqual({ text: 'answer' });
 });

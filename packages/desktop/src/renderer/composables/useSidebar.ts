@@ -1,6 +1,9 @@
-import { ref, computed, readonly } from 'vue';
+import { ref, computed, readonly, onScopeDispose, getCurrentScope } from 'vue';
 
 let globalSidebarState: ReturnType<typeof createSidebarState> | null = null;
+
+const AUTO_COLLAPSE_BELOW = 760;
+const AUTO_RESTORE_ABOVE = AUTO_COLLAPSE_BELOW + 96;
 
 function createSidebarState(initialState = true) {
   const width = ref<number>(200);
@@ -11,20 +14,53 @@ function createSidebarState(initialState = true) {
   };
 
   const isExpanded = ref<boolean>(initialState);
+  let autoCollapsed = false;
 
   const isCollapsed = computed<boolean>(() => !isExpanded.value);
 
   const expand = (): void => {
+    autoCollapsed = false;
     isExpanded.value = true;
   };
 
   const collapse = (): void => {
+    autoCollapsed = false;
     isExpanded.value = false;
   };
 
   const toggle = (): void => {
+    autoCollapsed = false;
     isExpanded.value = !isExpanded.value;
   };
+
+  let belowThreshold: boolean | null = null;
+
+  const applyResponsiveCollapse = (): void => {
+    const below = window.innerWidth < AUTO_COLLAPSE_BELOW;
+    if (belowThreshold !== null && below === belowThreshold) return;
+    belowThreshold = below;
+    if (below) {
+      if (isExpanded.value && !autoCollapsed) {
+        autoCollapsed = true;
+        isExpanded.value = false;
+      }
+      return;
+    }
+    if (autoCollapsed && !isExpanded.value && window.innerWidth >= AUTO_RESTORE_ABOVE) {
+      autoCollapsed = false;
+      isExpanded.value = true;
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', applyResponsiveCollapse);
+    applyResponsiveCollapse();
+    if (getCurrentScope()) {
+      onScopeDispose(() => {
+        window.removeEventListener('resize', applyResponsiveCollapse);
+      });
+    }
+  }
 
   const setShowExternalChats = (nextValue: boolean): void => {
     showExternalChats.value = Boolean(nextValue);
@@ -48,7 +84,6 @@ function createSidebarState(initialState = true) {
   };
 }
 
-// 主应用中调用此函数初始化
 export function createSidebar() {
   if (!globalSidebarState) {
     globalSidebarState = createSidebarState();
@@ -56,43 +91,9 @@ export function createSidebar() {
   return globalSidebarState;
 }
 
-// 组件中使用此函数获取共享状态
 export function useSidebar() {
   if (!globalSidebarState) {
     throw new Error('Sidebar not initialized. Call createSidebar() in App.vue first.');
   }
   return globalSidebarState;
 }
-// export interface SidebarState {
-//   isExpanded: Readonly<Ref<boolean>>
-//   isCollapsed: Readonly<Ref<boolean>>
-//   expand: () => void
-//   collapse: () => void
-//   toggle: () => void
-// }
-
-// export function useSidebar(initialExpanded = true): SidebarState {
-//   const isExpanded = ref<boolean>(initialExpanded)
-
-//   const isCollapsed = computed<boolean>(() => !isExpanded.value)
-
-//   const expand = (): void => {
-//     isExpanded.value = true
-//   }
-
-//   const collapse = (): void => {
-//     isExpanded.value = false
-//   }
-
-//   const toggle = (): void => {
-//     isExpanded.value = !isExpanded.value
-//   }
-
-//   return {
-//     isExpanded: readonly(isExpanded),
-//     isCollapsed: readonly(isCollapsed),
-//     expand,
-//     collapse,
-//     toggle,
-//   }
-// }

@@ -38,7 +38,7 @@ export const getNetworkTimeoutMs = (): number => {
   return clampNetworkTimeoutMs(getNetworkConfig()?.timeout);
 };
 
-export const clampNetworkRetryAttempts = (retries: unknown): number => {
+const clampNetworkRetryAttempts = (retries: unknown): number => {
   if (typeof retries !== 'number' || !Number.isFinite(retries)) {
     return DEFAULT_NETWORK_RETRY_ATTEMPTS;
   }
@@ -53,7 +53,7 @@ export const getNetworkRetryAttempts = (): number => {
   return clampNetworkRetryAttempts(getNetworkConfig()?.retryAttempts);
 };
 
-export const getConfiguredProxyUrl = (): string | null => {
+const getConfiguredProxyUrl = (): string | null => {
   return buildProxyUrl(getNetworkConfig());
 };
 
@@ -146,8 +146,8 @@ export const fetchWithTimeout = async (
         try {
           await hostResponse.arrayBuffer();
         } catch {
-          // ignore
-        }
+    // Intentionally ignored: the caller cannot act on it.
+  }
       } catch (error) {
         lastError = error;
         if (attempt >= retries) {
@@ -174,12 +174,11 @@ export const fetchWithTimeout = async (
         return response;
       }
 
-      // Drain body to avoid leaking resources before retrying.
       try {
         await response.arrayBuffer();
       } catch {
-        // ignore
-      }
+    // Intentionally ignored: the caller cannot act on it.
+  }
     } catch (err) {
       lastError = err;
       if (isAbortError(err)) {
@@ -193,7 +192,6 @@ export const fetchWithTimeout = async (
       clearTimeout(timer);
     }
 
-    // Basic backoff: 250ms, 500ms, 1000ms, 2000ms...
     await sleep(Math.min(2000, 250 * Math.pow(2, attempt)));
   }
 

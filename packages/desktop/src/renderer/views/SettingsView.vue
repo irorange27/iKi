@@ -1,121 +1,120 @@
 <template>
   <div class="settings-container">
     <div class="titlebar-drag-region"></div>
-    <!-- Left Nav -->
-    <aside class="settings-nav">
-      <ul class="nav-menu">
-        <li
-          v-for="item in menuItems"
-          :key="item.key"
-          :class="{ active: activeSection === item.key }"
-          @click="activeSection = item.key"
-        >
-          <span class="icon">
-            <component :is="item.icon" :size="20" />
-          </span>
-          {{ item.label }}
+    <!-- Left Nav: a tab list, so the four sections are one stop in the Tab
+         order and arrow keys move between them. -->
+    <nav class="settings-nav" :aria-label="t('a11y.settingsNav')">
+      <ul class="nav-menu" role="tablist" :aria-label="t('a11y.settingsNav')">
+        <li v-for="(item, index) in menuItems" :key="item.key" role="presentation">
+          <button
+            :id="settingsTabId(item.key)"
+            type="button"
+            role="tab"
+            class="nav-menu-tab"
+            :class="{ active: activeSection === item.key }"
+            :title="item.label"
+            :aria-label="t('a11y.settingsSectionTab', { name: item.label })"
+            :aria-selected="activeSection === item.key ? 'true' : 'false'"
+            :aria-controls="settingsPanelId(item.key)"
+            :tabindex="activeSection === item.key ? 0 : -1"
+            @click="selectSection(item.key)"
+            @keydown="handleTabKeydown($event, index)"
+          >
+            <span class="icon">
+              <component :is="item.icon" :size="20" />
+            </span>
+            <span class="nav-label">{{ item.label }}</span>
+          </button>
         </li>
       </ul>
-    </aside>
+    </nav>
 
     <!-- Right Side Config Panel -->
-    <main class="settings-content">
+    <main class="settings-content" :aria-label="t('a11y.settingsContent')">
       <div class="settings-header">
         <div class="settings-header-left">
           <span class="icon"><component :is="activeSectionIcon" :size="22" /></span>
           <span class="title">{{ activeSectionLabel }}</span>
         </div>
-        <div class="settings-header-right" :class="{ 'is-unsaved': !saved }">
+        <div class="settings-header-right" :class="{ 'is-unsaved': !saved || providerDraftDirty }">
           <span class="unsaved-dot" />
-          <span>{{ saved ? t('settings.saved.all') : t('settings.saved.unsaved') }}</span>
+          <span>{{
+            saved && !providerDraftDirty ? t('settings.saved.all') : t('settings.saved.unsaved')
+          }}</span>
         </div>
       </div>
-      <SettingsGeneralSection
-        v-show="activeSection === 'general'"
-        :providers="providers"
-        @config-change="autoSave"
-        @reset="resetSection('general')"
-      />
+      <!-- 通用: lightweight preferences live together on one page. -->
+      <section v-show="activeSection === 'general'" class="settings-page">
+        <SettingsGeneralSection
+          :providers="providers"
+          @config-change="autoSave"
+          @reset="resetSection('general')"
+        />
 
-      <ProvidersSettings v-show="activeSection === 'provider'" />
+        <h2 class="settings-page-title">{{ t('settings.menu.ui') }}</h2>
+        <SettingsUiSection @config-change="autoSave" @reset="resetSection('ui')" />
 
-      <McpSettings v-show="activeSection === 'mcp'" @config-change="autoSave" />
+        <h2 class="settings-page-title">{{ t('settings.menu.speech') }}</h2>
+        <SettingsSpeechSection
+          :active="activeSection === 'general'"
+          @config-change="autoSave"
+          @reset="resetSection('speech')"
+        />
 
-      <NapCatSettings
-        :active="activeSection === 'bridges'"
-        v-show="activeSection === 'bridges'"
-        @config-change="autoSave"
-        @reset="resetBridgeSection"
-      />
+        <h2 class="settings-page-title">{{ t('settings.menu.colorScheme') }}</h2>
+        <SettingsColorSchemeSection
+          :active="activeSection === 'general'"
+          @config-change="autoSave"
+          @reset="resetColorSchemeSection"
+        />
 
-      <SettingsSpeechSection
-        v-show="activeSection === 'speech'"
-        :active="activeSection === 'speech'"
-        @config-change="autoSave"
-        @reset="resetSection('speech')"
-      />
+        <h2 class="settings-page-title">{{ t('settings.menu.network') }}</h2>
+        <SettingsNetworkSection
+          :active="activeSection === 'general'"
+          @config-change="autoSave"
+          @reset="resetSection('network')"
+        />
 
-      <SettingsColorSchemeSection
-        v-show="activeSection === 'colorScheme'"
-        :active="activeSection === 'colorScheme'"
-        @config-change="autoSave"
-        @reset="resetColorSchemeSection"
-      />
+        <h2 class="settings-page-title">{{ t('settings.menu.security') }}</h2>
+        <SettingsSecuritySection @config-change="autoSave" @reset="resetSection('security')" />
 
-      <SettingsUiSection
-        v-show="activeSection === 'ui'"
-        @config-change="autoSave"
-        @reset="resetSection('ui')"
-      />
+        <SettingsKeybindingsSection
+          v-show="activeSection === 'keybindings'"
+          @config-change="autoSave"
+          @reset="resetSection('keybindings')"
+        />
 
-      <SettingsNetworkSection
-        v-show="activeSection === 'network'"
-        :active="activeSection === 'network'"
-        @config-change="autoSave"
-        @reset="resetSection('network')"
-      />
+        <!-- Dev-only row: restart so main-process edits apply. Renders nothing
+             in the packaged app. -->
+        <SettingsDevSection />
+      </section>
 
-      <SettingsSecuritySection
-        v-show="activeSection === 'security'"
-        @config-change="autoSave"
-        @reset="resetSection('security')"
-      />
+      <!-- 模型与工具: providers, MCP servers, and API usage. -->
+      <section v-show="activeSection === 'models'" class="settings-page">
+        <h2 class="settings-page-title">{{ t('settings.menu.provider') }}</h2>
+        <ProvidersSettings />
 
+        <h2 class="settings-page-title">{{ t('settings.menu.mcp') }}</h2>
+        <McpSettings @config-change="autoSave" />
 
-      <SettingsKeybindingsSection
-        v-show="activeSection === 'keybindings'"
-        @config-change="autoSave"
-        @reset="resetSection('keybindings')"
-      />
+        <h2 class="settings-page-title">{{ t('settings.menu.usage') }}</h2>
+        <SettingsUsageSection :active="activeSection === 'models'" />
+      </section>
 
-      <SettingsMemorySection
-        v-show="activeSection === 'memory'"
-        :active="activeSection === 'memory'"
-        :providers="providers"
-        @config-change="autoSave"
-        @reset="resetSection('memory')"
-      />
-
-      <SettingsTasksSection
-        v-show="activeSection === 'tasks'"
-        :active="activeSection === 'tasks'"
-        :providers="availableProvidersWithModels"
-      />
-
-      <SettingsUsageSection
-        v-show="activeSection === 'usage'"
-        :active="activeSection === 'usage'"
-      />
-
-      <SettingsSkillsSection
-        v-show="activeSection === 'skills'"
-        :active="activeSection === 'skills'"
-        @config-change="autoSave"
-      />
+      <!-- 技能: what the agent can do. -->
+      <section v-show="activeSection === 'intelligence'" class="settings-page">
+        <h2 class="settings-page-title">{{ t('settings.menu.skills') }}</h2>
+        <SettingsSkillsSection
+          :active="activeSection === 'intelligence'"
+          @config-change="autoSave"
+        />
+      </section>
 
       <!-- Footer operabar -->
       <div class="settings-footer">
-        <span v-if="saved" class="save-status">{{ t('settings.saved.all') }}</span>
+        <span v-if="saved && !providerDraftDirty" class="save-status">{{
+          t('settings.saved.all')
+        }}</span>
         <div class="footer-actions">
           <button class="secondary" @click="$emit('close')">{{ t('common.close') }}</button>
           <button class="primary" @click="saveAndClose">{{ t('common.save') }}</button>
@@ -126,34 +125,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import {
-  Cog,
-  Palette,
-  Mic,
-  Brain,
-  Bot,
-  BarChart3,
-  AlarmClock,
-  Globe,
-  Wand2,
-  Plug,
-  SlidersHorizontal,
-} from 'lucide-vue-next';
+import { Bot, Brain, Cog } from 'lucide-vue-next';
 
 import SettingsGeneralSection from '../components/settings/SettingsGeneralSection.vue';
 import SettingsUiSection from '../components/settings/SettingsUiSection.vue';
 import SettingsSecuritySection from '../components/settings/SettingsSecuritySection.vue';
 import SettingsKeybindingsSection from '../components/settings/SettingsKeybindingsSection.vue';
+import SettingsDevSection from '../components/settings/SettingsDevSection.vue';
 import ProvidersSettings from '../components/settings/ProvidersSettings.vue';
 import McpSettings from '../components/settings/McpSettings.vue';
-import NapCatSettings from '../components/settings/NapCatSettings.vue';
 import SettingsColorSchemeSection from '../components/settings/SettingsColorSchemeSection.vue';
 import SettingsNetworkSection from '../components/settings/SettingsNetworkSection.vue';
 import SettingsSpeechSection from '../components/settings/SettingsSpeechSection.vue';
-import SettingsMemorySection from '../components/settings/SettingsMemorySection.vue';
-import SettingsTasksSection from '../components/settings/SettingsTasksSection.vue';
 import SettingsUsageSection from '../components/settings/SettingsUsageSection.vue';
 import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.vue';
 import { useI18n } from '../i18n';
@@ -170,27 +155,27 @@ const electronAPI = getElectronAPI();
 const settingsViewLogger = createLogger({ module: 'settings_view' });
 const { t } = useI18n();
 
-const SETTINGS_SECTION_KEYS = new Set([
-  'general',
-  'provider',
-  'mcp',
-  'bridges',
-  'usage',
-  'skills',
-  'memory',
-  'network',
-  'ui',
-  'colorScheme',
-  'speech',
-  'tasks',
-  'security',
-  'keybindings',
-]);
+const SETTINGS_SECTION_KEYS = new Set(['general', 'models', 'intelligence']);
+
+const SETTINGS_SECTION_ALIASES: Record<string, string> = {
+  provider: 'models',
+  mcp: 'models',
+  usage: 'models',
+  memory: 'intelligence',
+  skills: 'intelligence',
+  ui: 'general',
+  colorScheme: 'general',
+  speech: 'general',
+  network: 'general',
+  security: 'general',
+  keybindings: 'general',
+};
 
 const resolveSettingsSection = (value?: string): string => {
   if (typeof value !== 'string') return 'general';
   const trimmed = value.trim();
-  return SETTINGS_SECTION_KEYS.has(trimmed) ? trimmed : 'general';
+  if (SETTINGS_SECTION_KEYS.has(trimmed)) return trimmed;
+  return SETTINGS_SECTION_ALIASES[trimmed] ?? 'general';
 };
 
 const props = defineProps<{
@@ -202,6 +187,7 @@ const { config } = storeToRefs(configStore);
 
 const activeSection = ref(resolveSettingsSection(props.initialSection));
 const saved = ref(true);
+const providerDraftDirty = ref(false);
 const providers = ref<Provider[]>([]);
 let removeProviderUpdateListener: () => void = () => undefined;
 
@@ -219,7 +205,6 @@ type AvailableProvider = {
   models: string[];
 };
 
-// Load providers
 const loadProviders = async () => {
   try {
     providers.value = await electronAPI.providers.list();
@@ -233,7 +218,6 @@ const loadProviders = async () => {
   }
 };
 
-// Computed: Get available providers with their models
 const availableProvidersWithModels = computed<AvailableProvider[]>(() => {
   return providers.value
     .filter(provider => provider.enabled)
@@ -251,18 +235,48 @@ const availableProvidersWithModels = computed<AvailableProvider[]>(() => {
 
 const menuItems = computed(() => [
   { key: 'general', label: t('settings.menu.general'), icon: Cog },
-  { key: 'provider', label: t('settings.menu.provider'), icon: Bot },
-  { key: 'mcp', label: t('settings.menu.mcp'), icon: Plug },
-  { key: 'bridges', label: t('settings.menu.bridges'), icon: Bot },
-  { key: 'usage', label: t('settings.menu.usage'), icon: BarChart3 },
-  { key: 'skills', label: t('settings.menu.skills'), icon: Wand2 },
-  { key: 'memory', label: t('settings.menu.memory'), icon: Brain },
-  { key: 'network', label: t('settings.menu.network'), icon: Globe },
-  { key: 'ui', label: t('settings.menu.ui'), icon: SlidersHorizontal },
-  { key: 'colorScheme', label: t('settings.menu.colorScheme'), icon: Palette },
-  { key: 'speech', label: t('settings.menu.speech'), icon: Mic },
-  { key: 'tasks', label: t('settings.menu.tasks'), icon: AlarmClock },
+  { key: 'models', label: t('settings.menu.models'), icon: Bot },
+  { key: 'intelligence', label: t('settings.menu.intelligence'), icon: Brain },
 ]);
+
+const settingsTabId = (key: string) => `settings-tab-${key}`;
+const settingsPanelId = (key: string) => `settings-panel-${key}`;
+
+const selectSection = (key: string) => {
+  activeSection.value = key;
+};
+
+const handleTabKeydown = (event: KeyboardEvent, index: number) => {
+  const items = menuItems.value;
+  if (items.length === 0) return;
+  const key = event.key;
+  const move = (nextIndex: number) => {
+    event.preventDefault();
+    const target = items[(nextIndex + items.length) % items.length];
+    if (!target) return;
+    selectSection(target.key);
+    void nextTick(() => document.getElementById(settingsTabId(target.key))?.focus());
+  };
+
+  switch (key) {
+    case 'ArrowRight':
+    case 'ArrowDown':
+      move(index + 1);
+      break;
+    case 'ArrowLeft':
+    case 'ArrowUp':
+      move(index - 1);
+      break;
+    case 'Home':
+      move(0);
+      break;
+    case 'End':
+      move(items.length - 1);
+      break;
+    default:
+      break;
+  }
+};
 
 const activeSectionMeta = computed(() => {
   return (
@@ -277,7 +291,6 @@ const activeSectionMeta = computed(() => {
 const activeSectionLabel = computed(() => activeSectionMeta.value.label);
 const activeSectionIcon = computed(() => activeSectionMeta.value.icon);
 
-// 自动保存防抖
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 const autoSave = () => {
   saved.value = false;
@@ -286,6 +299,32 @@ const autoSave = () => {
     await configStore.saveConfig();
     saved.value = true;
   }, 300);
+};
+
+const PROVIDER_DRAFT_FLUSH_EVENT = 'iki:providers:flush-draft';
+const PROVIDER_DRAFT_DIRTY_EVENT = 'iki:providers:draft-dirty';
+
+const flushProviderDraft = async (): Promise<boolean> => {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') {
+    return false;
+  }
+
+  return await new Promise<boolean>(resolve => {
+    let settled = false;
+    const settle = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      resolve(value);
+    };
+    const timeout = window.setTimeout(() => settle(false), 5000);
+
+    window.dispatchEvent(
+      new CustomEvent(PROVIDER_DRAFT_FLUSH_EVENT, {
+        detail: { resolve: settle },
+      })
+    );
+  });
 };
 
 const resetSection = async (section: keyof AppConfig) => {
@@ -301,20 +340,17 @@ const resetColorSchemeSection = () => {
   autoSave();
 };
 
-const resetBridgeSection = async () => {
-  await configStore.resetSection('bridges');
-  await configStore.resetSection('daemon');
-  saved.value = true;
-};
-
 const saveAndClose = async () => {
   clearTimeout(saveTimer);
+  await flushProviderDraft();
   await configStore.saveConfig();
   saved.value = true;
   emit('close');
 };
 
 onMounted(async () => {
+  window.addEventListener(PROVIDER_DRAFT_DIRTY_EVENT, handleProviderDraftDirty);
+
   if (typeof electronAPI.providers.onUpdated === 'function') {
     removeProviderUpdateListener = electronAPI.providers.onUpdated(() => {
       void loadProviders();
@@ -327,8 +363,14 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener(PROVIDER_DRAFT_DIRTY_EVENT, handleProviderDraftDirty);
   removeProviderUpdateListener();
 });
+
+const handleProviderDraftDirty = (event: Event) => {
+  const detail = (event as CustomEvent<{ dirty?: boolean }>).detail;
+  providerDraftDirty.value = detail?.dirty === true;
+};
 </script>
 
 <style scoped src="../components/settings/settings_shared.css"></style>

@@ -4,14 +4,7 @@ import { deriveModelAwareContextConfig } from '@iki/backend/turn_prep/context_bu
 
 const baseConfig = {
   enabled: true,
-  recentMessageCount: 10,
-  maxRecentTokens: 2400,
-  maxMessageTokens: 420,
   maxIdentityTokens: 320,
-  summaryTriggerMessages: 14,
-  summaryRecentMessages: 6,
-  maxSummaryTokens: 500,
-  maxMemoryTokens: 500,
   maxSkillTokens: 1200,
 } as const;
 
@@ -19,14 +12,37 @@ describe('chat_context_budget', () => {
   it('keeps the configured budgets when no model capability is available', () => {
     const result = deriveModelAwareContextConfig(baseConfig);
 
-    expect(result.maxRecentTokens).toBe(baseConfig.maxRecentTokens);
+    expect(result.maxIdentityTokens).toBe(baseConfig.maxIdentityTokens);
     expect(result.maxSkillTokens).toBe(baseConfig.maxSkillTokens);
     expect(result.budgetScale).toBe(1);
     expect(result.availableContextTokens).toBeNull();
     expect(result.maxOutputTokens).toBeNull();
   });
 
-  it('shrinks context budgets to fit smaller model input limits', () => {
+  it('shrinks the live clipping caps when the window cannot hold them', () => {
+    const result = deriveModelAwareContextConfig(baseConfig, {
+      providerType: 'openai',
+      providerKey: 'openai',
+      modelId: 'gpt-small',
+      displayName: 'GPT Small',
+      contextWindow: 1024,
+      maxInputTokens: 1024,
+      maxOutputTokens: 256,
+      supportsToolCalls: true,
+      supportsReasoning: false,
+      source: 'models.dev',
+    });
+
+    expect(result.availableContextTokens).toBeLessThan(result.requestedContextTokens);
+    expect(result.maxIdentityTokens).toBeLessThan(baseConfig.maxIdentityTokens);
+    expect(result.maxSkillTokens).toBeLessThan(baseConfig.maxSkillTokens);
+    expect(result.maxOutputTokens).toBe(256);
+
+    const totalBudget = result.maxIdentityTokens + result.maxSkillTokens;
+    expect(totalBudget).toBeLessThanOrEqual(result.availableContextTokens || 0);
+  });
+
+  it('leaves the live caps untouched when the window can hold them', () => {
     const result = deriveModelAwareContextConfig(baseConfig, {
       providerType: 'openai',
       providerKey: 'openai',
@@ -40,20 +56,9 @@ describe('chat_context_budget', () => {
       source: 'models.dev',
     });
 
-    expect(result.availableContextTokens).toBeLessThan(result.requestedContextTokens);
-    expect(result.maxRecentTokens).toBeLessThan(baseConfig.maxRecentTokens);
-    expect(result.maxSummaryTokens).toBeLessThan(baseConfig.maxSummaryTokens);
-    expect(result.maxSkillTokens).toBeLessThan(baseConfig.maxSkillTokens);
-    expect(result.maxMessageTokens).toBeLessThan(baseConfig.maxMessageTokens);
-    expect(result.maxOutputTokens).toBe(1024);
-
-    const totalBudget =
-      result.maxRecentTokens +
-      result.maxIdentityTokens +
-      result.maxSummaryTokens +
-      result.maxMemoryTokens +
-      result.maxSkillTokens;
-    expect(totalBudget).toBeLessThanOrEqual(result.availableContextTokens || 0);
+    expect(result.maxIdentityTokens).toBe(baseConfig.maxIdentityTokens);
+    expect(result.maxSkillTokens).toBe(baseConfig.maxSkillTokens);
+    expect(result.budgetScale).toBe(1);
   });
 
   it('does not expand budgets above the configured defaults for large-context models', () => {
@@ -70,9 +75,8 @@ describe('chat_context_budget', () => {
       source: 'models.dev',
     });
 
-    expect(result.maxRecentTokens).toBe(baseConfig.maxRecentTokens);
+    expect(result.maxIdentityTokens).toBe(baseConfig.maxIdentityTokens);
     expect(result.maxSkillTokens).toBe(baseConfig.maxSkillTokens);
-    expect(result.maxSummaryTokens).toBe(baseConfig.maxSummaryTokens);
     expect(result.budgetScale).toBe(1);
     expect(result.maxOutputTokens).toBe(32768);
   });

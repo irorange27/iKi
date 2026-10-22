@@ -2,17 +2,23 @@ import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import started from 'electron-squirrel-startup';
 import { wirePlatformContext } from '@iki/backend/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
-import { applyAppLoggingConfig, createLogger, setBaseLogContext } from '@iki/backend/logger';
-import { registerStandardTools } from '@iki/backend/tools';
-import { startTurnHarness } from '@iki/backend/agent/harness';
-import { getMcpManager } from '@iki/backend/mcp';
 import {
-  initLangfuseTracing,
-  shutdownLangfuseTracing,
-} from '@iki/backend/observability/langfuse';
+  applyAppLoggingConfig,
+  createLogger,
+  setBaseLogContext,
+  setConsoleLoggingEnabled,
+} from '@iki/backend/logger';
+import { registerStandardTools } from '@iki/backend/tools';
+import { startPiTurnHarness } from '@iki/backend/agent/harness';
+import { getMcpManager } from '@iki/backend/mcp';
 import { setHostFetch, setPlatformInfo } from '@iki/backend/platform';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
+import {
+  finalizeHarnessTurn,
+  finalizeTurnFailure,
+} from '@iki/backend/thread_session/turn_finalize';
 import { getToolModel } from '@iki/backend/provider/tool_model';
+import { resolveElement } from './main/services/devtools/element_source';
 import { startDaemonServer } from '@iki/daemon/server';
 import { electronFetchWithTimeout } from './main/services/network/electron_fetch';
 import { registerMainIpc } from './main/ipc';
@@ -28,6 +34,7 @@ import {
 import { startAppUpdateService } from './main/services/update/auto_update_service';
 import { companionService } from './main/services/companion/companion_service';
 import { createMainWindow } from './main/windows/main_window';
+import { installApplicationMenu } from './main/windows/app_menu';
 import { setDevDockIcon } from './main/windows/dev_dock_icon';
 import { syncCompanionWindowToConfig } from './main/windows/companion_window';
 
@@ -36,15 +43,18 @@ const appLogger = createLogger({ module: 'app' });
 
 setBaseLogContext({ process: isDaemonMode ? 'daemon' : 'main' });
 
+if (!isDaemonMode) {
+  setConsoleLoggingEnabled(false);
+}
+
 wirePlatformContext();
 setHostFetch(electronFetchWithTimeout);
-initLangfuseTracing();
 
 const syncLoggingConfig = () => {
   try {
     applyAppLoggingConfig(getAppConfig());
   } catch {
-    // Fall back to env/default logger config until app config becomes available.
+    /* empty: error is not actionable here */
   }
 };
 
@@ -59,7 +69,7 @@ const updatePlatformDisplayScale = () => {
     const scale = screen.getPrimaryDisplay().scaleFactor;
     setPlatformInfo({ displayScale: scale });
   } catch {
-    // ignore
+    /* empty: error is not actionable here */
   }
 };
 
@@ -127,25 +137,25 @@ if (isDaemonMode) {
     updatePlatformTheme();
   });
 
-  // Register standard tools + IPC handlers on startup.
   registerStandardTools({
+    elementSourceResolver: request => resolveElement(request),
     delegatedAgentRuntime: {
       createRunTracker: createAgentRunTracker,
       getConversationToolModel: getToolModel,
-      createHarness: startTurnHarness,
+      createHarness: startPiTurnHarness,
+      finalize: {
+        finalizeFailure: finalizeTurnFailure,
+        finalizeSuccess: finalizeHarnessTurn,
+      },
     },
   });
   void getMcpManager().initialize();
   registerMainIpc();
 
-  // Handle creating/removing shortcuts on Windows when installing/uninstalling.
   if (started) {
     app.quit();
   }
 
-  // This method will be called when Electron has finished
-  // initialization and is ready to create browser windows.
-  // Some APIs can only be used after this event occurs.
   app.on('ready', () => {
     syncLoggingConfig();
     appLogger.event({
@@ -157,6 +167,7 @@ if (isDaemonMode) {
         platform: process.platform,
       },
     });
+    installApplicationMenu();
     startBackgroundRuntime();
     startAppUpdateService(getAppConfig());
     void startDesktopDaemon();
@@ -174,12 +185,8 @@ if (isDaemonMode) {
     });
     stopBackgroundRuntime();
     stopDesktopDaemon();
-    void shutdownLangfuseTracing();
   });
 
-  // Quit when all windows are closed, except on macOS. There, it's common
-  // for applications and their menu bar to stay active until the user quits
-  // explicitly with Cmd + Q.
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
       app.quit();
@@ -187,8 +194,6 @@ if (isDaemonMode) {
   });
 
   app.on('activate', () => {
-    // On OS X it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
       syncCompanionWindowToConfig(getAppConfig());

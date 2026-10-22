@@ -16,11 +16,6 @@ import {
 
 const tempDirs: string[] = [];
 
-/**
- * Monorepo-style fixture: the packaging project dir is a workspace package,
- * while the installed packages live in the repo-root node_modules (pnpm store
- * layout) — outside the project dir, reachable only by node's upward walk.
- */
 const createFixture = (): { rootDir: string; projectDir: string } => {
   const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'iki-runtime-packaging-'));
   tempDirs.push(rootDir);
@@ -195,7 +190,6 @@ describe('runtime_packaging', () => {
     const { rootDir, projectDir } = createFixture();
     seedRootPackages(rootDir);
     writeBuildFixture(projectDir, 'main-test.js', DEFAULT_BUILD_FIXTURE);
-    // ajv-formats gets its own ws copy with a different major (pnpm layout).
     writeJson(path.join(rootDir, 'node_modules/ajv-formats/package.json'), {
       name: 'ajv-formats',
       version: '1.0.0',
@@ -233,8 +227,6 @@ describe('runtime_packaging', () => {
       'require("branch-a");',
       'require("branch-b");',
     ]);
-    // Two independent consumers on different branches share ws@2 while ws@1
-    // owns the root slot — each branch needs its own resolvable copy.
     for (const branch of ['branch-a', 'branch-b']) {
       writeJson(path.join(rootDir, `node_modules/${branch}/package.json`), {
         name: branch,
@@ -254,8 +246,6 @@ describe('runtime_packaging', () => {
 
     copyRuntimePackagesInto(projectDir, buildPath, 'darwin');
 
-    // Each branch must resolve its own physical ws@2 copy — existence alone
-    // would not catch a shared-wrong-source or root-version regression.
     for (const branch of ['branch-a', 'branch-b']) {
       const branchDir = path.join(buildPath, 'node_modules', branch);
       const stagedManifest = JSON.parse(

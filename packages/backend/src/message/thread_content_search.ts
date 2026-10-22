@@ -1,20 +1,13 @@
-import { z } from 'zod';
-
-import * as chatMessageDb from '../db/chat_message';
+import { getSessionEvents } from '../db/session_events';
+import { getChatThreads } from '../db/chat_thread';
 import * as chatThreadDb from '../db/chat_thread';
 import { extractTextFromMessageParts, isObjectRecord } from './message_parts';
-
-/**
- * Content-level thread search (Codex-style ⌘K search): scans the persisted
- * message JSON for the query and returns per-thread best matches with a
- * plain-text snippet. Title matching stays a renderer concern.
- */
 
 export type ThreadContentMatch = {
   threadId: string;
   threadTitle: string;
   messageId: string;
-  /** Matched message role for context ('user' | 'assistant'). */
+
   role: string;
   snippet: string;
   updatedAt: string;
@@ -22,11 +15,6 @@ export type ThreadContentMatch = {
 
 const SNIPPET_CONTEXT = 48;
 const SNIPPET_MAX = 180;
-
-export const threadContentSearchInputSchema = z.object({
-  query: z.string().trim().min(1).max(200),
-  limit: z.number().int().positive().max(50).optional(),
-});
 
 const buildSnippet = (text: string, query: string): string => {
   const lowered = text.toLowerCase();
@@ -39,7 +27,6 @@ const buildSnippet = (text: string, query: string): string => {
   );
 };
 
-/** Extract searchable plain text from a persisted message row. */
 const messageSearchableText = (messageJson: string): { role: string; text: string } | null => {
   try {
     const parsed: unknown = JSON.parse(messageJson);
@@ -56,11 +43,21 @@ export const searchThreadContent = (rawQuery: string, limit = 12): ThreadContent
   const query = rawQuery.trim();
   if (!query) return [];
 
-  // JSON LIKE prefilter narrows the scan; exact per-message matching happens
-  // on the extracted plain text so markup never surfaces in snippets.
-  const like = `%${query.replace(/[%_]/g, ch => `\\${ch}`)}%`;
-  const rows = chatMessageDb
-    .searchMessageRows(like, limit * 4)
+  const rows = getChatThreads()
+    .flatMap(thread =>
+      getSessionEvents(thread.id, ['input_accepted', 'model_output_committed'])
+        .filter(event => JSON.stringify(event.payload).includes(query))
+        .map(event => {
+          const message = (event.payload as { message?: { id?: unknown } }).message;
+          return {
+            id: typeof message?.id === 'string' ? message.id : '',
+            thread_id: thread.id,
+            message: JSON.stringify(message ?? {}),
+            updated_at: event.createdAt,
+          };
+        })
+    )
+    .slice(0, limit * 4)
     .map(row => {
       const parsed = messageSearchableText(row.message);
       return parsed ? { row, parsed } : null;

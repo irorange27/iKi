@@ -1,4 +1,4 @@
-import { getDb } from '../database';
+import type { SqliteDatabase } from '../sqlite';
 import {
   isMigrationExecuted,
   markMigrationExecuted,
@@ -6,35 +6,35 @@ import {
   type Migration,
 } from './runner';
 import { migration as baseline } from './001_baseline';
-import { migration as renameChatToolApprovals } from './002_rename_chat_tool_approvals';
+import { migration as dropLegacyTables } from './002_drop_legacy_tables';
 
-// Forward-only migrations after the baseline. Add new ones above 001 in name
-// order (002_*, 003_*, …) — runMigrations sorts by name. Tables introduced
-// after the squash are bootstrap-created in database.ts (initCoreTables), not
-// by migrations: post-baseline migrations must not emit CREATE TABLE.
-export const registeredMigrations: Migration[] = [baseline, renameChatToolApprovals];
+export const registeredMigrations: Migration[] = [baseline, dropLegacyTables];
 
-export const initializeMigrations = () => {
-  // Databases created before the migration squash already carry the full
-  // schema: detect any pre-existing user table and mark the baseline as
-  // applied so they open unchanged. Fresh databases run the baseline to
-  // create the schema from scratch. config/providers/migrations are excluded
-  // because database.ts bootstrap-creates them before migrations run.
-  // hasPreBaselineSchema detection must ignore every table initCoreTables
-  // bootstrap-creates (config, providers, thread_run_locks, migrations) or a
-  // fresh database gets misread as pre-squash and skips the baseline.
-  const hasPreBaselineSchema = Boolean(
-    getDb()
+// Tables database.ts creates before migrations run. Anything else means the
+// database predates the squashed baseline.
+const CORE_TABLES = ['config', 'providers', 'thread_run_locks', 'session_events', 'migrations'];
+
+const hasPreBaselineSchema = (db: SqliteDatabase): boolean => {
+  const placeholders = CORE_TABLES.map(() => '?').join(', ');
+  return Boolean(
+    db
       .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('config', 'providers', 'thread_run_locks', 'migrations') LIMIT 1"
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT IN (${placeholders}) LIMIT 1`
       )
-      .get()
+      .get(...CORE_TABLES)
   );
+};
 
-  if (hasPreBaselineSchema && !isMigrationExecuted(baseline.name)) {
-    runMigrations([]); // ensures the migrations bookkeeping table exists
-    markMigrationExecuted(baseline.name);
+export const initializeMigrations = (db: SqliteDatabase) => {
+  // A database from before the squash already has every table the baseline
+  // would create, but its older column sets fail the baseline's indexes. Record
+  // the baseline as executed instead of replaying it.
+  if (hasPreBaselineSchema(db)) {
+    runMigrations(db, []);
+    if (!isMigrationExecuted(db, baseline.name)) {
+      markMigrationExecuted(db, baseline.name);
+    }
   }
 
-  runMigrations(registeredMigrations);
+  runMigrations(db, registeredMigrations);
 };

@@ -4,23 +4,13 @@ import fs from 'fs';
 import { initializeMigrations } from './migration';
 import { createLogger } from '@iki/backend/logger';
 import { getUserDataPath } from '../platform';
+import type {
+  SqliteDatabase,
+  SqliteRunResult,
+  SqliteStatement,
+} from './sqlite';
 
-export type SqliteRunResult = { changes: number; lastInsertRowid: number | bigint };
-
-export type SqliteStatement = {
-  run: (...params: unknown[]) => SqliteRunResult;
-  get: (...params: unknown[]) => unknown;
-  all: (...params: unknown[]) => unknown[];
-};
-
-export type SqliteDatabase = {
-  exec: (sql: string) => void;
-  prepare: (sql: string) => SqliteStatement;
-  transaction: <TArgs extends unknown[], TResult>(
-    fn: (...args: TArgs) => TResult
-  ) => (...args: TArgs) => TResult;
-  close: () => void;
-};
+export type { SqliteDatabase, SqliteRunResult, SqliteStatement };
 
 let db: SqliteDatabase | null = null;
 let initialized = false;
@@ -64,6 +54,16 @@ const initCoreTables = (database: SqliteDatabase) => {
       acp_model_mapping TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS session_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      thread_id TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(thread_id, revision)
+    );
     CREATE TABLE IF NOT EXISTS thread_run_locks (
       thread_id TEXT PRIMARY KEY,
       token TEXT NOT NULL,
@@ -72,9 +72,6 @@ const initCoreTables = (database: SqliteDatabase) => {
   `);
 };
 
-// node:sqlite rejects named-parameter objects carrying keys the statement never
-// uses (better-sqlite3 ignored them), so object params are filtered down to the
-// names actually present in the SQL text.
 const NAMED_PARAM_PATTERN = /[@:$][A-Za-z_][A-Za-z0-9_]*/g;
 
 const collectNamedParams = (sql: string): Set<string> | null => {
@@ -108,7 +105,7 @@ const wrapStatement = (
     all: (...params: unknown[]) => unknown[];
   }
 ): SqliteStatement => ({
-  // Default (non-bigint) read mode always returns numbers here.
+
   run: (...params: unknown[]) => statement.run(...normalizeBindParams(sql, params)) as SqliteRunResult,
   get: (...params: unknown[]) => statement.get(...normalizeBindParams(sql, params)),
   all: (...params: unknown[]) => statement.all(...normalizeBindParams(sql, params)),
@@ -120,7 +117,8 @@ const wrapDatabase = (raw: DatabaseSync): SqliteDatabase => ({
   transaction:
     <TArgs extends unknown[], TResult>(fn: (...args: TArgs) => TResult) =>
     (...args: TArgs): TResult => {
-      raw.exec('BEGIN');
+
+      raw.exec('BEGIN IMMEDIATE');
       try {
         const result = fn(...args);
         raw.exec('COMMIT');
@@ -135,6 +133,10 @@ const wrapDatabase = (raw: DatabaseSync): SqliteDatabase => ({
 
 export const initializeDatabase = (options?: { dbPath?: string }) => {
   if (options?.dbPath) {
+
+    if (dbPathOverride !== options.dbPath && db) {
+      closeDatabase();
+    }
     dbPathOverride = options.dbPath;
   }
   if (initialized && db) return db;
@@ -142,10 +144,13 @@ export const initializeDatabase = (options?: { dbPath?: string }) => {
 
   initializing = true;
   const dbPath = resolveDbPath();
-  db = wrapDatabase(new DatabaseSync(dbPath));
+  const raw = new DatabaseSync(dbPath);
+
+  raw.exec('PRAGMA busy_timeout = 5000');
+  db = wrapDatabase(raw);
   initCoreTables(db);
   initialized = true;
-  initializeMigrations();
+  initializeMigrations(db);
   initializing = false;
   return db;
 };
@@ -167,6 +172,8 @@ export const closeDatabase = () => {
     db = null;
     initialized = false;
     initializing = false;
+
+    dbPathOverride = null;
   }
 };
 
@@ -195,7 +202,7 @@ export const migrateFromJson = (jsonPath: string, key: string) => {
     try {
       const data = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
       setConfig(key, data);
-      // Optional: Rename or delete the old file
+
       fs.renameSync(jsonPath, jsonPath + '.bak');
       databaseLogger.event({
         level: 'info',

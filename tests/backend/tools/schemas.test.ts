@@ -10,31 +10,24 @@ import {
   ListDirInputSchema,
   ReadFileInputSchema,
   ShellToolInputSchema,
-  TodoToolInputSchema,
   WebToolInputSchema,
   WriteFileInputSchema,
   DeleteAwaiterInputSchema,
   DeletePersonalSkillInputSchema,
   DeleteProactiveTaskInputSchema,
-  DeleteTodoListInputSchema,
   ListAwaitersInputSchema,
   ListPersonalSkillsInputSchema,
   ListProactiveTasksInputSchema,
-  ListTodoListsInputSchema,
   ReadAwaiterInputSchema,
   ReadPersonalSkillInputSchema,
   ReadProactiveTaskInputSchema,
-  ReadTodoListInputSchema,
   WriteAwaiterInputSchema,
   WritePersonalSkillInputSchema,
   WriteProactiveTaskInputSchema,
-  WriteTodoListInputSchema,
 } from '@iki/backend/tools/schemas';
 
 describe('tool input schemas', () => {
   it('keeps tool schemas browser-safe for renderer payload parsing', () => {
-    // The schema surface is split across the per-domain modules in schemas/;
-    // scan the shim and every domain module so a heavy dep cannot sneak in.
     const schemasDir = new URL('../../../packages/backend/src/tools/schemas/', import.meta.url);
     const files = [
       '../tools/schemas.ts',
@@ -72,15 +65,4 @@ describe('tool input schemas', () => {
     ).toBe('Search for current updates.');
   });
 
-  it('caps execution todo plans at five broad steps', () => {
-    expect(() =>
-      TodoToolInputSchema.parse({
-        items: Array.from({ length: 6 }, (_value, index) => ({
-          id: String(index + 1),
-          text: `Task ${index + 1}`,
-        })),
-        description: 'Track an overlong execution plan.',
-      })
-    ).toThrow(/<=5 items/i);
-  });
 });

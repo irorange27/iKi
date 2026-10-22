@@ -4,6 +4,7 @@ import type {
   AgentRunError,
   AgentRunInput,
   AgentRunOutput,
+  AgentRunStatus,
   AgentRunTrace,
   AgentRunTree,
   AgentRunStep,
@@ -80,7 +81,7 @@ const normalizeInput = (value: unknown): AgentRunInput => {
 const normalizeWorking = (value: unknown): AgentRunWorkingState => {
   const parsed = parseJsonValue<Record<string, unknown>>(value, {});
   return {
-    modelMessages: Array.isArray(parsed.modelMessages) ? parsed.modelMessages : [],
+
     accumulatedText:
       typeof parsed.accumulatedText === 'string' ? parsed.accumulatedText : '',
     pendingApprovalIds: normalizeStringArray(parsed.pendingApprovalIds),
@@ -101,6 +102,14 @@ const normalizeOutput = (value: unknown): AgentRunOutput | null => {
       : {}),
     ...(parsed.usage && typeof parsed.usage === 'object'
       ? { usage: parsed.usage as Record<string, unknown> }
+      : {}),
+
+    ...(Array.isArray(parsed.pendingToolCalls)
+      ? {
+          pendingToolCalls: parsed.pendingToolCalls as NonNullable<
+            AgentRunOutput['pendingToolCalls']
+          >,
+        }
       : {}),
   };
 };
@@ -153,7 +162,6 @@ const mapAgentRunStepRow = (row: AgentRunStepRow): AgentRunStep => ({
   startedAt: row.started_at,
   finishedAt: row.finished_at ?? null,
 });
-
 
 const normalizeRunIds = (runIds: string[]): string[] => {
   const normalized: string[] = [];
@@ -454,6 +462,22 @@ export const appendAgentRunStep = (step: AgentRunStep): AgentRunStep => {
   return step;
 };
 
+export const claimQueuedAgentRun = (runId: string): AgentRun | null => {
+  const normalized = normalizeWhitespace(runId);
+  if (!normalized) return null;
+  const db = getDb();
+  return db.transaction(() => {
+    const claim = db
+      .prepare(
+        `UPDATE agent_runs SET status = 'running', updated_at = ?
+         WHERE id = ? AND status = 'queued'`
+      )
+      .run(toIsoNow(), normalized);
+    if (claim.changes === 0) return null;
+    return getAgentRun(normalized);
+  })();
+};
+
 export const appendAgentRunStepAndUpdateRun = (
   step: AgentRunStep,
   updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>
@@ -464,6 +488,58 @@ export const appendAgentRunStepAndUpdateRun = (
     const updated = updateAgentRun(step.runId, updates);
     if (!updated) {
       throw new Error('Cannot update missing agent run "' + step.runId + '"');
+    }
+    return updated;
+  })();
+};
+
+export const appendAgentRunStepAndUpdateRunIfStatus = (
+  step: AgentRunStep,
+  updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>,
+  expectedStatuses: readonly AgentRunStatus[]
+): AgentRun | null => {
+  const db = getDb();
+  const placeholders = expectedStatuses.map(() => '?').join(', ');
+  return db.transaction(() => {
+    const claim = db
+      .prepare(
+        `UPDATE agent_runs SET updated_at = updated_at
+         WHERE id = ? AND status IN (${placeholders})`
+      )
+      .run(step.runId, ...expectedStatuses);
+    if (claim.changes === 0) return null;
+    appendAgentRunStep(step);
+    const updated = updateAgentRun(step.runId, updates);
+    if (!updated) {
+      throw new Error('Cannot update missing agent run "' + step.runId + '"');
+    }
+    return updated;
+  })();
+};
+
+/**
+ * Claim a run in one of the expected statuses and update it, without appending a
+ * step. Terminal transitions record the row alone: the step duplicated fields
+ * the row already carries.
+ */
+export const updateAgentRunIfStatus = (
+  runId: string,
+  updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>,
+  expectedStatuses: readonly AgentRunStatus[]
+): AgentRun | null => {
+  const db = getDb();
+  const placeholders = expectedStatuses.map(() => '?').join(', ');
+  return db.transaction(() => {
+    const claim = db
+      .prepare(
+        `UPDATE agent_runs SET updated_at = updated_at
+         WHERE id = ? AND status IN (${placeholders})`
+      )
+      .run(runId, ...expectedStatuses);
+    if (claim.changes === 0) return null;
+    const updated = updateAgentRun(runId, updates);
+    if (!updated) {
+      throw new Error('Cannot update missing agent run "' + runId + '"');
     }
     return updated;
   })();
@@ -504,9 +580,6 @@ const listAgentRunStepsByRunIds = (runIds: string[]): Map<string, AgentRunStep[]
   return stepsByRunId;
 };
 
-
-
-
 export const getAgentRunTrace = (runId: string): AgentRunTrace | null => {
   const normalizedRunId = normalizeWhitespace(runId);
   if (!normalizedRunId) return null;
@@ -541,10 +614,6 @@ export const cleanupOldAgentRuns = (maxAgeDays: number): { deletedRuns: number }
 
   db.prepare(
     `DELETE FROM agent_run_steps WHERE run_id IN (${idPlaceholders})`
-  ).run(...runIds);
-
-  db.prepare(
-    `DELETE FROM agent_run_checkpoints WHERE run_id IN (${idPlaceholders})`
   ).run(...runIds);
 
   const result = db

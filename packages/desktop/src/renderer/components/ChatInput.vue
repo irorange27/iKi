@@ -1,13 +1,7 @@
 <template>
   <div class="chat-input-outer">
-    <ChatSteerBar
-      :visible="isLoading && isAutonomousMode"
-      :disabled="isStopping"
-      @steer="handleSteer"
-    />
     <!-- Width is owned by the parent (.composer-area tracks the chat column). -->
     <div>
-      <ChatTodoPlan v-if="props.todoPlan" class="chat-input-plan" :plan="props.todoPlan" />
       <ChatComposerShell
         :set-input-ref="setInputRef"
         v-model="message"
@@ -109,45 +103,35 @@
               </button>
             </PopoverTrigger>
             <PopoverPortal>
-            <PopoverContent
-              class="permission-panel"
-              side="top"
-              align="start"
-              :side-offset="8"
-            >
-              <p class="permission-panel-title">{{ t('chat.input.permission.panelTitle') }}</p>
-              <div role="radiogroup" :aria-label="t('chat.input.permission.panelTitle')">
-                <button
-                  v-for="option in permissionOptions"
-                  :key="option.value"
-                  class="permission-option"
-                  :class="{ 'permission-option--selected': approvalPolicy === option.value }"
-                  role="radio"
-                  :aria-checked="approvalPolicy === option.value"
-                  @click="selectApprovalPolicy(option.value)"
-                >
-                  <span class="permission-option-icon" aria-hidden="true">
-                    <component :is="option.icon" class="h-4 w-4" />
-                  </span>
-                  <span class="permission-option-copy">
-                    <span class="permission-option-name">{{ option.name }}</span>
-                    <span class="permission-option-desc">{{ option.description }}</span>
-                  </span>
-                  <Check
-                    v-if="approvalPolicy === option.value"
-                    class="permission-option-check h-4 w-4"
-                  />
-                </button>
-              </div>
-            </PopoverContent>
-
+              <PopoverContent class="permission-panel" side="top" align="start" :side-offset="8">
+                <p class="permission-panel-title">{{ t('chat.input.permission.panelTitle') }}</p>
+                <div role="radiogroup" :aria-label="t('chat.input.permission.panelTitle')">
+                  <button
+                    v-for="option in permissionOptions"
+                    :key="option.value"
+                    class="permission-option"
+                    :class="{ 'permission-option--selected': approvalPolicy === option.value }"
+                    role="radio"
+                    :aria-checked="approvalPolicy === option.value"
+                    :data-policy="option.value"
+                    @click="selectApprovalPolicy(option.value)"
+                  >
+                    <span class="permission-option-icon" aria-hidden="true">
+                      <component :is="option.icon" class="h-4 w-4" />
+                    </span>
+                    <span class="permission-option-copy">
+                      <span class="permission-option-name">{{ option.name }}</span>
+                      <span class="permission-option-desc">{{ option.description }}</span>
+                    </span>
+                    <Check
+                      v-if="approvalPolicy === option.value"
+                      class="permission-option-check h-4 w-4"
+                    />
+                  </button>
+                </div>
+              </PopoverContent>
             </PopoverPortal>
           </PopoverRoot>
-          <ChatComposerSelectors
-            class="composer-context-row"
-            v-model:autonomous-active="isAutonomousMode"
-            v-model:autonomous-max-iterations="autonomousMaxIterations"
-          />
         </template>
 
         <template #toolbar-right>
@@ -174,10 +158,19 @@
               </div>
             </HoverCardTrigger>
             <HoverCardPortal>
-              <HoverCardContent class="context-usage-panel" side="top" align="end" :side-offset="10">
+              <HoverCardContent
+                class="context-usage-panel"
+                side="top"
+                align="end"
+                :side-offset="10"
+              >
                 <div class="context-usage-panel-header">
-                  <span class="context-usage-panel-title">{{ t('chat.contextUsage.panelTitle') }}</span>
-                  <span class="context-usage-panel-total">{{ composerContextUsage.tokenLabel }}</span>
+                  <span class="context-usage-panel-title">{{
+                    t('chat.contextUsage.panelTitle')
+                  }}</span>
+                  <span class="context-usage-panel-total">{{
+                    composerContextUsage.tokenLabel
+                  }}</span>
                 </div>
                 <div class="context-usage-panel-bar" role="presentation">
                   <div
@@ -192,9 +185,13 @@
                     :key="row.key"
                     class="context-usage-panel-row"
                   >
-                    <span class="context-usage-row-label">{{ t(`chat.contextUsage.category.${row.key}`) }}</span>
+                    <span class="context-usage-row-label">{{
+                      t(`chat.contextUsage.category.${row.key}`)
+                    }}</span>
                     <span class="context-usage-row-values">
-                      <span class="context-usage-row-tokens">{{ formatTokenCount(row.tokens) }}</span>
+                      <span class="context-usage-row-tokens">{{
+                        formatTokenCount(row.tokens)
+                      }}</span>
                       <span class="context-usage-row-percent">{{ row.percent }}%</span>
                     </span>
                   </li>
@@ -213,7 +210,9 @@
             :available-providers="availableProviders"
             :selected-provider="selectedProvider"
             :selected-model="selectedModel"
+            :reasoning-effort="currentReasoningEffort"
             @select="handleProviderModelSelect"
+            @update:reasoning-effort="handleReasoningEffortChanged"
           />
           <ChatComposerActions
             :is-incognito="isIncognito"
@@ -229,7 +228,6 @@
             :speech-status-tone-class="speechStatusToneClass"
             :run-active="runStatusState.isActive.value"
             :run-status="runStatusState.currentStatus.value"
-            :autonomous-active="isAutonomousMode"
             @toggle-incognito="toggleIncognitoMode"
             @toggle-voice-input="toggleVoiceInput"
             @send-message="sendMessage"
@@ -238,18 +236,24 @@
         </template>
 
         <template #image-previews>
-          <div v-if="attachedImages.length > 0" class="image-preview-strip" aria-label="Attached images">
-            <div
-              v-for="(file, index) in attachedImages"
-              :key="index"
-              class="image-preview-chip"
-              @click="viewerSrc = file.url"
-            >
-              <img
-                :src="file.url"
-                :alt="file.filename || 'Attached image'"
-                class="image-preview-thumb"
-              />
+          <div
+            v-if="attachedImages.length > 0"
+            class="image-preview-strip"
+            :aria-label="t('a11y.attachedImages')"
+          >
+            <div v-for="(file, index) in attachedImages" :key="index" class="image-preview-chip">
+              <button
+                type="button"
+                class="image-preview-open"
+                :aria-label="t('a11y.viewImage')"
+                @click="viewerSrc = file.url"
+              >
+                <img
+                  :src="file.url"
+                  :alt="file.filename || 'Attached image'"
+                  class="image-preview-thumb"
+                />
+              </button>
               <button
                 type="button"
                 class="image-preview-dismiss"
@@ -266,21 +270,16 @@
         </template>
       </ChatComposerShell>
     </div>
-    <ImageViewerOverlay
-      :visible="viewerSrc.length > 0"
-      :src="viewerSrc"
-      @close="viewerSrc = ''"
-    />
+    <ImageViewerOverlay :visible="viewerSrc.length > 0" :src="viewerSrc" @close="viewerSrc = ''" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue';
 import type { Component } from 'vue';
-import type { FileUIPart } from 'ai';
+import type { UiFilePart as FileUIPart } from '@iki/backend/message/ui_protocol';
 import { Check, Hand, Settings, ShieldCheck, Zap } from 'lucide-vue-next';
 import type { Provider } from '@iki/backend/types/provider';
-import type { TaskPlan } from '@iki/backend/types/task_plan';
 import {
   buildContextCompositionRows,
   buildTokenUsageIndicator,
@@ -293,12 +292,9 @@ import type {
   PrepareMessageSendPayload,
 } from '../modules/chat/chat_prepare_send';
 import type { SubmitTurnParams, SubmitTurnResult } from '../composables/useChatComposerSend';
-import ChatTodoPlan from './chat/ChatTodoPlan.vue';
 import ChatComposerActions from './ChatComposerActions.vue';
 import ChatModelSelector from './ChatModelSelector.vue';
-import ChatComposerSelectors from './ChatComposerSelectors.vue';
 import ChatComposerShell from './ChatComposerShell.vue';
-import ChatSteerBar from './ChatSteerBar.vue';
 import ImageViewerOverlay from './ImageViewerOverlay.vue';
 import { useChatComposerDraft } from '../composables/useChatComposerDraft';
 import { useChatComposerLifecycle } from '../composables/useChatComposerLifecycle';
@@ -313,15 +309,9 @@ import { useRunStatus } from '../composables/useRunStatus';
 import { useThreadSessionStore } from '../store/thread_session';
 import { useConfigStore } from '../store/config';
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui';
-import {
-  HoverCardContent,
-  HoverCardPortal,
-  HoverCardRoot,
-  HoverCardTrigger,
-} from 'reka-ui';
+import { HoverCardContent, HoverCardPortal, HoverCardRoot, HoverCardTrigger } from 'reka-ui';
 import {
   parseApprovalPolicy,
-  type ThreadApprovalPolicy,
 } from '@iki/backend/workspaces/thread_mode';
 import { storeToRefs } from 'pinia';
 import { resolveThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
@@ -332,7 +322,9 @@ const electronAPI = getElectronAPI();
 const { t } = useI18n();
 const threadSession = useThreadSessionStore();
 const configStore = useConfigStore();
-const autoApproveEnabled = computed(() => configStore.config?.general?.autoApproveToolRequests === true);
+const autoApproveEnabled = computed(
+  () => configStore.config?.general?.autoApproveToolRequests === true
+);
 const approvalPolicy = computed(() => props.approvalPolicy ?? '');
 const permissionPanelOpen = ref(false);
 
@@ -340,7 +332,7 @@ const permissionOptions = computed<
   { value: string; icon: Component; name: string; description: string }[]
 >(() => [
   {
-    value: '',
+    value: 'askRisky',
     icon: Settings,
     name: t('chat.input.permission.defaultName'),
     description: t('chat.input.permission.defaultDesc'),
@@ -375,7 +367,7 @@ const permissionChipLabel = computed(() => {
 });
 
 const selectApprovalPolicy = (value: string) => {
-  void threadSession.setApprovalPolicy(parseApprovalPolicy(value) ?? '');
+  void threadSession.setApprovalPolicy(parseApprovalPolicy(value) ?? 'askRisky');
   permissionPanelOpen.value = false;
 };
 const {
@@ -388,8 +380,6 @@ const {
   selectedWorkspaceId: sessionSelectedWorkspaceId,
 } = storeToRefs(threadSession);
 
-// Plain chats have no workspace concept — the composer no longer renders a
-// picker, but work threads still need one, so the send-guard below remains.
 const isWorkThread = computed(() => resolveThreadWorkMode(currentThread.value) === 'work');
 const emit = defineEmits<{
   'new-chat-requested': [];
@@ -403,7 +393,6 @@ const props = defineProps<{
   submitTurn: (params: SubmitTurnParams) => Promise<SubmitTurnResult>;
   latestTokenUsage?: TokenUsageSummary | null;
   sessionPerfStats?: SessionPerfStats | null;
-  todoPlan?: TaskPlan | null;
 }>();
 
 type ComposerTextControl = HTMLInputElement | HTMLTextAreaElement;
@@ -424,16 +413,12 @@ const message = ref('');
 const attachedImages = ref<FileUIPart[]>([]);
 const viewerSrc = ref('');
 
-const modelSupportsVision = computed(
-  () => selectedModelCapability.value?.supportsVision === true
-);
+const modelSupportsVision = computed(() => selectedModelCapability.value?.supportsVision === true);
 
 const showVisionWarning = computed(
   () => attachedImages.value.length > 0 && !modelSupportsVision.value
 );
 const isBusy = ref(false);
-const isAutonomousMode = ref(false);
-const autonomousMaxIterations = ref(20);
 
 const runStatusState = useRunStatus({ electronAPI });
 
@@ -458,7 +443,6 @@ const {
   speechEngineAvailable,
   showWaveform,
   waveformBars,
-  audioEmotion,
   loadSpeechStatus,
   toggleVoiceInput,
   stopVoiceInput,
@@ -500,7 +484,12 @@ const {
 const handlePasteImage = (payload: { mediaType: string; url: string; filename?: string }) => {
   attachedImages.value = [
     ...attachedImages.value,
-    { type: 'file' as const, mediaType: payload.mediaType, url: payload.url, filename: payload.filename },
+    {
+      type: 'file' as const,
+      mediaType: payload.mediaType,
+      url: payload.url,
+      filename: payload.filename,
+    },
   ];
 };
 
@@ -533,8 +522,6 @@ const {
   message,
   isRecording,
   isTranscribing,
-  isAutonomousMode,
-  autonomousMaxIterations,
   reasoningEffort: currentReasoningEffort,
   personality: currentPersonality,
   approvalPolicy: computed(() => props.approvalPolicy ?? ''),
@@ -552,7 +539,6 @@ const {
   ensureProviderReady,
   stopVoiceInput,
   attachedImages,
-  audioEmotion,
 });
 sendMessageHandler = sendMessage;
 watchEffect(() => {
@@ -671,7 +657,6 @@ const contextRingToneClass = computed(() => {
 const contextCompositionRows = computed(() =>
   buildContextCompositionRows(props.latestTokenUsage ?? null)
 );
-// Session-cumulative weighted average (same aggregation as the stats bar).
 const contextCacheHitRate = computed(() => {
   const percent = props.sessionPerfStats?.cacheHitPercent ?? null;
   return percent === null ? null : Math.round(percent);
@@ -697,8 +682,9 @@ const handleProviderModelSelect = (payload: { provider: Provider; model: string 
   threadSession.handleModelSelected(payload);
 };
 
-const handleReasoningEffortChanged = (effort: string) => {
-  void threadSession.setReasoningEffort(effort);
+const toggleIncognitoMode = () => {
+  if (isBusy.value || isStopping.value) return;
+  void threadSession.setIncognito(!isIncognito.value);
 };
 
 const handleComposerKeydown = (event: KeyboardEvent) => {
@@ -724,17 +710,8 @@ const shouldShowSkillSectionLabel = (index: number) => {
   return previousCommand?.kind !== 'skill';
 };
 
-const handleSteer = async (message: string) => {
-  try {
-    await electronAPI.chat.steerStream(props.threadId, message);
-  } catch {
-    // steer failed silently — the stream may have already ended
-  }
-};
-
-const toggleIncognitoMode = () => {
-  if (isBusy.value || isStopping.value) return;
-  void threadSession.setIncognito(!isIncognito.value);
+const handleReasoningEffortChanged = (effort: string) => {
+  void threadSession.setReasoningEffort(effort);
 };
 
 defineExpose({
@@ -995,6 +972,34 @@ defineExpose({
   overflow: hidden;
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
+}
+
+/* Opens the full-size preview. It wraps only the thumbnail: the chip stays a
+   plain container so the dismiss button is not nested inside another button. */
+.image-preview-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  /* the chip clips overflow, so pull the ring fully inside its box */
+  outline-offset: calc((var(--focus-ring-width) + var(--focus-ring-offset)) * -1);
+}
+
+/* Opens the full-size preview. It wraps only the thumbnail: the chip stays a
+   plain container so the dismiss button is not nested inside another button. */
+.image-preview-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  /* the chip clips overflow, so pull the ring fully inside its box */
+  outline-offset: calc((var(--focus-ring-width) + var(--focus-ring-offset)) * -1);
 }
 
 .image-preview-thumb {

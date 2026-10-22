@@ -37,13 +37,6 @@ const runChecker = (
     });
   });
 
-/**
- * Best-effort syntax gate for edited files: verify what the host can check
- * statically (JSON inline; Python via ast.parse; JS via node --check) and
- * skip every other file type so the gate never blocks edits it cannot
- * evaluate. A missing interpreter counts as "cannot evaluate", not as a
- * failure.
- */
 export const checkEditedFileSyntax = async (
   filePath: string,
   content: string

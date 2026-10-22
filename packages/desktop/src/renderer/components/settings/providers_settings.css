@@ -1,26 +1,42 @@
 .action-btn {
-  padding: 10px 16px;
-  border-radius: 8px;
+  padding: 6px 12px;
+  border-radius: var(--control-radius);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  transition: all 0.2s;
+  gap: 6px;
+  min-height: 34px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .provider-config-group {
   margin-bottom: 32px;
 }
 
+/* Providers is one block on the merged "模型与工具" page, sharing the scroll
+   container with MCP and Usage. It must size to its content: flex-basis 0 plus
+   min-height 0 collapses it to a sliver whenever a sibling section
+   (MCP/Usage) is tall, which is the normal case. `.providers-layout` still owns
+   the height between the sidebar and the details pane.
+
+   Container-Over-Viewport: this section adapts to its own inline size, not to
+   the window. The settings nav eats 220px / 188px / 56px depending on the
+   window, so a viewport breakpoint here fires at the wrong content width and
+   restyles the provider list while there is still plenty of room. The overlays
+   render as siblings of this section because container-type applies layout
+   containment, which would otherwise become the containing block for their
+   fixed-position overlays. */
 .config-section.providers-section {
   max-width: none;
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  container: providers / inline-size;
 }
 
 .providers-toolbar {
@@ -29,36 +45,53 @@
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
+  /* The action drops under the search when the row genuinely runs out of
+     room, instead of snapping the whole toolbar into a column early. */
+  flex-wrap: wrap;
 }
 
 .providers-layout {
   display: flex;
   gap: 16px;
-  min-height: 460px;
+  /* Follows the window height, so short windows shrink the pane instead of
+     pushing the rest of the page out of reach. */
+  min-height: clamp(280px, 56vh, 560px);
   flex: 1;
   min-width: 0;
   overflow: hidden;
 }
 
+/* Fluid, so the two panes stay side by side while the list still has room;
+   the details pane keeps the remainder. */
 .providers-sidebar {
-  width: 240px;
+  width: clamp(168px, 26%, 240px);
   flex-shrink: 0;
 }
 
+/* `min-width` (not `flex-basis`) is what pushes the action onto its own line:
+   the toolbar turns into a column in the stacked layout, where a 220px
+   flex-basis would become a 220px-tall search box instead of a wide one. */
 .providers-search {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: min(220px, 100%);
   max-width: 400px;
 }
 
+/* The search mirrors the model selector's: borderless, sits on the card, no
+   fill. */
 .providers-search .search-input {
   width: 100%;
-  padding: 9px 13px;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  border-radius: var(--control-radius);
   background: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: 14px;
-  min-height: 46px;
+  font-size: 13px;
+  min-height: 34px;
+}
+
+.providers-search .search-input::placeholder {
+  color: var(--text-muted);
 }
 
 .providers-search .search-input:focus {
@@ -81,45 +114,40 @@
 .providers-scroll-list {
   height: 100%;
   overflow-y: auto;
-  border: 1px solid var(--border-color);
-  border-radius: var(--surface-radius);
-  background: color-mix(in srgb, var(--bg-tertiary) 88%, var(--bg-secondary));
-  padding: 12px;
-  box-shadow: var(--surface-inset-highlight);
+  border: none;
+  background: transparent;
+  padding: 4px 6px 8px;
 }
 
 .providers-scroll-list-inner {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
   min-height: 100%;
 }
 
+/* Sidebar rows speak the same language as the chat model selector's provider
+   groups: one quiet row per provider, no card border, identity on the left and
+   status on the right. Selection is the shared wash, not an accent outline. */
 .provider-list-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  border-radius: 12px;
+  gap: 10px;
+  min-height: 34px;
+  padding: 4px 10px;
+  border-radius: var(--control-radius);
   cursor: pointer;
-  transition:
-    background 0.2s,
-    border-color 0.2s,
-    box-shadow 0.2s,
-    transform 0.2s;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
+  transition: background-color 0.15s;
+  background: transparent;
+  border: none;
 }
 
 .provider-list-item:hover {
   background: var(--bg-hover);
-  border-color: color-mix(in srgb, var(--accent-color) 30%, var(--border-color));
 }
 
 .provider-list-item.active {
-  background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-tertiary));
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 1px var(--accent-color);
+  background: var(--bg-active);
 }
 
 .provider-list-item.configured {
@@ -130,20 +158,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: transparent;
   flex-shrink: 0;
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease;
+  color: var(--text-muted);
 }
 
-.provider-icon .lobe-icon {
-  filter: grayscale(1) brightness(1.4);
-  opacity: 0.75;
+/* Brand marks stay coloured, like the model selector's provider icons. */
+.provider-icon :deep(.lobe-icon) {
+  filter: none;
+  opacity: 1;
 }
 
 .provider-item-main {
@@ -155,7 +181,9 @@
 }
 
 .provider-item-name {
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -164,14 +192,12 @@
 
 .provider-item-badge {
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-weight: 500;
   padding: 2px 8px;
   border-radius: 999px;
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--border-color) 30%, var(--bg-tertiary));
-  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
   flex-shrink: 0;
 }
 
@@ -199,15 +225,18 @@
   letter-spacing: 0.5px;
 }
 
+/* Same surface as the model selector's panel: translucent card, hairline
+   border, large shadow, 16px radius. */
 .provider-details-panel {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--surface-radius);
-  padding: 20px 22px;
-  box-shadow: var(--surface-shadow-md);
+  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: var(--surface-shadow-lg);
+  backdrop-filter: blur(18px);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -258,16 +287,21 @@
   margin-bottom: 8px;
 }
 
+/* The details header reads like the selector's pane header: provider name at
+   13px/500 with its type label quietly beside it, not a 20px page title. */
 .provider-title-row h3 {
   margin: 0;
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--text-primary);
 }
 
 .provider-description {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   margin: 0;
-  line-height: 1.4;
+  font-size: 11px;
+  line-height: 15px;
 }
 
 .provider-header-actions {
@@ -278,26 +312,24 @@
 }
 
 .provider-icon-button {
-  width: 42px;
-  height: 42px;
+  width: 34px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
+  border-radius: var(--control-radius);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
   text-decoration: none;
   transition:
-    border-color 0.2s ease,
-    background 0.2s ease,
-    color 0.2s ease;
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .provider-icon-button:hover {
-  border-color: var(--accent-color);
-  color: var(--accent-color);
   background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .provider-switch {
@@ -313,23 +345,24 @@
   pointer-events: none;
 }
 
+/* Smaller, quieter switch to match the 13px row scale. */
 .provider-switch-track {
-  width: 56px;
-  height: 32px;
+  width: 40px;
+  height: 22px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--border-color) 70%, var(--bg-secondary));
   border: 1px solid var(--border-color);
   display: inline-flex;
   align-items: center;
-  padding: 3px;
+  padding: 2px;
   transition:
     background 0.2s ease,
     border-color 0.2s ease;
 }
 
 .provider-switch-thumb {
-  width: 24px;
-  height: 24px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--bg-primary);
   box-shadow: var(--surface-shadow-sm);
@@ -342,7 +375,7 @@
 }
 
 .provider-switch input:checked + .provider-switch-track .provider-switch-thumb {
-  transform: translateX(24px);
+  transform: translateX(18px);
 }
 
 .provider-config-form {
@@ -353,19 +386,20 @@
   padding-top: 4px;
 }
 
+/* Sticky footer inside the details card: hairline divider, no gradient wash,
+   matching the settings window's own footer. */
 .provider-card-actions {
+  position: sticky;
+  bottom: 0;
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 18px;
-  padding-top: 18px;
-  border-top: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 0 4px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
   flex-shrink: 0;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-primary) 0%, transparent),
-    var(--bg-primary)
-  );
+  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+  backdrop-filter: blur(18px);
 }
 
 .provider-form-stack {
@@ -386,10 +420,11 @@
   gap: 10px;
 }
 
+/* Field labels match the model selector's row labels: 12px, medium weight. */
 .provider-field-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .provider-secret-input {
@@ -403,31 +438,32 @@
 }
 
 .provider-secret-toggle {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
+  width: 34px;
+  height: 34px;
+  border-radius: var(--control-radius);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition:
-    border-color 0.2s ease,
-    color 0.2s ease,
-    background 0.2s ease;
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .provider-secret-toggle:hover {
-  border-color: var(--accent-color);
-  color: var(--accent-color);
+  color: var(--text-primary);
   background: var(--bg-hover);
 }
 
+/* Help text is metadata, so it uses the quiet tone. */
 .provider-field-help {
   margin: 0;
-  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -592,11 +628,12 @@
   backdrop-filter: blur(4px);
 }
 
+/* Same translucent card as the model selector's panel. */
 .modal-content {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
   border-radius: 16px;
-  padding: 32px;
+  padding: 20px;
   width: 100%;
   max-width: 500px;
   max-height: calc(100vh - 48px);
@@ -609,11 +646,15 @@
 
 .provider-editor-header {
   flex-shrink: 0;
-  padding-bottom: 24px;
+  padding-bottom: 14px;
 }
 
 .provider-editor h3 {
   margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--text-primary);
 }
 
 .provider-editor-scroll {
@@ -645,31 +686,27 @@
 }
 
 .modal-footer {
-  margin-top: 32px;
+  margin-top: 16px;
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
 }
 
 .provider-editor-footer {
   flex-shrink: 0;
-  padding-top: 20px;
-  border-top: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-primary) 0%, transparent),
-    var(--bg-primary)
-  );
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
 }
 
+/* Quiet status label, matching the selector's pane titles. */
 .status-badge {
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
   transition:
     background 0.2s ease,
     color 0.2s ease,
@@ -698,7 +735,10 @@
 
   .providers-layout {
     flex-direction: column;
+    flex: 0 0 auto;
     min-height: 0;
+    /* One page scroll: the panes no longer clip each other. */
+    overflow: visible;
   }
 
   .providers-sidebar {

@@ -1,4 +1,4 @@
-import type { JSONValue } from '@ai-sdk/provider';
+import type { JSONValue } from '@iki/backend/provider/llm/wire_types';
 
 import type { ProviderModelOptions } from '@iki/backend/types/provider';
 import { parseProviderModelOptionsMap } from '@iki/backend/utils/provider_models';

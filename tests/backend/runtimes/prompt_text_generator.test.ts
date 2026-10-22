@@ -1,78 +1,114 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  generateTextMock,
-  createModelMock,
-  disposeLanguageModelMock,
+  generateChatWithModelMessagesMock,
   getModelGenerationSettingsMock,
-  getFullSystemPromptMock,
+  resolvePersonaPromptMock,
   getAppConfigMock,
 } =
   vi.hoisted(() => ({
-    generateTextMock: vi.fn(),
-    createModelMock: vi.fn(),
-    disposeLanguageModelMock: vi.fn(),
+    generateChatWithModelMessagesMock: vi.fn(),
     getModelGenerationSettingsMock: vi.fn(() => ({})),
-    getFullSystemPromptMock: vi.fn(),
+    resolvePersonaPromptMock: vi.fn(),
     getAppConfigMock: vi.fn(),
   }));
 
-vi.mock('ai', () => ({
-  generateText: generateTextMock,
-}));
-
-vi.mock('@iki/backend/provider/llm/factory', () => ({
-  createModel: createModelMock,
-  disposeLanguageModel: disposeLanguageModelMock,
-  getModelGenerationSettings: getModelGenerationSettingsMock,
-  getFullSystemPrompt: getFullSystemPromptMock,
-}));
+vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
+  return {
+    ...actual,
+    generateChatWithModelMessages: generateChatWithModelMessagesMock,
+    getModelGenerationSettings: getModelGenerationSettingsMock,
+    resolvePersonaPrompt: resolvePersonaPromptMock,
+  };
+});
 
 vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-import { createSimplePromptTextGenerator } from '@iki/backend/runtimes/prompt_text_generator';
+import { generatePromptText } from '@iki/backend/runtimes/prompt_text_generator';
 
 beforeEach(() => {
   vi.clearAllMocks();
-  createModelMock.mockReturnValue('mock-model');
   getModelGenerationSettingsMock.mockImplementation(
     ({ temperature }: { temperature?: number }) =>
       typeof temperature === 'number' ? { temperature } : {}
   );
-  getFullSystemPromptMock.mockReturnValue('persona prompt');
+  resolvePersonaPromptMock.mockReturnValue('persona prompt');
   getAppConfigMock.mockImplementation(() => {
     throw new Error('app config should not be loaded');
   });
 });
 
-describe('SimplePromptTextGenerator', () => {
-  it('generates text directly through AI SDK with composed system prompt and user message', async () => {
-    generateTextMock.mockResolvedValue({
-      text: 'generated text',
-    });
+describe('generatePromptText', () => {
+  it('routes through the factory entry with its own system as the exact override (#126)', async () => {
+    generateChatWithModelMessagesMock.mockResolvedValue({ text: 'generated text' });
 
-    const generator = createSimplePromptTextGenerator({
-      enabled: true,
-      providerType: 'openai',
-      model: 'gpt-4o-mini',
-      systemPrompt: 'system prompt',
-      temperature: 0.4,
-      maxTokens: 256,
-      enableTools: false,
-    });
+    await expect(
+      generatePromptText(
+        {
+          enabled: true,
+          providerType: 'openai',
+          model: 'gpt-4o-mini',
+          systemPrompt: 'system prompt',
+          temperature: 0.4,
+          maxTokens: 256,
+          enableTools: false,
+        },
+        'hello'
+      )
+    ).resolves.toBe('generated text');
 
-    await expect(generator.generate('hello')).resolves.toEqual({ response: 'generated text' });
+    expect(generateChatWithModelMessagesMock).toHaveBeenCalledTimes(1);
+    const options = generateChatWithModelMessagesMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(options.providerType).toBe('openai');
+    expect(options.modelId).toBe('gpt-4o-mini');
+    expect(options.auxSystemInstruction).toContain('system prompt');
+    expect(options.auxSystemInstruction).toContain('persona prompt');
+    expect(options.temperature).toBe(0.4);
+    expect(options.maxOutputTokens).toBe(256);
+    expect(options.messages).toEqual([{ role: 'user', content: 'hello' }]);
+  });
 
-    expect(createModelMock).toHaveBeenCalledWith('openai', 'gpt-4o-mini', '');
-    expect(generateTextMock).toHaveBeenCalledWith({
-      model: 'mock-model',
-      system: 'persona prompt\n\nsystem prompt',
-      messages: [{ role: 'user', content: 'hello' }],
-      temperature: 0.4,
-      maxOutputTokens: 256,
-    });
-    expect(disposeLanguageModelMock).toHaveBeenCalledWith('mock-model');
+  it('forwards threadId and abortSignal and drops absent optionals', async () => {
+    generateChatWithModelMessagesMock.mockResolvedValue({ text: 'ok' });
+    const controller = new AbortController();
+
+    await generatePromptText(
+      {
+        enabled: true,
+        providerType: 'openai',
+        model: 'gpt-4o-mini',
+        systemPrompt: 'system prompt',
+        enableTools: false,
+        threadId: 'thread_1',
+      },
+      'hello',
+      controller.signal
+    );
+
+    const options = generateChatWithModelMessagesMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(options.threadId).toBe('thread_1');
+    expect(options.abortSignal).toBe(controller.signal);
+    expect(options.temperature).toBe(0.1);
+    expect(options.providerOptions).toBeUndefined();
+    expect(options.maxOutputTokens).toBe(2000);
+  });
+
+  it('propagates factory failures', async () => {
+    generateChatWithModelMessagesMock.mockRejectedValue(new Error('provider down'));
+    await expect(
+      generatePromptText(
+        {
+          enabled: true,
+          providerType: 'openai',
+          model: 'gpt-4o-mini',
+          systemPrompt: 'system prompt',
+          enableTools: false,
+        },
+        'hello'
+      )
+    ).rejects.toThrow('provider down');
   });
 });

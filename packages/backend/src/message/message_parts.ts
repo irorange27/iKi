@@ -1,23 +1,8 @@
-import type { UIMessage, UIMessageChunk } from 'ai';
-
-import {
-  isAffectLabel,
-  type AffectLabel,
-  type AffectScore,
-  type AffectSignalSource,
-} from '@iki/backend/types/affect';
 import type { SkillSource } from '@iki/backend/types/skill';
 import type { ContextCompositionSummary } from '@iki/backend/types/context_composition';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 
 export { isObjectRecord };
-
-export type MemoryResult = Record<string, unknown>;
-
-export type MemoryPartData = {
-  query?: string;
-  results?: MemoryResult[];
-};
 
 export type SkillUsageEntry = {
   id: string;
@@ -44,7 +29,7 @@ export type ComposerInvocationPartData = {
 };
 
 export type ContextReportItem = {
-  kind?: 'recent-history' | 'identity' | 'thread-summary' | 'memory' | 'affect' | 'skills';
+  kind?: 'recent-history' | 'identity' | 'thread-summary' | 'skills';
   status?: 'included' | 'truncated' | 'dropped';
   estimatedTokens?: number;
   charCount?: number;
@@ -59,22 +44,6 @@ export type ContextReportPartData = {
   blocks?: ContextReportItem[];
 };
 
-export type AffectSignalPartData = {
-  source?: AffectSignalSource;
-  guardActive?: boolean;
-  label?: AffectLabel;
-  confidence?: number;
-  valence?: number;
-  arousal?: number;
-  emotions?: AffectScore[];
-  sampleCount?: number;
-  windowSize?: number;
-  startAt?: string;
-  endAt?: string;
-  ageMinutes?: number;
-  windowMinutes?: number;
-};
-
 export type TokenUsagePartData = {
   inputTokens?: number;
   outputTokens?: number;
@@ -83,21 +52,21 @@ export type TokenUsagePartData = {
   cacheWriteTokens?: number;
   reasoningTokens?: number;
   estimatedCostUsd?: number;
-  /** Billed input of the final SDK step — the real context size the model last saw (absent on legacy messages). */
+
   lastStepInputTokens?: number;
   maxInputTokens?: number;
   maxOutputTokens?: number;
   model?: string;
   providerType?: string;
   providerId?: string;
-  /** Turn perf metrics (undefined on messages produced before instrumentation). */
+
   llmMs?: number;
   toolMs?: number;
   firstTokenMs?: number;
   firstTokenSamples?: number;
   steps?: number;
   toolCalls?: number;
-  /** Estimated per-category context assembly breakdown (absent on legacy messages). */
+
   contextComposition?: ContextCompositionSummary;
 };
 
@@ -107,32 +76,39 @@ const isContextCompositionSummary = (value: unknown): value is ContextCompositio
 };
 
 export type ChatUiDataTypes = {
-  'memory-retrieval': MemoryPartData;
   'skill-usage': SkillUsagePartData;
   'composer-invocation': ComposerInvocationPartData;
   'context-report': ContextReportPartData;
-  'affect-signal': AffectSignalPartData;
   'token-usage': TokenUsagePartData;
 };
 
-export type ChatUiMessage = UIMessage<unknown, ChatUiDataTypes>;
-export type ChatUiMessageChunk = UIMessageChunk<unknown, ChatUiDataTypes>;
-export type UiMessagePart = ChatUiMessage['parts'][number];
+import type {
+  UiDataPart,
+  UiGenericDataPart,
+  ChatUiChunk,
+  ChatUiMessage,
+  ChatUiPart,
+} from './ui_protocol';
+
+export type { ChatUiMessage };
+export type ChatUiMessageChunk = ChatUiChunk;
+
+type ChatUiDataPart = {
+  [K in keyof ChatUiDataTypes]: UiDataPart<K & string, ChatUiDataTypes[K]>;
+}[keyof ChatUiDataTypes];
+
+export type UiMessagePart =
+  | Exclude<ChatUiPart, { type: `data-${string}` }>
+  | ChatUiDataPart
+
+  | UiGenericDataPart;
 export type TextPart = Extract<UiMessagePart, { type: 'text' }>;
 export type ReasoningPart = Extract<UiMessagePart, { type: 'reasoning' }>;
-export type MemoryPart = Extract<UiMessagePart, { type: 'data-memory-retrieval' }>;
 export type SkillUsagePart = Extract<UiMessagePart, { type: 'data-skill-usage' }>;
 export type ComposerInvocationPart = Extract<UiMessagePart, { type: 'data-composer-invocation' }>;
 export type ContextReportPart = Extract<UiMessagePart, { type: 'data-context-report' }>;
-export type AffectSignalPart = Extract<UiMessagePart, { type: 'data-affect-signal' }>;
 export type TokenUsagePart = Extract<UiMessagePart, { type: 'data-token-usage' }>;
 export type DynamicToolPart = Extract<UiMessagePart, { type: 'dynamic-tool' }>;
-
-type LegacyMemoryPart = {
-  type: 'memory-retrieval';
-  query?: string;
-  results?: MemoryResult[];
-};
 
 type LegacySkillUsagePart = {
   type: 'skill-usage';
@@ -151,23 +127,6 @@ type LegacyContextReportPart = {
   retainedRecentMessages?: number;
   compactedMessages?: number;
   blocks?: ContextReportItem[];
-};
-
-type LegacyAffectSignalPart = {
-  type: 'affect-signal';
-  source?: AffectSignalSource;
-  guardActive?: boolean;
-  label?: AffectLabel;
-  confidence?: number;
-  valence?: number;
-  arousal?: number;
-  emotions?: AffectScore[];
-  sampleCount?: number;
-  windowSize?: number;
-  startAt?: string;
-  endAt?: string;
-  ageMinutes?: number;
-  windowMinutes?: number;
 };
 
 type LegacyTokenUsagePart = {
@@ -193,11 +152,9 @@ type LegacyTokenUsagePart = {
 };
 
 type LegacyChatUiMetadataPart =
-  | LegacyMemoryPart
   | LegacySkillUsagePart
   | LegacyComposerInvocationPart
   | LegacyContextReportPart
-  | LegacyAffectSignalPart
   | LegacyTokenUsagePart;
 
 export type ToolApproval = {
@@ -275,40 +232,29 @@ export type ToolPart =
   | ToolApprovalResponsePart;
 
 export type ChatUiMetadataPart =
-  | MemoryPart
   | SkillUsagePart
   | ComposerInvocationPart
   | ContextReportPart
-  | AffectSignalPart
   | TokenUsagePart;
 
 type ChatUiMetadataPartType = ChatUiMetadataPart['type'];
 type LegacyChatUiMetadataPartType = LegacyChatUiMetadataPart['type'];
 
 const CHAT_UI_METADATA_PART_TYPES = new Set<ChatUiMetadataPartType>([
-  'data-memory-retrieval',
   'data-skill-usage',
   'data-composer-invocation',
   'data-context-report',
-  'data-affect-signal',
   'data-token-usage',
 ]);
 
 const LEGACY_CHAT_UI_METADATA_PART_TYPES = new Set<LegacyChatUiMetadataPartType>([
-  'memory-retrieval',
   'skill-usage',
   'composer-invocation',
   'context-report',
-  'affect-signal',
   'token-usage',
 ]);
 
-export const createMemoryPart = (data: MemoryPartData): MemoryPart => ({
-  type: 'data-memory-retrieval',
-  data,
-});
-
-export const createSkillUsagePart = (data: SkillUsagePartData): SkillUsagePart => ({
+const createSkillUsagePart = (data: SkillUsagePartData): SkillUsagePart => ({
   type: 'data-skill-usage',
   data,
 });
@@ -320,17 +266,12 @@ export const createComposerInvocationPart = (
   data,
 });
 
-export const createContextReportPart = (data: ContextReportPartData): ContextReportPart => ({
+const createContextReportPart = (data: ContextReportPartData): ContextReportPart => ({
   type: 'data-context-report',
   data,
 });
 
-export const createAffectSignalPart = (data: AffectSignalPartData): AffectSignalPart => ({
-  type: 'data-affect-signal',
-  data,
-});
-
-export const createTokenUsagePart = (data: TokenUsagePartData): TokenUsagePart => ({
+const createTokenUsagePart = (data: TokenUsagePartData): TokenUsagePart => ({
   type: 'data-token-usage',
   data,
 });
@@ -344,29 +285,17 @@ export const isReasoningPart = (part: unknown): part is ReasoningPart =>
 export const isDataPart = (part: unknown): boolean =>
   isObjectRecord(part) && typeof part.type === 'string' && part.type.startsWith('data-');
 
-export const isMemoryPart = (part: unknown): part is MemoryPart =>
-  isObjectRecord(part) && part.type === 'data-memory-retrieval';
-
 export const isSkillUsagePart = (part: unknown): part is SkillUsagePart =>
   isObjectRecord(part) && part.type === 'data-skill-usage';
 
 export const isComposerInvocationPart = (part: unknown): part is ComposerInvocationPart =>
   isObjectRecord(part) && part.type === 'data-composer-invocation';
 
-export const isContextReportPart = (part: unknown): part is ContextReportPart =>
+const isContextReportPart = (part: unknown): part is ContextReportPart =>
   isObjectRecord(part) && part.type === 'data-context-report';
-
-export const isAffectSignalPart = (part: unknown): part is AffectSignalPart =>
-  isObjectRecord(part) && part.type === 'data-affect-signal';
 
 export const isTokenUsagePart = (part: unknown): part is TokenUsagePart =>
   isObjectRecord(part) && part.type === 'data-token-usage';
-
-export const isDynamicToolPart = (part: unknown): part is DynamicToolPart =>
-  isObjectRecord(part) &&
-  part.type === 'dynamic-tool' &&
-  typeof part.toolCallId === 'string' &&
-  typeof part.toolName === 'string';
 
 export const isChatUiMetadataPart = (part: unknown): part is ChatUiMetadataPart =>
   isObjectRecord(part) &&
@@ -381,11 +310,6 @@ export const extractTextFromMessageParts = (parts: unknown): string => {
     .join('');
 };
 
-export const getMemoryPartData = (part: unknown): MemoryPartData | null => {
-  if (!isMemoryPart(part)) return null;
-  return isObjectRecord(part.data) ? (part.data as MemoryPartData) : {};
-};
-
 export const getSkillUsagePartData = (part: unknown): SkillUsagePartData | null => {
   if (!isSkillUsagePart(part)) return null;
   return isObjectRecord(part.data) ? (part.data as SkillUsagePartData) : {};
@@ -396,14 +320,9 @@ export const getComposerInvocationPartData = (part: unknown): ComposerInvocation
   return isObjectRecord(part.data) ? (part.data as ComposerInvocationPartData) : {};
 };
 
-export const getContextReportPartData = (part: unknown): ContextReportPartData | null => {
+const getContextReportPartData = (part: unknown): ContextReportPartData | null => {
   if (!isContextReportPart(part)) return null;
   return isObjectRecord(part.data) ? (part.data as ContextReportPartData) : {};
-};
-
-export const getAffectSignalPartData = (part: unknown): AffectSignalPartData | null => {
-  if (!isAffectSignalPart(part)) return null;
-  return isObjectRecord(part.data) ? (part.data as AffectSignalPartData) : {};
 };
 
 export const getTokenUsagePartData = (part: unknown): TokenUsagePartData | null => {
@@ -412,10 +331,6 @@ export const getTokenUsagePartData = (part: unknown): TokenUsagePartData | null 
 };
 
 export const normalizeChatUiMetadataPart = (part: unknown): ChatUiMetadataPart | null => {
-  if (isMemoryPart(part)) {
-    return createMemoryPart(getMemoryPartData(part) ?? {});
-  }
-
   if (isSkillUsagePart(part)) {
     return createSkillUsagePart(getSkillUsagePartData(part) ?? {});
   }
@@ -428,10 +343,6 @@ export const normalizeChatUiMetadataPart = (part: unknown): ChatUiMetadataPart |
     return createContextReportPart(getContextReportPartData(part) ?? {});
   }
 
-  if (isAffectSignalPart(part)) {
-    return createAffectSignalPart(getAffectSignalPartData(part) ?? {});
-  }
-
   if (isTokenUsagePart(part)) {
     return createTokenUsagePart(getTokenUsagePartData(part) ?? {});
   }
@@ -441,13 +352,6 @@ export const normalizeChatUiMetadataPart = (part: unknown): ChatUiMetadataPart |
     typeof part.type === 'string' &&
     LEGACY_CHAT_UI_METADATA_PART_TYPES.has(part.type as LegacyChatUiMetadataPartType)
   ) {
-    if (part.type === 'memory-retrieval') {
-      return createMemoryPart({
-        ...(typeof part.query === 'string' ? { query: part.query } : {}),
-        ...(Array.isArray(part.results) ? { results: part.results } : {}),
-      });
-    }
-
     if (part.type === 'skill-usage') {
       return createSkillUsagePart({
         ...(part.mode === 'auto' || part.mode === 'manual' ? { mode: part.mode } : {}),
@@ -473,24 +377,6 @@ export const normalizeChatUiMetadataPart = (part: unknown): ChatUiMetadataPart |
           ? { compactedMessages: part.compactedMessages }
           : {}),
         ...(Array.isArray(part.blocks) ? { blocks: part.blocks } : {}),
-      });
-    }
-
-    if (part.type === 'affect-signal') {
-      return createAffectSignalPart({
-        ...(part.source === 'history' || part.source === 'realtime' ? { source: part.source } : {}),
-        ...(typeof part.guardActive === 'boolean' ? { guardActive: part.guardActive } : {}),
-        ...(isAffectLabel(part.label) ? { label: part.label } : {}),
-        ...(typeof part.confidence === 'number' ? { confidence: part.confidence } : {}),
-        ...(typeof part.valence === 'number' ? { valence: part.valence } : {}),
-        ...(typeof part.arousal === 'number' ? { arousal: part.arousal } : {}),
-        ...(Array.isArray(part.emotions) ? { emotions: part.emotions } : {}),
-        ...(typeof part.sampleCount === 'number' ? { sampleCount: part.sampleCount } : {}),
-        ...(typeof part.windowSize === 'number' ? { windowSize: part.windowSize } : {}),
-        ...(typeof part.startAt === 'string' ? { startAt: part.startAt } : {}),
-        ...(typeof part.endAt === 'string' ? { endAt: part.endAt } : {}),
-        ...(typeof part.ageMinutes === 'number' ? { ageMinutes: part.ageMinutes } : {}),
-        ...(typeof part.windowMinutes === 'number' ? { windowMinutes: part.windowMinutes } : {}),
       });
     }
 

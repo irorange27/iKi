@@ -5,11 +5,7 @@ import path from 'node:path';
 export const VITE_EXTERNAL_RUNTIME_DEPS = [
   'whisper-node',
   'ffmpeg-static',
-  // ponytail: otel/langfuse pulled in a process-introspection path that crashed Vite's CJS interop; load at runtime instead.
-  '@langfuse/otel',
-  '@langfuse/tracing',
-  '@opentelemetry/api',
-  '@opentelemetry/sdk-node',
+  'source-map-js',
 ] as const;
 
 type InstalledPackageManifest = {
@@ -19,7 +15,6 @@ type InstalledPackageManifest = {
   peerDependencies?: Record<string, string>;
 };
 
-/** A runtime package to copy into the packaged app: realpath source → app-relative destination. */
 export type RuntimePlacement = {
   sourcePath: string;
   targetRelative: string;
@@ -49,16 +44,6 @@ const readInstalledPackageManifest = (packageDir: string): InstalledPackageManif
   }
 };
 
-/**
- * Resolve a package name to its installed real path (pnpm store, hoisted
- * node_modules, …) as seen from `fromDir`. Node's own resolution walks up the
- * directory tree, so packages declared in the monorepo root resolve fine even
- * though the packaging project dir is `packages/desktop`.
- *
- * `name/package.json` is not exported by every package (modern `exports`
- * maps), so fall back to resolving the bare entry and deriving the package
- * dir from the real path's last `node_modules/` segment.
- */
 const resolvePackageRealPath = (fromDir: string, packageName: string): string | null => {
   const resolver = createRequire(path.join(resolveRealPath(fromDir), '__runtime_packaging__.cjs'));
 
@@ -71,7 +56,6 @@ const resolvePackageRealPath = (fromDir: string, packageName: string): string | 
     const remainder = realFile.slice(markerIndex + marker.length);
     const segments = remainder.split(path.sep);
     if (segments.length === 0 || !segments[0]) return null;
-    // Scoped packages span two segments below node_modules.
     return segments[0].startsWith('@') && segments.length > 1
       ? path.join(nodeModulesRoot, segments[0], segments[1])
       : path.join(nodeModulesRoot, segments[0]);
@@ -104,8 +88,6 @@ const extractPackageName = (specifier: string): string | null => {
   return name || null;
 };
 
-// `electron` resolves to Electron's builtin module inside the app runtime —
-// never to the npm package, whose 800 MB dist must not be staged.
 const RUNTIME_BUILTIN_MODULE_NAMES = ['electron'];
 
 const BUILTIN_MODULE_SET = new Set(
@@ -229,9 +211,6 @@ export const resolveRuntimePackagingPlan = (
     ...collectBuiltRuntimePackageNames(projectDir),
   ]);
 
-  // A package's install name and physical path together identify a node:
-  // distinct store copies of the same name@version can carry different peer
-  // contexts, while aliases can expose one physical path under two names.
   type ClosureNode = {
     key: string;
     name: string;
@@ -268,9 +247,6 @@ export const resolveRuntimePackagingPlan = (
   while (queue.length > 0) {
     const node = queue.shift();
     if (!node) continue;
-    // Binary-drop packages ship only the files from their include rule — their
-    // JS dependency closure (whisper's ML stack alone is hundreds of MB) never
-    // loads inside the packaged app.
     if (specialRules[node.name]) continue;
     const manifest = readInstalledPackageManifest(node.realpath);
     const dependencyNames = new Set<string>([
@@ -280,9 +256,7 @@ export const resolveRuntimePackagingPlan = (
     ]);
     const childKeys = new Set<string>();
     for (const dependencyName of dependencyNames) {
-      // Type-only packages exist for the compiler, never for `require` at runtime.
       if (dependencyName.startsWith('@types/')) continue;
-      // The packaged app provides `electron` as a builtin module.
       if (dependencyName === 'electron') continue;
       const childRealPath = resolvePackageRealPath(node.realpath, dependencyName);
       if (!childRealPath) continue;
@@ -291,10 +265,6 @@ export const resolveRuntimePackagingPlan = (
     }
     if (childKeys.size > 0) edges.set(node.key, childKeys);
   }
-  // Hoist the shallowest install of each name. Other installs go at the
-  // shallowest safe resolution directory; a nearer conflicting install splits
-  // consumers into separate scopes. This shares valid ancestors without
-  // recursively copying every descendant into every branch.
   const MAX_RUNTIME_PACKAGE_PLACEMENTS = 2000;
 
   const depthSorted = Array.from(nodes.values()).sort(
@@ -307,8 +277,6 @@ export const resolveRuntimePackagingPlan = (
     }
   }
 
-  // Every node_modules directory on a consumer target's resolution chain,
-  // deepest first, always ending at the app root.
   const resolutionChainDirs = (targetRelative: string): string[] => {
     const segments = targetRelative.split('/');
     const dirs: string[] = [`${segments.join('/')}/node_modules`];
@@ -438,10 +406,6 @@ export const resolveRuntimePackagingPlan = (
     return demands;
   };
 
-  // Process graph edges from the root placements. A package can have several
-  // staged copies, so every consumer destination must flow to its dependencies.
-  // Shared installs go in a safe common directory. If a conflict shadows only
-  // part of the consumer paths, the remaining scopes receive their own copy.
   let demands = collectDemands();
   while (demands.size > 0) {
     let madeProgress = false;
@@ -538,8 +502,6 @@ export const createRuntimeAsarConfig = (
 
 export const createVitePackagingIgnore = (projectDir: string): ((file: string) => boolean) => {
   void projectDir;
-  // Everything the app needs either ships inside `.vite` (the bundles), is the
-  // manifest itself, or is staged into `node_modules` by the afterCopy copier.
   return (file: string): boolean => {
     if (!file) return false;
     const candidatePath = normalizePath(file);

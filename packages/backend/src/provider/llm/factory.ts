@@ -1,19 +1,13 @@
-import { generateText, smoothStream, type LanguageModel, type ModelMessage } from 'ai';
-import type { JSONValue, SharedV3ProviderOptions } from '@ai-sdk/provider';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createOpenAI } from '@ai-sdk/openai';
-import { createDeepSeek } from '@ai-sdk/deepseek';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { createMiniMax } from '@ai-sdk/minimax';
+
+import type { JSONValue, SharedV3ProviderOptions } from './wire_types';
+import type { ModelMessage } from '@iki/backend/message/model_history';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { getProviders } from '../../db/providers';
 import { createLogger } from '@iki/backend/logger';
-import { langfuseTelemetry } from '@iki/backend/observability/langfuse';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
-import { getToolRuntimeContext } from '../../utils/runtime_context';
 import {
   getProviderModelOptions,
   listModelsDevProviderModels,
@@ -25,27 +19,77 @@ import {
   type ModelsDevCatalog,
 } from '@iki/backend/utils/provider_models';
 import type {
-  ProviderModelDiscoveryOverride,
   ProviderModelOptions,
   ProviderModelOptionsMap,
 } from '@iki/backend/types/provider';
 import type { TokenUsageMetrics } from '@iki/backend/types/chat_usage';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import {
-  createAcpLanguageModel,
-  disposeAcpLanguageModel,
-  fetchAcpAuthMethods as fetchAcpAuthMethodsFromSession,
-  fetchAcpModels as fetchAcpModelsFromSession,
-  isAcpProviderType,
-  type AcpAuthMethod,
-} from './acp';
-
-export type { AcpAuthMethod };
-import { normalizeLanguageModelUsage } from './usage';
+  assembleAuxRequestSystemPrompt,
+  assembleRequestSystemPrompt,
+} from '@iki/backend/message/system_prompt';
+import {
+  buildPiModel,
+  callPiChat,
+  projectHistoryToPiContext,
+  projectUsageToIki,
+} from './pi_adapter';
 
 const factoryLogger = createLogger({ module: 'llm_factory' });
 const MODELS_DEV_CACHE_TTL_MS = 3600000;
 const MODELS_DEV_TIMEOUT_MS = 1200;
 const MODELS_DEV_FAILURE_COOLDOWN_MS = 300000;
+
+const PI_DEFAULT_CONTEXT_WINDOW = 128000;
+
+export const resolvePiModelCapability = (params: {
+  providerType: string;
+  modelId: string;
+  providerId?: string | null;
+}): {
+  input?: string[];
+  contextWindow?: number | null;
+  maxTokens?: number | null;
+  cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+} | null => {
+  const trimmedModelId = params.modelId.trim();
+  if (!trimmedModelId) return null;
+
+  try {
+    const modelOptions = getStoredProviderModelOptions(
+      params.providerType,
+      trimmedModelId,
+      params.providerId
+    );
+    const catalog = getModelsDevCatalogSnapshot();
+    const catalogCapability = catalog
+      ? lookupModelsDevModelCapability(catalog, params.providerType, trimmedModelId)
+      : null;
+    const capability = mergeModelCapability(
+      catalogCapability,
+      params.providerType,
+      trimmedModelId,
+      modelOptions
+    );
+    if (!capability) return null;
+
+    const storedInputLimit = capability.maxInputTokens;
+    const catalogWindow = capability.contextWindow;
+
+    return {
+      ...(capability.modalities ? { input: capability.modalities } : {}),
+      contextWindow:
+        typeof storedInputLimit === 'number' && typeof catalogWindow === 'number'
+          ? Math.min(storedInputLimit, catalogWindow)
+          : (catalogWindow ?? storedInputLimit ?? null),
+      maxTokens: capability.maxOutputTokens,
+      ...(capability.costPerMillionTokens ? { cost: capability.costPerMillionTokens } : {}),
+    };
+  } catch {
+
+    return null;
+  }
+};
 
 let cachedModelsDevCatalog: ModelsDevCatalog | null = null;
 let cachedModelsDevFetchedAt = 0;
@@ -60,34 +104,12 @@ export interface ProviderConfig {
   models: string[];
   modelOptions: ProviderModelOptionsMap;
   isResponseApi: boolean;
-  acpCommand: string;
-  acpArgs: string;
-  acpMcpServerIds: string;
-  acpAuthMethodId: string;
-  acpApiProviderId: string;
-  acpModelMapping: string;
 }
 
 export interface ChatGenerationResult {
   text: string;
   usage: TokenUsageMetrics;
 }
-
-const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const isLanguageModelInstance = (value: unknown): value is LanguageModel => {
-  if (!isObjectRecord(value)) return false;
-
-  return (
-    value.specificationVersion === 'v3' &&
-    typeof value.provider === 'string' &&
-    typeof value.modelId === 'string' &&
-    typeof value.doGenerate === 'function' &&
-    typeof value.doStream === 'function' &&
-    'supportedUrls' in value
-  );
-};
 
 const readBootstrapAuthConfig = (providerType: string): ProviderConfig | null => {
   try {
@@ -104,12 +126,6 @@ const readBootstrapAuthConfig = (providerType: string): ProviderConfig | null =>
       models: [],
       modelOptions: {},
       isResponseApi: false,
-      acpCommand: '',
-      acpArgs: '',
-      acpMcpServerIds: '',
-      acpAuthMethodId: '',
-      acpApiProviderId: '',
-      acpModelMapping: '',
     };
   } catch {
     return null;
@@ -121,7 +137,7 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
   try {
     providers = getProviders();
   } catch {
-    // DB unavailable — fall through to auth.json bootstrap
+    // Intentionally ignored: the caller cannot act on it.
   }
   const normalizedProviderId =
     typeof providerId === 'string' && providerId.trim().length > 0 ? providerId.trim() : '';
@@ -133,7 +149,7 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
     if (normalizedProviderId) {
       throw new Error(`Provider ${normalizedProviderId} is not configured or not enabled`);
     }
-    // Fallback to auth.json bootstrap before throwing
+
     const bootstrap = readBootstrapAuthConfig(providerType);
     if (bootstrap) return bootstrap;
     throw new Error(`Provider ${providerType} not configured or not enabled`);
@@ -155,93 +171,6 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
     models,
     modelOptions: parseProviderModelOptionsMap(provider.model_options),
     isResponseApi: provider.is_response_api === true,
-    acpCommand: provider.acp_command || '',
-    acpArgs: provider.acp_args || '',
-    acpMcpServerIds: provider.acp_mcp_server_ids || '',
-    acpAuthMethodId: provider.acp_auth_method_id || '',
-    acpApiProviderId: provider.acp_api_provider_id || '',
-    acpModelMapping: provider.acp_model_mapping || '',
-  };
-};
-
-const normalizeOptionalString = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
-const buildProviderConfigForDiscovery = (params: {
-  providerType: string;
-  providerId?: string | null;
-  providerOverride?: ProviderModelDiscoveryOverride | null;
-}): ProviderConfig => {
-  const override = params.providerOverride;
-  if (!override) {
-    return getProviderConfig(params.providerType, params.providerId);
-  }
-
-  let persisted: ProviderConfig | null = null;
-  try {
-    persisted = getProviderConfig(params.providerType, params.providerId);
-  } catch {
-    persisted = null;
-  }
-
-  const resolvedType =
-    normalizeOptionalString(override.type) ?? normalizeOptionalString(persisted?.type) ?? params.providerType;
-  const resolvedId =
-    normalizeOptionalString(override.id) ??
-    normalizeOptionalString(persisted?.id) ??
-    normalizeOptionalString(params.providerId) ??
-    `${resolvedType}_draft`;
-
-  return {
-    id: resolvedId,
-    type: resolvedType,
-    apiKey:
-      normalizeOptionalString(override.api_key) ?? normalizeOptionalString(persisted?.apiKey) ?? '',
-    baseURL:
-      normalizeOptionalString(override.base_url) ??
-      normalizeOptionalString(persisted?.baseURL) ??
-      '',
-    models:
-      override.models !== undefined
-        ? parseModelList(override.models)
-        : persisted?.models
-          ? [...persisted.models]
-          : [],
-    modelOptions:
-      override.model_options !== undefined
-        ? parseProviderModelOptionsMap(override.model_options)
-        : persisted?.modelOptions
-          ? structuredClone(persisted.modelOptions)
-          : {},
-    isResponseApi:
-      typeof override.is_response_api === 'boolean'
-        ? override.is_response_api
-        : persisted?.isResponseApi === true,
-    acpCommand:
-      normalizeOptionalString(override.acp_command) ??
-      normalizeOptionalString(persisted?.acpCommand) ??
-      '',
-    acpArgs:
-      normalizeOptionalString(override.acp_args) ?? normalizeOptionalString(persisted?.acpArgs) ?? '',
-    acpMcpServerIds:
-      normalizeOptionalString(override.acp_mcp_server_ids) ??
-      normalizeOptionalString(persisted?.acpMcpServerIds) ??
-      '',
-    acpAuthMethodId:
-      normalizeOptionalString(override.acp_auth_method_id) ??
-      normalizeOptionalString(persisted?.acpAuthMethodId) ??
-      '',
-    acpApiProviderId:
-      normalizeOptionalString(override.acp_api_provider_id) ??
-      normalizeOptionalString(persisted?.acpApiProviderId) ??
-      '',
-    acpModelMapping:
-      normalizeOptionalString(override.acp_model_mapping) ??
-      normalizeOptionalString(persisted?.acpModelMapping) ??
-      '',
   };
 };
 
@@ -368,7 +297,7 @@ export const getModelGenerationSettings = (params: {
   modelId: string;
   providerId?: string | null;
   temperature?: number;
-  /** Per-call reasoning effort override; wins over stored provider model options. */
+
   reasoningEffort?: string;
 }): { providerOptions?: SharedV3ProviderOptions; temperature?: number } => {
   const storedCallSettings = getModelCallSettings(params.providerType, params.modelId, params.providerId);
@@ -389,206 +318,188 @@ export const getModelGenerationSettings = (params: {
     : callSettings;
 };
 
-const createInstrumentedFetch = (): typeof globalThis.fetch => {
-  return async (input, init) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const method = init?.method ?? 'GET';
-
-    if (method === 'POST' && url.includes('/chat/completions')) {
-      const bodyText = init?.body as string;
-      try {
-        const body = JSON.parse(bodyText);
-        if (!body.thinking) {
-          body.thinking = { type: 'disabled' };
-        }
-        return globalThis.fetch(input, { ...init, body: JSON.stringify(body) });
-      } catch {
-        // If we can't parse the body, pass through unchanged
-      }
-    }
-    return globalThis.fetch(input, init);
-  };
-};
-
-/**
- * Per-provider model wiring for the static (non-ACP) provider types. Each entry
- * owns its SDK client construction and default endpoint; providers absent from
- * this table fall through to isResponseApi handling or the OpenAI-compatible path.
- */
-const STATIC_PROVIDER_MODEL_FACTORIES: Record<string, (config: ProviderConfig, modelId: string) => LanguageModel> = {
-  openai: (config, modelId) => {
-    const client = createOpenAI({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.openai.com/v1',
-    });
-    return client(modelId);
-  },
-  anthropic: (config, modelId) => {
-    const model = createAnthropic({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.anthropic.com/v1',
-    })(modelId);
-    if (!isLanguageModelInstance(model)) {
-      throw new Error(`Anthropic provider returned an invalid language model for "${modelId}".`);
-    }
-    return model;
-  },
-  'anthropic-compatible': (config, modelId) => {
-    const model = createAnthropic({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.anthropic.com/v1',
-      name: 'anthropic-compatible',
-    })(modelId);
-    if (!isLanguageModelInstance(model)) {
-      throw new Error(`Anthropic provider returned an invalid language model for "${modelId}".`);
-    }
-    return model;
-  },
-  deepseek: (config, modelId) => {
-    const client = createDeepSeek({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.deepseek.com/v1',
-    });
-    return client(modelId);
-  },
-  minimax: (config, modelId) => {
-    const model = createMiniMax({
-      apiKey: config.apiKey,
-      baseURL: config.baseURL || 'https://api.minimax.io/anthropic/v1',
-    })(modelId);
-    if (!isLanguageModelInstance(model)) {
-      throw new Error(`MiniMax provider returned an invalid language model for "${modelId}".`);
-    }
-    return model;
-  },
-};
-
-export const createModel = (
-  providerType: string,
-  modelId: string,
-  providerId?: string | null
-): LanguageModel => {
-  const config = getProviderConfig(providerType, providerId);
-
-  // Validations: If no modelId, try to pick the first one from config
-  if (!modelId && config.models.length > 0) {
-    modelId = config.models[0];
-  }
-
-  if (!modelId) {
-    throw new Error(
-      `Model not specified for provider "${providerType}". Please select a model in chat or update settings.`
-    );
-  }
-
-  const storedModelOptions = getProviderModelOptions(config.modelOptions, modelId);
-
-  if (isAcpProviderType(providerType)) {
-    const toolRuntimeContext = getToolRuntimeContext();
-    return createAcpLanguageModel(
-      {
-        id: config.id,
-        apiKey: config.apiKey,
-        baseURL: config.baseURL,
-        acpCommand: config.acpCommand,
-        acpArgs: config.acpArgs,
-        acpMcpServerIds: config.acpMcpServerIds,
-        acpAuthMethodId: config.acpAuthMethodId,
-        acpApiProviderId: config.acpApiProviderId,
-        acpModelMapping: config.acpModelMapping,
-      },
-      modelId,
-      toolRuntimeContext.threadId
-    );
-  }
-
-  const staticFactory = STATIC_PROVIDER_MODEL_FACTORIES[providerType];
-  if (staticFactory) {
-    return staticFactory(config, modelId);
-  }
-
-  if (config.isResponseApi) {
-    const client = createOpenAI({
-      name: providerType,
-      apiKey: config.apiKey,
-      baseURL: config.baseURL,
-    });
-    return client.responses(modelId);
-  }
-
-  // Default to OpenAI compatible for most other providers
-  const client = createOpenAICompatible({
-    name: providerType,
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-    fetch: createInstrumentedFetch(),
-  });
-  if (typeof storedModelOptions?.supportsStructuredOutputs === 'boolean') {
-    return client.languageModel(modelId, {
-      supportsStructuredOutputs: storedModelOptions.supportsStructuredOutputs,
-    });
-  }
-
-  return client(modelId);
-};
-
-export const disposeLanguageModel = (model: LanguageModel): void => {
-  disposeAcpLanguageModel(model);
-};
-
-export const getFullSystemPrompt = (providerType: string, providerId?: string | null) => {
+export const resolvePersonaPrompt = (providerType: string, providerId?: string | null) => {
   getProviderConfig(providerType, providerId);
   const personaPrompt = getPersonaPrompt();
   return personaPrompt;
 };
-export const generateChatWithModelMessages = async (options: {
+
+const STATIC_PROVIDER_API: Partial<Record<string, 'openai-responses' | 'anthropic-messages'>> = {
+
+  openai: 'openai-responses',
+
+  anthropic: 'anthropic-messages',
+  'anthropic-compatible': 'anthropic-messages',
+  minimax: 'anthropic-messages',
+
+};
+
+export const resolveProviderApi = (
+  providerType: string,
+  config: Pick<ProviderConfig, 'isResponseApi'>
+): 'openai-completions' | 'openai-responses' | 'anthropic-messages' => {
+
+  if (config.isResponseApi) return 'openai-responses';
+  const declared = STATIC_PROVIDER_API[providerType];
+  if (declared) return declared;
+
+  return 'openai-completions';
+};
+
+const supportsPiGeneration = (_providerType: string, config: ProviderConfig): boolean =>
+
+  typeof config.baseURL === 'string' &&
+  config.baseURL.trim().length > 0;
+
+export type PiTurnSupplyDecision =
+  | { admitted: true; reason?: never; cause?: never }
+  | { admitted: false; reason: string; cause: 'config' | 'domain' };
+
+export const resolvePiTurnSupply = (params: {
   providerType: string;
   providerId?: string;
   modelId: string;
-  messages: ModelMessage[];
-  extraSystemPrompt?: string;
-  maxOutputTokens?: number;
-  /** Optional thread id — forwarded to Langfuse as sessionId. */
-  threadId?: string;
-}): Promise<ChatGenerationResult> => {
-  const model = createModel(options.providerType, options.modelId, options.providerId);
-  const systemPrompt = [
-    getFullSystemPrompt(options.providerType, options.providerId),
-    options.extraSystemPrompt,
-  ]
-    .filter(value => typeof value === 'string' && value.trim().length > 0)
-    .join('\n\n');
+  history: ModelMessage[];
+}): PiTurnSupplyDecision => {
+  let config: ProviderConfig;
+  try {
+    config = getProviderConfig(params.providerType, params.providerId);
+  } catch (error) {
+    return {
+      admitted: false,
+      cause: 'config',
+      reason: `provider "${params.providerType}" is not configured: ${getErrorMessage(error)}`,
+    };
+  }
+  if (!supportsPiGeneration(params.providerType, config)) {
+    return {
+      admitted: false,
+      cause: 'config',
+      reason: `provider "${params.providerType}" has no base URL, so no model endpoint can be addressed`,
+    };
+  }
+  try {
+    projectHistoryToPiContext(params.history, params.modelId, params.providerType);
+    return { admitted: true };
+  } catch (error) {
+    return {
+      admitted: false,
+      cause: 'domain',
+      reason: getErrorMessage(error),
+    };
+  }
+};
+
+const generateViaPi = async (
+  options: {
+    providerType: string;
+    providerId?: string;
+    modelId: string;
+    messages: ModelMessage[];
+    extraSystemPrompt?: string;
+
+    auxSystemInstruction?: string;
+    temperature?: number;
+    maxOutputTokens?: number;
+    threadId?: string;
+    abortSignal?: AbortSignal;
+  },
+  config: ProviderConfig
+): Promise<ChatGenerationResult> => {
+  const capability = resolvePiModelCapability({
+    providerType: options.providerType,
+    ...(options.providerId ? { providerId: options.providerId } : {}),
+    modelId: options.modelId,
+  });
+  const model = buildPiModel({
+    id: options.modelId,
+    providerType: config.type,
+    baseUrl: config.baseURL,
+    api: resolveProviderApi(options.providerType, config),
+
+    contextWindow: capability?.contextWindow ?? PI_DEFAULT_CONTEXT_WINDOW,
+    maxTokens: options.maxOutputTokens ?? capability?.maxTokens ?? 4096,
+    ...(capability?.input ? { input: capability.input } : {}),
+    ...(capability?.cost ? { cost: capability.cost } : {}),
+  });
+  const personaPrompt = resolvePersonaPrompt(options.providerType, options.providerId);
+  const { systemPrompt: transcriptSystem, messages } = projectHistoryToPiContext(
+    options.messages,
+    options.modelId,
+    options.providerType
+  );
+
+  const systemPrompt =
+    typeof options.auxSystemInstruction === 'string'
+      ? assembleAuxRequestSystemPrompt({ instruction: options.auxSystemInstruction }).prompt
+      : assembleRequestSystemPrompt([
+          { slot: 'persona', text: personaPrompt },
+          ...(typeof options.extraSystemPrompt === 'string'
+            ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
+            : []),
+          { slot: 'transcriptSystem', text: transcriptSystem },
+        ]).prompt;
 
   try {
-    const telemetry = langfuseTelemetry('chat.generate', {
-      sessionId: options.threadId,
-      provider: options.providerType,
-      providerId: options.providerId,
-      model: options.modelId,
-    });
-    const result = await generateText({
-      model,
-      system: systemPrompt,
-      messages: injectReasoningContentIntoMessages(options.messages),
-      ...getModelCallSettings(options.providerType, options.modelId, options.providerId),
-      ...(typeof options.maxOutputTokens === 'number'
-        ? { maxOutputTokens: options.maxOutputTokens }
-        : {}),
-      ...(telemetry ? { experimental_telemetry: telemetry } : {}),
-    });
+    const settle = await (async () => {
+          const eventStream = callPiChat(
+            model,
+            { systemPrompt, messages },
+            {
+              apiKey: config.apiKey,
+              signal: options.abortSignal,
+              ...(typeof options.maxOutputTokens === 'number'
+                ? { maxTokens: options.maxOutputTokens }
+                : {}),
+              ...(typeof options.temperature === 'number'
+                ? { temperature: options.temperature }
+                : {}),
+            }
+          );
+          const resultPromise = eventStream.result();
+          for await (const _event of eventStream) {
+            void _event;
+          }
+          const final = await resultPromise;
 
-    if (!result.text) {
+          const settledText = final.content
+            .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
+            .map(block => block.text)
+            .join('');
+
+          if (final.stopReason === 'aborted' || final.stopReason === 'error') {
+            const failure =
+              final.stopReason === 'aborted'
+                ? new DOMException(final.errorMessage || 'Generation aborted', 'AbortError')
+                : new Error(final.errorMessage || 'Provider returned an error stop reason');
+            throw failure;
+          }
+
+          const mapped = projectUsageToIki(final.usage);
+          return { final, text: settledText, usage: mapped };
+    })();
+    const { final, text, usage } = settle;
+    if (!text) {
       factoryLogger.event({
         level: 'warn',
         event: 'llm.generate.empty',
         outcome: 'degraded',
         message: `Generation produced no text for provider "${options.providerType}" model "${options.modelId}".`,
-        data: { providerType: options.providerType, modelId: options.modelId },
+        data: { providerType: options.providerType, modelId: options.modelId, supply: 'pi' },
       });
     }
     return {
-      text: result.text,
-      usage: normalizeLanguageModelUsage(result.totalUsage || result.usage),
+      text,
+      usage: {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+        cacheReadTokens: usage.cacheReadTokens,
+        cacheWriteTokens: usage.cacheWriteTokens,
+        reasoningTokens: usage.reasoningTokens,
+
+        estimatedCostUsd: final.usage.cost.total,
+      },
     };
   } catch (error) {
     factoryLogger.event({
@@ -597,12 +508,39 @@ export const generateChatWithModelMessages = async (options: {
       outcome: 'failed',
       message: `Generation failed for provider "${options.providerType}" model "${options.modelId}".`,
       error,
-      data: { providerType: options.providerType, modelId: options.modelId },
+      data: { providerType: options.providerType, modelId: options.modelId, supply: 'pi' },
     });
     throw error;
-  } finally {
-    disposeLanguageModel(model);
   }
+};
+
+export const generateChatWithModelMessages = async (options: {
+  providerType: string;
+  providerId?: string;
+  modelId: string;
+  messages: ModelMessage[];
+  extraSystemPrompt?: string;
+
+  auxSystemInstruction?: string;
+  temperature?: number;
+
+  providerOptions?: SharedV3ProviderOptions;
+  maxOutputTokens?: number;
+
+  threadId?: string;
+
+  abortSignal?: AbortSignal;
+}): Promise<ChatGenerationResult> => {
+  const config = getProviderConfig(options.providerType, options.providerId);
+  if (!supportsPiGeneration(options.providerType, config)) {
+
+    throw new Error(
+      `Provider "${options.providerType}" cannot be served: it has no base URL, so no model endpoint can be addressed.`
+    );
+  }
+
+  projectHistoryToPiContext(options.messages, options.modelId, options.providerType);
+  return generateViaPi(options, config);
 };
 
 export const fetchModelsFromDev = async (providerType: string) => {
@@ -612,60 +550,6 @@ export const fetchModelsFromDev = async (providerType: string) => {
   } catch {
     return [];
   }
-};
-
-export const fetchAcpModels = async (
-  providerType: string,
-  providerId?: string | null,
-  providerOverride?: ProviderModelDiscoveryOverride | null
-) => {
-  const config = buildProviderConfigForDiscovery({
-    providerType,
-    providerId,
-    providerOverride,
-  });
-  if (!isAcpProviderType(config.type)) {
-    return [];
-  }
-
-  return await fetchAcpModelsFromSession({
-    id: config.id,
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-    acpCommand: config.acpCommand,
-    acpArgs: config.acpArgs,
-    acpMcpServerIds: config.acpMcpServerIds,
-    acpAuthMethodId: config.acpAuthMethodId,
-    acpApiProviderId: config.acpApiProviderId,
-    acpModelMapping: config.acpModelMapping,
-  });
-};
-
-export const fetchAcpAuthMethods = async (
-  providerType: string,
-  providerId?: string | null,
-  providerOverride?: ProviderModelDiscoveryOverride | null
-) => {
-  const config = buildProviderConfigForDiscovery({
-    providerType,
-    providerId,
-    providerOverride,
-  });
-  if (!isAcpProviderType(config.type)) {
-    return [];
-  }
-
-  return await fetchAcpAuthMethodsFromSession({
-    id: config.id,
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-    acpCommand: config.acpCommand,
-    acpArgs: config.acpArgs,
-    acpMcpServerIds: config.acpMcpServerIds,
-    acpAuthMethodId: config.acpAuthMethodId,
-    acpApiProviderId: config.acpApiProviderId,
-    acpModelMapping: config.acpModelMapping,
-  });
 };
 
 const hasFreshModelsDevCatalog = (now = Date.now()) =>
@@ -749,7 +633,6 @@ export const fetchModelCapabilityFromDev = async (
 ): Promise<ModelCapability | null> => {
   const trimmedModelId = modelId.trim();
   if (!trimmedModelId) return null;
-  if (isAcpProviderType(providerType)) return null;
 
   const catalog = getModelsDevCatalogSnapshot();
   return catalog ? lookupModelsDevModelCapability(catalog, providerType, trimmedModelId) : null;
@@ -767,34 +650,6 @@ export const resolveModelCapability = async (
   const baseCapability = await fetchModelCapabilityFromDev(providerType, trimmedModelId);
 
   return mergeModelCapability(baseCapability, providerType, trimmedModelId, modelOptions);
-};
-
-/**
- * Inject reasoning_content from reasoning content parts into each assistant
- * message's providerOptions, so that @ai-sdk/openai-compatible (and similar
- * providers) include it in the API request body. Needed for providers like MIMO
- * that require reasoning_content be passed back across all turns.
- */
-export const injectReasoningContentIntoMessages = (
-  messages: ModelMessage[],
-): ModelMessage[] => {
-  return messages.map(msg => {
-    if (msg.role !== 'assistant') return msg;
-    if (!Array.isArray(msg.content)) return msg;
-    const reasoningParts = msg.content.filter(p => p.type === 'reasoning');
-    if (reasoningParts.length === 0) return msg;
-    const reasoningContent = reasoningParts.map(p => p.text).join('');
-    return {
-      ...msg,
-      providerOptions: {
-        ...msg.providerOptions,
-        openaiCompatible: {
-          ...(msg.providerOptions?.openaiCompatible ?? {}),
-          reasoning_content: reasoningContent,
-        },
-      },
-    };
-  });
 };
 
 export const resetModelsDevCatalogCacheForTests = () => {

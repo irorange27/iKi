@@ -5,7 +5,6 @@ import type {
 } from '@iki/backend/types/speech';
 import { DEFAULT_OPENAI_MODEL, getSpeechConfig, normalizeOpenAiBaseUrl } from './speech_config';
 import { getAudioExtension } from './speech_audio';
-import { analyzeAudioEmotion, isAudioEmotionAvailable } from './speech_emotion';
 import {
   downloadWhisperNodeModel,
   getWhisperNodeStatus,
@@ -114,18 +113,6 @@ export const transcribeSpeech = async (
       providerType: 'openai',
       model,
     };
-  }
-
-  if (isAudioEmotionAvailable() && input.audioBase64) {
-    const mimeType = input.mimeType || 'audio/webm';
-    try {
-      const audioEmotion = await analyzeAudioEmotion(input.audioBase64, mimeType);
-      if (audioEmotion) {
-        result = { ...result, audioEmotion };
-      }
-    } catch {
-      // Audio emotion is best-effort; don't block STT
-    }
   }
 
   return result;

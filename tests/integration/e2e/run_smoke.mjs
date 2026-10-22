@@ -15,6 +15,8 @@ import { connect, findRendererTarget } from './cdp.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const CDP_PORT = Number(process.env.CDP_PORT || 18731);
+// Publish the resolved port so shared helpers (cdp.mjs) read THIS runner's port.
+process.env.CDP_PORT = String(CDP_PORT);
 // Private daemon port (IKI_DAEMON_PORT override) so the gate can run while
 // the user's real app holds the default 6127.
 const DAEMON_PORT = Number(process.env.IKI_E2E_DAEMON_PORT || 16127);
@@ -32,6 +34,9 @@ const fail = message => {
 
 let workDir;
 let fauxServer;
+const VIEWPORT_WIDTH = 1200;
+const VIEWPORT_HEIGHT = 800;
+
 const launchedPids = [];
 
 let currentStep = 'startup';
@@ -43,10 +48,15 @@ const step = name => {
 const cleanup = () => {
   if (fauxServer) fauxServer.kill('SIGKILL');
   if (workDir) killAppByUserDataDir();
-  // Keep the scene for post-mortem when the gate fails; remove on pass.
+  // Keep the scene for post-mortem when the gate fails; on a pass remove the
+  // scratch state but PRESERVE the screenshots — they are the only evidence of
+  // what the UI actually looked like, and a green run is exactly when someone
+  // wants to confirm it visually.
   if (workDir && !process.exitCode) {
+    preserveScreenshots();
     fs.rmSync(workDir, { recursive: true, force: true });
   } else if (workDir) {
+    preserveScreenshots();
     console.error('[e2e] kept failure scene:', workDir);
   }
 };
@@ -124,7 +134,19 @@ const launchApp = async label => {
         ...process.env,
         IKI_DAEMON_PORT: String(DAEMON_PORT),
         IKI_VITE_PORT: String(VITE_PORT),
+        // Keep this run's logs in the scene dir so the gate can assert on them.
+        // Without an explicit dir the app writes to the developer's real
+        // ~/Library/Application Support/iki/logs and the gate cannot see what
+        // it did — which is how "approval policy never wired" stayed invisible.
+        IKI_LOG_DIR: path.join(workDir, 'logs'),
         MAIN_WINDOW_VITE_DEV_SERVER_URL: `http://127.0.0.1:${VITE_PORT}`,
+        // The gate drives the UI over CDP; an auto-opened dock only gets in the
+        // way, and in a detached child it is a window nobody closes.
+        IKI_AUTO_OPEN_DEVTOOLS: 'false',
+        // The window must be at least as large as the emulated viewport, or the
+        // page lays out wider than its window and the composer is clipped off.
+        IKI_WINDOW_WIDTH: String(VIEWPORT_WIDTH),
+        IKI_WINDOW_HEIGHT: String(VIEWPORT_HEIGHT),
       },
       stdio: ['ignore', 'inherit', 'inherit'],
       detached: true,
@@ -132,7 +154,73 @@ const launchApp = async label => {
   );
   launchedPids.push(child.pid);
   const cdp = await waitForCdp(label, child);
+  await applyStableViewport(cdp);
   return cdp;
+};
+
+/**
+ * Pin the renderer viewport for every boot.
+ *
+ * The gate depended on the HOST window size before this: a small or restored
+ * window made the sidebar auto-collapse (its responsive threshold sits below the
+ * app's own default width), so the thread list rendered no `.chat-item` rows and
+ * the restart-reopen step failed — while the same code passes on a wide window.
+ * A gate must not depend on the machine it runs on. 1200 is comfortably above
+ * the collapse threshold AND the restore mark, so the sidebar is expanded and
+ * stable for the whole scenario.
+ */
+const applyStableViewport = async cdp => {
+  const applied = await cdp
+    .send('Emulation.setDeviceMetricsOverride', {
+      width: VIEWPORT_WIDTH,
+      height: VIEWPORT_HEIGHT,
+      deviceScaleFactor: 1,
+      mobile: false,
+    })
+    .then(() => true)
+    .catch(() => false);
+  if (!applied) log('viewport override unavailable; continuing with the host window size');
+  await sleep(300);
+};
+
+/**
+ * Capture a screenshot into the scene directory.
+ *
+ * A gate that only asserts on DOM text cannot see a layout break: the sidebar
+ * toggle defect passed every text assertion while the panel was unreachable.
+ * Screenshots are kept with the scene on failure and printed as paths, so a red
+ * run can be LOOKED AT instead of re-derived from logs.
+ */
+/** Copy this run's screenshots somewhere they survive the scene cleanup. */
+const preserveScreenshots = () => {
+  if (!workDir) return;
+  const from = path.join(workDir, 'shots');
+  if (!fs.existsSync(from)) return;
+  const to = path.join(ROOT, 'e2e-shots');
+  try {
+    fs.mkdirSync(to, { recursive: true });
+    for (const name of fs.readdirSync(from)) {
+      fs.copyFileSync(path.join(from, name), path.join(to, name));
+    }
+    log(`screenshots kept in ${to}`);
+  } catch (error) {
+    console.error('[e2e] could not preserve screenshots:', error.message);
+  }
+};
+
+const shot = async (cdp, name) => {
+  const dir = path.join(workDir, 'shots');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${name}.png`);
+  try {
+    const result = await cdp.send('Page.captureScreenshot', { format: 'png' });
+    fs.writeFileSync(file, Buffer.from(result.data, 'base64'));
+    log(`screenshot: ${file}`);
+    return file;
+  } catch (error) {
+    log(`screenshot ${name} failed: ${error.message}`);
+    return null;
+  }
 };
 
 const waitForCdp = async (label, child) => {
@@ -211,7 +299,54 @@ const ensureModelSelected = async cdp => {
   }
 };
 
-const setAlwaysApprovalPolicy = async cdp => {
+/**
+ * Pick an approval policy by its VALUE, never by its position.
+ *
+ * This used to be `opts[1].click()` — "the second option is always". That
+ * made the gate depend on menu ordering rather than on the policy being
+ * tested: reordering or relabelling the menu silently changed which policy
+ * the gate ran under, and the failure looked like a product bug. The option
+ * elements now carry `data-policy`, so the selector states what it means.
+ */
+/**
+ * Open the newest real thread from the sidebar.
+ *
+ * The collapsed sidebar renders NO thread rows (width 0), so it must be
+ * expanded first — and expanded only while collapsed: clicking the toggle on
+ * every poll reopened/closed it and the list never settled. The toggle has two
+ * homes depending on layout (the sidebar's floating toolbar, or the chat
+ * header's leading cluster), so it is matched by label, not by position.
+ */
+const openNewestThread = async cdp => {
+  for (let i = 0; i < 30; i++) {
+    const result = await page(cdp, `(function(){
+      if (document.querySelector('.sidebar-shell-collapsed')) {
+        const expandBtn =
+          document.querySelector('.toolbar-container .sidebar-tool-btn') ||
+          [...document.querySelectorAll('button')].find(
+            b => (b.getAttribute('aria-label') || '') === 'Toggle sidebar'
+          );
+        if (!expandBtn) return 'NO_EXPAND_CONTROL';
+        expandBtn.click();
+        return 'EXPANDING';
+      }
+      const items = [...document.querySelectorAll('.chat-item')];
+      const target =
+        items.find(i => {
+          const text = (i.textContent || '').trim();
+          return text && !/^new chat$/i.test(text) && !/^ack\.$/i.test(text);
+        }) || items.find(i => /^ack\.$/i.test((i.textContent || '').trim()));
+      if (!target) return 'NO_THREAD';
+      target.click();
+      return 'OK';
+    })()`);
+    if (result === 'OK') return;
+    await sleep(1000);
+  }
+  throw new Error('thread not found after restart');
+};
+
+const setApprovalPolicy = async (cdp, policy) => {
   const chip = await page(cdp, `(function(){
     const chip = document.querySelector('.composer-permission-chip');
     if (!chip) return 'NO_CHIP';
@@ -224,15 +359,89 @@ const setAlwaysApprovalPolicy = async cdp => {
   let picked = 'NO_OPTIONS';
   for (let i = 0; i < 30 && picked !== 'OK'; i++) {
     picked = await page(cdp, `(function(){
-      const opts = [...document.querySelectorAll('.permission-option')];
-      if (!opts.length) return 'NO_OPTIONS';
-      opts[1].click();  // 'always'
+      const target = document.querySelector('.permission-option[data-policy="${policy}"]');
+      if (!target) {
+        const seen = [...document.querySelectorAll('.permission-option')]
+          .map(el => el.getAttribute('data-policy'));
+        return seen.length ? 'NO_SUCH_POLICY:' + seen.join(',') : 'NO_OPTIONS';
+      }
+      target.click();
       return 'OK';
     })()`);
     if (picked !== 'OK') await sleep(500);
   }
   await sleep(600);
-  if (picked !== 'OK') throw new Error('permission popover failed: ' + picked);
+  if (picked !== 'OK') throw new Error(`permission popover failed for "${policy}": ${picked}`);
+
+  // Read the chip back: the policy must actually be in force before the turn
+  // starts, otherwise the assertions below would test whatever the default was.
+  const applied = await page(cdp, `(function(){
+    const selected = document.querySelector('.permission-option--selected');
+    return selected ? selected.getAttribute('data-policy') : 'NONE';
+  })()`);
+  if (applied !== policy && applied !== 'NONE') {
+    throw new Error(`approval policy "${policy}" did not stick (selected: "${applied}")`);
+  }
+};
+
+const setAlwaysApprovalPolicy = cdp => setApprovalPolicy(cdp, 'always');
+
+/**
+ * The composer must always send a concrete approval policy.
+ *
+ * When it does not, the backend logs `chat.stream.approval_policy degraded`
+ * and falls back to legacy flags. That is a silent safety downgrade with no
+ * user-visible symptom, so every other assertion in this gate passed while it
+ * was happening on every single tool turn. Fail the gate on it instead.
+ */
+const assertNoApprovalPolicyDegradation = () => {
+  const logPath = path.join(workDir, 'logs/combined.log');
+  if (!fs.existsSync(logPath)) {
+    throw new Error(
+      `app wrote no log at ${logPath} — set IKI_LOG_DIR (the gate cannot assert on behaviour it cannot see)`
+    );
+  }
+  const degraded = fs
+    .readFileSync(logPath, 'utf8')
+    .split('\n')
+    .filter(line => line.includes('"event":"chat.stream.approval_policy"'))
+    .filter(line => line.includes('"outcome":"degraded"'));
+  if (degraded.length > 0) {
+    throw new Error(
+      `composer sent no approval policy on ${degraded.length} tool turn(s); ` +
+        `the backend degraded to legacy defaults. First: ${degraded[0].slice(0, 300)}`
+    );
+  }
+  log('approval policy supplied on every tool turn');
+};
+
+
+/**
+ * The turn must run on the Pi supply, and silently falling back must not happen
+ * unnoticed.
+ *
+ * The gate's provider is an OpenAI-compatible gateway, so every turn of this
+ * scenario is Pi-eligible. `llm.supply.pi_turn_fallback` means the selector
+ * rejected the history and handed the turn to the AI SDK harness instead —
+ * which is a legitimate safety net for out-of-domain parts, but for THIS
+ * scenario (plain text and tool calls) it can only mean a projection
+ * regression. Fail the gate rather than let the AI SDK quietly become the
+ * executor again.
+ */
+const assertPiSupplyServed = () => {
+  const logPath = path.join(workDir, 'logs/combined.log');
+  if (!fs.existsSync(logPath)) {
+    throw new Error(`app wrote no log at ${logPath}; the gate cannot assert on supply routing`);
+  }
+  const lines = fs.readFileSync(logPath, 'utf8').split('\n');
+  const fallbacks = lines.filter(line => line.includes('llm.supply.pi_turn_fallback'));
+  if (fallbacks.length > 0) {
+    throw new Error(
+      `Pi declined ${fallbacks.length} turn(s) that should be in its projection domain; ` +
+        `the AI SDK harness served them instead. First: ${fallbacks[0].slice(0, 300)}`
+    );
+  }
+  log('every turn ran on the Pi supply (no silent AI SDK fallback)');
 };
 
 const assertAppDatabaseReady = () => {
@@ -252,8 +461,8 @@ const seedProviderAndWorkspace = () => {
   const db = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'));
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT OR REPLACE INTO providers (id, name, type, api_key, models, model_options, base_url, enabled, created_at, updated_at, available_models, api_version, is_response_api, acp_command, acp_args, acp_mcp_server_ids, acp_auth_method_id, acp_api_provider_id, acp_model_mapping)
-     VALUES (?, ?, 'openai-compatible', 'sk-e2e', ?, '{}', ?, 1, ?, ?, '[]', NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL)`
+    `INSERT OR REPLACE INTO providers (id, name, type, api_key, models, model_options, base_url, enabled, created_at, updated_at, available_models, api_version, is_response_api)
+     VALUES (?, ?, 'openai-compatible', 'sk-e2e', ?, '{}', ?, 1, ?, ?, '[]', NULL, 0)`
   ).run('provider-faux-e2e', 'Faux E2E', JSON.stringify(['faux-e2e-model']), `http://127.0.0.1:${FAUX_PORT}/v1`, now, now);
   db.prepare(
     `INSERT OR REPLACE INTO workspaces (id, path, name, is_temporary, show_in_list, created_at, updated_at)
@@ -318,9 +527,16 @@ const main = async () => {
   diagDb.close();
   await sleep(4000);
   await ensureModelSelected(cdp);
+  await shot(cdp, '01-boot2-welcome');
 
-  // Round 1 creates the thread; the tool fails (no workspace at turn time).
+  // Round 1 creates the thread. Its write_file is expected to FAIL because the
+  // thread has no workspace yet — but the turn must still finish so the next
+  // round can run. Under the default Ask-first policy the write is gated by an
+  // approval card instead of failing, and nothing answers it, so the turn
+  // hangs. Pin 'never' for this round: the intent is "run the tool and let it
+  // fail", not "wait for a human". Round 2 installs always-ask explicitly.
   step('round 1 (thread creation)');
+  await setApprovalPolicy(cdp, 'never');
   await typeAndSend(cdp, 'E2E_TASK round1');
   await waitForDom(cdp, t => t.includes('E2E_DONE E2E_TASK round1'), { label: 'round1 completion' });
   step('bind workspace + set always-ask policy');
@@ -333,6 +549,7 @@ const main = async () => {
   step('round 2 (approval-gated write, repeat approval)');
   await typeAndSend(cdp, 'E2E_TASK round2');
   await waitForDom(cdp, t => (t.includes('Approve') && t.includes('write_file')), { label: 'approval card' });
+  await shot(cdp, '02-round2-approval-card');
   const approved1 = await page(cdp, `(function(){
     const b = [...document.querySelectorAll('button')].find(x => (x.textContent||'').trim()==='Approve');
     if (!b) return 'NO_BTN'; b.click(); return 'OK';
@@ -383,23 +600,20 @@ const main = async () => {
   cdp = await launchApp('boot3');
   await sleep(4000);
   // The sidebar thread list hydrates asynchronously after boot; poll for it.
-  let opened = 'NO_THREAD';
-  for (let i = 0; i < 30 && opened !== 'OK'; i++) {
-    opened = await page(cdp, `(function(){
-      // Title generation may rewrite the title; pick the newest real thread.
-      const items = [...document.querySelectorAll('.chat-item')];
-      const target = items.find(i => {
-        const text = (i.textContent || '').trim();
-        return text && !/^new chat$/i.test(text) && !/^ack\.$/i.test(text);
-      }) || items.find(i => /^ack\.$/i.test((i.textContent || '').trim()));
-      if (!target) return 'NO_THREAD'; target.click(); return 'OK';
-    })()`);
-    if (opened !== 'OK') await sleep(1000);
-  }
-  if (opened !== 'OK') throw new Error('thread not found after restart');
+  await openNewestThread(cdp);
   await sleep(2000);
+  await shot(cdp, '03-boot3-recovered');
   const history = await bodyText(cdp);
-  if (!history.includes('write_file')) throw new Error('history does not render the tool card');
+  // A settled tool card renders its SUMMARY ("Wrote · 1 files"), not the raw
+  // tool name — the name only appears while the approval card is open. Asserting
+  // `write_file` here failed on a correct transcript; assert the pair the user
+  // actually sees instead (prose + the settled write summary).
+  if (!history.includes('Wrote')) throw new Error(
+    `history does not render the settled tool card (expected a "Wrote" summary): ${history.slice(0, 400)}`
+  );
+  if (!history.includes('E2E_DONE E2E_TASK round2')) {
+    throw new Error('history lost the round-2 completion marker');
+  }
 
   step('history check turn');
   await typeAndSend(cdp, 'CHECK_HISTORY');
@@ -427,19 +641,7 @@ const main = async () => {
   step('boot 4 (recovery)');
   cdp = await launchApp('boot4');
   await sleep(4000);
-  let reopened = 'NO_THREAD';
-  for (let i = 0; i < 30 && reopened !== 'OK'; i++) {
-    reopened = await page(cdp, `(function(){
-      const items = [...document.querySelectorAll('.chat-item')];
-      const target = items.find(i => {
-        const text = (i.textContent || '').trim();
-        return text && !/^new chat$/i.test(text) && !/^ack\.$/i.test(text);
-      }) || items.find(i => /^ack\.$/i.test((i.textContent || '').trim()));
-      if (!target) return 'NO_THREAD'; target.click(); return 'OK';
-    })()`);
-    if (reopened !== 'OK') await sleep(1000);
-  }
-  if (reopened !== 'OK') throw new Error('thread not found after recovery boot');
+  await openNewestThread(cdp);
   await sleep(2000);
 
   const recoveredBody = await bodyText(cdp);
@@ -451,11 +653,54 @@ const main = async () => {
     return b ? 'ZOMBIE' : 'OK';
   })()`);
   if (zombie !== 'OK') throw new Error('approval card still answerable after restart');
-  const leftoverPending = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'))
-    .prepare("SELECT approval_id FROM tool_call_approvals WHERE state = 'pending'")
+  // A pause is memory-only, so a restart must leave no approval the app can
+  // still answer. The zombie-button probe above proves that from the UI side;
+  // this proves the tables a pause used to need are gone from the schema.
+  const leftoverTables = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'))
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'tool_call_approval%'")
     .all();
-  if (leftoverPending.length !== 0) {
-    throw new Error(`pending approvals survived restart: ${JSON.stringify(leftoverPending)}`);
+  if (leftoverTables.length !== 0) {
+    throw new Error(`approval tables still present after migration: ${JSON.stringify(leftoverTables)}`);
+  }
+
+  // F4 (ADR 008 flip): the restart recovery must record its facts in the
+  // session log — the expired approvals as system-sourced approval_decided
+  // events, and a terminal fact for each reclaimed run.
+  {
+    const eventDb = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'));
+    try {
+      const decidedRows = eventDb
+        .prepare("SELECT payload FROM session_events WHERE type = 'approval_decided'")
+        .all();
+      const systemDecided = decidedRows.filter(row => {
+        try {
+          return JSON.parse(row.payload).source === 'system';
+        } catch {
+          return false;
+        }
+      });
+      if (systemDecided.length === 0) {
+        throw new Error(
+          'restart recovery recorded no system-sourced approval decisions in the session log'
+        );
+      }
+      // Scoped to the RECLAIMED runs: the recovery terminal carries the
+      // reclamation message — 'Run interrupted by process restart' for
+      // running runs, 'Run blocked at restart — approval session lost' for
+      // blocked ones (round 3 crashes while approval-pending, so blocked).
+      const reclaimedTerminals = eventDb
+        .prepare(
+          "SELECT payload FROM session_events WHERE type = 'turn_failed' AND (json_extract(payload, '$.errorText') LIKE '%process restart%' OR json_extract(payload, '$.errorText') LIKE '%approval session lost%')"
+        )
+        .all();
+      if (reclaimedTerminals.length === 0) {
+        throw new Error(
+          'restart recovery recorded no terminal fact for the reclaimed runs in the session log'
+        );
+      }
+    } finally {
+      eventDb.close();
+    }
   }
 
   step('post-recovery continuation turn');
@@ -468,8 +713,15 @@ const main = async () => {
     throw new Error(`post-recovery mismatch: tool_msgs=${toolMsgs2} assistant_tool_calls=${toolCalls2} (pre-recovery ${toolMsgs})`);
   }
   cdp.close();
+
+  step('assert no approval-policy degradation in the app log');
+  assertNoApprovalPolicyDegradation();
+
+  step('assert the turn ran on the Pi supply');
+  assertPiSupplyServed();
+
   clearTimeout(watchdog);
-  log(`PASS — approval loop + crash-restart recovery verified (tool pairs: ${toolMsgs2})`);
+  log(`PASS — approval loop, restart failure semantics, and crash recovery verified (tool pairs: ${toolMsgs2})`);
 };
 
 try {

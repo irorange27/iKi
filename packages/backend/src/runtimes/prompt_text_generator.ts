@@ -1,80 +1,47 @@
-import { generateText } from 'ai';
-
-import { langfuseTelemetry } from '@iki/backend/observability/langfuse';
-import {
-  appendUserPromptToHistory,
-  buildPromptContext,
-} from '../provider/ai_sdk_runtime';
-import {
-  loadAgentConfig,
-  validateAgentConfig,
-} from '../agent/ai_sdk_config';
-import type { AgentConfig, AgentResult, PartialAgentConfig } from '@iki/backend/agent/types';
-import {
-  createModel,
-  disposeLanguageModel,
-  getModelGenerationSettings,
-} from '../provider/llm/factory';
-
-export type PromptTextGeneratorResult = Pick<AgentResult, 'response'>;
-
-export interface PromptTextGenerator {
-  generate(prompt: string, abortSignal?: AbortSignal): Promise<PromptTextGeneratorResult>;
-}
+import { appendUserPromptToHistory } from '@iki/backend/message/model_history';
+import { buildPromptContext } from '@iki/backend/message/prompt_context';
+import { loadAgentConfig, validateAgentConfig } from '../agent/config';
+import type { PartialAgentConfig } from '@iki/backend/agent/types';
+import { generateChatWithModelMessages, getModelGenerationSettings } from '../provider/llm/factory';
 
 export type PromptTextGeneratorConfig = PartialAgentConfig & {
-  /** Optional thread id — forwarded to Langfuse as sessionId. */
   threadId?: string;
 };
 
-export type PromptTextGeneratorFactory = (
-  config?: PromptTextGeneratorConfig
-) => PromptTextGenerator;
+export const generatePromptText = async (
+  config: PromptTextGeneratorConfig | undefined,
+  prompt: string,
+  abortSignal?: AbortSignal
+): Promise<string> => {
+  const resolved = loadAgentConfig(config);
+  validateAgentConfig(resolved);
 
-export class SimplePromptTextGenerator implements PromptTextGenerator {
-  private readonly config: AgentConfig;
-  private readonly threadId?: string;
+  const history = appendUserPromptToHistory([], prompt);
+  const { systemPrompt, messages } = buildPromptContext(resolved, history);
 
-  constructor(config?: PromptTextGeneratorConfig) {
-    this.config = loadAgentConfig(config);
-    this.threadId = config?.threadId;
-  }
+  const generationSettings = getModelGenerationSettings({
+    providerType: resolved.providerType,
+    modelId: resolved.model,
+    providerId: resolved.providerId,
+    temperature: resolved.temperature,
+  });
 
-  async generate(prompt: string, abortSignal?: AbortSignal): Promise<PromptTextGeneratorResult> {
-    validateAgentConfig(this.config);
+  const result = await generateChatWithModelMessages({
+    providerType: resolved.providerType,
+    providerId: resolved.providerId,
+    modelId: resolved.model,
+    messages,
+    auxSystemInstruction: systemPrompt,
+    ...(typeof generationSettings.temperature === 'number'
+      ? { temperature: generationSettings.temperature }
+      : {}),
+    ...(generationSettings.providerOptions
+      ? { providerOptions: generationSettings.providerOptions }
+      : {}),
+    ...(typeof resolved.maxTokens === 'number' ? { maxOutputTokens: resolved.maxTokens } : {}),
+    ...(config?.threadId ? { threadId: config.threadId } : {}),
+    ...(abortSignal ? { abortSignal } : {}),
+  });
 
-    const history = appendUserPromptToHistory([], prompt);
-    const { systemPrompt, messages } = buildPromptContext(this.config, history);
-    const model = createModel(this.config.providerType, this.config.model, this.config.providerId);
-    try {
-      const telemetry = langfuseTelemetry('prompt.generate', {
-        sessionId: this.threadId,
-        provider: this.config.providerType,
-        providerId: this.config.providerId,
-        model: this.config.model,
-      });
-      const result = await generateText({
-        model,
-        abortSignal,
-        system: systemPrompt,
-        messages,
-        ...getModelGenerationSettings({
-          providerType: this.config.providerType,
-          modelId: this.config.model,
-          providerId: this.config.providerId,
-          temperature: this.config.temperature,
-        }),
-        maxOutputTokens: this.config.maxTokens,
-        ...(telemetry ? { experimental_telemetry: telemetry } : {}),
-      });
-
-      return { response: result.text };
-    } finally {
-      disposeLanguageModel(model);
-    }
-  }
-}
-
-export const createSimplePromptTextGenerator: PromptTextGeneratorFactory = (
-  config?: PromptTextGeneratorConfig
-) => new SimplePromptTextGenerator(config);
+  return result.text;
+};

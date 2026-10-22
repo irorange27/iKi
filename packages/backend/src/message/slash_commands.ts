@@ -31,7 +31,7 @@ export type ParsedSlashCommandDraft = {
 
 const INPUT_PLACEHOLDER_PATTERN = /\{\{\s*input\s*\}\}/gi;
 
-export const normalizeSlashCommandShortcut = (value: unknown): string | null => {
+const normalizeSlashCommandShortcut = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (!trimmed) return null;

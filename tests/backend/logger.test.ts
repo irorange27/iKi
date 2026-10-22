@@ -1,10 +1,37 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const tempDirs: string[] = [];
+
+const createTempLogDir = (): string => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'iki-logger-'));
+  tempDirs.push(dir);
+  return dir;
+};
+
+const flushSink = () => new Promise(resolve => setTimeout(resolve, 300));
+
+const readCombined = async (dir: string): Promise<string> => {
+  await flushSink();
+  const file = path.join(dir, 'combined.log');
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+};
 
 describe('core logger', () => {
   beforeEach(() => {
     vi.resetModules();
     delete process.env.LOG_LEVEL;
     delete process.env.IKI_LOG_PROCESS;
+    delete process.env.IKI_LOG_DIR;
+  });
+
+  afterEach(() => {
+    delete process.env.IKI_LOG_DIR;
+    for (const dir of tempDirs.splice(0)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('builds canonical structured entries and merges async log context', async () => {
@@ -81,8 +108,7 @@ describe('core logger', () => {
   });
 
   it('applies runtime logging config from app config', async () => {
-    const { applyAppLoggingConfig, getRuntimeLoggingConfig } =
-      await import('@iki/backend/logger');
+    const { applyAppLoggingConfig, getRuntimeLoggingConfig } = await import('@iki/backend/logger');
 
     applyAppLoggingConfig({
       security: {
@@ -91,9 +117,43 @@ describe('core logger', () => {
       },
     } as never);
 
-    expect(getRuntimeLoggingConfig()).toEqual({
+    expect(getRuntimeLoggingConfig()).toMatchObject({
       enabled: false,
       level: 'warn',
     });
+  });
+
+  it('stops mirroring to the terminal without dropping file sinks', async () => {
+    const logDir = createTempLogDir();
+    process.env.IKI_LOG_DIR = logDir;
+
+    const { createLogger, setConsoleLoggingEnabled, setLoggingEnabled } =
+      await import('@iki/backend/logger');
+
+    setLoggingEnabled(true);
+    const writeLine = (message: string) =>
+      createLogger({ module: 'window' }).event({ level: 'info', event: 'app.start', message });
+
+    writeLine('mirrored line');
+    setConsoleLoggingEnabled(false);
+    writeLine('file only line');
+
+    const written = await readCombined(logDir);
+    expect(written).toContain('mirrored line');
+    expect(written).toContain('file only line');
+  });
+
+  it('keeps the terminal mirror when it was never switched off', async () => {
+    const logDir = createTempLogDir();
+    process.env.IKI_LOG_DIR = logDir;
+
+    const { createLogger, getRuntimeLoggingConfig, setLoggingEnabled } =
+      await import('@iki/backend/logger');
+
+    setLoggingEnabled(true);
+    createLogger({ module: 'window' }).event({ level: 'info', event: 'app.start' });
+
+    expect(getRuntimeLoggingConfig().console).toBe(true);
+    expect(await readCombined(logDir)).toContain('app.start');
   });
 });

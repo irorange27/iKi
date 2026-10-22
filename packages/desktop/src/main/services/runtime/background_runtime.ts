@@ -1,7 +1,6 @@
 import { cleanupOldAgentRuns } from '@iki/backend/db/agent_runs';
-import { recoverStuckRunsOnStartup } from '@iki/backend/thread_session/run_tracker';
+import { recoverStuckRunsOnStartup } from '@iki/backend/thread_session/run_recovery';
 import { createLogger } from '@iki/backend/logger';
-import { startProactiveTaskScheduler, stopProactiveTaskScheduler } from '../tasks/proactive_tasks';
 import { startAwaiterScheduler, stopAwaiterScheduler } from '../awaiters/awaiters';
 
 const runtimeLogger = createLogger({ module: 'background_runtime' });
@@ -46,12 +45,11 @@ export const startBackgroundRuntime = () => {
         level: 'warn',
         event: 'runtime.startup.recovery',
         outcome: 'succeeded',
-        message: `Recovered ${recovery.totalRuns} stuck runs from previous session (${recovery.failedRuns} running, ${recovery.blockedRuns} blocked — all marked failed; ${recovery.expiredApprovals} approvals expired, ${recovery.interruptedToolParts} tool parts marked interrupted)`,
+        message: `Recovered ${recovery.totalRuns} stuck runs from previous session (${recovery.failedRuns} running, ${recovery.blockedRuns} waiting on an approval that died with the process — all marked failed; ${recovery.interruptedToolParts} tool parts marked interrupted)`,
         data: {
           failedRuns: recovery.failedRuns,
           blockedRuns: recovery.blockedRuns,
           totalRuns: recovery.totalRuns,
-          expiredApprovals: recovery.expiredApprovals,
           interruptedToolParts: recovery.interruptedToolParts,
         },
       });
@@ -66,7 +64,6 @@ export const startBackgroundRuntime = () => {
     });
   }
 
-  startProactiveTaskScheduler();
   startAwaiterScheduler();
 
   runTtlCleanup();
@@ -76,7 +73,6 @@ export const startBackgroundRuntime = () => {
 export const stopBackgroundRuntime = () => {
   if (!started) return;
   started = false;
-  stopProactiveTaskScheduler();
   stopAwaiterScheduler();
   if (cleanupInterval !== undefined) {
     clearInterval(cleanupInterval);

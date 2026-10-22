@@ -20,19 +20,15 @@ vi.mock('electron', () => {
 });
 
 vi.mock('@iki/backend/db/awaiters', () => ({
-  addAwaiterWakeEvent: vi.fn(),
   getAwaiter: vi.fn(),
   listDueAwaiters: vi.fn(),
   updateAwaiter: vi.fn(),
   updateAwaiterIfStatus: vi.fn(() => ({ changes: 1 })),
+  reclaimStaleWakingAwaiters: vi.fn(() => 0),
 }));
 
 vi.mock('@iki/backend/db/chat_thread', () => ({
   touchChatThread: vi.fn(),
-}));
-
-vi.mock('@iki/backend/bridge_dispatch', () => ({
-  deliverBridgeThreadMessage: vi.fn(),
 }));
 
 vi.mock('@iki/backend/db/agent_runs', () => ({
@@ -44,7 +40,7 @@ vi.mock('../../../../packages/desktop/src/main/services/chat/service', () => ({
   chatService: {
     getThread: vi.fn(),
     createMessage: vi.fn(),
-    send: vi.fn(),
+    stream: vi.fn(),
   },
 }));
 
@@ -58,7 +54,6 @@ import {
 } from '../../../../packages/desktop/src/main/services/awaiters/awaiters';
 import * as awaitersDb from '@iki/backend/db/awaiters';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import { deliverBridgeThreadMessage } from '@iki/backend/bridge_dispatch';
 import { chatService } from '../../../../packages/desktop/src/main/services/chat/service';
 
 const baseAwaiter = (overrides: Partial<Awaiter> = {}): Awaiter => ({
@@ -101,22 +96,18 @@ describe('runAwaiterWake', () => {
   const listDueAwaitersMock = vi.mocked(awaitersDb.listDueAwaiters);
   const updateAwaiterMock = vi.mocked(awaitersDb.updateAwaiter);
   const updateAwaiterIfStatusMock = vi.mocked(awaitersDb.updateAwaiterIfStatus);
-  const addAwaiterWakeEventMock = vi.mocked(awaitersDb.addAwaiterWakeEvent);
+  const reclaimStaleWakingAwaitersMock = vi.mocked(awaitersDb.reclaimStaleWakingAwaiters);
   const touchChatThreadMock = vi.mocked(chatThreadDb.touchChatThread);
-  const deliverBridgeThreadMessageMock = vi.mocked(deliverBridgeThreadMessage);
   const chatServiceMock = chatService as unknown as {
     getThread: ReturnType<typeof vi.fn>;
     createMessage: ReturnType<typeof vi.fn>;
-    send: ReturnType<typeof vi.fn>;
+    stream: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     updateAwaiterIfStatusMock.mockReturnValue({ changes: 1 } as { changes: number });
-    deliverBridgeThreadMessageMock.mockResolvedValue({
-      handled: false,
-      delivered: false,
-    });
+    reclaimStaleWakingAwaitersMock.mockReturnValue(0);
   });
 
   afterEach(() => {
@@ -135,7 +126,7 @@ describe('runAwaiterWake', () => {
       .mockReturnValueOnce(baseAwaiter({ status: 'waking' }))
       .mockReturnValue(baseAwaiter({ status: 'completed', next_wake_at: null }));
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
-    chatServiceMock.send.mockResolvedValue({
+    chatServiceMock.stream.mockResolvedValue({
       success: true,
       text: 'Wake complete.',
       runId: 'run_wake_1',
@@ -144,9 +135,11 @@ describe('runAwaiterWake', () => {
     const result = await runAwaiterWake('awaiter_1');
 
     expect(result).toEqual({ success: true, runId: 'run_wake_1' });
-    expect(updateAwaiterMock.mock.calls[0]?.[1]).toEqual({
+    expect(updateAwaiterIfStatusMock.mock.calls[0]?.[1]).toBe('armed');
+    expect(updateAwaiterIfStatusMock.mock.calls[0]?.[2]).toEqual({
       status: 'waking',
       last_error: null,
+      next_wake_at: null,
     });
     expect(updateAwaiterIfStatusMock).toHaveBeenCalledWith('awaiter_1', 'waking', {
       status: 'completed',
@@ -162,7 +155,8 @@ describe('runAwaiterWake', () => {
       })
     );
 
-    expect(chatServiceMock.send).toHaveBeenCalledWith(
+    expect(chatServiceMock.stream).toHaveBeenCalledWith(
+      expect.objectContaining({ id: -1 }),
       expect.objectContaining({
         providerId: 'provider_primary',
         threadId: 'thread_1',
@@ -178,18 +172,6 @@ describe('runAwaiterWake', () => {
         },
       })
     );
-    expect(deliverBridgeThreadMessageMock).toHaveBeenCalledWith({
-      threadId: 'thread_1',
-      text: expect.stringContaining('Wake complete.'),
-    });
-    expect(addAwaiterWakeEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        awaiter_id: 'awaiter_1',
-        run_id: 'run_wake_1',
-        outcome: 'success',
-      })
-    );
-
     const messageMetaRaw = chatServiceMock.createMessage.mock.calls.at(-1)?.[0]?.metadata;
     const messageMeta = messageMetaRaw ? JSON.parse(messageMetaRaw) : null;
     expect(messageMeta).toMatchObject({
@@ -223,7 +205,7 @@ describe('runAwaiterWake', () => {
       .mockReturnValueOnce(baseAwaiter({ status: 'waking' }))
       .mockReturnValue(baseAwaiter({ status: 'failed', next_wake_at: null, last_error: 'Boom' }));
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
-    chatServiceMock.send.mockResolvedValue({
+    chatServiceMock.stream.mockResolvedValue({
       success: false,
       error: 'Boom',
       runId: 'run_failed_1',
@@ -241,14 +223,6 @@ describe('runAwaiterWake', () => {
         status: 'failed',
         last_error: 'Boom',
         next_wake_at: null,
-      })
-    );
-    expect(addAwaiterWakeEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        awaiter_id: 'awaiter_1',
-        run_id: 'run_failed_1',
-        outcome: 'error',
-        error: 'Boom',
       })
     );
 
@@ -290,14 +264,7 @@ describe('runAwaiterWake', () => {
         next_wake_at: null,
       })
     );
-    expect(addAwaiterWakeEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        awaiter_id: 'awaiter_1',
-        outcome: 'error',
-        error: 'Target thread is unavailable',
-      })
-    );
-    expect(chatServiceMock.send).not.toHaveBeenCalled();
+    expect(chatServiceMock.stream).not.toHaveBeenCalled();
   });
 
   it('rejects overlapping wakes while the same awaiter is already in flight', async () => {
@@ -305,7 +272,7 @@ describe('runAwaiterWake', () => {
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
 
     const deferred = createDeferred<{ success: true; text: string; runId: string }>();
-    chatServiceMock.send.mockReturnValue(deferred.promise);
+    chatServiceMock.stream.mockReturnValue(deferred.promise);
 
     const firstRun = runAwaiterWake('awaiter_1');
     const secondRun = await runAwaiterWake('awaiter_1');
@@ -319,7 +286,7 @@ describe('runAwaiterWake', () => {
   it('retries a persisted waking awaiter so restart does not strand it forever', async () => {
     getAwaiterMock.mockReturnValue(baseAwaiter({ status: 'waking' }));
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
-    chatServiceMock.send.mockResolvedValue({
+    chatServiceMock.stream.mockResolvedValue({
       success: true,
       text: 'Recovered wake complete.',
       runId: 'run_wake_recovered',
@@ -328,7 +295,7 @@ describe('runAwaiterWake', () => {
     const result = await runAwaiterWake('awaiter_1');
 
     expect(result).toEqual({ success: true, runId: 'run_wake_recovered' });
-    expect(chatServiceMock.send).toHaveBeenCalledTimes(1);
+    expect(chatServiceMock.stream).toHaveBeenCalledTimes(1);
   });
 
   it('does not clobber a mid-flight reschedule when the awaiter was re-armed', async () => {
@@ -354,34 +321,24 @@ describe('runAwaiterWake', () => {
         })
       );
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
-    chatServiceMock.send.mockResolvedValue({
+    chatServiceMock.stream.mockResolvedValue({
       success: true,
       text: 'Wake complete.',
       runId: 'run_wake_rearmed',
     });
-    updateAwaiterIfStatusMock.mockReturnValue({ changes: 0 } as { changes: number });
+    updateAwaiterIfStatusMock
+      .mockReturnValueOnce({ changes: 1 } as { changes: number })
+      .mockReturnValue({ changes: 0 } as { changes: number });
 
     const result = await runAwaiterWake('awaiter_1');
 
     expect(result).toEqual({ success: true, runId: 'run_wake_rearmed' });
-    expect(updateAwaiterMock).toHaveBeenCalledTimes(1);
-    expect(updateAwaiterMock).toHaveBeenCalledWith('awaiter_1', {
-      status: 'waking',
-      last_error: null,
-    });
     expect(updateAwaiterIfStatusMock).toHaveBeenCalledWith('awaiter_1', 'waking', {
       status: 'completed',
       last_wake_at: expect.any(String),
       last_error: null,
       next_wake_at: null,
     });
-    expect(addAwaiterWakeEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        awaiter_id: 'awaiter_1',
-        outcome: 'success',
-        run_id: 'run_wake_rearmed',
-      })
-    );
     expect(chatServiceMock.createMessage).toHaveBeenCalled();
     expect(sendMock).toHaveBeenCalledWith(
       'awaiters:push',
@@ -402,7 +359,7 @@ describe('runAwaiterWake', () => {
       .mockReturnValueOnce(baseAwaiter())
       .mockReturnValueOnce(null);
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
-    chatServiceMock.send.mockResolvedValue({
+    chatServiceMock.stream.mockResolvedValue({
       success: true,
       text: 'Wake complete.',
       runId: 'run_wake_deleted',
@@ -415,7 +372,6 @@ describe('runAwaiterWake', () => {
       error: 'Awaiter no longer exists',
       runId: 'run_wake_deleted',
     });
-    expect(addAwaiterWakeEventMock).not.toHaveBeenCalled();
     expect(chatServiceMock.createMessage).not.toHaveBeenCalled();
     expect(sendMock).not.toHaveBeenCalled();
   });
@@ -426,7 +382,7 @@ describe('runAwaiterWake', () => {
     listDueAwaitersMock.mockReturnValueOnce([baseAwaiter()]).mockReturnValue([]);
     getAwaiterMock.mockReturnValue(baseAwaiter());
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
-    chatServiceMock.send.mockResolvedValue({
+    chatServiceMock.stream.mockResolvedValue({
       success: true,
       text: 'Wake complete.',
       runId: 'run_wake_sched_1',
@@ -436,11 +392,11 @@ describe('runAwaiterWake', () => {
     await vi.runAllTicks();
     await Promise.resolve();
 
-    expect(chatServiceMock.send).toHaveBeenCalledTimes(1);
+    expect(chatServiceMock.stream).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(30_000);
 
     expect(listDueAwaitersMock).toHaveBeenCalledTimes(2);
-    expect(chatServiceMock.send).toHaveBeenCalledTimes(1);
+    expect(chatServiceMock.stream).toHaveBeenCalledTimes(1);
   });
 });

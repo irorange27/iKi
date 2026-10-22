@@ -1,9 +1,13 @@
 .sidebar-shell {
+  /* Separation is drawn, not shaded: the shell edge and the boxes inside it
+     all key off one hairline derived from the live border token, so injected
+     themes re-resolve it. Never pair a full-strength border with these. */
+  --sidebar-hairline: color-mix(in srgb, var(--sidebar-border) 55%, transparent);
   min-width: 210px;
   margin-bottom: var(--chat-composer-padding, 10px);
   overflow: hidden;
   background-color: var(--sidebar-background);
-  border-color: var(--sidebar-border);
+  border-color: var(--sidebar-hairline);
 }
 
 .sidebar-shell-collapsed {
@@ -77,19 +81,19 @@
   flex: 1;
   align-items: center;
   gap: 4px;
-  border: 1px solid var(--sidebar-border);
-  border-radius: 9px;
+  border: none;
+  border-radius: var(--control-radius);
   background: var(--bg-tertiary);
   padding: 2px;
-  height: 30px;
+  height: 28px;
 }
 
 .sidebar-new-task-btn {
   flex-shrink: 0;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--sidebar-border);
-  border-radius: 9px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--control-radius);
   background: var(--bg-tertiary);
   display: flex;
   align-items: center;
@@ -112,13 +116,13 @@
   justify-content: center;
   gap: 5px;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--control-radius-sm);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   padding: 3px 6px;
   font-size: 11px;
-  font-weight: 550;
+  font-weight: 500;
   transition:
     background-color 0.15s,
     color 0.15s;
@@ -130,6 +134,7 @@
 
 .sidebar-group-tab--active {
   background: var(--sidebar-active);
+  box-shadow: inset 0 0 0 1px var(--sidebar-hairline);
   color: var(--sidebar-accent-foreground);
 }
 
@@ -145,12 +150,13 @@
   align-items: center;
   gap: 10px;
   width: 100%;
+  height: 30px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 6px 8px;
+  padding: 0 8px;
   font-size: 13px;
   text-align: left;
   transition:
@@ -252,8 +258,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--sidebar-border);
-  border-radius: 8px;
+  border: 1px solid var(--sidebar-hairline);
+  border-radius: var(--control-radius);
   background: var(--bg-tertiary);
   padding: 4px 8px;
   transition: border-color 0.2s;
@@ -340,7 +346,9 @@
 }
 
 .chat-item {
-  color: var(--text-secondary);
+  /* Row titles read at primary ink; hierarchy comes from the wash on
+     hover/selected and the muted time cell, not from dimming the title. */
+  color: var(--text-primary);
   transition:
     background-color 0.2s,
     color 0.2s;
@@ -360,19 +368,21 @@
   color: var(--sidebar-accent-foreground);
 }
 
-.chat-item:focus {
-  background-color: var(--sidebar-active);
-  color: var(--sidebar-accent-foreground);
+/* Keyboard focus keeps a visible ring inside the row; pointer focus stays
+   quiet (the wash belongs to hover/selection, not to focus). */
+.chat-item:focus-visible {
+  outline: 2px solid var(--sidebar-ring);
+  outline-offset: -2px;
 }
 
 .chat-item-active {
   background-color: var(--sidebar-active);
   color: var(--sidebar-accent-foreground);
-  font-weight: 500;
 }
 
 .chat-item-title {
   display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -402,7 +412,7 @@
 
 .chat-item-badge {
   border-radius: 999px;
-  border: 1px solid var(--sidebar-border);
+  border: 1px solid var(--sidebar-hairline);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   padding: 2px 8px;
@@ -423,7 +433,7 @@
 .sidebar-section-divider {
   height: 1px;
   margin-bottom: 12px;
-  background: var(--sidebar-border);
+  background: var(--sidebar-hairline);
 }
 
 .sidebar-section-header {
@@ -521,13 +531,11 @@
 }
 
 .chat-export-btn:hover {
-  color: var(--sidebar-accent-foreground);
-  background-color: var(--sidebar-accent);
+  color: var(--text-primary);
 }
 
 .chat-delete-btn:hover:not(:disabled) {
   color: var(--status-danger-color);
-  background-color: var(--sidebar-accent);
 }
 
 .chat-delete-btn:disabled {
@@ -557,6 +565,7 @@
   min-width: 220px;
   flex-direction: column;
   gap: 4px;
+  border: 1px solid var(--sidebar-hairline);
   border-radius: 14px;
   background: color-mix(in srgb, var(--sidebar-background) 92%, transparent);
   padding: 8px;
@@ -586,12 +595,6 @@
 .sidebar-menu-item:hover {
   background: var(--sidebar-accent);
   color: var(--sidebar-accent-foreground);
-}
-
-.sidebar-menu-item-settings:hover {
-  background: color-mix(in srgb, var(--sidebar-primary) 10%, var(--sidebar-accent));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sidebar-primary) 18%, transparent);
-  color: color-mix(in srgb, var(--sidebar-accent-foreground) 82%, var(--sidebar-primary));
 }
 
 .sidebar-menu-divider {
@@ -625,8 +628,11 @@
   opacity: 1;
 }
 
+/* Quiet scrollbar: the thumb only exists while the pointer is over the list;
+   overflow-y-scroll keeps the gutter reserved, so revealing it never reflows
+   a row. */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -635,8 +641,12 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 3px;
+}
+
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
   background-color: var(--sidebar-border);
-  border-radius: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {

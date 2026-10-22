@@ -3,16 +3,13 @@ import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/backend/logger';
 import { parseModelList } from '@iki/backend/utils/provider_models';
 import type {
-  CompanionAffectHint,
   CompanionDormantReason,
-  CompanionNudgeKind,
   CompanionPhase,
   CompanionSnapshot,
   ConversationPreview,
 } from '@iki/backend/types/companion';
 import type { AppConfig } from '@iki/backend/types/config';
 import type { Provider } from '@iki/backend/types/provider';
-import type { InterventionPolicySignal } from '@iki/backend/message/intervention_policy';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 
 type CompanionWindowTarget = {
@@ -30,13 +27,7 @@ type CompanionServiceDeps = {
   clearTimeoutFn?: typeof clearTimeout;
 };
 
-type TimedPolicyState = {
-  policy: InterventionPolicySignal;
-  expiresAt: number;
-};
-
 type TimedNudgeState = {
-  kind: CompanionNudgeKind;
   taskName: string;
   expiresAt: number;
 };
@@ -44,8 +35,6 @@ type TimedNudgeState = {
 const companionLogger = createLogger({ module: 'companion_service' });
 
 const COMPANION_UPDATED_CHANNEL = 'companion:updated';
-const EXECUTE_POLICY_TTL_MS = 25_000;
-const REFLECTIVE_POLICY_TTL_MS = 90_000;
 const NUDGE_TTL_MS = 12_000;
 
 const COMPANION_COPY = {
@@ -67,32 +56,7 @@ const COMPANION_COPY = {
       headline: 'Reading',
       detail: 'Gathering context.',
     },
-    clarify: {
-      label: 'Clarify',
-      headline: 'Need one detail',
-      detail: 'One missing point before moving.',
-    },
-    coPlan: {
-      label: 'Co-plan',
-      headline: 'Make it smaller',
-      detail: 'Ease into the next step together.',
-    },
-    stabilize: {
-      label: 'Steady',
-      headline: 'Lower the pressure',
-      detail: 'Stabilize before pushing ahead.',
-    },
-    execute: {
-      label: 'Execute',
-      headline: 'Moving',
-      detail: 'Concrete enough to act.',
-    },
     nudge: {
-      successLabel: 'Done',
-      successHeadline: 'Finished',
-      errorLabel: 'Nudge',
-      errorHeadline: 'Needs a look',
-      taskFallback: 'Scheduled task',
       replyLabel: 'Reply ready',
       replyDetail: 'The reply is complete.',
     },
@@ -115,32 +79,7 @@ const COMPANION_COPY = {
       headline: '先读一下',
       detail: '正在汇聚上下文。',
     },
-    clarify: {
-      label: '先澄清',
-      headline: '还差一点',
-      detail: '先补一个关键细节。',
-    },
-    coPlan: {
-      label: '共拟计划',
-      headline: '先缩一步',
-      detail: '把下一步降到更好开始的尺寸。',
-    },
-    stabilize: {
-      label: '先稳定',
-      headline: '先降刺激，再处理任务',
-      detail: '先稳住，再往前推。',
-    },
-    execute: {
-      label: '执行',
-      headline: '开始推进',
-      detail: '现在已经足够具体。',
-    },
     nudge: {
-      successLabel: '完成',
-      successHeadline: '做完了',
-      errorLabel: '提醒',
-      errorHeadline: '需要看一眼',
-      taskFallback: '定时任务',
       replyLabel: '回复完成',
       replyDetail: 'AI 已完成回复。',
     },
@@ -155,8 +94,6 @@ const createSnapshot = (
     detail: string;
     updatedAt: string;
     dormantReason?: CompanionDormantReason;
-    nudgeKind?: CompanionNudgeKind;
-    affect?: CompanionAffectHint;
   }
 ): CompanionSnapshot => ({
   phase,
@@ -165,8 +102,6 @@ const createSnapshot = (
   detail: params.detail,
   updatedAt: params.updatedAt,
   ...(params.dormantReason ? { dormantReason: params.dormantReason } : {}),
-  ...(params.nudgeKind ? { nudgeKind: params.nudgeKind } : {}),
-  ...(params.affect ? { affect: params.affect } : {}),
 });
 
 const isEnabledProvider = (provider: Provider): boolean => provider.enabled === true;
@@ -199,33 +134,18 @@ const buildNudgeSnapshot = (
   updatedAt: string,
   params: {
     copy: (typeof COMPANION_COPY)[keyof typeof COMPANION_COPY];
-    kind: CompanionNudgeKind;
     taskName: string;
   }
 ): CompanionSnapshot => {
-  if (params.kind === 'reply-complete') {
-    const clipped = clipTaskName(params.taskName, '');
-    const detail = clipped
-      ? `${params.copy.nudge.replyDetail} — ${clipped}`
-      : params.copy.nudge.replyDetail;
-    return createSnapshot('nudge', {
-      label: params.copy.nudge.replyLabel,
-      headline: params.copy.nudge.replyLabel,
-      detail,
-      updatedAt,
-      nudgeKind: 'reply-complete',
-    });
-  }
+  const clipped = clipTaskName(params.taskName, '');
+  const detail = clipped
+    ? `${params.copy.nudge.replyDetail} — ${clipped}`
+    : params.copy.nudge.replyDetail;
   return createSnapshot('nudge', {
-    label:
-      params.kind === 'task-error' ? params.copy.nudge.errorLabel : params.copy.nudge.successLabel,
-    headline:
-      params.kind === 'task-error'
-        ? params.copy.nudge.errorHeadline
-        : params.copy.nudge.successHeadline,
-    detail: clipTaskName(params.taskName, params.copy.nudge.taskFallback),
+    label: params.copy.nudge.replyLabel,
+    headline: params.copy.nudge.replyLabel,
+    detail,
     updatedAt,
-    nudgeKind: params.kind,
   });
 };
 
@@ -237,14 +157,10 @@ const snapshotsEqual = (left: CompanionSnapshot, right: CompanionSnapshot): bool
   left.headline === right.headline &&
   left.detail === right.detail &&
   left.dormantReason === right.dormantReason &&
-  left.nudgeKind === right.nudgeKind &&
   left.preview?.kind === right.preview?.kind &&
   left.preview?.text === right.preview?.text &&
   left.preview?.toolName === right.preview?.toolName &&
-  left.preview?.threadId === right.preview?.threadId &&
-  left.affect?.label === right.affect?.label &&
-  left.affect?.valence === right.affect?.valence &&
-  left.affect?.arousal === right.affect?.arousal;
+  left.preview?.threadId === right.preview?.threadId;
 
 export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
   const getConfig = deps.getConfig ?? getAppConfig;
@@ -264,9 +180,7 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
       }
     }
   };
-  let timedPolicyState: TimedPolicyState | null = null;
   let timedNudgeState: TimedNudgeState | null = null;
-  let policyTimer: ReturnType<typeof setTimeout> | null = null;
   let nudgeTimer: ReturnType<typeof setTimeout> | null = null;
   let currentSnapshot = createSnapshot('idle', {
     label: COMPANION_COPY.en.idle.label,
@@ -275,31 +189,12 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
     updatedAt: now().toISOString(),
   });
   let currentPreview: ConversationPreview | null = null;
-  let currentAffect: CompanionAffectHint | null = null;
 
   const clearExpiredState = () => {
     const nowMs = now().getTime();
-    if (timedPolicyState && isExpired(timedPolicyState.expiresAt, nowMs)) {
-      timedPolicyState = null;
-    }
     if (timedNudgeState && isExpired(timedNudgeState.expiresAt, nowMs)) {
       timedNudgeState = null;
     }
-  };
-
-  const schedulePolicyExpiry = () => {
-    if (policyTimer) {
-      clearTimeoutFn(policyTimer);
-      policyTimer = null;
-    }
-    if (!timedPolicyState) return;
-
-    const delay = Math.max(0, timedPolicyState.expiresAt - now().getTime());
-    policyTimer = setTimeoutFn(() => {
-      timedPolicyState = null;
-      policyTimer = null;
-      publish();
-    }, delay);
   };
 
   const scheduleNudgeExpiry = () => {
@@ -360,46 +255,11 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
       });
     }
 
-    if (timedPolicyState) {
-      switch (timedPolicyState.policy.interventionState) {
-        case 'stabilize':
-          return createSnapshot('stabilize', {
-            label: copy.stabilize.label,
-            headline: copy.stabilize.headline,
-            detail: copy.stabilize.detail,
-            updatedAt,
-          });
-        case 'clarify':
-          return createSnapshot('clarify', {
-            label: copy.clarify.label,
-            headline: copy.clarify.headline,
-            detail: copy.clarify.detail,
-            updatedAt,
-          });
-        case 'co_plan':
-          return createSnapshot('co_plan', {
-            label: copy.coPlan.label,
-            headline: copy.coPlan.headline,
-            detail: copy.coPlan.detail,
-            updatedAt,
-          });
-        case 'guided_execute':
-        case 'autonomous_execute':
-          return createSnapshot('execute', {
-            label: copy.execute.label,
-            headline: copy.execute.headline,
-            detail: copy.execute.detail,
-            updatedAt,
-          });
-      }
-    }
-
     return createSnapshot('idle', {
       label: copy.idle.label,
       headline: copy.idle.headline,
       detail: copy.idle.detail,
       updatedAt,
-      ...(currentAffect ? { affect: currentAffect } : {}),
     });
   };
 
@@ -433,28 +293,6 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
   return {
     getSnapshot: (): CompanionSnapshot => publish(),
     refreshAvailability: (): CompanionSnapshot => publish(),
-    setAffect: (affect: CompanionAffectHint | null): void => {
-      currentAffect = affect;
-    },
-    setChatPolicy: (policy: InterventionPolicySignal | null): CompanionSnapshot => {
-      if (!policy) {
-        timedPolicyState = null;
-        schedulePolicyExpiry();
-        return publish();
-      }
-
-      const ttlMs =
-        policy.interventionState === 'guided_execute' ||
-        policy.interventionState === 'autonomous_execute'
-          ? EXECUTE_POLICY_TTL_MS
-          : REFLECTIVE_POLICY_TTL_MS;
-      timedPolicyState = {
-        policy,
-        expiresAt: now().getTime() + ttlMs,
-      };
-      schedulePolicyExpiry();
-      return publish();
-    },
     beginThinking: (key: string): CompanionSnapshot => {
       const trimmedKey = key.trim();
       if (!trimmedKey) return publish();
@@ -467,19 +305,9 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
       thinkingKeys.delete(trimmedKey);
       return publish();
     },
-    pushTaskNudge: (params: { kind: CompanionNudgeKind; taskName: string }): CompanionSnapshot => {
-      timedNudgeState = {
-        kind: params.kind,
-        taskName: params.taskName,
-        expiresAt: now().getTime() + NUDGE_TTL_MS,
-      };
-      scheduleNudgeExpiry();
-      return publish();
-    },
     notifyReplyComplete: (threadLabel?: string): CompanionSnapshot => {
       const label = threadLabel?.trim() || '';
       timedNudgeState = {
-        kind: 'reply-complete',
         taskName: label,
         expiresAt: now().getTime() + NUDGE_TTL_MS,
       };

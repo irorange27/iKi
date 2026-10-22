@@ -4,19 +4,17 @@ import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import type { Provider } from '@iki/backend/types/provider';
 
 const {
-  createModelMock,
-  disposeLanguageModelMock,
+  generateChatWithModelMessagesMock,
   generateTextMock,
   getAppConfigMock,
-  getFullSystemPromptMock,
+  resolvePersonaPromptMock,
   getModelCallSettingsMock,
   getProvidersMock,
 } = vi.hoisted(() => ({
-  createModelMock: vi.fn(),
-  disposeLanguageModelMock: vi.fn(),
+  generateChatWithModelMessagesMock: vi.fn(),
   generateTextMock: vi.fn(),
   getAppConfigMock: vi.fn(),
-  getFullSystemPromptMock: vi.fn(),
+  resolvePersonaPromptMock: vi.fn(),
   getModelCallSettingsMock: vi.fn(() => ({})),
   getProvidersMock: vi.fn(),
 }));
@@ -26,9 +24,8 @@ vi.mock('ai', () => ({
 }));
 
 vi.mock('@iki/backend/provider/llm/factory', () => ({
-  createModel: createModelMock,
-  disposeLanguageModel: disposeLanguageModelMock,
-  getFullSystemPrompt: getFullSystemPromptMock,
+  generateChatWithModelMessages: generateChatWithModelMessagesMock,
+  resolvePersonaPrompt: resolvePersonaPromptMock,
   getModelCallSettings: getModelCallSettingsMock,
 }));
 
@@ -68,20 +65,17 @@ const buildProvider = (
   available_models: overrides.available_models ?? '[]',
   api_version: overrides.api_version,
   is_response_api: overrides.is_response_api,
-  acp_command: overrides.acp_command,
-  acp_args: overrides.acp_args,
-  acp_mcp_server_ids: overrides.acp_mcp_server_ids,
-  acp_auth_method_id: overrides.acp_auth_method_id,
-  acp_api_provider_id: overrides.acp_api_provider_id,
-  acp_model_mapping: overrides.acp_model_mapping,
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  createModelMock.mockReturnValue('mock-model');
   getModelCallSettingsMock.mockReturnValue({});
   generateTextMock.mockResolvedValue({ text: 'OK' });
-  getFullSystemPromptMock.mockReturnValue('persona prompt');
+  generateChatWithModelMessagesMock.mockResolvedValue({
+    text: 'OK',
+    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+  });
+  resolvePersonaPromptMock.mockReturnValue('persona prompt');
   getAppConfigMock.mockReturnValue(createDefaultAppConfig());
   getProvidersMock.mockReturnValue([]);
 });
@@ -154,7 +148,7 @@ describe('tool model provider', () => {
     expect(toolModel?.model).toBe('gpt-4o-mini');
   });
 
-  it('runs latency tests through the direct model call path instead of chat orchestration', async () => {
+  it('probes latency through the shared aux supply entry, not a private AI SDK call', async () => {
     getProvidersMock.mockReturnValue([
       buildProvider({
         id: 'provider-deepseek',
@@ -176,22 +170,16 @@ describe('tool model provider', () => {
       model: 'deepseek-chat',
     });
 
-    expect(createModelMock).toHaveBeenCalledWith(
-      'deepseek',
-      'deepseek-chat',
-      'provider-deepseek'
+    expect(generateChatWithModelMessagesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerType: 'deepseek',
+        providerId: 'provider-deepseek',
+        modelId: 'deepseek-chat',
+        messages: [{ role: 'user', content: 'Reply with OK.' }],
+        maxOutputTokens: 8,
+      })
     );
-    expect(getModelCallSettingsMock).toHaveBeenCalledWith(
-      'deepseek',
-      'deepseek-chat',
-      'provider-deepseek'
-    );
-    expect(generateTextMock).toHaveBeenCalledWith({
-      model: 'mock-model',
-      messages: [{ role: 'user', content: 'Reply with OK.' }],
-      maxOutputTokens: 8,
-    });
-    expect(disposeLanguageModelMock).toHaveBeenCalledWith('mock-model');
+    expect(generateTextMock).not.toHaveBeenCalled();
   });
 
   it('rejects invalid explicit providerId selections instead of silently picking another provider', async () => {

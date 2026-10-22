@@ -1,7 +1,6 @@
 import * as llmFactory from '../provider/llm/factory';
-import { getProviderModels } from '../provider/llm/model_discovery';
+import { getProviderModels, getProviderModelsForRecord } from '../provider/llm/model_discovery';
 import { createLogger } from '@iki/backend/logger';
-import { ACP_PROVIDER_TYPE } from '@iki/backend/constants/acp';
 import type {
   ProviderModelDescriptor,
   ProviderModelDiscoveryOverride,
@@ -60,77 +59,26 @@ export const createChatStreamingModels = () => {
     providerOverride?: ProviderModelDiscoveryOverride | null
   ): Promise<ProviderModelDescriptor[]> => {
     try {
-      if (providerType === ACP_PROVIDER_TYPE) {
-        const acpDescriptors = await llmFactory.fetchAcpModels(
-          providerType,
-          providerId,
-          providerOverride ?? undefined
-        );
-        return await Promise.all(
-          acpDescriptors.map(async descriptor => {
-            const resolvedCapability = await llmFactory.resolveModelCapability(
-              providerType,
-              descriptor.id,
-              providerId
-            );
-            const capability = ensureModelCapability(providerType, descriptor.id, resolvedCapability, {
-              contextWindow: descriptor.contextWindow ?? null,
-              maxInputTokens: descriptor.maxInputTokens ?? null,
-              maxOutputTokens: descriptor.maxOutputTokens ?? null,
-            });
-            const descriptorSource =
-              capability.source !== 'default'
-                ? capability.source
-                : descriptor.source;
-            const displayName =
-              capability.source === 'default'
-                ? descriptor.displayName || descriptor.id
-                : capability.displayName || descriptor.displayName || descriptor.id;
 
-            return {
-              ...descriptor,
-              displayName,
-              contextWindow: capability.contextWindow,
-              maxInputTokens: capability.maxInputTokens,
-              maxOutputTokens: capability.maxOutputTokens ?? null,
-              supportsToolCalls:
-                capability.supportsToolCalls ?? descriptor.supportsToolCalls ?? true,
-              ...(capability.supportsReasoning !== null && capability.supportsReasoning !== undefined
-                ? { supportsReasoning: capability.supportsReasoning }
-                : descriptor.supportsReasoning !== undefined
-                  ? { supportsReasoning: descriptor.supportsReasoning }
-                  : {}),
-              ...(capability.supportsVision !== null && capability.supportsVision !== undefined
-                ? { supportsVision: capability.supportsVision }
-                : descriptor.supportsVision !== undefined
-                  ? { supportsVision: descriptor.supportsVision }
-                  : {}),
-              ...(descriptorSource ? { source: descriptorSource } : {}),
-            } satisfies ProviderModelDescriptor;
+      const overrideBaseUrl = providerOverride?.base_url?.trim();
+      const overrideApiKey = providerOverride?.api_key?.trim();
+      const shouldUseRecord =
+        Boolean(providerId) || Boolean(overrideBaseUrl) || Boolean(overrideApiKey);
+
+      const modelIds = shouldUseRecord
+        ? await getProviderModelsForRecord({
+            providerId: providerId ?? providerOverride?.id ?? providerType,
+            providerType,
+            ...(overrideBaseUrl || providerOverride?.base_url
+              ? { baseUrl: overrideBaseUrl || providerOverride?.base_url || '' }
+              : {}),
+            ...(overrideApiKey ? { apiKey: overrideApiKey } : {}),
           })
-        );
-      }
+        : await getProviderModels(providerType);
 
-      return await toDescriptors(providerType, providerId, await getProviderModels(providerType));
+      return await toDescriptors(providerType, providerId, modelIds);
     } catch (error: unknown) {
       chatStreamingLogger.error(`Failed to get models for ${providerType}`, error);
-      return [];
-    }
-  };
-
-  const getAcpAuthMethods = async (
-    providerType: string,
-    providerId?: string,
-    providerOverride?: ProviderModelDiscoveryOverride | null
-  ) => {
-    try {
-      return await llmFactory.fetchAcpAuthMethods(
-        providerType,
-        providerId,
-        providerOverride ?? undefined
-      );
-    } catch (error: unknown) {
-      chatStreamingLogger.error('Failed to get ACP auth methods', error);
       return [];
     }
   };
@@ -138,16 +86,11 @@ export const createChatStreamingModels = () => {
   const isProviderConfigured = (providerType: string, providerId?: string) => {
     try {
       const config = llmFactory.getProviderConfig(providerType, providerId);
-      if (providerType.trim().toLowerCase() === ACP_PROVIDER_TYPE) {
-        return config.acpCommand.trim().length > 0;
-      }
       return Boolean(config.apiKey);
     } catch {
       return false;
     }
   };
 
-  return { getModels, getAcpAuthMethods, isProviderConfigured };
+  return { getModels, isProviderConfigured };
 };
-
-export type ChatStreamingModels = ReturnType<typeof createChatStreamingModels>;

@@ -1,4 +1,4 @@
-export const DEFAULT_TOOL_CALL_MAX_ITERATIONS = 200;
+const DEFAULT_TOOL_CALL_MAX_ITERATIONS = 200;
 
 export const resolveToolCallMaxIterations = (value?: number): number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -18,10 +18,9 @@ export const TOOL_AGENT_SYSTEM_PROMPT =
   '- Do not use `agent` for trivial work, one or two direct tool calls, or anything you can do directly without losing control flow.\n' +
   '- Do not use `agent` for approval-gated or destructive actions that you should own directly. If the likely next step is `shell`, `read_file`, `write_file`, `edit`, or `delete_file`, keep that work under the main agent.\n' +
   '- Do not delegate the entire user request; delegate only a bounded intermediate result with a clear output contract.\n' +
-  '- Use the dedicated `todo` tool only for genuinely substantial multi-step execution plans. Skip it for simple questions, one-shot checks, or straightforward single edits. When you do use it, keep it concise with at most 5 broad steps, mark one item `in_progress` before starting work, then mark it `completed` immediately after finishing.\n' +
+  '- Use the dedicated `plan` tool only for genuinely substantial multi-step work. Skip it for simple questions, one-shot checks, or straightforward single edits. When you do use it, keep the plan concise with a few broad steps.\n' +
   '- MCP tools may invoke external systems; minimize data sharing and avoid sending secrets.\n' +
   '- Prefer built-in tools when they are safer or simpler than MCP tools.\n' +
-  '- Prefer the dedicated `todo` tool for your own execution state, and use the persistent todo-list tools only when the user wants a maintained checklist.\n' +
   '- Use an internal ReAct loop: decide if a tool is needed, call it, then re-evaluate based on the result.\n' +
   '- Do a brief internal self-check before finalizing; if something is missing, fix it or use a tool.\n' +
   '- Keep reasoning private; do not reveal chain-of-thought or reflection text.\n' +

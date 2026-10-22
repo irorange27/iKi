@@ -21,12 +21,6 @@ const buildProvider = (
   available_models: overrides.available_models ?? '[]',
   api_version: overrides.api_version,
   is_response_api: overrides.is_response_api,
-  acp_command: overrides.acp_command,
-  acp_args: overrides.acp_args,
-  acp_mcp_server_ids: overrides.acp_mcp_server_ids,
-  acp_auth_method_id: overrides.acp_auth_method_id,
-  acp_api_provider_id: overrides.acp_api_provider_id,
-  acp_model_mapping: overrides.acp_model_mapping,
 });
 
 describe('ChatModelSelector', () => {
@@ -62,6 +56,11 @@ describe('ChatModelSelector', () => {
     );
 
     await wrapper.find('.model-selector-trigger').trigger('click');
+    await flushPromises();
+
+    const menuCells = wrapper.findAll('.model-menu-cell');
+    expect(menuCells.length).toBe(2);
+    await menuCells[0].trigger('click');
     await flushPromises();
 
     const searchInput = wrapper.find('.model-selector-search-input');
@@ -116,6 +115,8 @@ describe('ChatModelSelector', () => {
 
     await wrapper.find('.model-selector-trigger').trigger('click');
     await flushPromises();
+    await wrapper.findAll('.model-menu-cell')[0].trigger('click');
+    await flushPromises();
 
     const groupIcon = wrapper.find('.model-provider-icon .lobe-icon-stub');
     expect(groupIcon.attributes('data-name')).toBe('grid-2x2');
@@ -138,5 +139,42 @@ describe('ChatModelSelector', () => {
 
     expect(wrapper.find('.model-selector-trigger').attributes('title')).toBe('Choose model');
     expect(wrapper.find('.model-selector-trigger').attributes('aria-label')).toBe('Choose model');
+  });
+  it('keeps a configured provider visible so its models can be picked', async () => {
+    const configured = buildProvider({
+      id: 'custom_gateway',
+      name: 'My Gateway',
+      type: 'openai-compatible',
+      models: '["gateway-model-a"]',
+      base_url: 'https://gateway.example.com/v1',
+      api_key: 'gateway-key',
+    });
+    const withoutModels = buildProvider({
+      id: 'deepseek_new',
+      name: 'DeepSeek',
+      type: 'deepseek',
+      models: '[]',
+      api_key: 'sk-new',
+    });
+
+    const wrapper = mount(ChatModelSelector, {
+      props: {
+        availableProviders: [configured, withoutModels],
+        selectedProvider: configured,
+        selectedModel: 'gateway-model-a',
+      },
+      global: { stubs: { LobeIcon: true } },
+    });
+
+    await wrapper.find('.model-selector-trigger').trigger('click');
+    await flushPromises();
+
+    await wrapper.find('.model-menu-cell').trigger('click');
+    await flushPromises();
+
+    const names = wrapper.findAll('.model-provider-name').map(n => n.text());
+    expect(names).toContain('My Gateway');
+    expect(names).toContain('DeepSeek');
+    expect(wrapper.text()).toContain('gateway-model-a');
   });
 });

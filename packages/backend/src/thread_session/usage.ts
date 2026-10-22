@@ -7,6 +7,7 @@ import type {
   TokenUsageMetrics,
 } from '@iki/backend/types/chat_usage';
 import { createPrefixedId } from '@iki/backend/utils/id';
+import { clampNonNegativeInteger, clampNonNegativeNumber } from '@iki/backend/utils/text';
 
 const PERIOD_DAYS: Record<Exclude<ChatUsagePeriod, 'all'>, number> = {
   '7d': 7,
@@ -16,28 +17,18 @@ const PERIOD_DAYS: Record<Exclude<ChatUsagePeriod, 'all'>, number> = {
 };
 const CHAT_USAGE_PERIODS = new Set<ChatUsagePeriod>(['7d', '30d', '90d', '365d', 'all']);
 
-const clampInteger = (value: unknown): number => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
-  return Math.max(0, Math.trunc(value));
-};
-
-const clampCost = (value: unknown): number => {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
-  return Math.max(0, value);
-};
-
 const normalizeUsage = (usage: Partial<TokenUsageMetrics> | undefined): TokenUsageMetrics => {
-  const inputTokens = clampInteger(usage?.inputTokens);
-  const outputTokens = clampInteger(usage?.outputTokens);
-  const totalTokens = Math.max(clampInteger(usage?.totalTokens), inputTokens + outputTokens);
+  const inputTokens = clampNonNegativeInteger(usage?.inputTokens);
+  const outputTokens = clampNonNegativeInteger(usage?.outputTokens);
+  const totalTokens = Math.max(clampNonNegativeInteger(usage?.totalTokens), inputTokens + outputTokens);
   return {
     inputTokens,
     outputTokens,
     totalTokens,
-    cacheReadTokens: clampInteger(usage?.cacheReadTokens),
-    cacheWriteTokens: clampInteger(usage?.cacheWriteTokens),
-    reasoningTokens: clampInteger(usage?.reasoningTokens),
-    estimatedCostUsd: clampCost(usage?.estimatedCostUsd),
+    cacheReadTokens: clampNonNegativeInteger(usage?.cacheReadTokens),
+    cacheWriteTokens: clampNonNegativeInteger(usage?.cacheWriteTokens),
+    reasoningTokens: clampNonNegativeInteger(usage?.reasoningTokens),
+    estimatedCostUsd: clampNonNegativeNumber(usage?.estimatedCostUsd),
   };
 };
 
@@ -89,8 +80,8 @@ const buildDenseDailySeries = (
     const row = byDate.get(date);
     result.push({
       date,
-      totalTokens: clampInteger(row?.totalTokens),
-      messageCount: clampInteger(row?.messageCount),
+      totalTokens: clampNonNegativeInteger(row?.totalTokens),
+      messageCount: clampNonNegativeInteger(row?.messageCount),
     });
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
@@ -182,5 +173,3 @@ export const createChatUsage = () => {
     getUsageSummary,
   };
 };
-
-export type ChatUsageService = ReturnType<typeof createChatUsage>;

@@ -5,40 +5,91 @@
   --settings-card-gap: 18px;
 }
 
+/* ── Settings layout grammar ──────────────────────────────────────────────
+ * Groups are transparent topic containers on the paper canvas — no boxes;
+ * separation comes from hairlines. Direction rule: booleans with an immediate
+ * effect are ROWS (label left, switch right, via SettingsSwitch); anything
+ * that needs typing is a BLOCK (label above its input, .input-label). Rows
+ * own their trailing hairline, and the group strips the last one, exactly
+ * like DSH's feature-contributed settings rows.
+ * ──────────────────────────────────────────────────────────────────────── */
 .settings-card,
 .config-group {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--surface-radius);
-  padding: 20px 22px;
-  margin-bottom: var(--settings-card-gap);
-  box-shadow: var(--surface-shadow-md);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin-bottom: 28px;
+}
+
+/* Group titles are small section headers, not card headings. */
+.settings-card > h3,
+.config-group > h3,
+.card-title {
+  margin: 0 0 2px;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* A group description sits tight under its title, no separator. */
+.settings-card > .group-description,
+.config-group > .group-description,
+.settings-card > .card-subtitle,
+.config-group > .card-subtitle {
+  margin: 0 0 6px;
 }
 
 .config-section > .settings-card:first-of-type,
 .config-section > .config-group:first-of-type {
-  margin-top: 6px;
+  margin-top: 0;
 }
 
 .input-label {
   display: block;
-  margin-bottom: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
+}
+
+/* Bare selector wrappers ride the same row rhythm (a labelled one already
+   has its row via .input-label, so no double line). */
+.settings-card > .settings-select,
+.config-group > .settings-select {
+  padding: 14px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+}
+
+.input-label .settings-select {
+  padding: 0;
+  border-bottom: none;
+}
+
+.slider-field {
+  padding: 14px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+}
+
+/* The last row of a group drops its hairline: the group gap closes it. */
+.settings-card > :last-child,
+.config-group > :last-child {
+  border-bottom: none;
 }
 
 .input-label input,
 .input-label select,
 .input-label textarea {
   width: 100%;
-  padding: 10px 12px;
-  margin-top: 6px;
+  padding: 6px 10px;
+  margin-top: 4px;
   border: 1px solid var(--border-color);
   border-radius: var(--control-radius-sm);
   background: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: var(--font-size);
+  font-size: 13px;
   transition:
     border-color 0.2s ease,
     background-color 0.2s ease,
@@ -210,15 +261,17 @@ input[type='range'] {
 }
 
 .config-group h3 {
-  margin-bottom: 10px;
-  font-size: 1.02em;
+  margin-bottom: 8px;
+  font-size: 14px;
+  line-height: 20px;
   font-weight: 600;
 }
 
 .card-title {
-  font-size: 1.1em;
+  font-size: 14px;
+  line-height: 20px;
   font-weight: 600;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .card-header {
@@ -226,7 +279,7 @@ input[type='range'] {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .card-subtitle {
@@ -379,4 +432,43 @@ input[type='range'] {
   to {
     transform: rotate(360deg);
   }
+}
+
+
+/* ── Advanced disclosure: long-tail toggles fold away ─────────────────── */
+.settings-advanced {
+  border: none;
+}
+
+.settings-advanced > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  width: 100%;
+  list-style: none;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--text-muted);
+  transition: color 0.15s;
+}
+
+.settings-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-advanced > summary::before {
+  content: '▸';
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.settings-advanced[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.settings-advanced > summary:hover {
+  color: var(--text-primary);
 }

@@ -71,9 +71,6 @@ import {
   DEEP_THINKING_SPRITE,
   HOVER_SPRITE,
   CLICK_SPRITE,
-  AFFECT_SAD_SPRITE,
-  AFFECT_EXCITED_SPRITE,
-  AFFECT_TIRED_SPRITE,
 } from '../composables/useCompanionSprites';
 import { useCompanionVoice } from '../composables/useCompanionVoice';
 import type { CompanionSnapshot } from '@iki/backend/types/companion';
@@ -122,39 +119,11 @@ const { oldSrc, newSrc, oldOpacity, newOpacity, setInitial, setSprite } =
 
 const { playPhaseVoice, setMuted } = useCompanionVoice();
 
-const resolveSprite = (phase: string, nudgeKind?: string): string => {
-  if (phase === 'nudge') {
-    return nudgeKind === 'task-error'
-      ? PHASE_SPRITE['nudge-error']
-      : PHASE_SPRITE['nudge-success'];
-  }
-  return PHASE_SPRITE[phase] ?? DEFAULT_SPRITE;
-};
+const resolveSprite = (phase: string): string => PHASE_SPRITE[phase] ?? DEFAULT_SPRITE;
 
-// ---- Idle random rotation ----
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
 const resolveIdleSprite = (): string | null => {
-  const affect = snapshot.value.affect;
-  if (!affect) {
-    const variants = IDLE_VARIANTS.filter(v => v !== oldSrc.value);
-    if (variants.length === 0) return IDLE_VARIANTS[0];
-    return variants[Math.floor(Math.random() * variants.length)];
-  }
-
-  const sadLabels = ['sadness', 'anger', 'fear', 'disgust'];
-  const excitedLabels = ['joy', 'surprise'];
-
-  if (sadLabels.includes(affect.label) && affect.valence < 0) {
-    return AFFECT_SAD_SPRITE;
-  }
-  if (excitedLabels.includes(affect.label) && affect.arousal > 0.4) {
-    return AFFECT_EXCITED_SPRITE;
-  }
-  if (affect.arousal < 0.2) {
-    return AFFECT_TIRED_SPRITE;
-  }
-
   const variants = IDLE_VARIANTS.filter(v => v !== oldSrc.value);
   if (variants.length === 0) return IDLE_VARIANTS[0];
   return variants[Math.floor(Math.random() * variants.length)];
@@ -178,7 +147,6 @@ const clearIdleRotation = () => {
   }
 };
 
-// ---- Thinking depth ----
 let thinkingCheckTimer: ReturnType<typeof setInterval> | null = null;
 let thinkingStartMs = 0;
 let toolPreviewCount = 0;
@@ -204,7 +172,6 @@ const stopThinkingDepthCheck = () => {
   toolPreviewCount = 0;
 };
 
-// ---- Interaction micro-reactions ----
 const reactionActive = ref(false);
 let reactionRestoreTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -219,7 +186,7 @@ const restorePhaseSprite = () => {
   const src =
     snapshot.value.phase === 'idle'
       ? resolveIdleSprite()
-      : resolveSprite(snapshot.value.phase, snapshot.value.nudgeKind);
+      : resolveSprite(snapshot.value.phase);
   if (src) setSprite(src);
 };
 
@@ -253,7 +220,6 @@ const handleStageClick = () => {
   void handleOpenMainWindow();
 };
 
-// ---- Phase watcher ----
 watch(
   () => snapshot.value.phase,
   (phase) => {
@@ -263,32 +229,20 @@ watch(
     clearIdleRotation();
 
     const src =
-      phase === 'idle' ? resolveIdleSprite() : resolveSprite(phase, snapshot.value.nudgeKind);
+      phase === 'idle' ? resolveIdleSprite() : resolveSprite(phase);
     if (src) setSprite(src);
-    if (!reduceMotion.value) playPhaseVoice(phase, snapshot.value.nudgeKind);
+    if (!reduceMotion.value) playPhaseVoice(phase);
 
     if (phase === 'idle') scheduleIdleRotation();
     if (phase === 'thinking') startThinkingDepthCheck();
   }
 );
 
-// Track tool previews for thinking depth
 watch(
   () => snapshot.value.preview?.kind,
   (kind) => {
     if (kind === 'tool' && snapshot.value.phase === 'thinking') {
       toolPreviewCount += 1;
-    }
-  }
-);
-
-watch(
-  () => snapshot.value.nudgeKind,
-  (kind) => {
-    if (snapshot.value.phase === 'nudge') {
-      const src = resolveSprite('nudge', kind);
-      if (src) setSprite(src);
-      if (!reduceMotion.value) playPhaseVoice('nudge', kind);
     }
   }
 );
@@ -342,7 +296,7 @@ onMounted(async () => {
     const initial = await electronAPI?.companion?.getSnapshot?.();
     if (initial) {
       snapshot.value = initial;
-      const src = resolveSprite(initial.phase, initial.nudgeKind);
+      const src = resolveSprite(initial.phase);
       if (src) setInitial(src);
     }
   } catch (error) {

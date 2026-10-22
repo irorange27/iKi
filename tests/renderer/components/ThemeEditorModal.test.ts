@@ -59,7 +59,6 @@ const mountModal = (options?: {
     },
   });
 
-  // reka portals the dialog into <body>; DOM queries must be document-wide.
   const dom = new DOMWrapper(document.body);
   return { wrapper, dom };
 };

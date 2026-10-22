@@ -4,24 +4,11 @@ import { z } from 'zod';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import type { AgentRun, AgentRunStep } from '@iki/backend/types/agent_run';
 import type {
-  AtifMetrics,
-  AtifObservation,
   AtifStep,
-  AtifToolCall,
   AtifTrajectory,
   AtifTrajectoryExportResult,
 } from '@iki/backend/types/atif';
 import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
-import { stripInjectedContext } from '@iki/backend/turn_prep/context_helpers';
-
-/**
- * Exporter for the Agent Trajectory Interchange Format (ATIF, v1.8) —
- * https://www.harborframework.com/docs/agents/trajectory-format
- *
- * Source records: the run row (working.modelMessages / output.usage) and its
- * append-only agent_run_steps audit log. Tool-call steps are merged with their
- * following tool-result step into a single agent step with an observation.
- */
 
 const ATIF_SCHEMA_VERSION = 'ATIF-v1.8';
 const MAX_MESSAGE_TEXT_CHARS = 20_000;
@@ -61,7 +48,7 @@ const AtifStepSchema = z.object({
   extra: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const AtifTrajectorySchema = z.object({
+const AtifTrajectorySchema = z.object({
   schema_version: z.literal(ATIF_SCHEMA_VERSION),
   session_id: z.string().optional(),
   trajectory_id: z.string().optional(),
@@ -112,7 +99,8 @@ const extractLastUserText = (messages: unknown[] | undefined): string | null => 
         : content && typeof content === 'object'
           ? extractTextFromModelMessageContent(content)
           : '';
-    if (text.trim()) return clip(stripInjectedContext(text));
+
+    if (text.trim()) return clip(text);
   }
   return null;
 };
@@ -148,16 +136,97 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
         }
   );
 
-  const observationByCallId = new Map<string, AtifStep['observation']>();
-  for (const step of orderedSteps) {
+  const observationsByInferenceAndCall = new Map<string, Array<AtifStep['observation']>>();
+  const observationsByCallId = new Map<string, AtifStep['observation']>();
+  const observationKey = (inferenceStepId: string, callId: string) => `${inferenceStepId}\u0000${callId}`;
+
+  const indexedInferences = orderedSteps.filter(
+    step => step.type === 'model' && stepOutput(step).inference === true
+  );
+
+  const inferenceCallCounts = new Map<string, Map<string, number>>(
+    indexedInferences.map(step => {
+      const content = stepOutput(step).content;
+      const parts = Array.isArray(content) ? content.filter(isObjectRecord) : [];
+      const counts = new Map<string, number>();
+      for (const part of parts) {
+        if (part.type !== 'tool-call' || typeof part.toolCallId !== 'string') continue;
+        const id = String(part.toolCallId);
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+      return [step.id, counts] as [string, Map<string, number>];
+    })
+  );
+
+  const inferencePositionById = new Map<string, number>();
+  orderedSteps.forEach((step, position) => {
+    if (step.type === 'model' && stepOutput(step).inference === true) {
+      inferencePositionById.set(step.id, position);
+    }
+  });
+
+  const assignedPerOwner = new Map<string, number>();
+
+  const ownerInferenceForAuditStep = (callId: string, index: number): string | null => {
+    let bestId: string | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const [stepId, position] of inferencePositionById) {
+      const total = inferenceCallCounts.get(stepId)?.get(callId) ?? 0;
+      if (total === 0) continue;
+      const assigned = assignedPerOwner.get(observationKey(stepId, callId)) ?? 0;
+      if (assigned >= total) continue;
+      const distance = Math.abs(position - index);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestId = stepId;
+      }
+    }
+    if (bestId) {
+      const key = observationKey(bestId, callId);
+      assignedPerOwner.set(key, (assignedPerOwner.get(key) ?? 0) + 1);
+    }
+    return bestId;
+  };
+  for (const [index, step] of orderedSteps.entries()) {
     if (step.type !== 'tool-result' && !(step.type === 'error' && stepInput(step).toolCallId)) continue;
+    const callId = toolCallIdOf(step);
     const output = stepOutput(step);
     const content = 'error' in output ? output.error : (output.output ?? null);
-    observationByCallId.set(toolCallIdOf(step), {
-      results: [{ source_call_id: toolCallIdOf(step), content: typeof content === 'string' ? content : JSON.stringify(content) }],
-    });
+    const observation: AtifStep['observation'] = {
+      results: [{ source_call_id: callId, content: typeof content === 'string' ? content : JSON.stringify(content) }],
+    };
+    const ownerInference = ownerInferenceForAuditStep(callId, index);
+    if (ownerInference) {
+      const key = observationKey(ownerInference, callId);
+      const queue = observationsByInferenceAndCall.get(key) ?? [];
+      queue.push(observation);
+      observationsByInferenceAndCall.set(key, queue);
+    } else {
+
+      if (!observationsByCallId.has(callId)) observationsByCallId.set(callId, observation);
+    }
   }
 
+  const observationFor = (inferenceStepId: string | null, callId: string) => {
+    if (!inferenceStepId) return observationsByCallId.get(callId);
+    const queue = observationsByInferenceAndCall.get(observationKey(inferenceStepId, callId));
+    const scoped = queue?.shift();
+    if (scoped) return scoped;
+
+    if ((inferenceCallCounts.get(inferenceStepId)?.get(callId) ?? 0) > 0) return undefined;
+    return observationsByCallId.get(callId);
+  };
+
+  const observationClaimedByInference = (callId: string): boolean => {
+    for (const inferenceStepId of inferenceCallCounts.keys()) {
+      const queue = observationsByInferenceAndCall.get(observationKey(inferenceStepId, callId));
+      if (queue && queue.length > 0) return true;
+    }
+    return false;
+  };
+
+  const stepIndexHasLegacyCallStep = (callId: string, steps: typeof orderedSteps): boolean =>
+    steps.some(step => step.type === 'tool-call' && toolCallIdOf(step) === callId);
   const inferences = orderedSteps.filter(step => step.type === 'model' && stepOutput(step).inference === true);
   const recordedCallIds = new Set(inferences.flatMap(step => {
     const content = stepOutput(step).content;
@@ -169,7 +238,11 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
     const output = stepOutput(step);
     const extra: Record<string, unknown> = { run_step_index: step.stepIndex, run_step_type: step.type };
 
-    if ((step.type === 'tool-result' || (step.type === 'error' && stepInput(step).toolCallId)) && !observationByCallId.has(toolCallIdOf(step))) continue;
+    if (step.type === 'tool-result' || (step.type === 'error' && stepInput(step).toolCallId)) {
+
+      if (observationClaimedByInference(toolCallIdOf(step))) continue;
+      if (stepIndexHasLegacyCallStep(toolCallIdOf(step), orderedSteps)) continue;
+    }
 
     const base = {
       step_id: trajectorySteps.length + 1,
@@ -186,10 +259,21 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
       const calls = parts.filter(part => part.type === 'tool-call').map(part => ({
         tool_call_id: String(part.toolCallId), function_name: String(part.toolName), arguments: part.input,
       }));
-      const results = parts.filter(part => part.type === 'tool-result' || part.type === 'tool-error').map(part => ({
-        source_call_id: String(part.toolCallId),
-        content: typeof part.output === 'string' ? part.output : JSON.stringify(part.output ?? part.error ?? null),
-      }));
+
+      const results = calls.flatMap(call => {
+        const inContent = parts
+          .filter(part =>
+            (part.type === 'tool-result' || part.type === 'tool-error') &&
+            String(part.toolCallId) === call.tool_call_id
+          )
+          .map(part => ({
+            source_call_id: String(part.toolCallId),
+            content: typeof part.output === 'string' ? part.output : JSON.stringify(part.output ?? part.error ?? null),
+          }));
+        if (inContent.length > 0) return inContent;
+        const observed = observationFor(step.id, call.tool_call_id);
+        return observed ? observed.results : [];
+      });
       const usage = isObjectRecord(output.usage) ? output.usage : {};
       trajectorySteps.push({
         ...base, model_name: modelName,
@@ -210,8 +294,8 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
     if (step.type === 'tool-call') {
       const input = stepInput(step);
       const callId = toolCallIdOf(step);
-      const observation = observationByCallId.get(callId);
-      if (observation) observationByCallId.delete(callId);
+      const observation = observationsByCallId.get(callId);
+      if (observation) observationsByCallId.delete(callId);
       trajectorySteps.push({
         ...base,
         model_name: modelName,
@@ -277,7 +361,6 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
       continue;
     }
 
-    // 'model' | 'finalize'
     const text = typeof output.text === 'string' ? clip(output.text) : '';
     trajectorySteps.push({
       ...base,
@@ -320,11 +403,6 @@ export const buildRunTrajectory = (run: AgentRun, steps: AgentRunStep[]): AtifTr
   };
 };
 
-/**
- * Structural validation mirroring Harbor's trajectory validator: sequential
- * step ids from 1, ISO timestamps, agent-only fields on agent steps, and
- * observation results that reference a tool call of the same step.
- */
 export const validateAtifTrajectory = (trajectory: AtifTrajectory): string[] => {
   const errors: string[] = [];
   const parsed = AtifTrajectorySchema.safeParse(trajectory);

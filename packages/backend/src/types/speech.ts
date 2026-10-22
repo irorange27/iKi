@@ -1,16 +1,3 @@
-import type { AffectLabel, AffectScore } from '@iki/backend/types/affect';
-
-export type AudioEmotionResult = {
-  label: AffectLabel;
-  confidence: number;
-  valence?: number;
-  arousal?: number;
-  emotions?: AffectScore[];
-  source: 'mimo-audio';
-  providerType: string;
-  model: string;
-};
-
 export type SpeechProviderType = 'openai' | 'whisper-node';
 
 export type SpeechStatus = {
@@ -35,7 +22,6 @@ export type SpeechTranscriptionResult = {
   text: string;
   providerType: SpeechProviderType;
   model: string;
-  audioEmotion?: AudioEmotionResult;
 };
 
 export type WhisperNodeModelInfo = {

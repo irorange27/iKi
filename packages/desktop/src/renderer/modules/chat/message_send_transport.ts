@@ -8,10 +8,6 @@ export type ComposerReadyProvider = {
   modelCapability?: ModelCapabilitySnapshot | null;
 };
 
-/**
- * Invocation options minus `messages`: the Chat transport injects the
- * conversation history from the chat state at send time.
- */
 export type ChatComposerInvocationBody = Omit<ChatInvocationOptions, 'messages'>;
 
 export const createChatComposerStreamPayload = (params: {
@@ -19,13 +15,12 @@ export const createChatComposerStreamPayload = (params: {
   threadId: string;
   isAutoSkillMode: boolean;
   selectedSkillIds: string[];
-  /** Thread-level reasoning effort; empty string = provider default (omitted from payload). */
+  
   reasoningEffort?: string;
-  /** Thread-level agent personality; empty string = default (omitted from payload). */
+  
   personality?: string;
-  /** Session-level tool approval policy; empty = global default (omitted). */
+  
   approvalPolicy?: string;
-  autonomous?: { maxIterations: number; continuePrompt?: string };
 }): ChatComposerInvocationBody | null => {
   if (!params.threadId) {
     return null;
@@ -48,11 +43,8 @@ export const createChatComposerStreamPayload = (params: {
       typeof params.providerReady.modelCapability.maxOutputTokens === 'number')
       ? { modelCapability: clonePlainData(params.providerReady.modelCapability) }
       : {}),
-    // Manual tool/MCP selection was removed with the composer selectors; the
-    // composer always runs in auto tool mode (omit `tools` = agent decides).
     skillMode: params.isAutoSkillMode ? 'auto' : 'manual',
     skillIds: params.isAutoSkillMode ? undefined : clonePlainData(params.selectedSkillIds),
     threadId: params.threadId,
-    ...(params.autonomous ? { autonomous: params.autonomous } : {}),
   };
 };

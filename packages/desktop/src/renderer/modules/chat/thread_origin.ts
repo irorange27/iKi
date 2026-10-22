@@ -30,38 +30,12 @@ const formatSourceLabel = (value: string): string =>
     .map(segment => segment[0].toUpperCase() + segment.slice(1))
     .join(' ');
 
-const inferNapCatMessageType = (
-  threadId: string,
-  messageType: string
-): 'private' | 'group' | null => {
-  if (messageType === 'private' || messageType === 'group') return messageType;
-  if (threadId.includes('_private_')) return 'private';
-  if (threadId.includes('_group_')) return 'group';
-  return null;
-};
-
 export const getThreadOriginInfo = (
   thread: Pick<ChatThread, 'id' | 'client_id' | 'metadata'>
 ): ThreadOriginInfo => {
-  const threadId = normalizeWhitespace(thread.id);
   const clientId = normalizeWhitespace(thread.client_id);
   const metadata = parseThreadMetadata(thread.metadata);
   const source = normalizeWhitespace(metadata.source).toLowerCase();
-  const messageType = normalizeWhitespace(metadata.message_type).toLowerCase();
-
-  const isNapCatThread =
-    source === 'napcat' || clientId === 'client_napcat' || threadId.startsWith('napcat_');
-
-  if (isNapCatThread) {
-    const inferredType = inferNapCatMessageType(threadId, messageType);
-    return {
-      isExternal: true,
-      source: 'napcat',
-      sourceLabel: 'NapCat',
-      channelLabel:
-        inferredType === 'private' ? 'QQ private' : inferredType === 'group' ? 'QQ group' : 'QQ',
-    };
-  }
 
   if (clientId) {
     const externalSource = source || clientId.replace(/^client_/, '');

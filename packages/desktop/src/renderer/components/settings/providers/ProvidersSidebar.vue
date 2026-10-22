@@ -2,15 +2,17 @@
   <div class="providers-sidebar">
     <div class="providers-scroll-list">
       <div class="providers-scroll-list-inner">
-        <div
+        <button
           v-for="provider in sidebarProviders"
           :key="provider.id"
+          type="button"
           class="provider-list-item"
           :class="{
             active: selectedProviderId === provider.id,
             configured: !provider.isCustom && isProviderConfigured(provider.id),
             custom: provider.isCustom,
           }"
+          :aria-pressed="selectedProviderId === provider.id"
           @click="emit('select-provider', provider.id)"
         >
           <span class="provider-icon">
@@ -28,7 +30,7 @@
             </span>
           </div>
           <span class="provider-status-dot" :class="{ enabled: provider.enabled }"></span>
-        </div>
+        </button>
       </div>
     </div>
   </div>
@@ -58,3 +60,21 @@ const { t } = useI18n();
 
 <style scoped src="../providers_settings.css"></style>
 <style scoped src="../settings_shared.css"></style>
+
+<style scoped>
+/* Rows are <button>s for keyboard reach, but the UA centres button text; the
+   provider name would then clip from both ends instead of ellipsising. Match
+   the left-aligned row text the rows had as <div>s. */
+.provider-list-item {
+  text-align: left;
+}
+</style>
+
+<style scoped>
+/* Rows are <button>s for keyboard reach, but the UA centres button text; the
+   provider name would then clip from both ends instead of ellipsising. Match
+   the left-aligned row text the rows had as <div>s. */
+.provider-list-item {
+  text-align: left;
+}
+</style>

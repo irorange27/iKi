@@ -41,6 +41,7 @@
         <input
           v-model="skillSearchQuery"
           type="text"
+          :aria-label="t('a11y.searchSkills')"
           :placeholder="t('settings.skills.searchPlaceholder')"
         />
       </div>
@@ -119,46 +120,11 @@
         </div>
       </div>
     </div>
-
-    <div class="settings-card">
-      <div class="card-title">{{ t('settings.skills.workflowTitle') }}</div>
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="config.workflowOptimization.enabled"
-          @change="
-            updateWorkflowOptimization('enabled', ($event.target as HTMLInputElement).checked)
-          "
-        />
-        {{ t('settings.skills.workflowEnable') }}
-      </label>
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="config.workflowOptimization.autoPinSkills"
-          :disabled="!config.workflowOptimization.enabled"
-          @change="
-            updateWorkflowOptimization('autoPinSkills', ($event.target as HTMLInputElement).checked)
-          "
-        />
-        {{ t('settings.skills.workflowAutoPin') }}
-      </label>
-      <p class="card-help">{{ t('settings.skills.workflowDescription') }}</p>
-      <div class="skills-toolbar-actions">
-        <button
-          class="secondary-btn skills-btn"
-          @click="resetWorkflowOptimization"
-          :disabled="workflowResetting"
-        >
-          {{ workflowResetting ? t('settings.skills.workflowResetting') : t('settings.skills.workflowReset') }}
-        </button>
-      </div>
-      <p v-if="workflowResetError" class="skills-error">{{ workflowResetError }}</p>
-    </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import SettingsSwitch from './SettingsSwitch.vue';
 import { computed, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { RefreshCw } from 'lucide-vue-next';
@@ -179,7 +145,6 @@ const props = defineProps<{
 }>();
 const { t } = useI18n();
 const skillsApi = getElectronApiSlice('skills', ['list', 'roots', 'openRoot', 'openSkill', 'read']);
-const resetAutoPinnedSkills = getElectronApiSliceMethod('workflow', 'resetAutoPinnedSkills');
 
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
@@ -193,38 +158,6 @@ const expandedSkillIds = ref<string[]>([]);
 const skillContents = ref<Record<string, string>>({});
 const skillContentLoading = ref<Record<string, boolean>>({});
 const skillContentTruncated = ref<Record<string, boolean>>({});
-const workflowResetting = ref(false);
-const workflowResetError = ref('');
-
-const updateWorkflowOptimization = <K extends keyof AppConfig['workflowOptimization']>(
-  key: K,
-  value: AppConfig['workflowOptimization'][K]
-) => {
-  config.value.workflowOptimization[key] = value;
-  emit('config-change');
-};
-
-const resetWorkflowOptimization = async () => {
-  workflowResetError.value = '';
-  if (!resetAutoPinnedSkills) {
-    workflowResetError.value = t('settings.skills.error.resetUnavailable');
-    return;
-  }
-  workflowResetting.value = true;
-  try {
-    const result = await resetAutoPinnedSkills();
-    if (!result?.success) {
-      workflowResetError.value =
-        result?.error || t('settings.skills.error.resetFailed', { error: '' });
-    }
-  } catch (error: unknown) {
-    workflowResetError.value = t('settings.skills.error.resetFailed', {
-      error: getErrorMessage(error),
-    });
-  } finally {
-    workflowResetting.value = false;
-  }
-};
 
 const loadSkillRoots = async () => {
   if (!skillsApi) {

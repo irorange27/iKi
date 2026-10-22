@@ -1,25 +1,14 @@
 import { deriveModelAwareContextConfig } from './context_budget';
-import type { ChatMemory } from '../thread_session/memory';
 import {
-  buildAffectBlock,
   buildDroppedBlock,
-  buildDroppedMemoryContext,
   buildIdentityContext,
-  buildMemoryContext,
-  buildQueryFromMessages,
   buildSkillContext,
   readAgentInstructions,
-  resolveAffectMessage,
+  readAgentInstructionsForSelection,
 } from './context_blocks';
-import {
-  appendContextToLastUserMessage,
-  buildAssembleResult,
-  getContextConfig,
-  insertSystemMessages,
-} from './context_helpers';
-import {
-  selectRecentHistory,
-} from './context_history';
+import { buildWorkspaceSystemMessageForSelection } from '../workspaces/thread_workspace';
+import { buildAssembleResult, getContextConfig, insertSystemMessages } from './context_helpers';
+import { selectRecentHistory } from './context_history';
 import type { AssembleChatContextParams, SkillContext } from './context_types';
 
 export type {
@@ -30,12 +19,12 @@ export type {
 } from './context_types';
 
 export const createChatContextAssembler = (deps: {
-  memory: ChatMemory;
   workspaceSystemMessage?: (threadId?: string) => string;
+  resolveSkillsSystemPrompt: typeof import('../thread_session/skills').resolveSkillsSystemPrompt;
 }) => {
   const assemble = async (params: AssembleChatContextParams) => {
     const contextConfig = deriveModelAwareContextConfig(
-      getContextConfig(params.memoryContextConfig),
+      getContextConfig(params.contextBudgetOverride),
       params.modelCapability
     );
     const blocks = [] as Array<ReturnType<typeof buildDroppedBlock>>;
@@ -53,69 +42,37 @@ export const createChatContextAssembler = (deps: {
       });
     }
 
-    const recentHistory = selectRecentHistory(
-      params.messages,
-      contextConfig,
-      params.modelCapability
-    );
+    const recentHistory = selectRecentHistory(params.messages, params.modelCapability);
     blocks.push(recentHistory.block);
 
+    const workspaceSystemMessage =
+      params.workspaceSelection !== undefined
+        ? buildWorkspaceSystemMessageForSelection(params.workspaceSelection)
+        : (deps.workspaceSystemMessage?.(params.threadId) ?? '');
+    const agentInstructions =
+      params.workspaceSelection !== undefined
+        ? readAgentInstructionsForSelection(params.workspaceSelection)
+        : readAgentInstructions(params.threadId);
     const identityContext = benchmarkCleanContext
       ? {
           systemMessage: '',
           block: buildDroppedBlock('identity', 'disabled for benchmark clean mode'),
         }
       : buildIdentityContext(
-          deps.workspaceSystemMessage,
+          () => workspaceSystemMessage,
           params.threadId,
           contextConfig,
-          params.modelCapability,
-          readAgentInstructions(params.threadId)
+          agentInstructions,
         );
     blocks.push(identityContext.block);
 
     blocks.push(buildDroppedBlock('thread-summary', 'managed at model step boundary'));
 
-    const query = buildQueryFromMessages(params.messages);
-    const memoryContext =
-      benchmarkCleanContext
-        ? buildDroppedMemoryContext('disabled for benchmark clean mode')
-        : params.includeMemory === false
-          ? buildDroppedMemoryContext('disabled for chat response path')
-          : await buildMemoryContext({
-              threadId: params.threadId,
-              query,
-              memory: deps.memory,
-              contextConfig,
-              modelCapability: params.modelCapability,
-              onMemoryRetrieved: params.onMemoryRetrieved,
-            });
-    blocks.push(memoryContext.block);
-
-    const baseMessages = insertSystemMessages(
+    const withIdentity = insertSystemMessages(
       [...recentHistory.systemMessages, ...recentHistory.recentMessages],
       [identityContext.systemMessage]
     );
 
-    const affectContext = resolveAffectMessage(params, deps.memory);
-    blocks.push(
-      buildAffectBlock(
-        affectContext.message,
-        params.modelCapability,
-        affectContext.droppedReason
-      )
-    );
-
-    // Identity and skills are stable instruction blocks and stay in the system
-    // prefix. Memory and affect are per-turn data: they ride with the newest
-    // user message so a change to them cannot invalidate the cached history
-    // prefix.
-    const baseWithVolatile = appendContextToLastUserMessage(
-      baseMessages,
-      [memoryContext.systemMessage, affectContext.message]
-        .filter(part => part.trim().length > 0)
-        .join('\n\n')
-    );
     const skillContext: SkillContext = benchmarkCleanContext
       ? {
           systemMessage: '',
@@ -124,18 +81,17 @@ export const createChatContextAssembler = (deps: {
           block: buildDroppedBlock('skills', 'disabled for benchmark clean mode'),
         }
       : await buildSkillContext({
-          inputMessages: baseWithVolatile,
+          inputMessages: withIdentity,
           threadId: params.threadId,
           skillIds: params.skillIds,
           skillMode: params.skillMode,
-          affectState: params.affectState,
           contextConfig,
-          modelCapability: params.modelCapability,
+          resolveSkillsSystemPrompt: deps.resolveSkillsSystemPrompt,
         });
     blocks.push(skillContext.block);
 
     return buildAssembleResult({
-      messages: insertSystemMessages(baseWithVolatile, [skillContext.systemMessage]),
+      messages: insertSystemMessages(withIdentity, [skillContext.systemMessage]),
       usedSkills: skillContext.usedSkills,
       skillMode: skillContext.skillMode,
       retainedRecentMessages: recentHistory.recentMessages.length,
@@ -147,5 +103,3 @@ export const createChatContextAssembler = (deps: {
 
   return { assemble };
 };
-
-export type ChatContextAssembler = ReturnType<typeof createChatContextAssembler>;

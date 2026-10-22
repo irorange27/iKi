@@ -2,6 +2,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { getDb } from './database';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { toIsoNow } from '@iki/backend/utils/text';
+import { parseJsonStringArray, toStringArray } from '@iki/backend/utils/json';
 
 type AppClientRow = {
   id: string;
@@ -32,34 +33,12 @@ export type CreateAppClientInput = {
   id?: string;
 };
 
-const toStringArray = (value: unknown): string[] => {
-  if (Array.isArray(value)) {
-    return value
-      .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-      .map(entry => entry.trim());
-  }
-  if (typeof value === 'string' && value.trim()) {
-    return [value.trim()];
-  }
-  return [];
-};
-
-const parseStringArray = (raw: string | null | undefined): string[] => {
-  if (!raw || typeof raw !== 'string') return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return toStringArray(parsed);
-  } catch {
-    return toStringArray(raw);
-  }
-};
-
 const normalizeClient = (row: AppClientRow): AppClient => ({
   id: row.id,
   name: row.name,
   tokenHash: row.token_hash,
-  scopes: parseStringArray(row.scopes),
-  allowedTools: parseStringArray(row.allowed_tools),
+  scopes: parseJsonStringArray(row.scopes),
+  allowedTools: parseJsonStringArray(row.allowed_tools),
   created_at: row.created_at,
   updated_at: row.updated_at,
   last_seen: row.last_seen ?? null,

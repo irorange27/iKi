@@ -1,26 +1,20 @@
-import { isObjectRecord } from './guards';
-
-export const parseJsonObjectRecord = (
-  value: string | null | undefined
-): Record<string, unknown> => {
-  if (!value?.trim()) return {};
-
-  try {
-    const parsed = JSON.parse(value);
-    return isObjectRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
+export const toStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+      .map(entry => entry.trim());
   }
+  if (typeof value === 'string' && value.trim()) {
+    return [value.trim()];
+  }
+  return [];
 };
 
-export const parseJsonStringArray = (value: string | null | undefined): string[] => {
-  if (!value?.trim()) return [];
-
+export const parseJsonStringArray = (raw: string | null | undefined): string[] => {
+  if (!raw || typeof raw !== 'string') return [];
   try {
-    const parsed = JSON.parse(value);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((entry): entry is string => typeof entry === 'string');
+    return toStringArray(JSON.parse(raw));
   } catch {
-    return [];
+    return toStringArray(raw);
   }
 };

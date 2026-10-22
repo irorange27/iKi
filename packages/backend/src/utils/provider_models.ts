@@ -1,4 +1,5 @@
 import type { JsonValue } from '../types/provider';
+import { normalizeOptionalString } from './text';
 
 import type { ProviderModelOptions, ProviderModelOptionsMap } from '../types/provider';
 
@@ -39,12 +40,6 @@ const normalizeOptionalBoolean = (value: unknown): boolean | null => {
   return null;
 };
 
-const normalizeOptionalString = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
 type ModelsDevLimitRecord = {
   context?: unknown;
   input?: unknown;
@@ -67,9 +62,13 @@ type ModelsDevModelRecord = {
   reasoning?: unknown;
   supportsReasoning?: unknown;
   supports_reasoning?: unknown;
+
+  modalities?: unknown;
   vision?: unknown;
   supportsVision?: unknown;
   supports_vision?: unknown;
+
+  cost?: unknown;
 };
 
 type ModelsDevProviderRecord = {
@@ -89,6 +88,10 @@ export type ModelCapability = {
   supportsToolCalls: boolean | null;
   supportsReasoning: boolean | null;
   supportsVision?: boolean | null;
+
+  modalities?: string[];
+
+  costPerMillionTokens?: { input: number; output: number; cacheRead: number; cacheWrite: number };
   source: 'models.dev' | 'provider' | 'default';
 };
 
@@ -97,21 +100,10 @@ export type ModelCapabilityLimits = Pick<
   'contextWindow' | 'maxInputTokens' | 'maxOutputTokens'
 >;
 
-// Fallback assumptions for models with no catalog/provider data (custom
-// openai-compatible endpoints, or while the models.dev catalog is
-// unreachable): assume a modern large-window multimodal model. Stored
-// provider/model options always win over these defaults.
 export const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 1_000_000;
-export const DEFAULT_MODEL_MAX_OUTPUT_TOKENS = 393_216; // 384K
 
-/**
- * Hard per-request output caps enforced by provider APIs. A stored model
- * override above the cap (e.g. copying the context window into max output
- * tokens) makes every request fail with HTTP 400, so clamp it during
- * capability resolution. Values are documented API limits, not context sizes.
- */
 const PROVIDER_MAX_OUTPUT_TOKEN_CAPS: Partial<Record<string, number>> = {
-  // DeepSeek rejects max_tokens outside [1, 393216].
+
   deepseek: 393_216,
 };
 
@@ -180,6 +172,49 @@ const getLimitRecord = (model: ModelsDevModelRecord): ModelsDevLimitRecord | nul
   if (alternate) return alternate as ModelsDevLimitRecord;
 
   return null;
+};
+
+const modalitiesIncludeImage = (modalities: unknown): boolean | null => {
+  const record = asRecord(modalities);
+  const input = Array.isArray(record?.input) ? record!.input : Array.isArray(modalities) ? modalities : null;
+  if (!input) return null;
+
+  const normalized = input.filter((value): value is string => typeof value === 'string');
+  if (normalized.length === 0) return null;
+
+  return normalized.some(value => value.trim().toLowerCase() === 'image');
+};
+
+const readModalityList = (modalities: unknown): string[] | null => {
+  const record = asRecord(modalities);
+  const input = Array.isArray(record?.input) ? record!.input : Array.isArray(modalities) ? modalities : null;
+  if (!input) return null;
+
+  const normalized = input
+    .filter((value): value is string => typeof value === 'string')
+    .map(value => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  return normalized.length > 0 ? normalized : null;
+};
+
+const readNonNegativeNumber = (value: unknown): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
+  return value;
+};
+
+const readModelCostPerMillionTokens = (
+  cost: unknown
+): { input: number; output: number; cacheRead: number; cacheWrite: number } | null => {
+  const record = asRecord(cost);
+  if (!record) return null;
+
+  return {
+    input: readNonNegativeNumber(record.input) ?? 0,
+    output: readNonNegativeNumber(record.output) ?? 0,
+    cacheRead: readNonNegativeNumber(record.cache_read ?? record.cacheRead) ?? 0,
+    cacheWrite: readNonNegativeNumber(record.cache_write ?? record.cacheWrite) ?? 0,
+  };
 };
 
 const getProviderModelsRecord = (
@@ -298,7 +333,7 @@ export const getProviderModelOptions = (
   return normalizeProviderModelOptions(modelOptions[trimmedModelId]) ?? null;
 };
 
-export const pruneProviderModelOptionsMap = (
+const pruneProviderModelOptionsMap = (
   modelOptions: ProviderModelOptionsMap,
   modelIds: string[]
 ): ProviderModelOptionsMap => {
@@ -386,9 +421,12 @@ export const lookupModelsDevModelCapability = (
     normalizeOptionalBoolean(model.supportsReasoning) ??
     normalizeOptionalBoolean(model.supports_reasoning);
   const supportsVision =
+    modalitiesIncludeImage(model.modalities) ??
     normalizeOptionalBoolean(model.vision) ??
     normalizeOptionalBoolean(model.supportsVision) ??
     normalizeOptionalBoolean(model.supports_vision);
+  const modalities = readModalityList(model.modalities);
+  const costPerMillionTokens = readModelCostPerMillionTokens(model.cost);
 
   return {
     providerType,
@@ -404,6 +442,8 @@ export const lookupModelsDevModelCapability = (
     supportsToolCalls,
     supportsReasoning,
     ...(supportsVision !== null ? { supportsVision } : {}),
+    ...(modalities ? { modalities } : {}),
+    ...(costPerMillionTokens ? { costPerMillionTokens } : {}),
     source: 'models.dev',
   };
 };
@@ -462,6 +502,11 @@ export const mergeModelCapability = (
     supportsToolCalls: providerCapability.supportsToolCalls ?? baseCapability.supportsToolCalls,
     supportsReasoning: providerCapability.supportsReasoning ?? baseCapability.supportsReasoning,
     ...(supportsVision !== undefined ? { supportsVision } : {}),
+
+    ...(baseCapability.modalities ? { modalities: baseCapability.modalities } : {}),
+    ...(baseCapability.costPerMillionTokens
+      ? { costPerMillionTokens: baseCapability.costPerMillionTokens }
+      : {}),
     source: 'provider',
   };
 };
@@ -482,8 +527,8 @@ export const normalizeModelCapabilityLimits = (
   return {
     contextWindow,
     maxInputTokens: maxInputTokens ?? contextWindow,
-    maxOutputTokens:
-      normalizePositiveInteger(limits?.maxOutputTokens) ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
+
+    maxOutputTokens: normalizePositiveInteger(limits?.maxOutputTokens) ?? null,
   };
 };
 
@@ -519,9 +564,7 @@ export const ensureModelCapability = (
     modelId: trimmedModelId,
     displayName: trimmedModelId,
     ...normalizedLimits,
-    // Unknown models are assumed to be modern multimodal reasoners: the UI
-    // offers image input and reasoning controls by default, and catalog or
-    // provider data still overrides these when it exists.
+
     supportsToolCalls: true,
     supportsReasoning: true,
     supportsVision: true,

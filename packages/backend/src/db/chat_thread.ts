@@ -1,4 +1,5 @@
 import { getDb } from './database';
+import { deleteSessionEvents } from './session_events';
 import { ChatThread } from '@iki/backend/types/chat';
 import { buildSetClause } from './utils';
 
@@ -34,32 +35,6 @@ export const getChatThread = (id: string): ChatThread | null => {
     is_incognito: row.is_incognito || 0,
     enable_artifacts: row.enable_artifacts || 0,
   };
-};
-
-export const getChatThreadsByWorkspace = (workspaceId: string): ChatThread[] => {
-  const rows = getDb()
-    .prepare('SELECT * FROM chat_threads WHERE workspace_id = ? ORDER BY updated_at DESC')
-    .all(workspaceId) as ChatThreadRow[];
-  return rows.map(row => ({
-    ...row,
-    is_generating: Boolean(row.is_generating),
-    is_favorited: row.is_favorited || 0,
-    is_incognito: row.is_incognito || 0,
-    enable_artifacts: row.enable_artifacts || 0,
-  }));
-};
-
-export const getFavoritedChatThreads = (): ChatThread[] => {
-  const rows = getDb()
-    .prepare('SELECT * FROM chat_threads WHERE is_favorited = 1 ORDER BY updated_at DESC')
-    .all() as ChatThreadRow[];
-  return rows.map(row => ({
-    ...row,
-    is_generating: Boolean(row.is_generating),
-    is_favorited: row.is_favorited || 0,
-    is_incognito: row.is_incognito || 0,
-    enable_artifacts: row.enable_artifacts || 0,
-  }));
 };
 
 export const addChatThread = (
@@ -114,8 +89,8 @@ export const updateChatThread = (id: string, thread: Partial<ChatThread>) => {
   if (!fields) return null;
 
   const stmt = getDb().prepare(`
-        UPDATE chat_threads 
-        SET ${fields}, updated_at = @updated_at 
+        UPDATE chat_threads
+        SET ${fields}, updated_at = @updated_at
         WHERE id = @id
     `);
 
@@ -140,12 +115,7 @@ export const touchChatThread = (id: string) => {
 };
 
 export const deleteChatThread = (id: string) => {
-  // Messages will be deleted automatically due to CASCADE
-  return getDb().prepare('DELETE FROM chat_threads WHERE id = ?').run(id);
-};
 
-export const toggleFavoriteChatThread = (id: string) => {
-  const thread = getChatThread(id);
-  if (!thread) return null;
-  return updateChatThread(id, { is_favorited: thread.is_favorited === 1 ? 0 : 1 });
+  deleteSessionEvents(id);
+  return getDb().prepare('DELETE FROM chat_threads WHERE id = ?').run(id);
 };

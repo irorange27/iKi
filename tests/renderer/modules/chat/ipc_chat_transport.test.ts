@@ -117,7 +117,6 @@ describe('ipc_chat_transport', () => {
       body: { threadId: 'thread_1' },
     });
 
-    // Late chunk from the superseded first stream: no start binding → dropped.
     electronApi.emit({ type: 'finish' });
 
     electronApi.emit({ type: 'start', messageId: 'assistant_2' });
@@ -195,7 +194,6 @@ describe('ipc_chat_transport', () => {
       approvalId: 'aitxt_2',
       toolCallId: 'call_2',
     });
-    // A blocked resume (repeat approval) never emits finish/abort/error.
     transport.closeFollowUpStream();
 
     const reconnected = await transport.reconnectToStream({ chatId: 'chat_1' });

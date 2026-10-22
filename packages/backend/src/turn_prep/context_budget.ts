@@ -1,15 +1,10 @@
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
 
-type ContextConfig = typeof DEFAULT_APP_CONFIG.memory.context;
+type ContextConfig = typeof DEFAULT_APP_CONFIG.context;
 
 type ScaledBudgetItem = {
-  key:
-    | 'maxRecentTokens'
-    | 'maxIdentityTokens'
-    | 'maxSummaryTokens'
-    | 'maxMemoryTokens'
-    | 'maxSkillTokens';
+  key: 'maxIdentityTokens' | 'maxSkillTokens';
   value: number;
   minValue: number;
 };
@@ -24,10 +19,7 @@ export type EffectiveContextConfig = ContextConfig & {
 };
 
 const CONTEXT_BUDGET_FLOORS: Record<ScaledBudgetItem['key'], number> = {
-  maxRecentTokens: 256,
   maxIdentityTokens: 48,
-  maxSummaryTokens: 96,
-  maxMemoryTokens: 96,
   maxSkillTokens: 160,
 };
 
@@ -36,24 +28,9 @@ const clampInteger = (value: number, minValue: number, maxValue: number): number
 
 const toScaledBudgetItems = (config: ContextConfig): ScaledBudgetItem[] => [
   {
-    key: 'maxRecentTokens',
-    value: config.maxRecentTokens,
-    minValue: CONTEXT_BUDGET_FLOORS.maxRecentTokens,
-  },
-  {
     key: 'maxIdentityTokens',
     value: config.maxIdentityTokens,
     minValue: CONTEXT_BUDGET_FLOORS.maxIdentityTokens,
-  },
-  {
-    key: 'maxSummaryTokens',
-    value: config.maxSummaryTokens,
-    minValue: CONTEXT_BUDGET_FLOORS.maxSummaryTokens,
-  },
-  {
-    key: 'maxMemoryTokens',
-    value: config.maxMemoryTokens,
-    minValue: CONTEXT_BUDGET_FLOORS.maxMemoryTokens,
   },
   {
     key: 'maxSkillTokens',
@@ -107,42 +84,22 @@ const shrinkBudgetToFit = (
 };
 
 const buildRequestedContextTokens = (config: ContextConfig): number =>
-  config.maxRecentTokens +
-  config.maxIdentityTokens +
-  config.maxSummaryTokens +
-  config.maxMemoryTokens +
-  config.maxSkillTokens;
+  config.maxIdentityTokens + config.maxSkillTokens;
 
 const resolveMaxOutputTokens = (
   modelInputLimit: number,
   capability?: ModelCapability | null
-): number => {
+): number | null => {
   const declaredOutput = capability?.maxOutputTokens ?? null;
-  if (declaredOutput && declaredOutput > 0) {
-    return clampInteger(declaredOutput, 256, Math.max(256, Math.floor(modelInputLimit / 2)));
+  if (!declaredOutput || declaredOutput <= 0) {
+
+    return null;
   }
 
-  return clampInteger(Math.floor(modelInputLimit * 0.2), 512, 2048);
+  return clampInteger(declaredOutput, 256, Math.max(256, Math.floor(modelInputLimit / 2)));
 };
 
-const scaleMessageClipBudget = (
-  config: ContextConfig,
-  scale: number,
-  maxRecentTokens: number
-): number => {
-  if (scale >= 1) {
-    return Math.min(config.maxMessageTokens, maxRecentTokens);
-  }
-
-  return Math.min(
-    maxRecentTokens,
-    clampInteger(
-      Math.floor(config.maxMessageTokens * Math.max(scale, 0.5)),
-      80,
-      config.maxMessageTokens
-    )
-  );
-};
+const MIN_AVAILABLE_CONTEXT_TOKENS = CONTEXT_BUDGET_FLOORS.maxIdentityTokens;
 
 export const deriveModelAwareContextConfig = (
   config: ContextConfig,
@@ -166,9 +123,10 @@ export const deriveModelAwareContextConfig = (
 
   const maxOutputTokens = resolveMaxOutputTokens(modelInputLimit, capability);
   const safetyReserveTokens = clampInteger(Math.floor(modelInputLimit * 0.05), 128, 1024);
+
   const availableContextTokens = Math.max(
-    CONTEXT_BUDGET_FLOORS.maxRecentTokens,
-    modelInputLimit - maxOutputTokens - safetyReserveTokens
+    MIN_AVAILABLE_CONTEXT_TOKENS,
+    modelInputLimit - (maxOutputTokens ?? 0) - safetyReserveTokens
   );
 
   if (availableContextTokens >= requestedContextTokens) {
@@ -200,11 +158,7 @@ export const deriveModelAwareContextConfig = (
 
   return {
     ...config,
-    maxRecentTokens: itemMap.maxRecentTokens,
-    maxMessageTokens: scaleMessageClipBudget(config, scale, itemMap.maxRecentTokens),
     maxIdentityTokens: itemMap.maxIdentityTokens,
-    maxSummaryTokens: itemMap.maxSummaryTokens,
-    maxMemoryTokens: itemMap.maxMemoryTokens,
     maxSkillTokens: itemMap.maxSkillTokens,
     budgetScale: scale,
     availableContextTokens,

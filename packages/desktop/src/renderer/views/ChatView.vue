@@ -2,6 +2,7 @@
   <div class="flex h-full min-h-0 app-background app-text">
     <Sidebar
       :workspace-locked="isWorkspaceLocked"
+      :hide-collapsed-toolbar="showHeaderMeta"
       @thread-selected="selectThread"
       @new-chat="handleNewChat"
       @new-work="handleNewWork"
@@ -10,27 +11,63 @@
 
     <!-- Main Content -->
     <div class="chat-content-column flex min-h-0 min-w-0 flex-1 flex-col">
-      <!-- Header -->
-      <div v-if="showHeaderMeta" class="flex items-center justify-center p-4">
-        <div class="ui-text-secondary flex items-center gap-1 text-sm">
-          <span v-if="showMessageCount">{{
-            t('chat.messagesCount', { count: chatMessages.length })
-          }}</span>
-          <span v-if="showMessageCount && currentThread">·</span>
-          <FolderOpen v-if="currentThread" :size="12" />
-          <span v-if="currentThread">{{ currentThread.title }}</span>
+      <!-- Header: conversation title row + view tabs. The hairline under the
+           block closes the header, mirroring the sidebar's quiet separation.
+           With the sidebar folded, the collapsed toolbar's controls move into
+           this row as a leading cluster (DSH's leading seat) — they and the
+           title share one line past the macOS traffic lights.
+           The row also carries the workspace seat, so it renders even on the
+           starting screen (no title yet): where tools will run has to be
+           answerable before the first message exists. -->
+      <header
+        class="chat-header"
+        :class="{ 'chat-header-leading-clear': sidebar.isCollapsed.value }"
+      >
+        <div class="chat-header-title-row">
+          <template v-if="sidebar.isCollapsed.value">
+            <!-- Two controls, and each must do what its label says. The toggle
+                 used to carry the "Toggle sidebar" label while running
+                 handleNewChat, so a folded sidebar had NO way to be reopened —
+                 the one affordance that claimed to do it created a chat
+                 instead. -->
+            <button
+              class="chat-header-tool-btn"
+              type="button"
+              :aria-label="t('chat.sidebar.toggle')"
+              @click="sidebar.toggle"
+            >
+              <PanelLeftDashed :size="16" />
+            </button>
+            <button
+              class="chat-header-tool-btn"
+              type="button"
+              :aria-label="t('chat.sidebar.newChat')"
+              @click="handleNewChat"
+            >
+              <SquarePen :size="16" />
+            </button>
+          </template>
+          <!-- Where tools will run. Leading seat of the title row, outside the
+               composer: it is conversation context, not a send-time option. -->
+          <WorkspaceSelector />
+          <span v-if="currentThread" class="chat-header-sep" aria-hidden="true"></span>
+          <h1 v-if="currentThread" class="chat-header-title" :title="currentThread.title">
+            {{ currentThread.title }}
+          </h1>
           <span v-if="currentThreadOrigin?.isExternal" class="thread-origin-chip">
             {{ currentThreadOrigin.channelLabel || currentThreadOrigin.sourceLabel || 'External' }}
           </span>
+          <span v-if="showMessageCount" class="chat-header-meta">
+            {{ t('chat.messagesCount', { count: chatMessages.length }) }}
+          </span>
         </div>
-      </div>
 
-      <div
-        v-if="currentThread"
-        class="chat-view-tabs flex h-9 shrink-0 items-end gap-5 px-4"
-        role="tablist"
-        :aria-label="t('chat.runs.views')"
-      >
+        <div
+          v-if="currentThread"
+          class="chat-view-tabs flex h-9 shrink-0 items-end gap-5"
+          role="tablist"
+          :aria-label="t('chat.runs.views')"
+        >
         <button
           id="chat-tab"
           type="button"
@@ -63,7 +100,8 @@
         >
           {{ t('chat.runs.title') }}
         </button>
-      </div>
+        </div>
+      </header>
       <TrajectoryView
         v-if="trajectoryMounted"
         v-show="showRunPanel"
@@ -102,7 +140,14 @@
             <div v-if="externalThreadNotice" class="thread-origin-banner">
               {{ externalThreadNotice }}
             </div>
-            <div class="messages-container" @click="handleMarkdownClick">
+            <!-- Delegation only: it forwards clicks to the copy <button> that the
+                 markdown plugin renders inside, which is natively keyboard
+                 operable. The container itself is not a control. -->
+            <div
+              class="messages-container"
+              data-a11y-delegated-click
+              @click="handleMarkdownClick"
+            >
               <ChatMessageItem
                 v-for="(m, index) in chatMessages"
                 :key="m.id"
@@ -158,7 +203,6 @@
           :approval-policy="currentApprovalPolicy"
           :latest-token-usage="latestAssistantTokenUsage"
           :session-perf-stats="sessionPerfStats"
-          :todo-plan="activeTodoPlan"
           :prepare-message-send="prepareMessageSend"
           :submit-turn="submitTurn"
           @new-chat-requested="handleNewChat"
@@ -179,15 +223,17 @@
 
 <script setup lang="ts">
 import { computed, ref, nextTick, watch, onBeforeUnmount } from 'vue';
+import { PanelLeftDashed, SquarePen } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';
+import WorkspaceSelector from '../components/WorkspaceSelector.vue';
+import { useSidebar } from '../composables/useSidebar';
 import ChatInput from '../components/ChatInput.vue';
 import ChatMessageItem from '../components/chat/ChatMessageItem.vue';
 import ChatSessionStatsBar from '../components/chat/ChatSessionStatsBar.vue';
 import TurnPreviewCard from '../components/chat/TurnPreviewCard.vue';
 import TrajectoryView from './TrajectoryView.vue';
-import { FolderOpen } from 'lucide-vue-next';
 import { useI18n } from '../i18n';
 import { useChatUsage } from '../composables/useChatUsage';
 import { createChatInstance } from '../modules/chat/chat_instance';
@@ -198,7 +244,6 @@ import { useConfigStore } from '../store/config';
 import { useThreadSessionStore } from '../store/thread_session';
 import { useMarkdownCopy } from '../composables/useMarkdownCopy';
 import { useChatStreaming } from '../composables/useChatStreaming';
-import { useChatThreadTodoPlan } from '../composables/useChatThreadTodoPlan';
 import { useToolMetadata } from '../composables/useToolMetadata';
 import { getThreadOriginInfo } from '../modules/chat/thread_origin';
 import { getElectronAPI } from '../services/electron_api';
@@ -250,10 +295,6 @@ const persistDraftModelSelection = async (selection: {
   await configStore.saveConfig();
 };
 
-// Chat runtime: SDK-owned message state + IPC transport (P6). Persistence,
-// the message-store view and the approval controller hang off the same
-// instance. `currentThread` and the thread callbacks are declared below —
-// referenced lazily from closures.
 const chatInstance = createChatInstance({
   electronAPI,
   generateId: () => createPrefixedId('msg'),
@@ -262,7 +303,6 @@ const chatInstance = createChatInstance({
   onStreamActivity: () => scheduleFollowScroll(),
 });
 const chat = chatInstance.chat;
-const persistence = chatInstance.persistence;
 const messageStore = chatInstance.messageStore;
 const chatMessages = computed<ChatUiMessage[]>(() => chat.messages);
 const messagesContainer = ref<HTMLElement | null>(null);
@@ -276,12 +316,6 @@ const focusViewTab = (id: string) => {
   void nextTick(() => document.getElementById(id)?.focus());
 };
 
-// The AI SDK appends usage parts to a message in place, which does not
-// invalidate computeds that only iterate `chat.messages`. Bump a counter when
-// a usage chunk has been applied so session stats and the context indicator
-// refresh within the same turn. The tap fires before the SDK consumes the
-// chunk, hence the deferred bump; the status->ready watch is the guaranteed
-// end-of-turn pass.
 const usageChunkTick = ref(0);
 let usageRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 const removeUsageListener = chatInstance.transport.onChunk(chunk => {
@@ -301,6 +335,7 @@ watch(chatInstance.status, status => {
 
 const createMessageId = () => createPrefixedId('msg');
 const { handleMarkdownClick } = useMarkdownCopy();
+const sidebar = useSidebar();
 const { loadToolSources, getMcpServerLabel } = useToolMetadata({
   electronAPI,
 });
@@ -312,10 +347,8 @@ const { latestAssistantTokenUsage, sessionPerfStats } = useChatUsage(
 );
 
 const showMessageCount = computed(() => chatMessages.value.length > 0);
-const showHeaderMeta = computed(() => showMessageCount.value || Boolean(currentThread.value));
+const showHeaderMeta = true;
 const showWelcomeScreen = computed(() => showWelcome.value && chatMessages.value.length === 0);
-// A work thread's project binding is immutable once the conversation has
-// started — switching mid-flight would silently move the tool roots.
 const isWorkspaceLocked = computed(
   () => Boolean(currentThread.value?.id) && chatMessages.value.length > 0
 );
@@ -351,9 +384,6 @@ const handleMessagesScroll = () => {
   pinnedToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_TAIL_THRESHOLD_PX;
 };
 
-// Stream activity coalesces into one scroll per frame and yields to a user
-// who scrolled up; explicit jumps (send, thread switch) go through
-// scrollToBottom and re-engage following.
 const scheduleFollowScroll = () => {
   if (!pinnedToBottom || followScrollRaf !== null) return;
   followScrollRaf = requestAnimationFrame(() => {
@@ -385,7 +415,6 @@ const {
   ensureWorkspaceForCurrentThread,
   getCurrentThreadId,
   handleAssistantMessagePersisted,
-  handleTaskPush,
   handleAwaiterPush,
 } = threadSession;
 const selectThreadBase = threadSession.selectThread;
@@ -424,26 +453,16 @@ const handleNewWork = async (workspaceId: string) => {
 threadSession.initRuntime({
   electronAPI,
   messageStore,
-  persistence,
   scrollToBottom,
   preferredDraftModel,
   preferredDraftProviderId,
   persistDraftModelSelection,
 });
 
-const { activeTodoPlan, handleChatChunk } = useChatThreadTodoPlan({
-  electronAPI,
-  threadId: computed(() => currentThread.value?.id || null),
-});
-// The transport is the single tap point for routed ui chunks (the todo-plan
-// projection mirrors them; stale chunks never reach it).
-chatInstance.transport.onChunk(handleChatChunk);
-
 const streaming = useChatStreaming({
   electronAPI,
   chatInstance,
   messageStore,
-  persistence,
   createMessageId,
   scrollToBottom,
   getCurrentThreadId,
@@ -504,20 +523,124 @@ useChatViewLifecycle({
   refreshThreads,
   loadToolSources,
   electronAPI,
-  handleTaskPush,
   handleAwaiterPush,
 });
 
-// Cross-window jumps (e.g. the settings automations review queue) ask the
-// main window to open a specific thread.
 electronAPI.onFocusThread?.(threadId => {
   void selectThread(threadId);
 });
 </script>
 
 <style scoped>
+/* Conversation header (DSH ConversationHeader): title row over the view tabs,
+   one hairline closing the block. The title is the page's h1; message count
+   and origin ride after it as quiet metadata. */
+/* Top-left workspace seat. It owns its row so it stays put whether or not the
+   header (title + tabs) is rendered, and it never competes with the composer
+   for attention. When the sidebar is folded the column reaches the window edge
+   and macOS traffic lights (20,20) overlay this zone, hence the 84px indent —
+   the same clearance the header uses. */
+.chat-workspace-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 8px clamp(14px, 2.2cqw, var(--chat-content-padding, 24px)) 0;
+}
+
+.chat-workspace-bar--collapsed {
+  padding-left: 84px;
+}
+
+.chat-header {
+  flex: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+}
+
+.chat-header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  /* Vertical rhythm follows the window height: in a short window the header
+     gives rows back to the conversation instead of keeping desktop air. */
+  min-height: clamp(24px, 3.2vh, 30px);
+  padding: clamp(6px, 1.4vh, 10px) clamp(14px, 2.2cqw, var(--chat-content-padding, 24px)) 0;
+}
+
+/* Sidebar folded: the chat column reaches the window edge, and hiddenInset
+   traffic lights (20,20) overlay the leading zone. The collapsed toolbar's
+   controls render inline in this row, so one indent clears the lights for
+   the whole line. */
+.chat-header-leading-clear .chat-header-title-row {
+  padding-left: 84px;
+}
+
+.chat-header-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.chat-header-tool-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Divides the workspace seat from the conversation title. Quiet on purpose:
+   both are metadata on the same line, neither should read as a control. */
+.chat-header-sep {
+  flex: none;
+  width: 1px;
+  height: 12px;
+  background: color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+
+/* Divides the workspace seat from the conversation title. Quiet on purpose:
+   both are metadata on the same line, neither should read as a control. */
+.chat-header-sep {
+  flex: none;
+  width: 1px;
+  height: 12px;
+  background: color-mix(in srgb, var(--border-color) 70%, transparent);
+}
+
+.chat-header-title {
+  margin: 0;
+  min-width: 0;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.chat-header-meta {
+  flex: none;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-muted);
+}
+
+/* The tab row is one of the fixed rows around the conversation, so it shrinks
+   with the window height before the message area has to. */
 .chat-view-tabs {
-  border-bottom: 1px solid var(--border-color);
+  height: clamp(28px, 4vh, 36px);
+  padding: 0 clamp(14px, 2.2cqw, var(--chat-content-padding, 24px));
 }
 
 /* Messages styles */
@@ -529,7 +652,12 @@ electronAPI.onFocusThread?.(threadId => {
 }
 
 .chat-main-area {
-  padding: var(--chat-content-padding, 24px);
+  /* Container-over-viewport companion: the horizontal gutter follows the chat
+     area's own width (cqw resolves against .chat-main-wrap below), so dragging
+     the sidebar and resizing the window produce one continuous rhythm instead
+     of a 24px -> 16px step at a viewport breakpoint. The block gutter follows
+     the window height for the same reason. */
+  padding: clamp(12px, 3.4vh, 24px) clamp(14px, 2.2cqw, var(--chat-content-padding, 24px));
   min-width: 0;
   overscroll-behavior: contain;
   scrollbar-gutter: stable both-edges;
@@ -548,11 +676,16 @@ electronAPI.onFocusThread?.(threadId => {
 }
 
 .chat-content-column {
-  /* Conversation column follows the window: grows from the 860px reading
-     width up to 1600px, holding ~82% of the chat area in between. Lives on
-     the shared column so the composer below the panel tracks the same
-     width as the messages. */
-  --chat-column-max: clamp(860px, 82%, 1600px);
+  /* Conversation column follows the chat area: 82% up to the 1600px cap, and
+     fluid all the way down to a 360px column instead of freezing at 860px
+     (which left the column wider than its container below ~1050px of chat
+     area and made the "fluid" middle band a no-op). Lives on the shared
+     column so the composer below the panel tracks the same width as the
+     messages. */
+  --chat-column-max: clamp(360px, 82%, 1600px);
+  /* The header and composer rows query this column rather than the viewport,
+     so the sidebar's drag width participates in their reflow. */
+  container-type: inline-size;
 }
 
 .chat-main-wrap {
@@ -567,26 +700,28 @@ electronAPI.onFocusThread?.(threadId => {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 26px;
+  width: 16px;
   z-index: 19;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   pointer-events: none;
 }
 
+/* Rest state is nearly invisible — a faint 8px hairline stack; only hovering
+   a mark makes it prominent (lengthens, tints accent). */
 .turn-rail-mark {
   pointer-events: auto;
   flex: 0 0 auto;
   display: block;
-  padding: 3px 3px;
+  padding: 3px 4px;
   border: none;
   background: transparent;
   border-radius: 4px;
   cursor: pointer;
-  opacity: 0.45;
+  opacity: 0.3;
   transition:
     opacity 0.15s ease,
     background-color 0.15s ease;
@@ -594,10 +729,10 @@ electronAPI.onFocusThread?.(threadId => {
 
 .turn-rail-mark span {
   display: block;
-  width: 14px;
+  width: 8px;
   height: 2px;
   border-radius: 1px;
-  background: var(--text-secondary);
+  background: var(--text-muted);
   transition:
     width 0.15s ease,
     background-color 0.15s ease;
@@ -612,15 +747,16 @@ electronAPI.onFocusThread?.(threadId => {
 
 .turn-rail-mark:hover span,
 .turn-rail-mark:focus-visible span {
-  width: 20px;
+  width: 16px;
   background: var(--accent-color);
 }
 
 .thread-origin-chip {
+  flex: none;
   border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
+  border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  background: transparent;
+  color: var(--text-muted);
   padding: 2px 8px;
   font-size: 11px;
   line-height: 1.2;
@@ -679,6 +815,26 @@ electronAPI.onFocusThread?.(threadId => {
 .edit-banner-cancel:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+@media (max-width: 768px) {
+  .chat-main-area {
+    padding: max(10px, calc(var(--chat-content-padding, 24px) - 8px));
+  }
+
+  .messages-container {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .chat-main-area {
+    padding: max(10px, calc(var(--chat-content-padding, 24px) - 8px));
+  }
+
+  .messages-container {
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 768px) {

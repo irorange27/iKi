@@ -7,7 +7,12 @@ import {
   type AwaiterTriggerSpec,
 } from '@iki/backend/types/awaiters';
 import { createPrefixedId } from '@iki/backend/utils/id';
-import { toIsoNow } from '@iki/backend/utils/text';
+import {
+  clampListLimit,
+  normalizeOptionalProviderId,
+  normalizeWhitespace,
+  toIsoNow,
+} from '@iki/backend/utils/text';
 import {
   computeAwaiterNextWakeAt,
   formatAwaiterTriggerSummary,
@@ -34,23 +39,9 @@ export type AwaiterRecord = Omit<Awaiter, 'trigger_spec_json' | 'resume_context_
   trigger_summary: string;
 };
 
-const trimString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
-
-const clampListLimit = (value: unknown): number => {
-  const asNumber = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(asNumber)) return DEFAULT_AWAITER_LIST_LIMIT;
-  return Math.max(1, Math.min(MAX_AWAITER_LIST_LIMIT, Math.trunc(asNumber)));
-};
-
-const normalizeProviderId = (value: unknown): string | null => {
-  if (value === null) return null;
-  const trimmed = trimString(value);
-  return trimmed || null;
-};
-
 const normalizeNullableText = (value: unknown): string | null => {
   if (value === null || typeof value === 'undefined') return null;
-  const trimmed = trimString(value);
+  const trimmed = normalizeWhitespace(value);
   return trimmed || null;
 };
 
@@ -107,13 +98,13 @@ const resolveAwaiterByTitle = (title: string): Awaiter | null => {
   return matches[0];
 };
 
-export const resolveAwaiter = (reference: AwaiterReference): Awaiter | null => {
-  const byId = trimString(reference.id);
+const resolveAwaiter = (reference: AwaiterReference): Awaiter | null => {
+  const byId = normalizeWhitespace(reference.id);
   if (byId) {
     return awaitersDb.getAwaiter(byId);
   }
 
-  const byTitle = trimString(reference.title);
+  const byTitle = normalizeWhitespace(reference.title);
   if (byTitle) {
     return resolveAwaiterByTitle(byTitle);
   }
@@ -137,13 +128,13 @@ const normalizeTriggerOrThrow = (raw: unknown, nowIso: string): AwaiterTriggerSp
 
 export const createAwaiter = (input: AwaiterCreateInput): Awaiter => {
   const nowIso = toIsoNow();
-  const id = trimString(input.id) || createPrefixedId('awaiter');
-  const title = trimString(input.title);
-  const instruction = trimString(input.instruction);
-  const threadId = trimString(input.thread_id);
-  const providerType = trimString(input.provider_type);
-  const providerId = normalizeProviderId(input.provider_id);
-  const model = trimString(input.model);
+  const id = normalizeWhitespace(input.id) || createPrefixedId('awaiter');
+  const title = normalizeWhitespace(input.title);
+  const instruction = normalizeWhitespace(input.instruction);
+  const threadId = normalizeWhitespace(input.thread_id);
+  const providerType = normalizeWhitespace(input.provider_type);
+  const providerId = normalizeOptionalProviderId(input.provider_id);
+  const model = normalizeWhitespace(input.model);
   const notify = input.notify !== false;
   const trigger = normalizeTriggerOrThrow(input.trigger, nowIso);
 
@@ -201,12 +192,12 @@ export const updateAwaiter = (
   const hasTrigger = Object.prototype.hasOwnProperty.call(updates, 'trigger');
 
   if (hasTitle) {
-    const title = trimString(updates.title);
+    const title = normalizeWhitespace(updates.title);
     if (!title) throw new Error('Awaiter title is required');
     nextUpdates.title = title;
   }
   if (hasInstruction) {
-    const instruction = trimString(updates.instruction);
+    const instruction = normalizeWhitespace(updates.instruction);
     if (!instruction) throw new Error('Awaiter instruction is required');
     nextUpdates.instruction = instruction;
   }
@@ -214,20 +205,20 @@ export const updateAwaiter = (
     nextUpdates.notify = updates.notify;
   }
   if (hasThreadId) {
-    const threadId = trimString(updates.thread_id);
+    const threadId = normalizeWhitespace(updates.thread_id);
     if (!threadId) throw new Error('Awaiter thread_id is required');
     nextUpdates.thread_id = threadId;
   }
   if (hasProviderType) {
-    const providerType = trimString(updates.provider_type);
+    const providerType = normalizeWhitespace(updates.provider_type);
     if (!providerType) throw new Error('Awaiter provider_type is required');
     nextUpdates.provider_type = providerType;
   }
   if (hasProviderId) {
-    nextUpdates.provider_id = normalizeProviderId(updates.provider_id);
+    nextUpdates.provider_id = normalizeOptionalProviderId(updates.provider_id);
   }
   if (hasModel) {
-    const model = trimString(updates.model);
+    const model = normalizeWhitespace(updates.model);
     if (!model) throw new Error('Awaiter model is required');
     nextUpdates.model = model;
   }
@@ -258,8 +249,8 @@ export const listAwaiterRecords = (params?: {
   query?: string;
   limit?: number;
 }): AwaiterRecord[] => {
-  const query = trimString(params?.query);
-  const limit = clampListLimit(params?.limit);
+  const query = normalizeWhitespace(params?.query);
+  const limit = clampListLimit(params?.limit, DEFAULT_AWAITER_LIST_LIMIT, MAX_AWAITER_LIST_LIMIT);
 
   return awaitersDb
     .getAwaiters()
@@ -284,5 +275,3 @@ export const deleteAwaiter = (
   awaitersDb.deleteAwaiter(awaiter.id);
   return { deleted: true, awaiterId: awaiter.id, awaiterTitle: awaiter.title };
 };
-
-export const getAwaiterRecord = toAwaiterRecord;

@@ -57,50 +57,35 @@ describe('createCompanionService', () => {
     expect(send).toHaveBeenCalled();
   });
 
-  it('prioritizes thinking over policy and lets policy decay back to idle', () => {
+  it('prioritizes thinking over the idle phase and returns to idle afterwards', () => {
     const service = createCompanionService({
       getConfig: () => ({ general: { language: 'en' } }) as Partial<AppConfig>,
       listProviders: () => [createProvider({ models: '["gpt-4o-mini"]' })],
       listWindows: () => [],
     });
 
-    service.setChatPolicy({
-      interventionState: 'clarify',
-      escalate: 0,
-      confidence: 0.82,
-      rationale: 'Clarify before acting.',
-      reasonCodes: ['missing_decision_or_info'],
-      affectUsed: false,
-      applied: false,
-    });
-    expect(service.getSnapshot().phase).toBe('clarify');
+    expect(service.getSnapshot().phase).toBe('idle');
 
     service.beginThinking('renderer:1');
     expect(service.getSnapshot().phase).toBe('thinking');
 
     service.endThinking('renderer:1');
-    expect(service.getSnapshot().phase).toBe('clarify');
-
-    vi.advanceTimersByTime(90_000);
     expect(service.getSnapshot().phase).toBe('idle');
   });
 
-  it('emits a transient nudge and then settles back to idle', () => {
+  it('emits a transient reply-complete nudge and then settles back to idle', () => {
     const service = createCompanionService({
       getConfig: () => ({ general: { language: 'zh-CN' } }) as Partial<AppConfig>,
       listProviders: () => [createProvider({ models: '["gpt-4o-mini"]' })],
       listWindows: () => [],
     });
 
-    service.pushTaskNudge({
-      kind: 'task-success',
-      taskName: 'Daily digest',
-    });
+    service.notifyReplyComplete('Daily digest');
 
     expect(service.getSnapshot()).toMatchObject({
       phase: 'nudge',
-      label: '完成',
-      detail: 'Daily digest',
+      label: '回复完成',
+      detail: 'AI 已完成回复。 — Daily digest',
     });
 
     vi.advanceTimersByTime(12_000);
@@ -114,19 +99,14 @@ describe('createCompanionService', () => {
       listWindows: () => [],
     });
 
-    // Start thinking for two keys
     service.beginThinking('renderer:1');
     service.beginThinking('renderer:2');
     expect(service.getSnapshot().phase).toBe('thinking');
 
-    // End thinking for only the first key
     service.endThinking('renderer:1');
-    // renderer:2 is still "thinking" — companion stays in thinking phase
     expect(service.getSnapshot().phase).toBe('thinking');
 
-    // After the TTL (5 min), the stale key should be cleaned up
     vi.advanceTimersByTime(300_001);
-    // The stale key is cleaned during getSnapshot, returning to idle
     expect(service.getSnapshot().phase).toBe('idle');
   });
 });

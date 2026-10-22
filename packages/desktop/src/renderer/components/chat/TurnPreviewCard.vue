@@ -3,10 +3,15 @@
     <div
       v-if="anchor"
       class="turn-preview-card"
+      role="button"
+      tabindex="0"
+      :aria-label="cardLabel"
       :style="cardStyle"
       @mouseenter="emit('mouse-enter')"
       @mouseleave="emit('mouse-leave')"
       @click="emit('activate')"
+      @keydown.enter.prevent="emit('activate')"
+      @keydown.space.prevent="emit('activate')"
     >
       <div v-if="title" class="turn-preview-title">{{ title }}</div>
       <div v-if="previewItems.length === 0" class="turn-preview-empty">
@@ -80,6 +85,10 @@ const previewItems = computed(() => {
   }
   return items;
 });
+
+const cardLabel = computed(() =>
+  props.title ? t('a11y.turnPreviewCard', { role: props.title }) : t('chat.turnPreview.jump')
+);
 
 const cardStyle = computed(() => {
   if (!props.anchor) return {};

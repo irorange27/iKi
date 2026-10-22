@@ -13,6 +13,20 @@ export type ThreadWorkspaceSelection = {
   workspace: Workspace | null;
 };
 
+export const parseStoredWorkspaceSelection = (
+  stored: string | null | undefined
+): ThreadWorkspaceSelection | null | undefined => {
+  if (typeof stored !== 'string' || !stored.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(stored);
+    if (parsed === null) return null;
+    if (typeof parsed !== 'object') return undefined;
+    return parsed as ThreadWorkspaceSelection;
+  } catch {
+    return undefined;
+  }
+};
+
 const THREAD_WORKSPACES_DIR = 'thread-workspaces';
 const BRAIN_DIR = 'brain';
 
@@ -49,9 +63,6 @@ const ensureThreadWorkspaceRecord = (threadId: string): Workspace | null => {
     if (existingWorkspace) return existingWorkspace;
   }
 
-  // Chat/worktree-style threads have no project workspace: plain chats never
-  // get an auto-created scratch dir — filesystem/shell tools report that a
-  // workspace must be chosen instead.
   if (!thread || resolveThreadWorkMode(thread) !== 'work') return null;
 
   const workspacePath = getThreadWorkspacePath(threadId);
@@ -119,18 +130,14 @@ export const ensureThreadWorkspaceSelection = (
   };
 };
 
-/**
- * Turn-start snapshot used by the agent harness to freeze the workspace for a
- * whole run: later thread-state changes cannot redirect tools already running
- * under the frozen context.
- */
 export const resolveThreadWorkspaceSelectionSnapshot = (
   threadId?: string | null
 ): ThreadWorkspaceSelection | null =>
   ensureThreadWorkspaceSelection(threadId) ?? getThreadWorkspaceSelection(threadId);
 
-export const buildThreadWorkspaceSystemMessage = (threadId?: string | null): string => {
-  const selection = ensureThreadWorkspaceSelection(threadId);
+export const buildWorkspaceSystemMessageForSelection = (
+  selection: ThreadWorkspaceSelection | null | undefined
+): string => {
   if (!selection?.threadId || !selection.workspaceId) {
     return (
       'No workspace is selected for this conversation. Do not use filesystem or shell tools ' +
@@ -163,6 +170,11 @@ export const buildThreadWorkspaceSystemMessage = (threadId?: string | null): str
   return (
     `Current workspace: ${workspaceLabel} (${workspacePath}). ` +
     'Prefer relative paths from this root, default shell work to this directory, and do not operate outside it unless the user explicitly changes workspace. ' +
-    `Additional writable app data root: ${brainPath}. Use it for continuity files such as owner.md and memory_inbox/.`
+    `Additional writable app data root: ${brainPath} (addressable as brain/). Use it for notes and files that should outlive this workspace.`
   );
 };
+
+export const buildThreadWorkspaceSystemMessage = (threadId?: string | null): string =>
+  buildWorkspaceSystemMessageForSelection(
+    ensureThreadWorkspaceSelection(threadId) ?? getThreadWorkspaceSelection(threadId)
+  );

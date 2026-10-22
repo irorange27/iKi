@@ -3,8 +3,6 @@ import { z } from 'zod';
 import { BaseTool } from '@iki/backend/tools/base';
 import { RetryableError } from '@iki/backend/utils/errors';
 
-// ---- Minimal concrete tools for testing ----
-
 const TestSchema = z.object({ value: z.string() });
 
 class NoRetryTool extends BaseTool<typeof TestSchema> {
@@ -29,8 +27,6 @@ class RetryTool extends BaseTool<typeof TestSchema> {
     return { result: args.value };
   }
 }
-
-// ---- Tests ----
 
 describe('BaseTool without retry/cache (backward compat)', () => {
   it('behaves exactly as before when no retry/cache config', async () => {
@@ -64,7 +60,6 @@ describe('BaseTool with retry', () => {
       }
     );
 
-    // execute() no longer retries — it delegates retry to buildAiToolSet
     await expect(tool.execute({ value: 'retry-test' })).rejects.toThrow('transient');
     expect(calls).toBe(1);
   });

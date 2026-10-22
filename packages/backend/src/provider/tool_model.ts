@@ -1,12 +1,8 @@
-import { generateText } from 'ai';
-
 import { getProviders } from '../db/providers';
 import { getAppConfig } from '../config';
 import { createLogger } from '@iki/backend/logger';
-import { langfuseTelemetry } from '@iki/backend/observability/langfuse';
-import { LlmTitleRuntime, type TitleRuntime } from '../runtimes/title_runtime';
-import { createSimplePromptTextGenerator } from '../runtimes/prompt_text_generator';
-import { createModel, disposeLanguageModel, getModelCallSettings } from '../provider/llm/factory';
+import { generateConversationTitle } from '../runtimes/title_runtime';
+import { generateChatWithModelMessages } from '../provider/llm/factory';
 import { parseModelList } from '@iki/backend/utils/provider_models';
 
 export interface ToolModelConfig {
@@ -108,8 +104,6 @@ const findConfiguredToolModel = (
   return resolveExplicitToolModel(enabledProviders, config ?? {});
 };
 
-// Resolves the first available model from enabled providers as a fallback for
-// lightweight tasks (title generation, etc.) when no explicit tool model is configured.
 const resolveFallbackToolModel = (providers: ReturnType<typeof getProviders>): ToolModelConfig | null => {
   for (const provider of providers) {
     if (!provider.enabled) continue;
@@ -134,7 +128,22 @@ export const getToolModel = (): ToolModelConfig | null => {
       return configuredToolModel;
     }
 
-    return resolveFallbackToolModel(providers);
+    const fallback = resolveFallbackToolModel(providers);
+    if (fallback) {
+      toolModelLogger.event({
+        level: 'info',
+        event: 'tool_model.resolve',
+        outcome: 'degraded',
+        message:
+          'No tool model configured; using the first enabled provider. Auxiliary calls (tool/skill routing, titles, emotion) depend on it.',
+        data: {
+          providerId: fallback.providerId ?? null,
+          providerType: fallback.providerType,
+          model: fallback.model,
+        },
+      });
+    }
+    return fallback;
   } catch (error) {
     toolModelLogger.error('Failed to get tool model', error);
     return null;
@@ -157,34 +166,14 @@ export const testToolModelLatency = async (
     );
   }
 
-  const model = createModel(
-    resolvedToolModel.providerType,
-    resolvedToolModel.model,
-    resolvedToolModel.providerId
-  );
   const startTime = Date.now();
-  try {
-    await generateText({
-      model,
-      messages: [{ role: 'user', content: 'Reply with OK.' }],
-      ...getModelCallSettings(
-        resolvedToolModel.providerType,
-        resolvedToolModel.model,
-        resolvedToolModel.providerId
-      ),
-      maxOutputTokens: 8,
-      ...(() => {
-        const telemetry = langfuseTelemetry('tool_model.probe', {
-          provider: resolvedToolModel.providerType,
-          providerId: resolvedToolModel.providerId,
-          model: resolvedToolModel.model,
-        });
-        return telemetry ? { experimental_telemetry: telemetry } : {};
-      })(),
-    });
-  } finally {
-    disposeLanguageModel(model);
-  }
+  await generateChatWithModelMessages({
+    providerType: resolvedToolModel.providerType,
+    ...(resolvedToolModel.providerId ? { providerId: resolvedToolModel.providerId } : {}),
+    modelId: resolvedToolModel.model,
+    messages: [{ role: 'user', content: 'Reply with OK.' }],
+    maxOutputTokens: 8,
+  });
 
   return {
     ...(resolvedToolModel.providerId ? { providerId: resolvedToolModel.providerId } : {}),
@@ -194,18 +183,5 @@ export const testToolModelLatency = async (
   };
 };
 
-export type { TitleRuntime };
-export { LlmTitleRuntime };
-
-export const generateTitle = async (conversationContent: string): Promise<string | null> => {
-  const trimmed = conversationContent.trim();
-  if (!trimmed) return null;
-
-  const runtime = new LlmTitleRuntime({
-    getToolModel,
-    createGenerator: createSimplePromptTextGenerator,
-  });
-  return runtime.run(trimmed);
-};
-
-export const generateTitleWithAgent = generateTitle;
+export const generateTitle = async (conversationContent: string): Promise<string | null> =>
+  generateConversationTitle(conversationContent, getToolModel);

@@ -30,40 +30,19 @@ export interface Provider {
   name: string;
   type: string;
   api_key: string;
-  models: string; // JSON string of models
-  model_options?: string; // JSON string keyed by model id
+  models: string;
+  model_options?: string;
   base_url?: string;
   enabled: boolean;
   created_at: string;
   updated_at: string;
-  available_models: string; // JSON string
+  available_models: string;
   api_version?: string;
   is_response_api?: boolean;
-  acp_command?: string;
-  acp_args?: string;
-  acp_mcp_server_ids?: string;
-  acp_auth_method_id?: string;
-  acp_api_provider_id?: string;
-  acp_model_mapping?: string;
 }
 
 export type ProviderModelDiscoveryOverride = Partial<
-  Pick<
-    Provider,
-    | 'id'
-    | 'type'
-    | 'api_key'
-    | 'base_url'
-    | 'models'
-    | 'model_options'
-    | 'is_response_api'
-    | 'acp_command'
-    | 'acp_args'
-    | 'acp_mcp_server_ids'
-    | 'acp_auth_method_id'
-    | 'acp_api_provider_id'
-    | 'acp_model_mapping'
-  >
+  Pick<Provider, 'id' | 'type' | 'api_key' | 'base_url' | 'models' | 'model_options' | 'is_response_api'>
 >;
 
 export type ProviderUpdatedAction = 'added' | 'updated' | 'deleted';

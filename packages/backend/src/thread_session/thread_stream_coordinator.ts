@@ -4,16 +4,10 @@ import type { ActiveStreamState } from './types';
 const THREAD_RATE_LIMIT_WINDOW_MS = 10_000;
 const THREAD_RATE_LIMIT_MAX_REQUESTS = 5;
 
-/**
- * Per-thread coordination record (ADR 004 / ADR 005 phase B): the thread is
- * the session key. Membership, the steer queue, and the active stream
- * reference live here — not in sender-keyed maps. Sender ids remain
- * transport-scoped handles.
- */
 class ThreadSession {
   readonly threadId: string | null;
   readonly senderIds = new Set<number>();
-  /** Null once the stream is stopped/unregistered — steer targets a live stream. */
+
   steerQueue: string[] | null = [];
   streamState: ActiveStreamState | null = null;
 
@@ -22,32 +16,25 @@ class ThreadSession {
   }
 }
 
-/**
- * Owns all stream coordination state: the sender-keyed transport registry,
- * which senders stream which thread, per-thread rate limiting, per-thread
- * steer queues, and the stop/steer/supersede/abort operations over them.
- *
- * Approval resume attaches session-less streams via attachStream — they are
- * stoppable and run-cancellable but deliberately not steerable.
- *
- * Stop remains connection-domain by decision (ADR 004 phase 2): supersede
- * guarantees at most one active stream per connection, so the connection's
- * active stream is the current thread.
- */
+export type LiveRunExecution = {
+
+  cancel: (reason: string) => void;
+
+  setRunId: (runId: string | null) => void;
+
+  dispose: () => void;
+};
+
 export const createThreadStreamCoordinator = (deps?: {
-  /**
-   * Cross-process admission lease (SQLite-backed). Extends the per-thread
-   * guard to turns running in other processes sharing the same database
-   * (desktop + headless daemon). Returning null means "held elsewhere".
-   * `onLeaseLost` fires when another process reclaims this holder's expired
-   * lease, so the local run aborts instead of double-running the thread.
-   */
+
   crossProcessThreadRun?: (
     threadId: string,
     options: { onLeaseLost: () => void }
   ) => (() => void) | null;
 }) => {
   const runningThreads = new Set<string>();
+
+  const executionAbortHooks = new Map<string, Set<() => void>>();
   const abortThreadRunForLeaseLoss = (threadId: string) => {
     const session = sessionsByThread.get(threadId);
     const streamState = session?.streamState;
@@ -55,8 +42,14 @@ export const createThreadStreamCoordinator = (deps?: {
       streamState.cancelled = true;
       streamState.abortController.abort('thread-lease-lost');
     }
+    for (const abort of executionAbortHooks.get(threadId) ?? []) {
+      abort();
+    }
   };
-  const tryAcquireThreadRun = (threadId?: string): (() => void) | null => {
+  const tryAcquireThreadRun = (
+    threadId?: string,
+    options?: { onExecutionAbort?: () => void }
+  ): (() => void) | null => {
     if (!threadId) return () => undefined;
     if (runningThreads.has(threadId)) return null;
     const releaseCrossProcess = deps?.crossProcessThreadRun?.(threadId, {
@@ -64,17 +57,34 @@ export const createThreadStreamCoordinator = (deps?: {
     });
     if (releaseCrossProcess === null) return null;
     runningThreads.add(threadId);
+    if (options?.onExecutionAbort) {
+      let hooks = executionAbortHooks.get(threadId);
+      if (!hooks) {
+        hooks = new Set();
+        executionAbortHooks.set(threadId, hooks);
+      }
+      hooks.add(options.onExecutionAbort);
+    }
     let released = false;
     return () => {
       if (released) return;
       released = true;
       runningThreads.delete(threadId);
+      const hooks = executionAbortHooks.get(threadId);
+      if (hooks) {
+        if (options?.onExecutionAbort) hooks.delete(options.onExecutionAbort);
+        if (hooks.size === 0) executionAbortHooks.delete(threadId);
+      }
       releaseCrossProcess?.();
     };
   };
   const activeStreams = new Map<number, ActiveStreamState>();
   const sessionsByThread = new Map<string, ThreadSession>();
   const sessionBySender = new Map<number, ThreadSession>();
+
+  const executionsByRunId = new Map<string, LiveRunExecution>();
+
+  const childRunAliases = new Map<string, string>();
   const threadRunLimiter = createRateLimiter({
     windowMs: THREAD_RATE_LIMIT_WINDOW_MS,
     maxRequests: THREAD_RATE_LIMIT_MAX_REQUESTS,
@@ -89,7 +99,6 @@ export const createThreadStreamCoordinator = (deps?: {
     return session;
   };
 
-  /** Thread-less streams (no options.threadId) get a sender-scoped session. */
   const sessionForSender = (senderId: number): ThreadSession => {
     let session = sessionBySender.get(senderId);
     if (!session) {
@@ -178,7 +187,6 @@ export const createThreadStreamCoordinator = (deps?: {
     }
   };
 
-  /** Drain pending steer messages for a stream. */
   const takeSteerMessages = (senderId: number): string[] => {
     const session = sessionBySender.get(senderId);
     if (!session?.steerQueue) return [];
@@ -201,7 +209,6 @@ export const createThreadStreamCoordinator = (deps?: {
     return { success: true };
   };
 
-  /** Abort the active stream running `runId` (run cancellation; not user-stop). */
   const abortStreamByRunId = (runId: string): boolean => {
     for (const [, streamState] of activeStreams) {
       if (streamState.runId === runId && !streamState.cancelled) {
@@ -212,6 +219,64 @@ export const createThreadStreamCoordinator = (deps?: {
     }
     return false;
   };
+
+  const registerExecution = (execution: {
+    cancel: (reason: string) => void;
+    runId?: string | null;
+  }): LiveRunExecution => {
+    let runId = execution.runId ?? null;
+    let disposed = false;
+    const record: LiveRunExecution = {
+      cancel: execution.cancel,
+      setRunId: next => {
+        if (disposed || next === runId) return;
+        if (runId && executionsByRunId.get(runId) === record) {
+          executionsByRunId.delete(runId);
+        }
+        runId = next;
+        if (runId) executionsByRunId.set(runId, record);
+      },
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        if (runId && executionsByRunId.get(runId) === record) {
+          executionsByRunId.delete(runId);
+        }
+      },
+    };
+    if (runId) executionsByRunId.set(runId, record);
+    return record;
+  };
+
+  const cancelExecutionByRunId = (runId: string, reason: string): boolean => {
+    const execution = executionsByRunId.get(runId);
+    if (execution) {
+      execution.cancel(reason);
+      return true;
+    }
+    const parentRunId = childRunAliases.get(runId);
+    if (!parentRunId) return false;
+    const parent = executionsByRunId.get(parentRunId);
+    if (!parent) return false;
+    parent.cancel(reason);
+    return true;
+  };
+
+  const registerChildRunAlias = (parentRunId: string, childRunId: string): (() => void) => {
+    if (!parentRunId || !childRunId || parentRunId === childRunId) return () => undefined;
+    childRunAliases.set(childRunId, parentRunId);
+    return () => {
+      if (childRunAliases.get(childRunId) === parentRunId) {
+        childRunAliases.delete(childRunId);
+      }
+    };
+  };
+
+  const hasLiveExecutionForRun = (runId: string): boolean =>
+    executionsByRunId.has(runId) || (() => {
+      const parent = childRunAliases.get(runId);
+      return Boolean(parent && executionsByRunId.has(parent));
+    })();
 
   const steerStream = (
     senderId: number,
@@ -233,10 +298,6 @@ export const createThreadStreamCoordinator = (deps?: {
     }
     return { success: true };
   };
-
-  // Session-less registry access for approval resume: the resumed stream is
-  // stoppable and run-cancellable but gets no session, so it is not steerable
-  // and does not participate in thread membership.
 
   const peekStream = (senderId: number): ActiveStreamState | undefined =>
     activeStreams.get(senderId);
@@ -265,6 +326,10 @@ export const createThreadStreamCoordinator = (deps?: {
     stopStream,
     steerStream,
     abortStreamByRunId,
+    registerExecution,
+    registerChildRunAlias,
+    cancelExecutionByRunId,
+    hasLiveExecutionForRun,
     peekStream,
     attachStream,
     detachStream,

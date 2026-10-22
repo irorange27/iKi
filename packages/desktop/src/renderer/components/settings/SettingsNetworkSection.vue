@@ -31,14 +31,11 @@
         <span class="network-summary-pill">{{ proxySummary }}</span>
       </div>
 
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="config.network.proxy.enable"
-          @change="updateProxy('enable', ($event.target as HTMLInputElement).checked)"
-        />
-        {{ t('settings.network.proxy.enable') }}
-      </label>
+      <SettingsSwitch
+        :model-value="config.network.proxy.enable"
+        :title="t('settings.network.proxy.enable')"
+        @update:model-value="updateProxy('enable', $event)"
+      />
 
       <div v-if="config.network.proxy.enable" class="config-grid">
         <label class="input-label">
@@ -169,6 +166,7 @@
         max="20000"
         step="500"
         :value="config.network.timeout"
+        :aria-label="t('settings.network.timeoutMs')"
         @input="updateNetwork('timeout', parseRequiredInteger(getInputValue($event)))"
       />
       <p class="slider-hint">{{ t('settings.network.timeoutHint') }}</p>
@@ -183,6 +181,7 @@
         max="10"
         step="1"
         :value="config.network.retryAttempts"
+        :aria-label="t('settings.network.retryAttempts')"
         @input="updateNetwork('retryAttempts', parseRequiredInteger(getInputValue($event)))"
       />
       <p class="slider-hint">{{ t('settings.network.retryHint') }}</p>
@@ -197,6 +196,7 @@
 </template>
 
 <script setup lang="ts">
+import SettingsSwitch from './SettingsSwitch.vue';
 import { computed, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { RefreshCw } from 'lucide-vue-next';

@@ -6,12 +6,6 @@ export const getErrorMessage = (error: unknown): string => {
 
 const MAX_ERROR_CAUSE_DEPTH = 5;
 
-/**
- * Message for stream failures. AI SDK wrappers like NoOutputGeneratedError
- * hide the provider's own detail ("Invalid max_tokens value...", rate limits)
- * behind a generic top-level message; walk the cause chain and prefer the
- * first API-call error, which carries the provider response.
- */
 export const getStreamErrorMessage = (error: unknown): string => {
   const fallback = getErrorMessage(error);
   let current: unknown = error;
@@ -28,22 +22,6 @@ export const getStreamErrorMessage = (error: unknown): string => {
   return fallback;
 };
 
-const REFUSAL_PATTERNS = [
-  /\bI (?:am unable to|cannot|can't|won't|am not able to) (?:assist|comply|generate|create|write|provide|help|fulfil|engage|participate|do that)\b/i,
-  /\b(?:content policy|safety guidelines?|acceptable use|against my (?:guidelines|policies|terms)|terms of service)\b/i,
-  /\bviolates? (?:my|the|our|content|safety) (?:policy|guidelines)\b/i,
-];
-
-export const looksLikeRefusal = (text: string): boolean => {
-  const trimmed = text.trim();
-  if (trimmed.length === 0) return true;
-  if (trimmed.length > 500) return false;
-  return REFUSAL_PATTERNS.some(pattern => pattern.test(trimmed));
-};
-
-/**
- * Error thrown when the model refuses to respond (content filter, safety, etc.).
- */
 export class RefusalError extends Error {
   constructor(
     message: string,
@@ -55,9 +33,6 @@ export class RefusalError extends Error {
   }
 }
 
-/**
- * Error thrown by tool handlers for transient failures that should be retried.
- */
 export class RetryableError extends Error {
   constructor(
     message: string,
@@ -68,19 +43,27 @@ export class RetryableError extends Error {
   }
 }
 
-/**
- * Check whether an error is transient and should be retried.
- *
- * Detects:
- * - RetryableError instances
- * - Common Node.js transient error codes (ECONNRESET, ETIMEDOUT, EBUSY, etc.)
- * - Rate-limiting and temporary-unavailable patterns in error messages
- */
+export const isContextOverflowError = (message: unknown): boolean => {
+  const msg = typeof message === 'string' ? message.toLowerCase() : '';
+  if (!msg) return false;
+  return (
+    msg.includes('context length') ||
+    msg.includes('context_length') ||
+    msg.includes('context window') ||
+    msg.includes('maximum context') ||
+    msg.includes('too many tokens') ||
+    msg.includes('token limit') ||
+    msg.includes('input length') ||
+    msg.includes('input is too long') ||
+    msg.includes('prompt is too long') ||
+    msg.includes('request too large')
+  );
+};
+
 export const isRetryableError = (error: unknown): boolean => {
   if (error instanceof RetryableError) return true;
   if (error instanceof RefusalError) return true;
 
-  // Extract message from Error instances or plain objects with .message
   const candidate =
     error instanceof Error
       ? error
@@ -92,10 +75,8 @@ export const isRetryableError = (error: unknown): boolean => {
 
   const err = candidate as NodeJS.ErrnoException & { message: unknown };
 
-  // Intentional cancellation — not retryable
   if (err.name === 'AbortError') return false;
 
-  // Common Node.js transient system errors
   if (
     err.code === 'ECONNRESET' ||
     err.code === 'ECONNREFUSED' ||
@@ -113,7 +94,6 @@ export const isRetryableError = (error: unknown): boolean => {
 
   const msg = typeof err.message === 'string' ? err.message.toLowerCase() : '';
 
-  // Rate limiting, server errors, and temporary-unavailable indicators
   return (
     msg.includes('rate limit') ||
     msg.includes('too many requests') ||

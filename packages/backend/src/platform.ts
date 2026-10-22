@@ -36,8 +36,6 @@ export const setPlatformInfo = (info: PlatformInfo) => {
   platformInfo = next;
 };
 
-export const getPlatformInfo = (): PlatformInfo => ({ ...platformInfo });
-
 export const getUserDataPath = (): string => {
   if (platformInfo.userDataPath && platformInfo.userDataPath.trim()) {
     return platformInfo.userDataPath.trim();
@@ -73,7 +71,6 @@ export const getDisplayScale = (): number => {
   return 1;
 };
 
-/** Fetch provided by the host runtime (e.g. Electron's net stack); null = use Node fetch. */
 export type HostFetch = (
   url: string,
   init: RequestInit | undefined,

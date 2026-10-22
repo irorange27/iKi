@@ -1,67 +1,42 @@
 import { createLogger } from '@iki/backend/logger';
-import type { ModelMessage, ToolApprovalResponse } from 'ai';
+import type { ModelMessage, ToolApprovalResponse } from '@iki/backend/message/model_history';
 
+import { cloneModelMessages } from '../agent/harness';
+import type { ApprovalRecoveryContext } from './approval_types';
 import {
-  type AgentResult,
-} from '@iki/backend/agent';
-import { appendApprovalResponsesToHistory } from '../provider/ai_sdk_runtime';
-import { cloneModelMessages, rehydrateHarness } from '../agent/harness';
-import * as agentRunDb from '@iki/backend/db/agent_runs';
-import * as toolCallApprovalDb from '@iki/backend/db/tool_call_approval';
-import * as chatMessageDb from '@iki/backend/db/chat_message';
-import { runWithToolRuntimeContext } from '../utils/runtime_context';
-import { createPrefixedId } from '../utils/id';
-import type { ToolCallApprovalDecision } from '@iki/backend/types/tool_call_approval';
-import { getErrorMessage } from '@iki/backend/utils/errors';
-import type { ChatMemory } from './memory';
-import type { ApprovalRecoveryContext, ToolLoopStreamResult } from './approval_types';
-import { DEFAULT_TOOL_CALL_MAX_ITERATIONS } from './constants';
-import { deriveRunTurnPlan } from './run_rehydrator';
-import {
-  loadPersistedAssistantParts,
-  persistAssistantTurnMessage,
-} from './turn_persistence';
-import {
-  createAgentRunTracker,
-  rehydrateAgentRunTracker,
-} from './run_tracker';
-import type { ActiveStreamState, ChatStreamTarget, ChatStreamEvent } from './types';
-import { createUiChunkEmitter } from './ui_stream';
-import { toModelInputMessages } from './ui_messages';
-import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
+  recordFailureTerminalEvent,
+  recordSessionEvents,
+  APPROVAL_REQUESTED,
+  APPROVAL_DECIDED,
+  SESSION_EVENT_VERSION,
+  type ApprovalDecidedPayload,
+} from './session_log';
+import { admitPiResume } from './pi_resume_admission';
+import { executeApprovalResume } from './approval_resume_execution';
+import type { ApprovalBinding, PendingApprovalSession } from './approval_session';
+import { registerApprovalBinding } from './tool_execution';
+import type { ActiveStreamState, ChatStreamTarget } from './types';
 
 const APPROVAL_TIMEOUT_MS = 30 * 60 * 1000;
 
-type PendingApprovalSession = {
-  sessionId?: string;
-  target: ChatStreamTarget;
-  recoveryContext?: ApprovalRecoveryContext;
-  history?: ModelMessage[];
-  pendingApprovalIds: Set<string>;
-  collectedApprovalResponses: Map<string, ToolApprovalResponse>;
-  timeouts: Map<string, ReturnType<typeof setTimeout>>;
-};
-
-const parseStringArray = (value: string | null | undefined): string[] => {
-  if (typeof value !== 'string' || !value.trim()) return [];
-  try {
-    const parsed = JSON.parse(value);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
-  } catch {
-    return [];
-  }
-};
 
 export const createChatApproval = (deps: {
-  /** Session-less stream registry access (owned by the stream coordinator). */
+
   streams: {
-    tryAcquireThreadRun: (threadId?: string) => (() => void) | null;
+    tryAcquireThreadRun: (
+      threadId?: string,
+      options?: { onExecutionAbort?: () => void }
+    ) => (() => void) | null;
     peek: (senderId: number) => ActiveStreamState | undefined;
     attach: (senderId: number, streamState: ActiveStreamState) => void;
     detach: (senderId: number, streamState: ActiveStreamState) => void;
+
+    registerExecution?: (execution: {
+      cancel: (reason: string) => void;
+      runId?: string | null;
+    }) => { setRunId: (runId: string | null) => void; dispose: () => void };
+    registerChildRunAlias: (parentRunId: string, childRunId: string) => () => void;
   };
-  memory: ChatMemory;
   conversation: {
     upsertTurnMessage: (input: unknown) => unknown;
   };
@@ -88,27 +63,42 @@ export const createChatApproval = (deps: {
   const pendingApprovalSessions = new Map<string, PendingApprovalSession>();
 
   const clearApprovalTimeouts = (session: PendingApprovalSession) => {
-    if (!session.timeouts) return;
-    for (const timeoutId of session.timeouts.values()) {
-      clearTimeout(timeoutId);
+    if (session.timeouts) {
+      for (const timeoutId of session.timeouts.values()) clearTimeout(timeoutId);
+      session.timeouts.clear();
     }
-    session.timeouts.clear();
+    for (const release of session.releases ?? []) release();
+    session.releases = [];
   };
 
-  const scheduleApprovalTimeout = (approvalId: string, session: PendingApprovalSession, delay = APPROVAL_TIMEOUT_MS) => {
+  const scheduleApprovalTimeout = (
+    approvalId: string,
+    session: PendingApprovalSession,
+    delay = APPROVAL_TIMEOUT_MS
+  ) => {
     if (!session.timeouts || session.timeouts.has(approvalId)) return;
     const timeoutId = setTimeout(() => {
       if (session.collectedApprovalResponses.has(approvalId)) return;
       session.timeouts.delete(approvalId);
-      void approveTool(session.target, approvalId, false, 'Approval timed out after 30 minutes')
+      void approveTool(
+        session.target,
+        approvalId,
+        false,
+        'Approval timed out after 30 minutes',
+        'timeout'
+      )
         .then(result => {
           if (!result.success && pendingApprovalSessions.get(approvalId) === session) {
             scheduleApprovalTimeout(approvalId, session, 1000);
           }
         })
-        .catch(error => createLogger({ module: 'chat_approval' }).event({
-          level: 'error', event: 'approval.timeout.failed', error,
-        }));
+        .catch(error =>
+          createLogger({ module: 'chat_approval' }).event({
+            level: 'error',
+            event: 'approval.timeout.failed',
+            error,
+          })
+        );
     }, delay);
     session.timeouts.set(approvalId, timeoutId);
   };
@@ -141,6 +131,8 @@ export const createChatApproval = (deps: {
       recoveryContext: session.recoveryContext,
       pendingApprovalIds: new Set([approvalId]),
       collectedApprovalResponses: new Map(),
+      bindings: new Map(),
+      releases: [],
       timeouts: new Map(),
     };
     pendingApprovalSessions.set(approvalId, created);
@@ -166,35 +158,46 @@ export const createChatApproval = (deps: {
 
     if (approvalIds.length === 0) return;
 
-    if (session.recoveryContext) {
-      const recoveryContext = session.recoveryContext;
-      toolCallApprovalDb.upsertToolCallApprovalSession({
-        session_id: recoveryContext.sessionId,
-        thread_id: recoveryContext.threadId,
-        assistant_message_id: recoveryContext.assistantMessageId,
-        run_id: recoveryContext.runId ?? null,
-        provider_type: recoveryContext.providerType,
-        provider_id: recoveryContext.providerId ?? null,
-        model: recoveryContext.model,
-        system_prompt: recoveryContext.systemPrompt,
-        max_input_tokens: recoveryContext.maxInputTokens ?? null,
-        max_output_tokens: recoveryContext.maxOutputTokens ?? null,
-        max_iterations: recoveryContext.maxIterations ?? null,
-        enabled_tools: JSON.stringify(recoveryContext.enabledTools),
-        available_skill_ids: JSON.stringify(recoveryContext.availableSkillIds),
-      });
-
-      toolCallApprovalDb.upsertToolCallApprovals(
+    const context = session.recoveryContext;
+    if (context?.plan.threadId) {
+      // The proposal is an audit fact, not a resumable checkpoint: it records
+      // what was asked so the transcript explains the pause.
+      recordSessionEvents(
+        context.plan.threadId,
         approvalRequests.map(request => ({
-          approval_id: request.approvalId,
-          session_id: recoveryContext.sessionId,
-          tool_call_id: request.toolCallId || null,
-          tool_name: request.toolCall?.toolName || null,
-          tool_args: request.toolCall ? JSON.stringify(request.toolCall.args ?? {}) : null,
-          state: 'pending',
+          type: APPROVAL_REQUESTED,
+          version: SESSION_EVENT_VERSION,
+          payload: {
+            approvalId: request.approvalId,
+            sessionId: context.sessionId,
+            ...(context.runId ? { runId: context.runId } : {}),
+            ...(request.toolCallId ? { toolCallId: request.toolCallId } : {}),
+            ...(request.toolCall?.toolName ? { toolName: request.toolCall.toolName } : {}),
+            ...(request.toolCall?.args ? { args: request.toolCall.args } : {}),
+          },
         }))
       );
     }
+
+    const bindingReleases: Array<() => void> = [];
+    const newBindings = new Map<string, ApprovalBinding>();
+    for (const request of approvalRequests) {
+      if (!request.toolCall || !context) continue;
+      const binding: ApprovalBinding = {
+        approvalId: request.approvalId,
+        messageId: context.assistantMessageId,
+        toolCallId: request.toolCallId ?? '',
+        toolName: request.toolCall.toolName,
+        args: request.toolCall.args ?? {},
+        workspace:
+          context.plan.workspaceSelection !== undefined
+            ? JSON.stringify(context.plan.workspaceSelection)
+            : null,
+      };
+      newBindings.set(request.approvalId, binding);
+      bindingReleases.push(registerApprovalBinding({ ...binding, threadId: context.plan.threadId ?? '' }));
+    }
+
 
     let existingSession: PendingApprovalSession | undefined;
     for (const approvalId of approvalIds) {
@@ -212,6 +215,10 @@ export const createChatApproval = (deps: {
       if (session.recoveryContext?.sessionId) {
         existingSession.sessionId = session.recoveryContext.sessionId;
       }
+      existingSession.releases.push(...bindingReleases);
+      for (const [approvalId, binding] of newBindings) {
+        existingSession.bindings.set(approvalId, binding);
+      }
       for (const approvalId of approvalIds) {
         existingSession.pendingApprovalIds.add(approvalId);
         pendingApprovalSessions.set(approvalId, existingSession);
@@ -227,6 +234,8 @@ export const createChatApproval = (deps: {
       recoveryContext: session.recoveryContext,
       pendingApprovalIds: new Set(approvalIds),
       collectedApprovalResponses: new Map(),
+      bindings: newBindings,
+      releases: bindingReleases,
       timeouts: new Map(),
     };
 
@@ -236,209 +245,55 @@ export const createChatApproval = (deps: {
     }
   };
 
-  const tryRecoverApprovalSession = async (
-    approvalId: string,
-    target: ChatStreamTarget
-  ): Promise<PendingApprovalSession | null> => {
-    if (!approvalId || typeof approvalId !== 'string') return null;
-    const needle = approvalId.trim();
-    if (!needle) return null;
-
-    const approvalRecord = toolCallApprovalDb.getToolCallApproval(needle);
-    if (!approvalRecord || approvalRecord.state === 'consumed') {
-      return null;
-    }
-
-    const approvalSession = toolCallApprovalDb.getToolCallApprovalSession(
-      approvalRecord.session_id
-    );
-    if (!approvalSession) return null;
-
-    const activeApprovals = toolCallApprovalDb.getActiveToolCallApprovalsBySession(
-      approvalSession.session_id
-    );
-    if (activeApprovals.length === 0) {
-      return null;
-    }
-
-    const fallbackToolNames = Array.from(
-      new Set(
-        activeApprovals
-          .map(record => (typeof record.tool_name === 'string' ? record.tool_name.trim() : ''))
-          .filter(Boolean)
-      )
-    );
-    const storedRunId = typeof approvalSession.run_id === 'string' ? approvalSession.run_id.trim() : '';
-    const runSnapshot = storedRunId ? agentRunDb.getAgentRun(storedRunId) : null;
-    const activeApprovalIds = activeApprovals.map(record => record.approval_id);
-    const runPendingApprovalIds = new Set(runSnapshot?.working.pendingApprovalIds ?? []);
-    const historyFromRun =
-      runSnapshot &&
-      (runSnapshot.status === 'blocked' ||
-        activeApprovalIds.some(activeApprovalId => runPendingApprovalIds.has(activeApprovalId)))
-        ? await toModelInputMessages(runSnapshot.working.modelMessages)
-        : null;
-
-    const threadId = runSnapshot?.threadId ?? approvalSession.thread_id;
-    if (!threadId) return null;
-
-    const inputMessages =
-      historyFromRun && historyFromRun.length > 0
-        ? historyFromRun
-        : await (async () => {
-            createLogger({ module: 'chat_approval' }).event({
-              level: 'warn',
-              event: 'chat.approval.resume_history',
-              outcome: 'degraded',
-              entity: { thread_id: threadId },
-              message:
-                'Approval resume fell back to the persisted UI history; run snapshot missing.',
-              data: { run_id: storedRunId || null },
-            });
-            const rows = chatMessageDb.getChatMessages(threadId);
-            if (rows.length === 0) return null;
-            const uiMessages = rows.map(row =>
-              parseStoredUiMessageRow({ id: row.id, message: row.message })
-            );
-            return await deps.memory.injectMemoryIntoMessages(
-              // Keep non-terminal tool parts intact here: the pending
-              // approval-request is live state the resumed harness must pair
-              // with the user's approval response. Repairing it to an
-              // interruption result makes the response reference an unknown
-              // approvalId and the resume is rejected.
-              await toModelInputMessages(uiMessages, { repairInterruptedTools: false }),
-              threadId,
-              { skipRetrieval: true }
-            );
-          })();
-
-    if (!inputMessages || inputMessages.length === 0) return null;
-
-    const plan = deriveRunTurnPlan(runSnapshot, {
-      providerType: approvalSession.provider_type,
-      providerId: approvalSession.provider_id,
-      model: approvalSession.model,
-      systemPrompt: approvalSession.system_prompt,
-      enabledTools: parseStringArray(approvalSession.enabled_tools),
-      availableSkillIds: parseStringArray(approvalSession.available_skill_ids),
-      maxIterations: approvalSession.max_iterations ?? undefined,
-    });
-    const resolvedToolNames =
-      plan.enabledTools.length > 0
-        ? plan.enabledTools
-        : Array.from(
-          new Set(
-            [...fallbackToolNames, ...activeApprovals.map(record => record.tool_name ?? '')]
-              .map(toolName => (typeof toolName === 'string' ? toolName.trim() : ''))
-              .filter(Boolean)
-          )
-        );
-
-    const pendingApprovalIds = new Set(activeApprovals.map(record => record.approval_id));
-    const collectedApprovalResponses = new Map<string, ToolApprovalResponse>();
-    for (const record of activeApprovals) {
-      if (record.state !== 'answered' || !record.decision) continue;
-      collectedApprovalResponses.set(record.approval_id, {
-        type: 'tool-approval-response',
-        approvalId: record.approval_id,
-        approved: record.decision === 'approved',
-        reason:
-          typeof record.decision_reason === 'string' && record.decision_reason.trim()
-            ? record.decision_reason
-            : record.decision === 'approved'
-              ? 'User approved tool execution.'
-              : 'User rejected tool execution.',
-      });
-    }
-
-    const session: PendingApprovalSession = {
-      sessionId: approvalSession.session_id,
-      target,
-      history: inputMessages,
-      recoveryContext: {
-        sessionId: approvalSession.session_id,
-        threadId,
-        assistantMessageId: approvalSession.assistant_message_id,
-        ...(storedRunId ? { runId: storedRunId } : {}),
-        providerType: plan.providerType,
-        ...(plan.providerId ? { providerId: plan.providerId } : {}),
-        model: plan.model,
-        systemPrompt: plan.systemPrompt,
-        ...(typeof approvalSession.max_input_tokens === 'number'
-          ? { maxInputTokens: approvalSession.max_input_tokens }
-          : {}),
-        ...(typeof approvalSession.max_output_tokens === 'number'
-          ? { maxOutputTokens: approvalSession.max_output_tokens }
-          : {}),
-        maxIterations: plan.maxIterations,
-        approvalPolicy: plan.approvalPolicy,
-        requireApproval: plan.requireApproval ?? true,
-        enabledTools: resolvedToolNames,
-        availableSkillIds: plan.availableSkillIds,
-      },
-      pendingApprovalIds,
-      collectedApprovalResponses,
-      timeouts: new Map(),
-    };
-
-    for (const id of pendingApprovalIds) {
-      pendingApprovalSessions.set(id, session);
-      scheduleApprovalTimeout(id, session);
-    }
-
-    return session;
-  };
-
   const resumeApproval = async (
     target: ChatStreamTarget,
     approvalId: string,
     approved: boolean,
-    reason?: string
+    reason?: string,
+    executionAbort?: { current: (() => void) | null; lost: boolean },
+    source: ApprovalDecidedPayload['source'] = 'user'
   ) => {
-    const storedApproval = toolCallApprovalDb.getToolCallApproval(approvalId);
-    let session = pendingApprovalSessions.get(approvalId);
+    const session = pendingApprovalSessions.get(approvalId);
     if (!session) {
-      session = await tryRecoverApprovalSession(approvalId, target);
-    }
-    if (!session) {
-      if (storedApproval && storedApproval.state !== 'pending') {
-        return {
-          success: false,
-          error: 'Approval request already processed.',
-        };
-      }
+      // A pause is memory-only by design: if the process that asked is gone, the
+      // decision has nowhere to land and the turn is over.
       return {
         success: false,
-        error: 'Approval request not found or already processed.',
+        error: 'Approval request not found. A paused turn does not survive a restart.',
       };
     }
 
-    // Ensure the resumed stream emits UI chunks to the window that initiated the approval.
     session.target = target;
 
     const approvalResponse: ToolApprovalResponse = {
       type: 'tool-approval-response',
       approvalId,
       approved,
-      reason: reason ?? (approved ? 'User approved tool execution.' : 'User rejected tool execution.'),
+      reason:
+        reason ?? (approved ? 'User approved tool execution.' : 'User rejected tool execution.'),
     };
 
-    const recordApprovalResponse = () => {
-      const runId = session?.recoveryContext?.runId;
-      if (!runId) return;
-      rehydrateAgentRunTracker(runId)?.recordApprovalResponse({
-        approvalId,
-        ...(storedApproval?.tool_call_id ? { toolCallId: storedApproval.tool_call_id } : {}),
-        approved,
-        reason: approvalResponse.reason,
-      });
+    const decidedThreadId = session.recoveryContext?.plan.threadId ?? null;
+    const recordDecisionEvent = () => {
+      if (!decidedThreadId) return;
+      recordSessionEvents(decidedThreadId, [
+        {
+          type: APPROVAL_DECIDED,
+          version: SESSION_EVENT_VERSION,
+          payload: {
+            approvalId,
+            approved,
+            ...(approvalResponse.reason ? { reason: approvalResponse.reason } : {}),
+            source,
+          },
+        },
+      ]);
     };
 
     if (session.collectedApprovalResponses.has(approvalId)) {
       const existing = session.collectedApprovalResponses.get(approvalId);
-      // Idempotent: if the same decision was already recorded, treat as success
+
       if (existing && existing.approved === approved) {
-        recordApprovalResponse();
         return { success: true };
       }
       return {
@@ -447,10 +302,8 @@ export const createChatApproval = (deps: {
       };
     }
 
+    recordDecisionEvent();
     session.collectedApprovalResponses.set(approvalId, approvalResponse);
-    const decision: ToolCallApprovalDecision = approved ? 'approved' : 'rejected';
-    toolCallApprovalDb.answerToolCallApproval(approvalId, decision, approvalResponse.reason);
-    recordApprovalResponse();
 
     const waitingForApprovals = Array.from(session.pendingApprovalIds).filter(
       id => !session.collectedApprovalResponses.has(id)
@@ -464,373 +317,53 @@ export const createChatApproval = (deps: {
       };
     }
 
-    clearApprovalTimeouts(session);
-    for (const pendingId of session.pendingApprovalIds) {
-      pendingApprovalSessions.delete(pendingId);
-    }
-    if (session.sessionId) {
-      toolCallApprovalDb.consumeToolCallApprovalSession(session.sessionId);
-    }
+    const piResumeAdmission = admitPiResume({
+      plan: session.recoveryContext?.plan,
+      history: cloneModelMessages(session.history ?? []),
+      pendingApprovalIds: session.pendingApprovalIds,
+      bindings: session.bindings,
+      onRefuse: () => session.collectedApprovalResponses.delete(approvalId),
+    });
 
-    const resumedSenderId = session.target.id;
-    const existingStream = deps.streams.peek(resumedSenderId);
-    if (existingStream) {
-      existingStream.cancelled = true;
-      existingStream.abortController.abort('resume-after-tool-approval');
-    }
-
-    // Continue the interrupted stream's message id: the resumed `start` chunk
-    // then addresses the same assistant message instead of opening a second one
-    // (idempotent accumulation on AI SDK clients keys on this id).
-    const resumeMessageId =
-      session.recoveryContext?.sessionId ?? createPrefixedId('assistant');
-    const streamState: ActiveStreamState = {
-      cancelled: false,
-      stoppedByUser: false,
-      abortController: new AbortController(),
-    };
-    const uiChunkEmitter = createUiChunkEmitter(session.target, resumeMessageId);
-    const baseApprovalContext = session.recoveryContext
-      ? {
-          ...session.recoveryContext,
-          sessionId: resumeMessageId,
-          assistantMessageId: resumeMessageId,
-        }
-      : undefined;
-    const resumeRunTracker = baseApprovalContext
-      ? createAgentRunTracker({
-          kind: 'approval-resume',
-          threadId: baseApprovalContext.threadId,
-          parentRunId: session.recoveryContext?.runId,
-          providerType: baseApprovalContext.providerType,
-          providerId: baseApprovalContext.providerId,
-          model: baseApprovalContext.model,
-          systemPrompt: baseApprovalContext.systemPrompt,
-          enabledTools: baseApprovalContext.enabledTools,
-          availableSkillIds: baseApprovalContext.availableSkillIds ?? [],
-          input: {
-            messages: session.history ?? [],
-            metadata: {
-              transport: 'approval-resume',
-              approvalPolicy: baseApprovalContext.approvalPolicy,
-              requireApproval: baseApprovalContext.requireApproval ?? true,
-              sourceSessionId: session.sessionId ?? session.recoveryContext?.sessionId ?? null,
-              sourceRunId: session.recoveryContext?.runId ?? null,
-              answeredApprovalIds: Array.from(session.collectedApprovalResponses.keys()),
-              maxIterations: baseApprovalContext.maxIterations,
-              enableTools:
-                baseApprovalContext.enabledTools.length > 0 ||
-                (baseApprovalContext.availableSkillIds?.length ?? 0) > 0,
-              assistantMessageId: uiChunkEmitter.messageId,
-            },
-          },
-          working: {
-            modelMessages: session.history ?? [],
-            accumulatedText: '',
-            pendingApprovalIds: Array.from(session.pendingApprovalIds).filter(
-              id => !session.collectedApprovalResponses.has(id)
-            ),
-            lastStepIndex: 0,
-          },
-        })
-      : null;
-    if (resumeRunTracker && baseApprovalContext?.runId) {
-      rehydrateAgentRunTracker(baseApprovalContext.runId)?.markResumed({
-        childRunId: resumeRunTracker.id,
-      });
-    }
-    const nextApprovalContext = baseApprovalContext
-      ? {
-          ...baseApprovalContext,
-          ...(resumeRunTracker ? { runId: resumeRunTracker.id } : {}),
-        }
-      : undefined;
-    streamState.runId = resumeRunTracker?.id;
-    deps.streams.attach(resumedSenderId, streamState);
-    let resolvedHistory: ModelMessage[] | undefined = session.history;
-    let isAwaitingApproval = false;
-
-    try {
-      const ctx = nextApprovalContext ?? session.recoveryContext;
-      const streamResult = await runWithToolRuntimeContext(
-        {
-          runId: resumeRunTracker?.id ?? nextApprovalContext?.runId,
-          ...(resumeRunTracker ? { runTracker: resumeRunTracker } : {}),
-          threadId: nextApprovalContext?.threadId ?? session.recoveryContext?.threadId,
-          conversationModel: {
-            providerType: ctx?.providerType ?? '',
-            providerId: ctx?.providerId,
-            model: ctx?.model ?? '',
-          },
+    return executeApprovalResume(
+      { session, approvalId, piResumeAdmission, ...(executionAbort ? { executionAbort } : {}) },
+      {
+        streams: deps.streams,
+        conversation: deps.conversation,
+        usage: deps.usage,
+        ensurePendingApprovalSession,
+        registerApprovalBatch,
+        clearApprovalTimeouts,
+        cleanupPendingSessionsForSender,
+        forgetSession: target => {
+          for (const pendingId of target.pendingApprovalIds) pendingApprovalSessions.delete(pendingId);
         },
-        async () => {
-          // Create a fresh harness from the recovery context
-          const approvalThreadId =
-            nextApprovalContext?.threadId ?? session.recoveryContext?.threadId;
-          const approvalHarness = rehydrateHarness({
-            providerType: ctx?.providerType ?? '',
-            providerId: ctx?.providerId,
-            model: ctx?.model ?? '',
-            systemPrompt: ctx?.systemPrompt ?? '',
-            maxInputTokens: ctx?.maxInputTokens,
-            enableTools: true,
-            enabledToolNames: ctx?.enabledTools ?? [],
-            availableSkillIds: ctx?.availableSkillIds ?? [],
-            guardActive: false,
-            approvalPolicy: ctx?.approvalPolicy,
-            requireApproval: ctx?.requireApproval ?? true,
-            // A resumed turn continues the original budget; when recovery
-            // context lacks it, fall back to the chat-turn default (not a
-            // starved legacy 10).
-            maxIterations: ctx?.maxIterations ?? DEFAULT_TOOL_CALL_MAX_ITERATIONS,
-            ...(approvalThreadId ? { threadId: approvalThreadId } : {}),
-            ...(typeof ctx?.maxOutputTokens === 'number'
-              ? { maxOutputTokens: ctx.maxOutputTokens }
-              : {}),
-            ...(ctx?.reasoningEffort ? { reasoningEffort: ctx.reasoningEffort } : {}),
-          });
-
-          // Build history with collected approval responses
-          const responses = Array.from(session.collectedApprovalResponses.values());
-          let streamHistory = cloneModelMessages(session.history ?? []);
-          if (responses.length > 0) {
-            streamHistory = appendApprovalResponsesToHistory(
-              streamHistory,
-              responses.map(r => ({
-                type: 'tool-approval-response' as const,
-                approvalId: r.approvalId,
-                approved: r.approved,
-                ...(r.reason ? { reason: r.reason } : {}),
-              }))
-            );
-          }
-
-          let awaitingApproval = false;
-          let cancelled = false;
-          let responseText = '';
-          let agentResult: AgentResult | undefined;
-
-          for await (const turnEvent of approvalHarness.turn({
-            prompt: '',
-            history: streamHistory,
-            onInference: record => resumeRunTracker?.recordModelStep(record),
-            abortSignal: streamState.abortController.signal,
-          })) {
-            if (streamState.cancelled) {
-              cancelled = true;
-              approvalHarness.cancel();
-              break;
-            }
-
-            if (turnEvent.event === 'step') {
-              const step = turnEvent.step;
-              if (step.type !== 'approval_request') {
-                resumeRunTracker?.recordAgentStep(step);
-              }
-              if (step.type === 'message_update') {
-                if (step.kind === 'reasoning') {
-                  uiChunkEmitter.emitReasoningDelta(step.text);
-                } else {
-                  responseText += step.text;
-                  uiChunkEmitter.emitTextDelta(step.text);
-                }
-              } else if (step.type === 'tool_execution_start') {
-                const event: ChatStreamEvent = {
-                  type: 'tool-call',
-                  toolCallId: step.toolCallId,
-                  toolName: step.toolName,
-                  input: step.input,
-                };
-                uiChunkEmitter.emitToolEvent(event);
-              } else if (step.type === 'tool_execution_end') {
-                if (step.outcome === 'success') {
-                  const event: ChatStreamEvent = {
-                    type: 'tool-result',
-                    toolCallId: step.toolCallId,
-                    output: step.output,
-                  };
-                  uiChunkEmitter.emitToolEvent(event);
-                } else {
-                  const event: ChatStreamEvent = {
-                    type: 'tool-error',
-                    toolCallId: step.toolCallId,
-                    error: step.error ?? 'Tool execution failed',
-                  };
-                  uiChunkEmitter.emitToolEvent(event);
-                }
-              } else if (step.type === 'approval_request') {
-                awaitingApproval = true;
-                for (const req of step.requests) {
-                  if (req.approvalId) {
-                    ensurePendingApprovalSession(req.approvalId, {
-                      target: session.target,
-                      history: approvalHarness.getHistory(),
-                      recoveryContext: nextApprovalContext,
-                    });
-                  }
-                }
-                for (const req of step.requests) {
-                  if (req.approvalId) {
-                    uiChunkEmitter.emitToolEvent({
-                      type: 'tool-approval-request',
-                      approvalId: req.approvalId,
-                      toolCallId: req.toolCallId || '',
-                      ...(req.toolCall
-                        ? {
-                            toolCall: {
-                              toolName: req.toolCall.toolName,
-                              toolCallId: req.toolCallId || '',
-                              args: req.toolCall.args ?? {},
-                            },
-                          }
-                        : {}),
-                    });
-                  }
-                }
-              }
-            } else if (turnEvent.event === 'done') {
-              const output = turnEvent.output;
-              agentResult = {
-                response: output.text,
-                toolCalls: output.toolCalls,
-                toolApprovalRequests: output.toolApprovalRequests,
-                usage: output.usage,
-                iterations: 0,
-                requiresApproval: output.requiresApproval,
-              } as AgentResult;
-            }
-          }
-
-          const result: ToolLoopStreamResult = {
-            awaitingApproval:
-              awaitingApproval || (agentResult?.requiresApproval ?? false),
-            cancelled,
-            ...(agentResult?.response
-              ? { response: agentResult.response }
-              : responseText
-                ? { response: responseText }
-                : {}),
-            usage: agentResult?.usage,
-          };
-
-          // Track history for subsequent getHistory() calls
-          resolvedHistory = approvalHarness.getHistory();
-          if (agentResult?.toolApprovalRequests?.length) {
-            registerApprovalBatch(agentResult.toolApprovalRequests, {
-              target: session.target,
-              history: resolvedHistory,
-              recoveryContext: nextApprovalContext,
-            });
-            resumeRunTracker?.recordAgentStep({
-              type: 'approval_request',
-              requests: agentResult.toolApprovalRequests,
-            });
-          }
-
-          return result;
-        }
-      );
-      isAwaitingApproval = streamResult.awaitingApproval;
-      if (streamResult.cancelled) {
-        uiChunkEmitter.abort();
-      } else if (!isAwaitingApproval) {
-        uiChunkEmitter.finish();
       }
-
-      resumeRunTracker?.syncModelMessages(resolvedHistory ?? session.history ?? []);
-      if (!streamResult.cancelled && nextApprovalContext) {
-        deps.usage.recordUsageEvent({
-          threadId: nextApprovalContext.threadId,
-          messageId: uiChunkEmitter.messageId,
-          providerType: nextApprovalContext.providerType,
-          model: nextApprovalContext.model,
-          usage: streamResult.usage,
-          source: 'chat.approval-stream',
-          metadata: {
-            sessionId: nextApprovalContext.sessionId,
-            awaitingApproval: streamResult.awaitingApproval,
-          },
-        });
-      }
-      if (resumeRunTracker) {
-        if (streamResult.cancelled) {
-          resumeRunTracker.markCancelled({
-            ...(streamResult.response ? { text: streamResult.response } : {}),
-          });
-        } else if (streamResult.awaitingApproval) {
-          resumeRunTracker.markBlocked({
-            ...(streamResult.response ? { text: streamResult.response } : {}),
-            usage: streamResult.usage ? { ...streamResult.usage } : undefined,
-          });
-        } else {
-          resumeRunTracker.markCompleted({
-            ...(streamResult.response ? { text: streamResult.response } : {}),
-            usage: streamResult.usage ? { ...streamResult.usage } : undefined,
-            finishReason: 'completed',
-          });
-        }
-      }
-      if (baseApprovalContext?.threadId) {
-        // Seed the reduction with the already-persisted pre-pause parts so the
-        // accumulated message stays whole across the pause, then upsert.
-        const persisted = await uiChunkEmitter.buildPersistedMessage(
-          loadPersistedAssistantParts(uiChunkEmitter.messageId)
-        );
-        if (persisted) {
-          await persistAssistantTurnMessage(
-            deps.conversation,
-            baseApprovalContext.threadId,
-            persisted,
-            'approval-resume'
-          );
-        }
-      }
-      return {
-        success: true,
-        awaitingApproval: streamResult.awaitingApproval,
-        stopped: streamState.stoppedByUser,
-        // Exposed as the approve-result wire payload (the continuation reply
-        // is already durably persisted by the backend turn-persistence seam
-        // above, under the same assistant message id).
-        ...(session.recoveryContext?.threadId ? { threadId: session.recoveryContext.threadId } : {}),
-        ...(streamResult.response ? { text: streamResult.response } : {}),
-      };
-    } catch (error: unknown) {
-      const message = getErrorMessage(error);
-      if (streamState.cancelled) {
-        uiChunkEmitter.abort();
-        if (resumeRunTracker && resumeRunTracker.getRun().status === 'running') {
-          resumeRunTracker.markCancelled();
-        }
-        return { success: true, stopped: streamState.stoppedByUser };
-      }
-      if (resumeRunTracker && resumeRunTracker.getRun().status === 'running') {
-        resumeRunTracker.markFailed({ message });
-      }
-      uiChunkEmitter.error(message);
-      return { success: false, error: message };
-    } finally {
-      if (deps.streams.peek(resumedSenderId) === streamState && !isAwaitingApproval) {
-        cleanupPendingSessionsForSender(resumedSenderId, resumeMessageId);
-      }
-      deps.streams.detach(resumedSenderId, streamState);
-    }
+    );
   };
 
   const approveTool = async (
     target: ChatStreamTarget,
     approvalId: string,
     approved: boolean,
-    reason?: string
+    reason?: string,
+    source: ApprovalDecidedPayload['source'] = 'user'
   ) => {
-    const pending = pendingApprovalSessions.get(approvalId);
-    const record = toolCallApprovalDb.getToolCallApproval(approvalId);
-    const storedSession = record ? toolCallApprovalDb.getToolCallApprovalSession(record.session_id) : null;
-    const threadId = pending?.recoveryContext?.threadId ?? storedSession?.thread_id;
-    const release = deps.streams.tryAcquireThreadRun(threadId);
+    const threadId = pendingApprovalSessions.get(approvalId)?.recoveryContext?.plan.threadId;
+
+    const executionAbort: { current: (() => void) | null; lost: boolean } = {
+      current: null,
+      lost: false,
+    };
+    const release = deps.streams.tryAcquireThreadRun(threadId, {
+      onExecutionAbort: () => {
+        executionAbort.lost = true;
+        executionAbort.current?.();
+      },
+    });
     if (!release) return { success: false, error: 'A turn is already running on this thread.' };
     try {
-      return await resumeApproval(target, approvalId, approved, reason);
+      return await resumeApproval(target, approvalId, approved, reason, executionAbort, source);
     } finally {
       release();
     }
@@ -849,15 +382,38 @@ export const createChatApproval = (deps: {
     const normalizedRunId = runId.trim();
     if (!normalizedRunId) return 0;
 
-    const sessions = new Set(pendingApprovalSessions.values());
-    for (const session of sessions) {
+    const expired: Array<{ approvalId: string; threadId?: string }> = [];
+    for (const session of new Set(pendingApprovalSessions.values())) {
       if (session.recoveryContext?.runId !== normalizedRunId) continue;
       clearApprovalTimeouts(session);
       for (const approvalId of session.pendingApprovalIds) {
         pendingApprovalSessions.delete(approvalId);
+        expired.push({
+          approvalId,
+          ...(session.recoveryContext?.plan.threadId
+            ? { threadId: session.recoveryContext.plan.threadId }
+            : {}),
+        });
       }
     }
-    return toolCallApprovalDb.expirePendingToolCallApprovalsByRunIds([normalizedRunId]).length;
+
+    const threadId = expired.find(entry => entry.threadId)?.threadId;
+    if (threadId) {
+      recordFailureTerminalEvent(
+        threadId,
+        expired.map(entry => ({
+          type: APPROVAL_DECIDED,
+          version: SESSION_EVENT_VERSION,
+          payload: {
+            approvalId: entry.approvalId,
+            approved: false,
+            reason: 'Run cancelled; pending approval expired.',
+            source: 'system' as const,
+          },
+        }))
+      );
+    }
+    return expired.length;
   };
 
   return {
@@ -868,5 +424,3 @@ export const createChatApproval = (deps: {
     cancelPendingApprovalsForRun,
   };
 };
-
-export type ChatApproval = ReturnType<typeof createChatApproval>;

@@ -1,6 +1,6 @@
 import { computed, nextTick, onUnmounted, ref } from 'vue';
 import type { Ref } from 'vue';
-import type { AudioEmotionResult, SpeechStatus } from '@iki/backend/types/speech';
+import type { SpeechStatus } from '@iki/backend/types/speech';
 import { createLogger } from '../logger';
 import { translate } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';
@@ -19,7 +19,6 @@ type SpeechInputState = {
   speechEngineAvailable: Ref<boolean>;
   showWaveform: Ref<boolean>;
   waveformBars: Ref<number[]>;
-  audioEmotion: Ref<AudioEmotionResult | null>;
   loadSpeechStatus: () => Promise<void>;
   toggleVoiceInput: () => Promise<void>;
   stopVoiceInput: () => void;
@@ -40,7 +39,6 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
   const mediaRecorder = ref<MediaRecorder | null>(null);
   const mediaStream = ref<MediaStream | null>(null);
   const recordingTimeout = ref<number | null>(null);
-  const audioEmotion = ref<AudioEmotionResult | null>(null);
   const waveformBars = ref<number[]>(Array.from({ length: WAVEFORM_BAR_COUNT }, () => 0.2));
   const showWaveform = computed(() => isRecording.value && Boolean(mediaStream.value));
 
@@ -210,7 +208,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
       try {
         waveformSource.disconnect();
       } catch {
-        // Ignore disconnect errors
+        /* empty: error is not actionable here */
       }
       waveformSource = null;
     }
@@ -218,7 +216,7 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
       try {
         waveformAnalyser.disconnect();
       } catch {
-        // Ignore disconnect errors
+        /* empty: error is not actionable here */
       }
       waveformAnalyser = null;
     }
@@ -290,7 +288,6 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
         model: speechStatus.value?.model,
       });
       const text = typeof result?.text === 'string' ? result.text : '';
-      audioEmotion.value = result?.audioEmotion ?? null;
       if (text.trim()) {
         await applySpeechText(text);
       } else {
@@ -433,7 +430,6 @@ export const useSpeechInput = ({ inputRef, message }: SpeechInputOptions): Speec
     speechEngineAvailable,
     showWaveform,
     waveformBars,
-    audioEmotion,
     loadSpeechStatus,
     toggleVoiceInput,
     stopVoiceInput,

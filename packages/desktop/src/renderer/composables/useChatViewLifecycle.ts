@@ -37,11 +37,9 @@ export const useChatViewLifecycle = (deps: {
   configStore: ConfigInitializer;
   refreshThreads: () => Promise<void>;
   loadToolSources: () => Promise<void>;
-  electronAPI: Pick<ElectronApi, 'chat' | 'tasks' | 'awaiters'>;
-  handleTaskPush: (payload: unknown) => Promise<void> | void;
+  electronAPI: Pick<ElectronApi, 'chat' | 'awaiters'>;
   handleAwaiterPush: (payload: unknown) => Promise<void> | void;
 }) => {
-  let removeTaskPushListener: () => void = () => undefined;
   let removeAwaiterPushListener: () => void = () => undefined;
 
   onMounted(async () => {
@@ -53,36 +51,21 @@ export const useChatViewLifecycle = (deps: {
     await deps.loadToolSources();
 
     try {
-      removeTaskPushListener();
-      removeTaskPushListener =
-        deps.electronAPI.tasks?.onPush?.((payload: unknown) => {
-          runSafe(() => deps.handleTaskPush(payload));
-        }) ?? (() => undefined);
-    } catch {
-      // Ignore missing tasks IPC in older builds.
-    }
-
-    try {
       removeAwaiterPushListener();
       removeAwaiterPushListener =
         deps.electronAPI.awaiters?.onPush?.((payload: unknown) => {
           runSafe(() => deps.handleAwaiterPush(payload));
         }) ?? (() => undefined);
     } catch {
-      // Ignore missing awaiter IPC in older builds.
+      /* empty: error is not actionable here */
     }
   });
 
   onUnmounted(() => {
     try {
-      removeTaskPushListener();
-    } catch {
-      // ignore
-    }
-    try {
       removeAwaiterPushListener();
     } catch {
-      // ignore
+      /* empty: error is not actionable here */
     }
   });
 };

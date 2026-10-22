@@ -1,7 +1,5 @@
 <template>
-  <template v-if="isHiddenTodoTool"></template>
-
-  <div v-else-if="isApprovalRequestedPart(part)" class="tool-approval-content">
+  <div v-if="isApprovalRequestedPart(part)" class="tool-approval-content">
     <div class="tool-approval-header">
       <svg class="tool-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
@@ -321,7 +319,6 @@ import {
   getToolInputDisplayTitle,
   getToolInputDisplayValue,
   getToolName,
-  getToolOutput,
   getToolOutputForDisplay,
   getToolStateKind,
   getToolStateLabel,
@@ -333,7 +330,6 @@ import {
   hasToolDiff,
   hasWebSearchCitations,
   isApprovalRequestedPart,
-  isTranscriptHiddenToolPart,
   isToolCallPart,
   isToolCollapsed,
   isToolResultPart,
@@ -343,7 +339,7 @@ import { useI18n } from '../../i18n';
 
 const props = defineProps<{
   approvalProcessing: boolean;
-  /** Rendered inside a ToolCallGroup row: detail body only, no card chrome. */
+  
   embedded?: boolean;
   mcpServerLabel: string;
   message: ChatUiMessage;
@@ -356,10 +352,6 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-const isHiddenTodoTool = computed(() => isTranscriptHiddenToolPart(props.part));
-
-// Shell calls render as a terminal block ($ command + output) instead of the
-// generic key/value sections.
 const terminalView = computed(() => (props.embedded ? getToolTerminalView(props.part) : null));
 
 const emitApproval = (approved: boolean) => {

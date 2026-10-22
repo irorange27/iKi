@@ -92,9 +92,14 @@ export class ShellExecutionTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = true;
+
+  override replay = 'unsafe' as const;
   override approvalMode = 'always' as const;
   override description =
-    'Execute a shell command inside the conversation workspace. Commands can be cancelled; output is returned when the process exits.';
+    'Execute a shell command inside the conversation workspace. Commands can be cancelled; output is returned when the process exits. ' +
+    'On macOS, osascript drives Calendar, Reminders, Mail and other system apps. For AppleScript dates, never parse a date string ' +
+    '(`date "2025-12-09 16:00:00"` is unreliable); build from the current date and set the fields to the TARGET values: ' +
+    '`set targetDate to current date` then `set year of targetDate to <Y>`, `set month of targetDate to <M>`, `set day of targetDate to <D>`, `set time of targetDate to <H> * hours`.';
 
   override paramSchema = ShellToolInputSchema;
 

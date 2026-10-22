@@ -31,7 +31,6 @@ describe('thread_markdown_export', () => {
     expect(markdown).toContain('Please refactor the loop.');
     expect(markdown).toContain('## Assistant');
     expect(markdown).toContain('Done — see summary.');
-    // System messages and whitespace-only messages are dropped.
     expect(markdown).not.toContain('system prompt leak');
   });
 

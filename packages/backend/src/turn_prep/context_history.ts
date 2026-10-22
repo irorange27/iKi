@@ -1,12 +1,11 @@
 import { sanitizeModelConversationMessages } from '@iki/backend/agent/model_messages';
 import type { ModelCapability } from '@iki/backend/utils/provider_models';
-import type { ChatInputMessage } from '../thread_session/types';
+import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 import { buildMessagePreview, countMessageTokens } from './context_helpers';
-import type { ContextConfig, RecentHistoryContext } from './context_types';
+import type { RecentHistoryContext } from './context_types';
 
 export const selectRecentHistory = (
   messages: ChatInputMessage[],
-  _contextConfig: ContextConfig,
   modelCapability?: ModelCapability | null
 ): RecentHistoryContext => {
   const systemMessages = messages.filter(message => message.role === 'system');

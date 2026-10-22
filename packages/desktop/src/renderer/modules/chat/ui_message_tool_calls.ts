@@ -5,7 +5,6 @@ import {
   Download,
   FilePenLine,
   FileText,
-  ListTodo,
   Search,
   Terminal,
   Trash2,
@@ -19,17 +18,11 @@ import {
   getToolOutput,
   isObjectRecord,
   isToolCallPart,
-  isToolPart,
   isToolResultPart,
   normalizeToolNameKey,
 } from '@iki/backend/message/tool_parts';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
-import {
-  parseToolInput,
-  parseToolOutput,
-  type ParsedToolInput,
-  type ParsedToolOutput,
-} from '@iki/backend/message/tool_payloads';
+import { getParsedToolInput, getParsedToolOutput } from './tool_payloads';
 import { translate } from '../../i18n';
 import { getToolUiState, updateToolUiState } from './tool_ui_state';
 
@@ -46,6 +39,7 @@ export {
   normalizeToolNameKey,
   parseToolInputFromText,
 } from '@iki/backend/message/tool_parts';
+export { getParsedToolInput, getParsedToolOutput } from './tool_payloads';
 
 export type WebSearchCitation = {
   title: string;
@@ -94,11 +88,6 @@ export const getToolStateKind = (part: unknown): ToolStateKind => {
 export const getToolStatePillClass = (part: unknown): string =>
   `tool-state-${getToolStateKind(part)}`;
 
-/**
- * The recorded failure reason of an output-error part. Surfaced in the card's
- * meta row so interrupted/failed calls say why instead of a bare "Failed"
- * pill — even while the card is collapsed.
- */
 export const getToolErrorText = (part: unknown): string => {
   if (!isObjectRecord(part) || getToolStateKind(part) !== 'error') return '';
   if (typeof part.errorText !== 'string') return '';
@@ -120,59 +109,6 @@ const coerceToTimestampMs = (value: unknown): number | null => {
 
   return null;
 };
-
-type ParsedToolPayload = {
-  input: ParsedToolInput;
-  output: ParsedToolOutput;
-  rawInput: unknown;
-  rawOutput: unknown;
-  toolName: string;
-};
-
-const toolPayloadCache = new WeakMap<object, ParsedToolPayload>();
-
-const getParsedToolPayload = (part: unknown): ParsedToolPayload => {
-  if (!isObjectRecord(part)) {
-    return {
-      input: { kind: 'unknown', input: undefined },
-      output: { kind: 'unknown', output: undefined },
-      rawInput: undefined,
-      rawOutput: undefined,
-      toolName: 'tool',
-    };
-  }
-
-  const cached = toolPayloadCache.get(part);
-  const rawInput = getToolInput(part);
-  const rawOutput = getToolOutput(part);
-  const toolName = getToolName(part);
-
-  if (
-    cached &&
-    cached.toolName === toolName &&
-    Object.is(cached.rawInput, rawInput) &&
-    Object.is(cached.rawOutput, rawOutput)
-  ) {
-    return cached;
-  }
-
-  const payload: ParsedToolPayload = {
-    input: parseToolInput(toolName, rawInput),
-    output: parseToolOutput(toolName, rawOutput),
-    rawInput,
-    rawOutput,
-    toolName,
-  };
-
-  toolPayloadCache.set(part, payload);
-  return payload;
-};
-
-export const getParsedToolInput = (part: unknown): ParsedToolInput =>
-  getParsedToolPayload(part).input;
-
-export const getParsedToolOutput = (part: unknown): ParsedToolOutput =>
-  getParsedToolPayload(part).output;
 
 export const getToolDurationMs = (part: unknown): number | null => {
   const toolCallId = getToolCallIdFromPart(part);
@@ -233,15 +169,10 @@ const TOOL_ICON_COMPONENTS: Record<string, Component> = {
   write_file: FilePenLine,
   delete_file: Trash2,
   agent: Bot,
-  todo: ListTodo,
   list_awaiters: Clock3,
   read_awaiter: Clock3,
   write_awaiter: Clock3,
   delete_awaiter: Trash2,
-  list_todo_lists: ListTodo,
-  read_todo_list: ListTodo,
-  write_todo_list: ListTodo,
-  delete_todo_list: Trash2,
   list_proactive_tasks: Clock3,
   read_proactive_task: Clock3,
   write_proactive_task: Clock3,
@@ -323,19 +254,6 @@ export const getToolTitle = (part: unknown): string => {
     }
 
     if (
-      toolKey === 'read_todo_list' ||
-      toolKey === 'write_todo_list' ||
-      toolKey === 'delete_todo_list'
-    ) {
-      if (typeof input.title === 'string' && input.title.trim()) {
-        return normalizeSingleLineText(input.title);
-      }
-      if (typeof input.id === 'string' && input.id.trim()) {
-        return normalizeSingleLineText(input.id);
-      }
-    }
-
-    if (
       toolKey === 'read_awaiter' ||
       toolKey === 'write_awaiter' ||
       toolKey === 'delete_awaiter'
@@ -381,16 +299,6 @@ export const getToolTitle = (part: unknown): string => {
       return 'Awaiters';
     }
 
-    if (toolKey === 'list_todo_lists') {
-      if (typeof input.query === 'string' && input.query.trim()) {
-        return normalizeSingleLineText(input.query);
-      }
-      return 'Todo lists';
-    }
-
-    if (toolKey === 'todo') {
-      return translate('toolCall.executionPlan');
-    }
   }
 
   if (typeof rawName === 'string' && rawName.trim()) {
@@ -513,37 +421,6 @@ const getToolInputDisplay = (part: unknown): ToolInputDisplay => {
       };
     }
 
-    if (toolKey === 'list_todo_lists') {
-      const query = typeof input.query === 'string' ? input.query.trim() : '';
-      const meta: string[] = [];
-      if (typeof input.limit === 'number' && Number.isFinite(input.limit)) {
-        meta.push(translate('toolCall.meta.limit', { value: Math.trunc(input.limit) }));
-      }
-
-      return {
-        title: translate('toolCall.query'),
-        value: query || translate('toolCall.allTodoLists'),
-        metaText: meta.length > 0 ? meta.join(' · ') : undefined,
-        isPrimary: true,
-      };
-    }
-
-    if (
-      (toolKey === 'read_todo_list' ||
-        toolKey === 'write_todo_list' ||
-        toolKey === 'delete_todo_list') &&
-      ((typeof input.title === 'string' && input.title.trim()) ||
-        (typeof input.id === 'string' && input.id.trim()))
-    ) {
-      return {
-        title: translate('toolCall.todoList'),
-        value:
-          (typeof input.title === 'string' && input.title.trim()) ||
-          (typeof input.id === 'string' && input.id.trim()) ||
-          '',
-        isPrimary: true,
-      };
-    }
   }
 
   return {
@@ -557,9 +434,6 @@ export const getToolInputDisplayTitle = (part: unknown): string => getToolInputD
 export const getToolInputDisplayValue = (part: unknown): unknown => getToolInputDisplay(part).value;
 export const getToolInputDisplayMetaText = (part: unknown): string =>
   getToolInputDisplay(part).metaText ?? '';
-
-export const isTranscriptHiddenToolPart = (part: unknown): boolean =>
-  normalizeToolNameKey(getToolName(part)) === 'todo';
 
 export const isToolCollapsed = (part: unknown): boolean => {
   const toolCallId = getToolCallIdFromPart(part);
@@ -575,29 +449,9 @@ export const canToggleToolCollapse = (part: unknown): boolean =>
   isToolCallPart(part) || isToolResultPart(part);
 
 export const toggleToolCollapse = (_message: ChatUiMessage, part: unknown) => {
-  // Collapse state is a purely UI concern; do not persist it.
   const toolCallId = getToolCallIdFromPart(part);
   if (!toolCallId) return;
   updateToolUiState(toolCallId, { collapsed: !isToolCollapsed(part) });
-};
-
-export const getUsedToolNames = (message: unknown): string[] => {
-  const parts = isObjectRecord(message) && Array.isArray(message.parts) ? message.parts : [];
-  const names: string[] = [];
-  const seen = new Set<string>();
-
-  for (const part of parts) {
-    if (!isToolPart(part)) continue;
-    if (isTranscriptHiddenToolPart(part)) continue;
-    const rawName = getToolName(part);
-    const name = typeof rawName === 'string' ? rawName.trim() : '';
-    if (!name || name === 'tool') continue;
-    if (seen.has(name)) continue;
-    seen.add(name);
-    names.push(name);
-  }
-
-  return names;
 };
 
 const getUrlDomain = (value: string): string => {
@@ -701,10 +555,6 @@ export const getToolDiffStat = (part: unknown): ToolDiffStat => {
   return stat;
 };
 
-// Output for the raw-JSON section: hide `diff` when it is rendered as a dedicated view.
-// Diff-stripped output views are rebuilt on every streaming re-render of an
-// expanded card; cache per part, invalidated when the raw output reference
-// moves (same freshness rule as toolPayloadCache).
 const displayOutputCache = new WeakMap<object, { source: unknown; value: unknown }>();
 
 export const getToolOutputForDisplay = (part: unknown): unknown => {
@@ -717,8 +567,6 @@ export const getToolOutputForDisplay = (part: unknown): unknown => {
     displayOutputCache.set(part, { source: output, value: rest });
     return rest;
   }
-  // Error results carry their reason in errorText — the Output section falls
-  // back to it (embedded views have no meta row to show it in).
   if (typeof getToolErrorText(part) === 'string' && getToolErrorText(part)) {
     return getToolErrorText(part);
   }
@@ -732,10 +580,6 @@ export type ToolTerminalView = {
   exitCode: number | null;
 };
 
-/**
- * Terminal-style view for shell calls: `$ command` plus captured output.
- * Returns null for anything that is not a settled shell invocation.
- */
 export const getToolTerminalView = (part: unknown): ToolTerminalView | null => {
   const input = getParsedToolInput(part);
   const output = getParsedToolOutput(part);
@@ -761,9 +605,6 @@ export const hasDisplayValue = (value: unknown): boolean => {
   return true;
 };
 
-// Expanded tool cards re-render on every stream chunk; formatting large
-// payloads is the hot cost. Sources are treated as immutable: new content
-// always arrives as a new reference, so reference-keyed caches stay fresh.
 const formatJsonObjectCache = new WeakMap<object, string>();
 const formatJsonStringCache = new Map<string, string>();
 const FORMAT_JSON_STRING_CACHE_LIMIT = 200;

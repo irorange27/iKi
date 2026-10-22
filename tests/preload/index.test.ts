@@ -5,7 +5,6 @@ import type { ElectronApi } from '@iki/backend/types/electron_api';
 const invokeMock = vi.fn();
 const onMock = vi.fn();
 const removeListenerMock = vi.fn();
-const removeAllListenersMock = vi.fn();
 const sendMock = vi.fn();
 
 let exposedApi: ElectronApi | null = null;
@@ -20,7 +19,6 @@ vi.mock('electron', () => ({
     invoke: (...args: unknown[]) => invokeMock(...args),
     on: (...args: unknown[]) => onMock(...args),
     removeListener: (...args: unknown[]) => removeListenerMock(...args),
-    removeAllListeners: (...args: unknown[]) => removeAllListenersMock(...args),
     send: (...args: unknown[]) => sendMock(...args),
   },
 }));
@@ -37,75 +35,8 @@ describe('preload task IPC payload serialization', () => {
     invokeMock.mockReset();
     onMock.mockReset();
     removeListenerMock.mockReset();
-    removeAllListenersMock.mockReset();
     sendMock.mockReset();
     await loadPreload();
-  });
-
-  it('serializes task update payloads before invoke', async () => {
-    invokeMock.mockResolvedValue({ success: true });
-
-    const toolsProxy = new Proxy(['web'], {});
-    const updatesProxy = new Proxy(
-      {
-        enabled: true,
-        tool_mode: 'disabled',
-        tools: toolsProxy,
-      },
-      {}
-    );
-
-    await exposedApi.tasks.update('task_1', updatesProxy);
-
-    expect(invokeMock).toHaveBeenCalledTimes(1);
-    const [channel, id, payload] = invokeMock.mock.calls[0];
-    expect(channel).toBe('tasks:update');
-    expect(id).toBe('task_1');
-    expect(payload).toEqual({
-      enabled: true,
-      tool_mode: 'disabled',
-      tools: ['web'],
-    });
-    expect(payload).not.toBe(updatesProxy);
-    expect(payload.tools).not.toBe(toolsProxy);
-  });
-
-  it('sanitizes Vue reactive task payloads so Electron can structured-clone them', async () => {
-    invokeMock.mockImplementation(async (_channel: string, payload: unknown) =>
-      structuredClone(payload)
-    );
-
-    const taskForm = ref({
-      name: 'Daily',
-      prompt: 'Summarize',
-      provider_type: 'deepseek',
-      model: 'deepseek-chat',
-      tool_mode: 'manual',
-      tools: ['web', 'fetch'],
-    });
-
-    await exposedApi.tasks.create({
-      name: taskForm.value.name,
-      prompt: taskForm.value.prompt,
-      provider_type: taskForm.value.provider_type,
-      model: taskForm.value.model,
-      tool_mode: taskForm.value.tool_mode,
-      tools: taskForm.value.tools,
-    });
-
-    expect(invokeMock).toHaveBeenCalledTimes(1);
-    const [channel, payload] = invokeMock.mock.calls[0];
-    expect(channel).toBe('tasks:create');
-    expect(() => structuredClone(payload)).not.toThrow();
-    expect(payload).toEqual({
-      name: 'Daily',
-      prompt: 'Summarize',
-      provider_type: 'deepseek',
-      model: 'deepseek-chat',
-      tool_mode: 'manual',
-      tools: ['web', 'fetch'],
-    });
-    expect(payload.tools).not.toBe(taskForm.value.tools);
   });
 
   it('forwards window shadow updates over IPC', async () => {
@@ -117,16 +48,14 @@ describe('preload task IPC payload serialization', () => {
   it('forwards model discovery overrides when fetching models from the renderer', async () => {
     invokeMock.mockResolvedValue([]);
 
-    await exposedApi.chat.getModels('acp', undefined, {
-      type: 'acp',
-      acp_command: 'codex',
-      acp_args: '--profile default',
+    await exposedApi.chat.getModels('custom-openai', undefined, {
+      type: 'custom-openai',
+      base_url: 'http://127.0.0.1:9/v1',
     });
 
-    expect(invokeMock).toHaveBeenCalledWith('chat:getModels', 'acp', undefined, {
-      type: 'acp',
-      acp_command: 'codex',
-      acp_args: '--profile default',
+    expect(invokeMock).toHaveBeenCalledWith('chat:getModels', 'custom-openai', undefined, {
+      type: 'custom-openai',
+      base_url: 'http://127.0.0.1:9/v1',
     });
   });
 
@@ -136,7 +65,6 @@ describe('preload task IPC payload serialization', () => {
     const configUpdated = vi.fn();
     const updateStatusChanged = vi.fn();
     const chatChunk = vi.fn();
-    const taskPush = vi.fn();
     const awaiterPush = vi.fn();
     const speechProgress = vi.fn();
     const companionUpdated = vi.fn();
@@ -165,7 +93,6 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.updates.check();
     await exposedApi.updates.install();
     exposedApi.updates.onStatusChanged(updateStatusChanged);
-    exposedApi.updates.removeAllListeners();
 
     await exposedApi.providers.list();
     await exposedApi.providers.get('provider_1');
@@ -183,11 +110,6 @@ describe('preload task IPC payload serialization', () => {
 
     await exposedApi.chat.getModels('openai');
     await exposedApi.chat.isProviderConfigured('openai');
-    await exposedApi.chat.send({
-      providerType: 'openai',
-      model: 'gpt-4.1',
-      messages: [],
-    });
     await exposedApi.chat.stream({
       providerType: 'openai',
       model: 'gpt-4.1',
@@ -197,43 +119,20 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.chat.stopStream();
     exposedApi.chat.onUiChunk(chatChunk);
     await exposedApi.chat.approveTool('approval_1', true);
-    exposedApi.chat.removeAllListeners();
     await exposedApi.chat.threads.list();
     await exposedApi.chat.threads.get('thread_1');
-    await exposedApi.chat.threads.getTodoPlan('thread_1');
     await exposedApi.chat.threads.create({ title: 'Thread' });
     await exposedApi.chat.threads.clear('thread_1', { title: 'Cleared' });
     await exposedApi.chat.threads.update('thread_1', { title: 'Updated' });
     await exposedApi.chat.threads.delete('thread_1');
     await exposedApi.chat.messages.list('thread_1');
     await exposedApi.chat.messages.get('message_1');
-    await exposedApi.chat.messages.create({ thread_id: 'thread_1', message: '{}' });
     await exposedApi.chat.messages.update('message_1', { message: '{}' });
-    await exposedApi.chat.messages.delete('message_1');
+    await exposedApi.chat.messages.truncateAfter('thread_1', 'message_1');
     await exposedApi.chat.runs.list('thread_1');
     await exposedApi.chat.runs.getTrace('run_1');
     await exposedApi.chat.runs.getTree('run_root_1');
     await exposedApi.chat.usage.summary('30d');
-
-    await exposedApi.memory.short.list('thread_1', 5);
-    await exposedApi.memory.short.add({
-      thread_id: 'thread_1',
-      message_id: 'message_1',
-      role: 'user',
-      content: 'hello',
-    });
-    await exposedApi.memory.short.listAll(5);
-    await exposedApi.memory.long.add({
-      thread_id: 'thread_1',
-      summary: 'summary',
-    });
-    await exposedApi.memory.long.update('memory_1', { summary: 'updated' });
-    await exposedApi.memory.long.delete('memory_1');
-    await exposedApi.memory.long.list('thread_1', 5);
-    await exposedApi.memory.long.listAll(5);
-    await exposedApi.memory.long.search('thread_1', 'query', { limit: 3 });
-    await exposedApi.memory.long.searchAll('query', { limit: 3 });
-    await exposedApi.memory.affect.get('thread_1');
 
     await exposedApi.workspaces.list();
     await exposedApi.workspaces.get('workspace_1');
@@ -267,7 +166,6 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.speech.listModels();
     await exposedApi.speech.downloadModel('base.en');
     exposedApi.speech.onDownloadProgress(speechProgress);
-    exposedApi.speech.removeAllListeners();
 
     await exposedApi.skills.list();
     await exposedApi.skills.roots();
@@ -275,15 +173,7 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.skills.openSkill('skill_1');
     await exposedApi.skills.read('skill_1', { maxChars: 500 });
 
-    await exposedApi.workflow.resetAutoPinnedSkills();
-
-    await exposedApi.tasks.list();
-    await exposedApi.tasks.get('task_1');
-    await exposedApi.tasks.runNow('task_1');
-    exposedApi.tasks.onPush(taskPush);
-    exposedApi.tasks.removeAllListeners();
     exposedApi.awaiters.onPush(awaiterPush);
-    exposedApi.awaiters.removeAllListeners();
 
     await exposedApi.mcp.list();
     await exposedApi.mcp.add({ name: 'Docs', transport: 'stdio', command: 'node' });
@@ -319,36 +209,21 @@ describe('preload task IPC payload serialization', () => {
         'providers:delete',
         'chat:getModels',
         'chat:isProviderConfigured',
-        'chat:send',
         'chat:stream',
         'chat:stop-stream',
         'chat:approve-tool',
         'chat:threads:list',
         'chat:threads:get',
-        'chat:threads:todo:get',
         'chat:threads:create',
         'chat:threads:update',
         'chat:threads:delete',
         'chat:messages:list',
         'chat:messages:get',
-        'chat:messages:create',
         'chat:messages:update',
-        'chat:messages:delete',
         'chat:runs:list',
         'chat:runs:trace:get',
         'chat:runs:tree:get',
         'chat:usage:summary',
-        'memory:short:list',
-        'memory:short:add',
-        'memory:short:listAll',
-        'memory:long:add',
-        'memory:long:update',
-        'memory:long:delete',
-        'memory:long:list',
-        'memory:long:listAll',
-        'memory:long:search',
-        'memory:long:searchAll',
-        'memory:affect:get',
         'workspaces:list',
         'workspaces:get',
         'workspaces:getByPath',
@@ -379,10 +254,6 @@ describe('preload task IPC payload serialization', () => {
         'skills:open-root',
         'skills:open-skill',
         'skills:read',
-        'workflow:reset-auto-skills',
-        'tasks:list',
-        'tasks:get',
-        'tasks:run-now',
         'mcp:list',
         'mcp:add',
         'mcp:update',
@@ -402,16 +273,7 @@ describe('preload task IPC payload serialization', () => {
         'providers:updated',
         'chat:ui-chunk',
         'speech:download-progress',
-        'tasks:push',
         'companion:updated',
-      ])
-    );
-    expect(removeAllListenersMock.mock.calls.map(call => call[0])).toEqual(
-      expect.arrayContaining([
-        'chat:ui-chunk',
-        'updates:status-changed',
-        'speech:download-progress',
-        'tasks:push',
       ])
     );
     expect(removeListenerMock).toHaveBeenCalledWith('providers:updated', expect.any(Function));

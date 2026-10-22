@@ -94,6 +94,27 @@ describe('file tools workspace boundaries', () => {
     expect(result.content).toBe('hello workspace');
   });
 
+  it('writes through the validated path, not a symlinked alias', async () => {
+    const workspaceRoot = path.join(tempRoot, 'workspace');
+    await fs.mkdir(workspaceRoot, { recursive: true });
+    const realFile = path.join(workspaceRoot, 'real.txt');
+    const aliasFile = path.join(workspaceRoot, 'alias.txt');
+    await fs.writeFile(realFile, 'original', 'utf8');
+    await fs.symlink(realFile, aliasFile);
+    getVisibleWorkspacesMock.mockReturnValue([createWorkspace(workspaceRoot)]);
+    getChatThreadMock.mockReturnValue({ id: 'thread_1', workspace_id: 'workspace_1' });
+    getWorkspaceMock.mockReturnValue(createWorkspace(workspaceRoot));
+
+    const writer = new WriteFileTool();
+    const result = (await runInWorkspaceContext('thread_1', async () =>
+      writer.execute({ path: 'alias.txt', content: 'via alias' })
+    )) as { path: string; success: boolean };
+
+    expect(await fs.readFile(realFile, 'utf8')).toBe('via alias');
+    expect((await fs.lstat(aliasFile)).isSymbolicLink()).toBe(true);
+    expect(result.path).toBe(aliasFile);
+  });
+
   it('reads current content after external and tool writes', async () => {
     const workspaceRoot = path.join(tempRoot, 'workspace');
     const filePath = path.join(workspaceRoot, 'docs', 'note.txt');
@@ -673,7 +694,6 @@ describe('concurrent same-path writes', () => {
     const workspaceRoot = await setupWorkspace();
     const writer = new WriteFileTool();
 
-    // Fake clock pins Date.now: pid+timestamp temp names would collide here.
     const results = await Promise.all(
       Array.from({ length: 8 }, (_, i) =>
         runInWorkspaceContext('thread_1', () =>
@@ -706,9 +726,6 @@ describe('concurrent same-path writes', () => {
     );
 
     const results = (await Promise.all(edits)) as Array<{ success?: boolean; message?: string }>;
-    // Without per-path serialization only the first edit could match; with it,
-    // each subsequent edit runs after the previous write (fuzzy anchor keeps
-    // matching), so all six apply.
     const succeeded = results.filter(result => result.success).length;
     expect(succeeded).toBe(6);
     const content = await fs.readFile(path.join(workspaceRoot, 'log.txt'), 'utf8');

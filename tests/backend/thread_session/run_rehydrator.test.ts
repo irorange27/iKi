@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveResumeStreamOptions,
   deriveRunTurnPlan,
+  journaledExchangePairs,
 } from '@iki/backend/thread_session/run_rehydrator';
 import type { AgentRun } from '@iki/backend/types/agent_run';
 
@@ -89,14 +90,12 @@ describe('deriveRunTurnPlan', () => {
 describe('deriveResumeStreamOptions', () => {
   it('restores the policy and iteration cap the original turn ran under', () => {
     const options = deriveResumeStreamOptions(baseRun, {
-      kind: 'handoff-resume',
+      kind: 'chat-turn',
       parentRunId: 'run_1',
       metadata: { source: 'resume', originalRunId: 'run_1' },
-      autonomous: { maxIterations: 10, continuePrompt: 'Continue.' },
+      continuePrompt: 'Continue.',
     });
 
-    // Regression: the pre-rehydrator inline assembly dropped these fields,
-    // degrading resumed turns to legacy approval flags.
     expect(options.approvalPolicy).toBe('trustWorkspace');
     expect(options.requireApproval).toBe(false);
     expect(options.maxIterations).toBe(12);
@@ -108,12 +107,12 @@ describe('deriveResumeStreamOptions', () => {
     expect(options.tools).toEqual(['read_file', 'shell']);
     expect(options.skillIds).toEqual(['skill_a']);
     expect(options.runConfig).toEqual({
-      kind: 'handoff-resume',
+      kind: 'chat-turn',
       parentRunId: 'run_1',
       rootRunId: 'run_1',
       metadata: { source: 'resume', originalRunId: 'run_1' },
     });
-    expect(options.autonomous).toEqual({ maxIterations: 10, continuePrompt: 'Continue.' });
+    expect(options.autonomous).toBeUndefined();
   });
 
   it('omits optional fields the run does not carry', () => {
@@ -153,5 +152,75 @@ describe('deriveResumeStreamOptions', () => {
     expect(plan.requireApproval).toBe(false);
     const options = deriveResumeStreamOptions(run, { kind: 'chat-turn' });
     expect(options.requireApproval).toBe(false);
+  });
+
+  it('drops a non-finite restored autonomous iteration cap instead of clamping NaN', () => {
+    const nanRun = {
+      ...baseRun,
+      input: { metadata: { autonomous: { maxIterations: Number.NaN, continuePrompt: 'go' } } },
+    } as never;
+    expect(deriveRunTurnPlan(nanRun).autonomous).toBeUndefined();
+    const infiniteRun = {
+      ...baseRun,
+      input: { metadata: { autonomous: { maxIterations: Infinity } } },
+    } as never;
+    expect(deriveRunTurnPlan(infiniteRun).autonomous).toBeUndefined();
+  });
+});
+
+describe('journaledExchangePairs: an unknown effect is not continuable', () => {
+  const chainRunIds = ['run_dead_1'];
+  const fact = (revision: number, type: string, payload: unknown) =>
+    ({ revision, type, version: 1, createdAt: '2026-10-01T00:00:00.000Z', payload }) as never;
+
+  const binding = {
+    threadId: 'thread_1',
+    approvalId: 'appr_unknown_1',
+    toolCallId: 'call_unknown_1',
+    toolName: 'write_file',
+    args: { path: 'notes.md', content: 'original body' },
+  };
+
+  it('refuses when an execution started but its result was never recorded', () => {
+    const events = [
+      fact(1, 'approval_requested', { approvalId: binding.approvalId, runId: 'run_dead_1', toolName: 'write_file', toolCallId: binding.toolCallId, args: binding.args }),
+      fact(2, 'tool_execution_prepared', { binding, decision: 'approved' }),
+      fact(3, 'tool_execution_started', { binding, decision: 'approved' }),
+    ];
+
+    expect(() => journaledExchangePairs(events, chainRunIds)).toThrow(
+      /never finished|unknown|outcome/i
+    );
+  });
+
+  it('still continues an execution whose result WAS recorded', () => {
+    const events = [
+      fact(1, 'approval_requested', { approvalId: binding.approvalId, runId: 'run_dead_1', toolName: 'write_file', toolCallId: binding.toolCallId, args: binding.args }),
+      fact(2, 'tool_execution_prepared', { binding, decision: 'approved' }),
+      fact(3, 'tool_execution_started', { binding, decision: 'approved' }),
+      fact(4, 'tool_execution_finished', {
+        binding,
+        decision: 'approved',
+        result: {
+          type: 'tool-result',
+          toolCallId: binding.toolCallId,
+          toolName: binding.toolName,
+          output: { type: 'text', value: 'written' },
+        },
+      }),
+    ];
+
+    const pairs = journaledExchangePairs(events, chainRunIds);
+    expect(pairs).toHaveLength(2);
+    expect(pairs[0]).toMatchObject({ role: 'assistant' });
+  });
+
+  it('still replays an approval that never started: nothing happened, so nothing to reconcile', () => {
+    const events = [
+      fact(1, 'approval_requested', { approvalId: binding.approvalId, runId: 'run_dead_1', toolName: 'write_file', toolCallId: binding.toolCallId, args: binding.args }),
+      fact(2, 'tool_execution_prepared', { binding, decision: 'approved' }),
+    ];
+
+    expect(journaledExchangePairs(events, chainRunIds)).toEqual([]);
   });
 });

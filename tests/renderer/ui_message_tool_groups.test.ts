@@ -56,24 +56,6 @@ describe('segmentMessageParts', () => {
     expect(group.parts).toHaveLength(1);
   });
 
-  it('drops transcript-hidden todo calls without breaking the group', () => {
-    const todoCall = dynamicTool({
-      toolName: 'todo',
-      toolCallId: 'call_todo',
-      input: { items: [] },
-    });
-    const segments = segmentMessageParts([
-      dynamicTool({ toolCallId: 'call_1' }),
-      todoCall,
-      dynamicTool({ toolCallId: 'call_2' }),
-    ]);
-
-    expect(segments).toHaveLength(1);
-    const group = segments[0]!;
-    if (group.kind !== 'tool-call-group') throw new Error('expected group');
-    expect(group.parts).toHaveLength(2);
-  });
-
   it('breaks the group on text and stands approval requests alone', () => {
     const segments = segmentMessageParts([
       dynamicTool({ toolCallId: 'call_1' }),

@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { createDefaultAppConfig, mergeAppConfig } from '@iki/backend/config/defaults';
 
 describe('default app config', () => {
-  it('enables emotion analysis by default without forcing realtime analysis', () => {
+  it('exposes context budgets at the top level, with no memory section', () => {
     const config = createDefaultAppConfig();
 
-    expect(config.memory.emotion.enabled).toBe(true);
-    expect(config.memory.emotion.injectToSystemPrompt).toBe(true);
-    expect(config.memory.emotion.realtimeAnalysis).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(config, 'memory')).toBe(false);
+    expect(config.context.enabled).toBe(true);
+    expect(config.context.maxSkillTokens).toBe(1200);
     expect(config.toolModel.providerId).toBe('');
     expect(config.general.autoApproveToolRequests).toBe(false);
     expect(config.chat.composer).toEqual({
@@ -30,6 +30,34 @@ describe('default app config', () => {
       preferredEngine: 'google',
     });
     expect(Object.prototype.hasOwnProperty.call(config, 'webSearch')).toBe(false);
+  });
+
+  it('keeps the context budget reachable after the memory namespace was removed', () => {
+    const config = mergeAppConfig({
+      context: { maxSkillTokens: 999 },
+    } as never);
+
+    expect(config.context.maxSkillTokens).toBe(999);
+    expect(config.context.enabled).toBe(true);
+    expect(config.context.maxIdentityTokens).toBe(320);
+    expect(Object.prototype.hasOwnProperty.call(config, 'memory')).toBe(false);
+  });
+
+  it('does not resurrect retired context budgets from a stale stored config', () => {
+    const config = mergeAppConfig({
+      context: {
+        maxRecentTokens: 9999,
+        maxMessageTokens: 9999,
+        maxSummaryTokens: 9999,
+        maxSkillTokens: 444,
+      },
+    } as never);
+
+    expect(config.context).toEqual({
+      enabled: true,
+      maxIdentityTokens: 320,
+      maxSkillTokens: 444,
+    });
   });
 
   it('drops legacy tool-model providerType config while preserving the selected model', () => {

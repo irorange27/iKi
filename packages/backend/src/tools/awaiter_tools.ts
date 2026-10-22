@@ -10,7 +10,7 @@ import {
 } from '../awaiters/awaiter_manager';
 import { BaseTool } from '@iki/backend/tools/base';
 import { zodSchemaToJsonSchema } from '@iki/backend/tools/json_schema';
-import { getToolRuntimeContext } from '../utils/runtime_context';
+import { getToolRuntimeContext, resolveConversationModelDefaults } from '../utils/runtime_context';
 import {
   DeleteAwaiterInputSchema,
   DeleteAwaiterOutputSchema,
@@ -47,35 +47,6 @@ const resolveAwaiterThreadId = (explicitThreadId?: string): string => {
   }
 
   return resolved;
-};
-
-const resolveConversationModelDefaults = (args: z.infer<typeof WriteAwaiterInputSchema>) => {
-  const runtimeModel = getToolRuntimeContext().conversationModel;
-  const explicitProviderType = args.providerType?.trim() || '';
-  const providerType = explicitProviderType || runtimeModel?.providerType?.trim() || '';
-  const providerTypeMatchesRuntime =
-    !explicitProviderType ||
-    (runtimeModel?.providerType?.trim() || '') === explicitProviderType;
-
-  const model =
-    args.model?.trim() ||
-    (providerTypeMatchesRuntime ? runtimeModel?.model?.trim() || '' : '');
-  const providerId =
-    args.providerId?.trim() ||
-    (providerTypeMatchesRuntime ? runtimeModel?.providerId?.trim() || '' : '');
-
-  if (!providerType) {
-    throw new Error('providerType is required when no current chat model is available');
-  }
-  if (!model) {
-    throw new Error('model is required when it cannot be inferred from the current chat');
-  }
-
-  return {
-    provider_type: providerType,
-    provider_id: providerId || null,
-    model,
-  };
 };
 
 const resolveAwaiterModelUpdates = (
@@ -129,6 +100,7 @@ export class ListAwaitersTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  override replay = 'safe' as const;
   override description =
     'List persistent continue-later awaiters so you can inspect, update, or delete an existing deferred continuation.';
   override paramSchema = ListAwaitersInputSchema;
@@ -155,6 +127,7 @@ export class ReadAwaiterTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  override replay = 'safe' as const;
   override description = 'Read an awaiter by id or exact title.';
   override paramSchema = ReadAwaiterInputSchema;
   override outputSchema = zodSchemaToJsonSchema(ReadAwaiterOutputSchema, {
@@ -177,6 +150,7 @@ export class WriteAwaiterTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = true;
+  override replay = 'unsafe' as const;
   override approvalMode = 'always' as const;
   override description =
     'Create or update a persistent continue-later awaiter. New awaiters default to the current chat thread and current chat model unless you override them.';
@@ -248,6 +222,7 @@ export class DeleteAwaiterTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = true;
+  override replay = 'unsafe' as const;
   override approvalMode = 'always' as const;
   override description = 'Delete an awaiter by id or exact title.';
   override paramSchema = DeleteAwaiterInputSchema;

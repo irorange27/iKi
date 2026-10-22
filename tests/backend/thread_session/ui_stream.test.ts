@@ -68,4 +68,27 @@ describe('ui chunk emitter persistence reduction', () => {
     const emitter = createUiChunkEmitter(target, 'assistant_4');
     expect(await emitter.buildPersistedMessage()).toBeNull();
   });
+
+  it('keeps the stored tool input when a resumed segment only reports the result', async () => {
+    const emitter = createUiChunkEmitter(target, 'assistant_resume');
+    emitter.emitToolEvent({ type: 'tool-result', toolCallId: 'call_9', output: { ok: true } });
+
+    const persisted = await emitter.buildPersistedMessage([
+      {
+        type: 'dynamic-tool',
+        toolCallId: 'call_9',
+        toolName: 'write_file',
+        state: 'approval-requested',
+        input: { path: 'notes.txt' },
+      },
+    ]);
+    const part = (persisted?.parts as Array<Record<string, unknown>>).find(
+      entry => entry.toolCallId === 'call_9'
+    );
+    expect(part).toMatchObject({
+      toolName: 'write_file',
+      input: { path: 'notes.txt' },
+      state: 'output-available',
+    });
+  });
 });

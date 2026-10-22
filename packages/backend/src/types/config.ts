@@ -1,4 +1,3 @@
-import type { WorkflowOptimizationConfig } from './workflow';
 import type { ThemeConfig } from '@iki/theme/types';
 import type {
   StructuredLogEntry,
@@ -16,34 +15,7 @@ export interface ConfigRuntimeInfo {
     defaultPort: number;
     configuredHost: string;
     configuredPort: number;
-    napcatWsPath: string;
-    localNapCatWsUrl: string;
-    dockerNapCatWsUrl: string;
   };
-}
-
-export type NapCatBridgeRuntimeState =
-  | 'disabled'
-  | 'disconnected'
-  | 'degraded'
-  | 'connected'
-  | 'unknown';
-
-export interface NapCatBridgeHeartbeatInfo {
-  lastReceivedAt: string | null;
-  intervalMs: number | null;
-  ageMs: number | null;
-  online: boolean | null;
-  good: boolean | null;
-  stale: boolean | null;
-}
-
-export interface NapCatBridgeStatusInfo {
-  state: NapCatBridgeRuntimeState;
-  activeConnectionCount: number | null;
-  lastConnectedAt: string | null;
-  lastDisconnectedAt: string | null;
-  heartbeat: NapCatBridgeHeartbeatInfo;
 }
 
 export interface DaemonStatusInfo {
@@ -53,9 +25,6 @@ export interface DaemonStatusInfo {
   status: string;
   source: 'health' | 'recorded' | 'default';
   uptimeSeconds: number | null;
-  bridges: {
-    napcat: NapCatBridgeStatusInfo;
-  };
   error?: string;
 }
 
@@ -67,22 +36,9 @@ export interface DaemonLogEntry extends Omit<StructuredLogEntry, 'level' | 'proc
   source: string;
 }
 
-export interface NapCatMessagePreviewEntry {
-  receivedAt: string;
-  messageType: 'private' | 'group';
-  userId: string;
-  groupId?: string;
-  selfId?: string;
-  messageId?: string;
-  textPreview: string;
-  mentionedSelf: boolean;
-  replyEligible: boolean;
-}
-
 export interface DaemonLogsInfo {
   filePath: string;
   entries: DaemonLogEntry[];
-  napcatMessages: NapCatMessagePreviewEntry[];
 }
 
 export type DaemonControlAction = 'start' | 'restart' | 'stop';
@@ -130,13 +86,13 @@ export interface AppConfig {
     autoApproveToolRequests: boolean;
   };
   ui: {
-    fontSize: number; // 10-32px
+    fontSize: number;
     density: 'compact' | 'comfortable' | 'spacious';
-    chatContentPadding: number; // 8-40px
-    composerPadding: number; // 4-24px
-    messageBubblePaddingX: number; // 8-28px
-    messageBubblePaddingY: number; // 6-20px
-    messageGap: number; // 8-32px
+    chatContentPadding: number;
+    composerPadding: number;
+    messageBubblePaddingX: number;
+    messageBubblePaddingY: number;
+    messageGap: number;
     companion: {
       enabled: boolean;
       alwaysOnTop: boolean;
@@ -173,8 +129,8 @@ export interface AppConfig {
     logLevel: 'debug' | 'info' | 'warn' | 'error';
   };
   keybindings: {
-    sendMessage: string; // e.g. "Enter"
-    openSettings: string; // e.g. "Cmd+," or "Ctrl+,"
+    sendMessage: string;
+    openSettings: string;
   };
   chat: {
     composer: {
@@ -182,53 +138,11 @@ export interface AppConfig {
       preferredModel: string;
     };
   };
-  memory: {
+
+  context: {
     enabled: boolean;
-    autoSummarize: boolean;
-    maxRetrievalCount: number;
-    similarThreshold: number;
-    embeddingModel: {
-      providerId: string;
-      providerType: string;
-      model: string;
-    };
-    context: {
-      enabled: boolean;
-      recentMessageCount: number;
-      maxRecentTokens: number;
-      maxMessageTokens: number;
-      maxIdentityTokens: number;
-      summaryTriggerMessages: number;
-      summaryRecentMessages: number;
-      maxSummaryTokens: number;
-      maxMemoryTokens: number;
-      maxSkillTokens: number;
-    };
-    emotion: {
-      enabled: boolean;
-      injectToSystemPrompt: boolean;
-      realtimeAnalysis: boolean;
-      minConfidence: number;
-      minSampleCount: number;
-      windowSize: number;
-      halfLifeMinutes: number;
-      maxAgeMinutes: number;
-      includeNeutral: boolean;
-      toolGuard: {
-        enabled: boolean;
-        minConfidence: number;
-        minArousal: number;
-        maxValence: number;
-        requireApproval: boolean;
-        disableAutoTools: boolean;
-      };
-    };
-  };
-  continuity: {
-    enabled: boolean;
-    autoCaptureExplicitFacts: boolean;
-    injectToSystemPrompt: boolean;
-    maxRetrievedItems: number;
+    maxIdentityTokens: number;
+    maxSkillTokens: number;
   };
   speech: {
     enabled: boolean;
@@ -259,27 +173,5 @@ export interface AppConfig {
   daemon: {
     host: string;
     port: number;
-  };
-  bridges: {
-    napcat: {
-      enabled: boolean;
-      accessToken: string;
-      providerType: string;
-      model: string;
-      tools: string[];
-      requireMention: boolean;
-    };
-  };
-  workflowOptimization: WorkflowOptimizationConfig;
-  agent: {
-    enabled: boolean;
-    systemPrompt: string;
-    providerType: string;
-    model: string;
-    temperature: number;
-    maxTokens: number;
-    maxIterations: number;
-    enableTools: boolean;
-    enableMemory: boolean;
   };
 }

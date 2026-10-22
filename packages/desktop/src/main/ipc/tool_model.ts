@@ -3,7 +3,7 @@ import { ipcMain } from 'electron';
 import { createLogger } from '@iki/backend/logger';
 import {
   getToolModel,
-  generateTitleWithAgent,
+  generateTitle,
   testToolModelLatency,
 } from '@iki/backend/provider/tool_model';
 import { getErrorMessage } from '@iki/backend/utils/errors';
@@ -31,7 +31,7 @@ export const registerToolModelIpc = (): void => {
 
   ipcMain.handle('toolModel:generateTitle', async (_event, conversationContent: string) => {
     try {
-      return await generateTitleWithAgent(conversationContent);
+      return await generateTitle(conversationContent);
     } catch (error: unknown) {
       toolModelIpcLogger.event({
         level: 'error',

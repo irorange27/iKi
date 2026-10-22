@@ -6,7 +6,6 @@ import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 import type { ChatInstance } from '../modules/chat/chat_instance';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
-import type { UiMessagePersistence } from '../modules/chat/ui_message_persistence';
 import {
   upsertComposerInvocationIntoMessageParts,
   upsertTextIntoMessageParts,
@@ -26,7 +25,6 @@ export const useChatStreaming = (deps: {
   electronAPI: Pick<ElectronApi, 'chat'>;
   chatInstance: ChatInstance;
   messageStore: ChatMessageStore;
-  persistence: UiMessagePersistence;
   createMessageId: () => string;
   scrollToBottom: () => void;
   getCurrentThreadId: () => string | null;
@@ -46,28 +44,18 @@ export const useChatStreaming = (deps: {
 }) => {
   const editingUserMessageId = ref<string | null>(null);
 
-  const upsertUiMessage = async (
-    message: ChatUiMessage,
-    parentId?: string,
-    source = 'unknown',
-    threadIdOverride?: string
-  ) => {
-    const threadId = threadIdOverride || deps.currentThread.value?.id || '';
-    if (!threadId) return;
-
-    await deps.persistence.upsertUiMessage({
-      message,
-      threadId,
-      parentId,
-      source,
-    });
-  };
-
+  
   const truncateConversationAfterIndex = async (messageIndex: number) => {
-    await deps.persistence.truncateConversationAfterIndex({
-      messageStore: deps.messageStore,
-      messageIndex,
-    });
+    const threadId = deps.currentThread.value?.id;
+    if (!threadId) return;
+    const anchorId = deps.messageStore.getAt(messageIndex)?.id;
+    if (typeof anchorId !== 'string' || !anchorId) return;
+
+    const result = await deps.electronAPI.chat.messages.truncateAfter(threadId, anchorId);
+    if (!result?.success) {
+      throw new Error(result?.error || 'Failed to truncate the conversation.');
+    }
+    deps.messageStore.truncateAfterIndex(messageIndex);
   };
 
   const stopActiveStreamIfNeeded = async (targetThreadId?: string) => {
@@ -133,12 +121,7 @@ export const useChatStreaming = (deps: {
     return clearDraftMessage();
   };
 
-  /**
-   * Prepares thread/workspace/model state and builds the user message (and
-   * persists it). The message is *not* appended to the store here — the
-   * Chat's `sendMessage` owns that, then hands the whole history to the
-   * transport.
-   */
+  
   const prepareMessageSend = async (
     payload: PrepareMessageSendPayload
   ): Promise<PreparedMessageSend | null> => {
@@ -216,18 +199,14 @@ export const useChatStreaming = (deps: {
                 composerInvocations
               ),
             ],
-            metadata: payload.audioEmotion
-              ? Object.assign({}, currentUserMessage.metadata ?? {}, { audioEmotion: payload.audioEmotion })
-              : currentUserMessage.metadata,
+            metadata: currentUserMessage.metadata,
           };
 
           deps.messageStore.replaceAt(messageIndex, updatedUserMessage);
-          await upsertUiMessage(
-            updatedUserMessage,
-            undefined,
-            'user-message-edit',
-            deps.currentThread.value.id
-          );
+          await deps.electronAPI.chat.messages.update(updatedUserMessage.id, {
+            message: JSON.stringify(updatedUserMessage),
+            metadata: JSON.stringify({ format: 'ai-ui-message-v1' }),
+          });
           await truncateConversationAfterIndex(messageIndex);
 
           editingUserMessageId.value = null;
@@ -253,13 +232,9 @@ export const useChatStreaming = (deps: {
           composerInvocations
         ),
       ],
-      ...(payload.audioEmotion
-        ? { metadata: { audioEmotion: payload.audioEmotion } }
-        : {}),
     };
 
     const threadId = deps.currentThread.value.id;
-    await upsertUiMessage(userMessage, undefined, 'user-message', threadId);
 
     deps.scrollToBottom();
     return {
@@ -268,11 +243,7 @@ export const useChatStreaming = (deps: {
     };
   };
 
-  /**
-   * Submits the prepared turn through the Chat: `sendMessage` appends the
-   * user message, streams the response via the IPC transport into the SDK's
-   * UIMessage accumulation, and resolves when the turn settles.
-   */
+  
   const submitTurn = async (params: SubmitTurnParams): Promise<SubmitTurnResult> => {
     const { preparedMessageSend, body } = params;
     try {

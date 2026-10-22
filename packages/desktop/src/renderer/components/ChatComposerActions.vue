@@ -1,7 +1,7 @@
 <template>
-  <div class="composer-toolbar-right flex items-center gap-2">
+  <div class="composer-toolbar-right flex items-center">
     <button
-      class="composer-icon-btn composer-mode-btn h-8 w-8 rounded-lg flex items-center justify-center"
+      class="composer-icon-btn composer-mode-btn h-7 w-7 rounded-lg flex items-center justify-center"
       :class="props.isIncognito ? 'is-incognito ui-text-accent' : 'ui-text-secondary'"
       :aria-label="incognitoAriaLabel"
       :aria-pressed="props.isIncognito"
@@ -56,7 +56,7 @@
     </div>
 
     <button
-      class="composer-icon-btn speech-btn h-8 w-8 rounded-lg flex items-center justify-center"
+      class="composer-icon-btn speech-btn h-7 w-7 rounded-lg flex items-center justify-center"
       :class="[
         props.isRecording
           ? 'ui-text-danger'
@@ -112,17 +112,12 @@
       {{ props.speechStatusLabel }}
     </span>
     <span
-      v-if="props.autonomousActive || props.runActive"
-      class="run-indicator"
-      :class="props.runActive ? 'run-active' : 'run-idle'"
-      :title="
-        props.runActive
-          ? `Agent run ${props.runStatus ?? 'active'}`
-          : 'Autonomous mode enabled'
-      "
+      v-if="props.runActive"
+      class="run-indicator run-active"
+      :title="runIndicatorTitle"
     >
-      <span v-if="props.runActive" class="run-dot" />
-      {{ props.runActive ? (props.runStatus === 'blocked' ? 'Awaiting' : 'Working') : 'Auto' }}
+      <span class="run-dot" />
+      {{ runIndicatorLabel }}
     </span>
     <button
       class="composer-icon-btn send-btn h-8 w-8 rounded-full flex items-center justify-center"
@@ -177,7 +172,6 @@ const props = defineProps<{
   speechStatusToneClass: string;
   runActive: boolean;
   runStatus: string | null;
-  autonomousActive: boolean;
 }>();
 
 defineEmits<{
@@ -188,6 +182,19 @@ defineEmits<{
 }>();
 
 const { t } = useI18n();
+// "Blocked" is the run status for a turn paused on an approval. The composer
+// said "Awaiting" for it while the trajectory said "Blocked" — same state, two
+// words, one of them hardcoded.
+const runIndicatorLabel = computed(() =>
+  props.runStatus === 'blocked'
+    ? t('chat.input.awaitingApproval')
+    : t('chat.input.working')
+);
+const runIndicatorTitle = computed(() =>
+  props.runStatus === 'blocked'
+    ? t('chat.input.awaitingApprovalDetail')
+    : t('chat.input.workingDetail')
+);
 const incognitoAriaLabel = computed(() =>
   props.isIncognito ? t('chat.input.disableIncognito') : t('chat.input.enableIncognito')
 );
@@ -203,12 +210,18 @@ const sendButtonTooltip = computed(() =>
 </script>
 
 <style scoped>
+/* One gap rhythm for the whole right cluster: the slot spacing between the
+   context ring, the model selector and this group is also 8px (shell). */
 .composer-toolbar-right {
-  gap: 14px;
+  gap: 8px;
 }
 
 button {
-  transition: all 0.2s;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    opacity 0.15s;
 }
 
 .composer-icon-btn {
@@ -277,10 +290,10 @@ button {
   align-items: flex-end;
   justify-content: center;
   gap: 2px;
-  height: 32px;
-  width: 32px;
-  padding: 6px 5px;
-  border-radius: 10px;
+  height: 28px;
+  width: 28px;
+  padding: 5px 4px;
+  border-radius: 8px;
   border: 1px solid rgba(var(--accent-rgb), 0.35);
   background: rgba(var(--accent-rgb), 0.18);
   color: var(--accent-color);
@@ -322,12 +335,6 @@ button {
   color: var(--accent-color);
   background: rgba(var(--accent-rgb), 0.12);
   border: 1px solid rgba(var(--accent-rgb), 0.28);
-}
-
-.run-indicator.run-idle {
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px solid var(--border-color);
 }
 
 .run-dot {

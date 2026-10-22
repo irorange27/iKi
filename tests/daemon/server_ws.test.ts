@@ -138,9 +138,6 @@ const createHarness = (clientOverrides: Partial<DaemonClientLike> = {}) => {
     approveTool: vi.fn(async () => ({ success: true })),
     stopStream: vi.fn(() => ({ success: true })),
   };
-  const napcatBridge = {
-    handleUpgrade: vi.fn(() => false),
-  };
   const logger = {
     event: loggerEventMock,
   };
@@ -158,7 +155,6 @@ const createHarness = (clientOverrides: Partial<DaemonClientLike> = {}) => {
     server: server as never,
     wss: wss as never,
     chatService: chatService as never,
-    napcatBridge: napcatBridge as never,
     sessions,
     wsSessions,
     nextSessionIdRef,
@@ -178,7 +174,6 @@ const createHarness = (clientOverrides: Partial<DaemonClientLike> = {}) => {
     ws,
     rawSocket,
     chatService,
-    napcatBridge,
     sessions,
     wsSessions,
     nextSessionIdRef,
@@ -212,7 +207,6 @@ describe('configureDaemonWebSockets', () => {
         approveTool: vi.fn(),
         stopStream: vi.fn(),
       } as never,
-      napcatBridge: { handleUpgrade: vi.fn(() => false) } as never,
       sessions: new Map(),
       wsSessions: new Map(),
       nextSessionIdRef: { current: 1 },
@@ -229,42 +223,6 @@ describe('configureDaemonWebSockets', () => {
     expect(rawSocket.write).toHaveBeenCalledWith('HTTP/1.1 401 Unauthorized\r\n\r\n');
     expect(rawSocket.destroy).toHaveBeenCalledTimes(1);
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
-  });
-
-  it('delegates non-chat upgrades to the NapCat bridge and otherwise destroys the socket', () => {
-    const server = createEmitter();
-    const wss = {
-      ...createEmitter(),
-      close: vi.fn(),
-      handleUpgrade: vi.fn(),
-    };
-    const napcatBridge = { handleUpgrade: vi.fn(() => true) };
-    const rawSocket = new FakeRawSocket();
-
-    configureDaemonWebSockets({
-      server: server as never,
-      wss: wss as never,
-      chatService: {
-        stream: vi.fn(),
-        approveTool: vi.fn(),
-        stopStream: vi.fn(),
-      } as never,
-      napcatBridge: napcatBridge as never,
-      sessions: new Map(),
-      wsSessions: new Map(),
-      nextSessionIdRef: { current: 1 },
-      logger: { event: loggerEventMock },
-    });
-
-    server.emit('upgrade', { url: '/onebot/v11/ws', headers: {} }, rawSocket, Buffer.alloc(0));
-
-    expect(napcatBridge.handleUpgrade).toHaveBeenCalledTimes(1);
-    expect(rawSocket.destroy).not.toHaveBeenCalled();
-
-    napcatBridge.handleUpgrade.mockReturnValueOnce(false);
-    server.emit('upgrade', { url: '/unknown', headers: {} }, rawSocket, Buffer.alloc(0));
-
-    expect(rawSocket.destroy).toHaveBeenCalledTimes(1);
   });
 
   it('creates a ready session on successful upgrade and cleans it up on close', () => {
@@ -399,7 +357,6 @@ describe('configureDaemonWebSockets', () => {
           skillIds: ['skill_1'],
           skillMode: 'manual',
           experimental_context: {
-            affect_mode: 'tone_only',
             context_mode: 'benchmark_clean',
           },
         },
@@ -427,7 +384,6 @@ describe('configureDaemonWebSockets', () => {
         threadId: 'thread_owned',
         maxIterations: 12,
         experimentalContext: {
-          affectMode: 'tone_only',
           contextMode: 'benchmark_clean',
         },
       }
@@ -479,6 +435,29 @@ describe('configureDaemonWebSockets', () => {
         }),
       })
     );
+  });
+
+  it('relays the approval-request chunk unwrapped so a client can discover the id', () => {
+    const harness = createHarness({ scopes: ['chat:write', 'tools:approve'] });
+    const session = harness.sessions.get(1) as { target: { send: (c: string, ...a: unknown[]) => void } };
+    expect(session).toBeDefined();
+
+    session.target.send('chat:ui-chunk', {
+      type: 'tool-approval-request',
+      approvalId: 'approval_probe_1',
+      toolCallId: 'call_probe_1',
+      toolName: 'write_file',
+    });
+
+    const relayed = JSON.parse(harness.ws.sent.at(-1) || '') as Record<string, unknown>;
+    expect(relayed.type).toBe('tool-approval-request');
+    expect(relayed.approvalId).toBe('approval_probe_1');
+
+    session.target.send('chat:other', { ok: true });
+    expect(JSON.parse(harness.ws.sent.at(-1) || '')).toEqual({
+      channel: 'chat:other',
+      payload: [{ ok: true }],
+    });
   });
 
   it('handles approve-tool and stop messages for authorized sessions', async () => {
@@ -604,16 +583,12 @@ describe('configureDaemonWebSockets', () => {
       scopes: ['chat:write'],
     });
 
-    // Record how many sends happened so far (the 'ready' message)
     const sentBefore = harness.ws.sent.length;
 
-    // Set the socket to CLOSED state
     harness.ws.readyState = 3;
 
-    // Try to send a message — the error response should be swallowed
     await harness.ws.emitMessage('{not-valid-json');
 
-    // No additional send should have occurred
     expect(harness.ws.sent.length).toBe(sentBefore);
   });
 });

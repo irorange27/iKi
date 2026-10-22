@@ -15,7 +15,6 @@ export default defineConfig({
       { find: '@iki/theme/', replacement: path.join(ROOT, 'packages/theme/src/') },
       { find: '@iki/theme', replacement: path.join(ROOT, 'packages/theme/src/index.ts') },
       { find: '@iki/backend/', replacement: path.join(ROOT, 'packages/backend/src/') },
-      { find: '@iki/backend', replacement: path.join(ROOT, 'packages/backend/src/index.ts') },
     ],
   },
   test: {
@@ -24,6 +23,7 @@ export default defineConfig({
     exclude: ['**/node_modules/**', 'tests/integration/**'],
     setupFiles: [
       'tests/setup/wire_core_context.ts',
+      'tests/setup/default_db_path.ts',
       'tests/setup/renderer_storage_fallback.ts',
       'tests/setup/strict_error_logs.ts',
     ],

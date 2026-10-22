@@ -5,7 +5,14 @@
         {{ t('settings.ui.fontSize') }}
         <span class="value-badge">{{ config.ui.fontSize }}px</span>
       </h3>
-      <input type="range" min="10" max="32" :value="config.ui.fontSize" @input="setFontSize" />
+      <input
+        type="range"
+        min="10"
+        max="32"
+        :value="config.ui.fontSize"
+        :aria-label="t('settings.ui.fontSize')"
+        @input="setFontSize"
+      />
     </div>
 
     <div class="config-group">
@@ -18,6 +25,7 @@
         min="8"
         max="40"
         :value="config.ui.chatContentPadding"
+        :aria-label="t('settings.ui.chatContentPadding')"
         @input="setUiMetric('chatContentPadding', $event)"
       />
     </div>
@@ -32,6 +40,7 @@
         min="4"
         max="24"
         :value="config.ui.composerPadding"
+        :aria-label="t('settings.ui.composerPadding')"
         @input="setUiMetric('composerPadding', $event)"
       />
     </div>
@@ -46,6 +55,7 @@
         min="8"
         max="28"
         :value="config.ui.messageBubblePaddingX"
+        :aria-label="t('settings.ui.bubbleHorizontalPadding')"
         @input="setUiMetric('messageBubblePaddingX', $event)"
       />
     </div>
@@ -60,6 +70,7 @@
         min="6"
         max="20"
         :value="config.ui.messageBubblePaddingY"
+        :aria-label="t('settings.ui.bubbleVerticalPadding')"
         @input="setUiMetric('messageBubblePaddingY', $event)"
       />
     </div>
@@ -74,19 +85,34 @@
         min="8"
         max="32"
         :value="config.ui.messageGap"
+        :aria-label="t('settings.ui.messageGap')"
         @input="setUiMetric('messageGap', $event)"
       />
     </div>
 
     <div class="config-group">
       <h3>{{ t('settings.ui.interfaceDensity') }}</h3>
-      <div class="density-options">
+      <div
+        class="density-options"
+        role="radiogroup"
+        :aria-label="t('settings.ui.interfaceDensity')"
+      >
         <div
           v-for="density in densityOptions"
           :key="density.key"
           class="density-card"
           :class="{ active: config.ui.density === density.key }"
+          role="radio"
+          :aria-checked="config.ui.density === density.key"
+          tabindex="0"
+          :aria-label="t('a11y.densityOption', { name: density.label })"
           @click="setDensity(density.key)"
+          @keydown.enter.prevent="setDensity(density.key)"
+          @keydown.space.prevent="setDensity(density.key)"
+          @keydown.right.prevent="setDensityByOffset(density.key, 1, $event)"
+          @keydown.down.prevent="setDensityByOffset(density.key, 1, $event)"
+          @keydown.left.prevent="setDensityByOffset(density.key, -1, $event)"
+          @keydown.up.prevent="setDensityByOffset(density.key, -1, $event)"
         >
           <div class="density-preview" :data-density="density.key"></div>
           <span>{{ density.label }}</span>
@@ -137,6 +163,18 @@ const setDensity = (density: AppConfig['ui']['density']) => {
   updateUi('density', density);
 };
 
+const setDensityByOffset = (current: AppConfig['ui']['density'], offset: number, event: Event) => {
+  const keys = densityOptions.value.map(option => option.key);
+  const index = keys.indexOf(current);
+  if (index === -1) return;
+
+  const nextIndex = (index + offset + keys.length) % keys.length;
+  setDensity(keys[nextIndex]);
+
+  const cards = (event.currentTarget as HTMLElement | null)?.parentElement?.children;
+  const nextCard = cards?.[nextIndex];
+  if (nextCard instanceof HTMLElement) nextCard.focus();
+};
 const setUiMetric = (
   key:
     | 'chatContentPadding'

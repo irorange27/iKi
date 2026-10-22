@@ -15,6 +15,7 @@ overrides:
   yauzl: ^3.4.0
 
 allowBuilds:
+  '@google/genai': false
   better-sqlite3: true
   electron: true
   electron-winstaller: true

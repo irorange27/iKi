@@ -13,8 +13,6 @@ export type ToolUiStatePatch = Partial<ToolUiState>;
 
 const toolUiStateMap = shallowReactive<Record<string, ToolUiState>>({});
 
-export const getToolUiStateMap = (): Readonly<Record<string, ToolUiState>> => toolUiStateMap;
-
 export const getToolUiState = (toolCallId: string | null | undefined): ToolUiState | undefined => {
   if (!toolCallId) return undefined;
   return toolUiStateMap[toolCallId];
@@ -45,9 +43,6 @@ export const resetToolUiStateMap = () => {
   for (const key of Object.keys(toolUiStateMap)) delete toolUiStateMap[key];
 };
 
-// Group-level collapse (keyed by a stable group id, same `collapsed` field as
-// per-call state). Whether a group defaults to open is derived from the call
-// states at render time; this only stores the user's manual override.
 export const getToolCallGroupCollapsedOverride = (
   groupKey: string
 ): boolean | undefined => getToolUiState(groupKey)?.collapsed;
@@ -65,10 +60,6 @@ const isTerminalToolChunk = (type: ChatUiMessageChunk['type']): boolean =>
   type === 'tool-output-denied' ||
   type === 'tool-input-error';
 
-/**
- * Timing side-tap for chunk-fed streams: durations and collapse state live
- * outside the message parts, keyed by toolCallId (read by the tool card).
- */
 export const recordToolChunkTiming = (chunk: ChatUiMessageChunk): void => {
   const toolCallId = getChunkToolCallId(chunk);
   if (!toolCallId) return;

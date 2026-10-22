@@ -40,5 +40,3 @@ export const createChatEval = (deps?: {
     deleteLabel,
   };
 };
-
-export type ChatEval = ReturnType<typeof createChatEval>;

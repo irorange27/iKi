@@ -2,8 +2,6 @@ import http from 'node:http';
 
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import {
-  createAppClient,
-  getAppClientById,
   getAppClientByToken,
   listAppClients,
   touchAppClient,
@@ -48,18 +46,6 @@ export type WsSession = {
 };
 
 const MAX_BODY_BYTES = 1024 * 1024 * 2;
-
-export const ensureNapCatClient = (): string => {
-  const existing = getAppClientById('client_napcat');
-  if (existing) return existing.id;
-  const created = createAppClient({
-    id: 'client_napcat',
-    name: 'NapCat',
-    scopes: [],
-    allowedTools: [],
-  });
-  return created.client.id;
-};
 
 export const isFirstUserClientRegistration = (systemClientId: string): boolean =>
   !listAppClients().some(client => client.id !== systemClientId);

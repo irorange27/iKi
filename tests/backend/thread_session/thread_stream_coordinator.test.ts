@@ -45,7 +45,6 @@ describe('createThreadStreamCoordinator', () => {
     coordinator.registerStream(42, streamState);
     coordinator.trackThreadStream('thread-a', 42);
 
-    // Another connection's thread must not be steerable from sender 42.
     expect(coordinator.steerStream(42, 'thread-b', 'go left')).toEqual({
       success: false,
       error: 'No active stream for thread',
@@ -77,7 +76,6 @@ describe('createThreadStreamCoordinator', () => {
     expect(coordinator.stopStream(42)).toEqual({ success: true });
     expect(streamState.cancelled).toBe(true);
     expect(streamState.stoppedByUser).toBe(true);
-    // Queue closed: further steer attempts fail instead of queueing.
     expect(coordinator.steerStream(42, undefined, 'late')).toEqual({
       success: false,
       error: 'No active autonomous stream to steer',
@@ -134,7 +132,6 @@ describe('createThreadStreamCoordinator', () => {
     expect(first.stoppedByUser).toBe(false);
     expect(second.cancelled).toBe(false);
 
-    // Already-cancelled streams are skipped, unknown runs find nothing.
     expect(coordinator.abortStreamByRunId('run-1')).toBe(false);
     expect(coordinator.abortStreamByRunId('run-404')).toBe(false);
   });
@@ -142,8 +139,6 @@ describe('createThreadStreamCoordinator', () => {
   it('run cancellation reaches streams attached outside the coordinator session', () => {
     const coordinator = createThreadStreamCoordinator();
 
-    // Approval resume attaches its stream without a session — run
-    // cancellation must still find it.
     const resumed = makeStreamState();
     resumed.runId = 'run-9';
     coordinator.attachStream(7, resumed);
@@ -172,7 +167,6 @@ describe('createThreadStreamCoordinator', () => {
     const resumed = makeStreamState();
     coordinator.attachStream(7, resumed);
 
-    // A superseding stream took the sender's slot: the stale detach is a no-op.
     const replacement = makeStreamState();
     coordinator.attachStream(7, replacement);
 
@@ -201,7 +195,6 @@ describe('createThreadStreamCoordinator cross-process lease', () => {
 
     const release = coordinator.tryAcquireThreadRun('thread_local');
     expect(release).not.toBeNull();
-    // In-process fast path still guards while the cross lease is held locally.
     expect(coordinator.tryAcquireThreadRun('thread_local')).toBeNull();
     release!();
     expect(coordinator.tryAcquireThreadRun('thread_local')).not.toBeNull();
@@ -245,5 +238,144 @@ describe('createThreadStreamCoordinator lease-loss abort', () => {
     expect(stream.abortController.signal.aborted).toBe(true);
 
     release!();
+  });
+});
+
+describe('createThreadStreamCoordinator execution handles', () => {
+  it('lease loss aborts the execution registered with the lease, membership or not', () => {
+    let notifyLeaseLost: (() => void) | undefined;
+    const coordinator = createThreadStreamCoordinator({
+      crossProcessThreadRun: (_threadId, options) => {
+        notifyLeaseLost = options.onLeaseLost;
+        return () => undefined;
+      },
+    });
+
+    const sendAbort = new AbortController();
+
+    const release = coordinator.tryAcquireThreadRun('thread_handles', {
+      onExecutionAbort: () => sendAbort.abort(),
+    });
+    expect(release).not.toBeNull();
+
+    notifyLeaseLost!();
+    expect(sendAbort.signal.aborted).toBe(true);
+
+    release!();
+  });
+
+  it('an execution hook outlives lease loss for late registrations and dies with release', () => {
+    let notifyLeaseLost: (() => void) | undefined;
+    const coordinator = createThreadStreamCoordinator({
+      crossProcessThreadRun: (_threadId, options) => {
+        notifyLeaseLost = options.onLeaseLost;
+        return () => undefined;
+      },
+    });
+
+    const lateAbort = new AbortController();
+    const release = coordinator.tryAcquireThreadRun('thread_late', {
+      onExecutionAbort: () => lateAbort.abort(),
+    });
+    notifyLeaseLost!();
+    expect(lateAbort.signal.aborted).toBe(true);
+
+    release!();
+    const release2 = coordinator.tryAcquireThreadRun('thread_late');
+    expect(release2).not.toBeNull();
+    expect(notifyLeaseLost).toBeDefined();
+    release2!();
+  });
+});
+
+describe('createThreadStreamCoordinator run-keyed executions', () => {
+  it('cancels the execution registered for a run, without stream membership', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const reasons: string[] = [];
+    const execution = coordinator.registerExecution({
+      runId: 'run_send',
+      cancel: reason => reasons.push(reason),
+    });
+
+    expect(coordinator.hasLiveExecutionForRun('run_send')).toBe(true);
+    expect(coordinator.cancelExecutionByRunId('run_send', 'run-cancelled')).toBe(true);
+    expect(reasons).toEqual(['run-cancelled']);
+
+    execution.dispose();
+    expect(coordinator.hasLiveExecutionForRun('run_send')).toBe(false);
+  });
+
+  it('refuses to cancel a run no live execution owns', () => {
+    const coordinator = createThreadStreamCoordinator();
+    expect(coordinator.cancelExecutionByRunId('run_elsewhere', 'run-cancelled')).toBe(false);
+  });
+
+  it('re-keys the index when a successor run swaps the executing run', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const execution = coordinator.registerExecution({ runId: 'run_parent', cancel: () => undefined });
+
+    execution.setRunId('run_child');
+    expect(coordinator.hasLiveExecutionForRun('run_parent')).toBe(false);
+    expect(coordinator.hasLiveExecutionForRun('run_child')).toBe(true);
+    expect(coordinator.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(true);
+
+    execution.dispose();
+    expect(coordinator.hasLiveExecutionForRun('run_child')).toBe(false);
+  });
+
+  it('cancels a delegated child run through its parent execution', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const reasons: string[] = [];
+    coordinator.registerExecution({
+      runId: 'run_parent',
+      cancel: reason => reasons.push(reason),
+    });
+    coordinator.registerChildRunAlias('run_parent', 'run_child');
+
+    expect(coordinator.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(true);
+    expect(reasons).toEqual(['run-cancelled']);
+  });
+
+  it('does not alias a child after its parent execution ended', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const parent = coordinator.registerExecution({
+      runId: 'run_parent',
+      cancel: () => undefined,
+    });
+    const disposeAlias = coordinator.registerChildRunAlias('run_parent', 'run_child');
+
+    parent.dispose();
+    expect(coordinator.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(false);
+
+    disposeAlias();
+  });
+
+  it('keeps two coordinators independent, so a second service cannot unmount the first', () => {
+    const first = createThreadStreamCoordinator();
+    const second = createThreadStreamCoordinator();
+
+    const firstReasons: string[] = [];
+    first.registerExecution({ runId: 'run_parent', cancel: r => firstReasons.push(r) });
+    second.registerChildRunAlias('run_parent', 'run_child');
+
+    expect(second.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(false);
+    expect(firstReasons).toEqual([]);
+
+    const dispose = first.registerChildRunAlias('run_parent', 'run_child');
+    expect(first.cancelExecutionByRunId('run_child', 'run-cancelled')).toBe(true);
+    expect(firstReasons).toEqual(['run-cancelled']);
+    dispose();
+  });
+
+  it('dispose is idempotent and never drops a newer registration for the same run', () => {
+    const coordinator = createThreadStreamCoordinator();
+    const first = coordinator.registerExecution({ runId: 'run_1', cancel: () => undefined });
+    const second = coordinator.registerExecution({ runId: 'run_1', cancel: () => undefined });
+
+    first.dispose();
+    expect(coordinator.hasLiveExecutionForRun('run_1')).toBe(true);
+    first.dispose();
+    second.dispose();
+    expect(coordinator.hasLiveExecutionForRun('run_1')).toBe(false);
   });
 });

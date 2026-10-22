@@ -16,7 +16,7 @@ const getJoinedTextContent = (content: ContentBlock[]): string | null => {
   return textParts.join('\n').trim() || null;
 };
 
-export const extractMcpToolErrorMessage = (result: CallToolResult): string | null => {
+const extractMcpToolErrorMessage = (result: CallToolResult): string | null => {
   if (isRecord(result.structuredContent)) {
     const message =
       typeof result.structuredContent.error === 'string'

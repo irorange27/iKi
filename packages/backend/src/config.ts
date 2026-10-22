@@ -5,20 +5,18 @@ import { normalizeAppLocale } from '@iki/backend/i18n/locale';
 import { getConfig, setConfig } from './db/database';
 import { getDisplayScale, getLocale, getTheme } from './platform';
 
-// Pure function: detect system and generate dynamic default configuration
 function getSystemConfig(): AppConfig {
   const locale = getLocale();
   const scale = getDisplayScale();
 
   const config = createDefaultAppConfig();
 
-  // Use larger font for high-scale displays
   config.ui.fontSize = scale > 1.5 ? 16 : 14;
-  // Use spacious layout for high-resolution displays
+
   config.ui.density = scale > 1.25 ? 'spacious' : scale < 1 ? 'compact' : 'comfortable';
   config.general.language = normalizeAppLocale(locale);
   config.general.theme = getTheme();
-  // Automatically identify OS settings for keybindings
+
   config.keybindings.openSettings = process.platform === 'darwin' ? 'Cmd+,' : 'Ctrl+,';
 
   return config;

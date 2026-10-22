@@ -76,41 +76,38 @@
 
     <div class="config-group">
       <h3>{{ t('settings.general.startupBehavior.title') }}</h3>
-      <label
+      <SettingsSwitch
         v-for="key in ['startMinimized', 'minimizeToTray', 'closeToTray', 'autoUpdate'] as const"
         :key="key"
-        class="checkbox-label"
-      >
-        <input
-          type="checkbox"
-          :checked="config.general[key as keyof typeof config.general] as boolean"
-          @change="updateGeneral(key, ($event.target as HTMLInputElement).checked)"
-        />
-        {{ formatGeneralLabel(key) }}
-      </label>
+        :model-value="config.general[key as keyof typeof config.general] as boolean"
+        :title="formatGeneralLabel(key)"
+        @update:model-value="updateGeneral(key, $event)"
+      />
     </div>
 
     <div class="config-group">
       <h3>{{ t('settings.general.companion.title') }}</h3>
       <p class="group-description">{{ t('settings.general.companion.description') }}</p>
-      <label
-        v-for="key in [
-          'enabled',
-          'alwaysOnTop',
-          'rememberPosition',
-          'reduceMotion',
-          'openMainWindowOnClick',
-        ] as const"
-        :key="key"
-        class="checkbox-label"
-      >
-        <input
-          type="checkbox"
-          :checked="config.ui.companion[key]"
-          @change="updateCompanion(key, ($event.target as HTMLInputElement).checked)"
+      <SettingsSwitch
+        :model-value="config.ui.companion.enabled"
+        :title="formatCompanionLabel('enabled')"
+        @update:model-value="updateCompanion('enabled', $event)"
+      />
+      <details class="settings-advanced">
+        <summary>{{ t('settings.common.advanced') }}</summary>
+        <SettingsSwitch
+          v-for="key in [
+            'alwaysOnTop',
+            'rememberPosition',
+            'reduceMotion',
+            'openMainWindowOnClick',
+          ] as const"
+          :key="key"
+          :model-value="config.ui.companion[key]"
+          :title="formatCompanionLabel(key)"
+          @update:model-value="updateCompanion(key, $event)"
         />
-        {{ formatCompanionLabel(key) }}
-      </label>
+      </details>
       <div
         class="companion-status-card"
         :class="{
@@ -241,6 +238,7 @@
 </template>
 
 <script setup lang="ts">
+import SettingsSwitch from './SettingsSwitch.vue';
 import { toRefs } from 'vue';
 import { RefreshCw } from 'lucide-vue-next';
 

@@ -19,6 +19,19 @@ export const getMainWindow = (): BrowserWindow | null => {
   return mainWindowRef;
 };
 
+/**
+ * Window size, overridable by environment so an automated run can match the
+ * viewport it emulates. Without this the CDP emulation lays the page out wider
+ * than the real window, the content is clipped, and the composer at the bottom
+ * is unreachable.
+ */
+const resolveWindowDimension = (name: string, fallback: number): number => {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : fallback;
+};
+
 export const createMainWindow = (): BrowserWindow => {
   const existingWindow = getMainWindow();
   if (existingWindow) {
@@ -26,15 +39,13 @@ export const createMainWindow = (): BrowserWindow => {
   }
 
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 680,
+    width: resolveWindowDimension('IKI_WINDOW_WIDTH', 900),
+    height: resolveWindowDimension('IKI_WINDOW_HEIGHT', 680),
     minWidth: 480,
     minHeight: 640,
     backgroundColor: resolveWindowBootstrapBackgroundColor(),
-    // Start shadow-free until the renderer resolves the active theme and opts in for light mode.
     hasShadow: false,
     frame: false,
-    // macOS
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 20, y: 20 },
     webPreferences: {
@@ -46,6 +57,21 @@ export const createMainWindow = (): BrowserWindow => {
   mainWindowRef = mainWindow;
 
   attachViewportResyncGuard(mainWindow);
+
+  if (process.platform === 'darwin') {
+    mainWindow.setWindowButtonVisibility(false);
+    mainWindow.on('enter-full-screen', () => {
+      mainWindow.webContents.send('window:fullscreen-changed', true);
+    });
+    mainWindow.on('leave-full-screen', () => {
+      mainWindow.webContents.send('window:fullscreen-changed', false);
+    });
+    const sendFocusChanged = () => {
+      mainWindow.webContents.send('window:focus-changed', mainWindow.isFocused());
+    };
+    mainWindow.on('focus', sendFocusChanged);
+    mainWindow.on('blur', sendFocusChanged);
+  }
 
   void loadRendererEntry(mainWindow, { isPackaged: app.isPackaged });
 

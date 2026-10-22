@@ -16,19 +16,13 @@ import {
   resolveDeleteWorkspacePath,
   resolveReadableWorkspacePath,
   resolveWritableWorkspacePath,
+  type ResolvedWorkspacePath,
 } from './workspace_paths';
 
 const MAX_EDIT_UNDO_DEPTH = 10;
 const editUndoStacks = new Map<string, Array<{ previousContent: string; writtenContent: string; encoding: BufferEncoding }>>();
 const undoKey = (filePath: string): string => JSON.stringify([getToolRuntimeContext().threadId ?? null, filePath]);
 
-// Mutating writes go through a same-directory temp file plus rename, so two
-// concurrent writers (threads sharing a workspace, or the desktop and daemon
-// processes) can never leave a torn half-written file behind: readers see
-// either the old or the new content, never a mix. The temp name carries a
-// random UUID — pid + timestamp alone collide for same-millisecond writes to
-// the same path from one process, and two writers sharing a temp file breaks
-// the atomicity the rename is there to provide.
 const writeFileAtomically = async (
   absolutePath: string,
   content: string,
@@ -44,11 +38,6 @@ const writeFileAtomically = async (
   }
 };
 
-// In-process read-modify-write serialization per absolute path. Concurrent
-// threads on one workspace would otherwise race edit/undo's read→write
-// sequence even with atomic replacement: each write is whole, but the later
-// writer clobbers a state it never read. Cross-process races remain
-// last-writer-wins (see backend README limits).
 const pathWriteLocks = new Map<string, Promise<unknown>>();
 
 const withPathWriteLock = <T>(absolutePath: string, fn: () => Promise<T>): Promise<T> => {
@@ -111,7 +100,7 @@ const findInContent = (
   contextBefore?: string,
   contextAfter?: string
 ): { index: number; matchType: 'exact' | 'fuzzy' | 'context'; matchedText: string } | { index: -1; error: { message: string; fileSnippet: string; retryHint: string } } => {
-  // Step 1: exact match
+
   const exactPos = content.indexOf(oldText);
   if (exactPos >= 0) {
     const count = countOccurrences(content, oldText);
@@ -119,9 +108,8 @@ const findInContent = (
       return { index: exactPos, matchType: 'exact', matchedText: oldText };
     }
 
-    // Multiple exact matches — try context anchors to disambiguate
     if (contextBefore || contextAfter) {
-      // Walk through each exact occurrence and test context anchors
+
       let searchFrom = 0;
       while (searchFrom <= content.length) {
         const candidatePos = content.indexOf(oldText, searchFrom);
@@ -150,7 +138,6 @@ const findInContent = (
         searchFrom = candidatePos + oldText.length;
       }
 
-      // Context anchors were provided but no occurrence satisfied them
       const missingAnchors = [contextBefore && 'contextBefore', contextAfter && 'contextAfter']
         .filter(Boolean)
         .join(' and ');
@@ -165,22 +152,19 @@ const findInContent = (
       };
     }
 
-    // Return first exact match; handler decides based on replaceAll / occurrences
     return { index: exactPos, matchType: 'exact', matchedText: oldText };
   }
 
-  // Step 2: fuzzy match over whole file (only when no exact match exists)
   const contentLines = content.split('\n');
   const searchLines = oldText.split('\n');
   const fuzzyPos = fuzzyLineMatch(contentLines, searchLines, 0);
   if (fuzzyPos >= 0) {
-    // Extract the actual matched text with original whitespace so replacement is reliable
+
     const matchedText = contentLines.slice(fuzzyPos, fuzzyPos + searchLines.length).join('\n');
     const charPos = content.indexOf(matchedText);
     return { index: Math.max(0, charPos), matchType: 'fuzzy', matchedText };
   }
 
-  // Step 3: failure — return structured error
   const oldFirstLine = oldText.split('\n')[0].substring(0, 80);
   const snippetStart = Math.max(0, exactPos > 0 ? exactPos - 200 : 0);
   const snippetEnd = Math.min(content.length, snippetStart + 600);
@@ -207,7 +191,6 @@ const generateUnifiedDiff = (
   parts.push(`--- a/${fileName}`);
   parts.push(`+++ b/${fileName}`);
 
-  // Find first and last changed blocks
   let firstChange = -1;
   let lastChange = -1;
   const maxLen = Math.max(origLines.length, newLines.length);
@@ -222,7 +205,6 @@ const generateUnifiedDiff = (
 
   if (firstChange < 0) return '';
 
-  // Include 2 lines of context
   const ctxStart = Math.max(0, firstChange - 2);
   const ctxEnd = Math.min(maxLen, lastChange + 3);
   const origChunkLen = Math.min(origLines.length, ctxEnd) - ctxStart;
@@ -250,73 +232,74 @@ export class ReadFileTool extends BaseTool {
   override type = 'function';
   override autoAllowed = true;
   override needsApproval = false;
+  override replay = 'safe' as const;
   override description = 'Read the content of a file from the local filesystem.';
 
   override paramSchema = ReadFileInputSchema;
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = await resolveReadableWorkspacePath(args.path);
-    const content = await fs.readFile(absolutePath, { encoding: args.encoding as BufferEncoding });
-    return { path: absolutePath, content };
+    const resolved = await resolveReadableWorkspacePath(args.path);
+    const content = await fs.readFile(resolved.validated, { encoding: args.encoding as BufferEncoding });
+    return { path: resolved.display, content };
   }
 }
 
-/**
- * Tool for writing file content
- */
 export class WriteFileTool extends BaseTool {
   override name = 'write_file';
   override type = 'function';
   override autoAllowed = true;
+
+  override replay = 'unsafe' as const;
   override description = 'Write or overwrite content to a file on the local filesystem.';
   override needsApproval = true;
   override paramSchema = WriteFileInputSchema;
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = await resolveWritableWorkspacePath(args.path);
+    const resolved = await resolveWritableWorkspacePath(args.path);
 
-    return await withPathWriteLock(absolutePath, async () => {
+    return await withPathWriteLock(resolved.validated, async () => {
       getToolRuntimeContext().abortSignal?.throwIfAborted();
-      // Ensure directory exists
-      await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+
+      await fs.mkdir(path.dirname(resolved.validated), { recursive: true });
 
       getToolRuntimeContext().abortSignal?.throwIfAborted();
-      await writeFileAtomically(absolutePath, args.content, args.encoding as BufferEncoding);
-      return { path: absolutePath, success: true };
+
+      await writeFileAtomically(resolved.validated, args.content, args.encoding as BufferEncoding);
+
+      return { path: resolved.display, success: true };
     });
   }
 }
 
-/**
- * Tool for applying text edits to an existing file with fuzzy matching and diff output
- */
 export class EditFileTool extends BaseTool {
   override name = 'edit';
   override type = 'function';
   override autoAllowed = true;
+
+  override replay = 'unsafe' as const;
   override description =
     'Edit an existing file by applying text replacements. Include 1-3 lines of surrounding context in oldText to make matches unambiguous. Use contextBefore/contextAfter anchors when the same text appears in multiple places. Edited files are syntax-checked before writing (JSON, Python, JS); syntax-breaking edits are rejected and the file stays untouched. Revert the most recent edit to a file with undo_edit.';
   override needsApproval = true;
   override paramSchema = EditFileInputSchema;
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = await resolveWritableWorkspacePath(args.path);
-    return await withPathWriteLock(absolutePath, () => this.applyEdits(absolutePath, args));
+    const resolved = await resolveWritableWorkspacePath(args.path);
+    return await withPathWriteLock(resolved.validated, () => this.applyEdits(resolved, args));
   }
 
   private async applyEdits(
-    absolutePath: string,
+    resolved: ResolvedWorkspacePath,
     args: z.infer<typeof this.paramSchema>
   ) {
     let originalContent: string;
     try {
-      originalContent = await fs.readFile(absolutePath, {
+      originalContent = await fs.readFile(resolved.validated, {
         encoding: args.encoding as BufferEncoding,
       });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return {
-          path: absolutePath,
+          path: resolved.display,
           success: false,
           changed: false,
           error: true,
@@ -342,7 +325,7 @@ export class EditFileTool extends BaseTool {
 
       if (result.index < 0 && 'error' in result) {
         return {
-          path: absolutePath,
+          path: resolved.display,
           success: false,
           changed: false,
           error: true,
@@ -361,7 +344,7 @@ export class EditFileTool extends BaseTool {
 
         if (!edit.replaceAll && occurrences > 1 && result.matchType === 'exact') {
           return {
-            path: absolutePath,
+            path: resolved.display,
             success: false,
             changed: false,
             error: true,
@@ -387,10 +370,11 @@ export class EditFileTool extends BaseTool {
       : '';
 
     if (changed) {
-      const syntaxVerdict = await checkEditedFileSyntax(absolutePath, updatedContent);
+
+      const syntaxVerdict = await checkEditedFileSyntax(resolved.validated, updatedContent);
       if (syntaxVerdict.status === 'failed') {
         return {
-          path: absolutePath,
+          path: resolved.display,
           success: false,
           changed: false,
           error: true,
@@ -403,18 +387,18 @@ export class EditFileTool extends BaseTool {
       }
 
       getToolRuntimeContext().abortSignal?.throwIfAborted();
-      await writeFileAtomically(absolutePath, updatedContent, args.encoding as BufferEncoding);
-      const undoStack = editUndoStacks.get(undoKey(absolutePath)) ?? [];
+      await writeFileAtomically(resolved.validated, updatedContent, args.encoding as BufferEncoding);
+      const undoStack = editUndoStacks.get(undoKey(resolved.validated)) ?? [];
       undoStack.push({
         previousContent: originalContent,
         writtenContent: updatedContent,
         encoding: args.encoding as BufferEncoding,
       });
       if (undoStack.length > MAX_EDIT_UNDO_DEPTH) undoStack.shift();
-      editUndoStacks.set(undoKey(absolutePath), undoStack);
+      editUndoStacks.set(undoKey(resolved.validated), undoStack);
 
       return {
-        path: absolutePath,
+        path: resolved.display,
         success: true,
         changed,
         appliedEditCount: args.edits.length,
@@ -425,7 +409,7 @@ export class EditFileTool extends BaseTool {
     }
 
     return {
-      path: absolutePath,
+      path: resolved.display,
       success: true,
       changed,
       appliedEditCount: args.edits.length,
@@ -435,29 +419,28 @@ export class EditFileTool extends BaseTool {
   }
 }
 
-/**
- * Reverts the most recent successful edit_file change to a file
- */
 export class UndoEditTool extends BaseTool {
   override name = 'undo_edit';
   override type = 'function';
   override autoAllowed = true;
+
+  override replay = 'unsafe' as const;
   override description =
     'Revert the most recent successful edit_file change to the given file, restoring the content from before that edit. Only edits made during this session can be undone.';
   override needsApproval = true;
   override paramSchema = UndoEditInputSchema;
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = await resolveWritableWorkspacePath(args.path);
-    return await withPathWriteLock(absolutePath, () => this.applyUndo(absolutePath, args));
+    const resolved = await resolveWritableWorkspacePath(args.path);
+    return await withPathWriteLock(resolved.validated, () => this.applyUndo(resolved, args));
   }
 
-  private async applyUndo(absolutePath: string, args: z.infer<typeof this.paramSchema>) {
-    const undoStack = editUndoStacks.get(undoKey(absolutePath));
+  private async applyUndo(resolved: ResolvedWorkspacePath, args: z.infer<typeof this.paramSchema>) {
+    const undoStack = editUndoStacks.get(undoKey(resolved.validated));
     const entry = undoStack?.at(-1);
     if (!undoStack || !entry) {
       return {
-        path: absolutePath,
+        path: resolved.display,
         success: false,
         error: true,
         message: `No edit_file changes to undo for "${args.path}" in this session.`,
@@ -467,15 +450,15 @@ export class UndoEditTool extends BaseTool {
       };
     }
 
-    const currentContent = await fs.readFile(absolutePath, { encoding: entry.encoding });
+    const currentContent = await fs.readFile(resolved.validated, { encoding: entry.encoding });
     if (currentContent !== entry.writtenContent) {
-      return { path: absolutePath, success: false, error: true, message: 'File changed since this edit; refusing to overwrite newer changes.' };
+      return { path: resolved.display, success: false, error: true, message: 'File changed since this edit; refusing to overwrite newer changes.' };
     }
     getToolRuntimeContext().abortSignal?.throwIfAborted();
-    await writeFileAtomically(absolutePath, entry.previousContent, entry.encoding);
+    await writeFileAtomically(resolved.validated, entry.previousContent, entry.encoding);
     undoStack.pop();
     return {
-      path: absolutePath,
+      path: resolved.display,
       success: true,
       restored: true,
       editsRemaining: undoStack.length,
@@ -483,22 +466,20 @@ export class UndoEditTool extends BaseTool {
   }
 }
 
-/**
- * Tool for deleting a file
- */
 export class DeleteFileTool extends BaseTool {
   override name = 'delete_file';
   override type = 'function';
   override needsApproval = true;
+  override replay = 'unsafe' as const;
   override description = 'Delete a file from the local filesystem. BE CAREFUL with this tool.';
 
   override paramSchema = DeleteFileInputSchema;
 
   protected override async handler(args: z.infer<typeof this.paramSchema>) {
-    const absolutePath = await resolveDeleteWorkspacePath(args.path);
+    const resolved = await resolveDeleteWorkspacePath(args.path);
 
     getToolRuntimeContext().abortSignal?.throwIfAborted();
-    await fs.unlink(absolutePath);
-    return { path: absolutePath, deleted: true };
+    await fs.unlink(resolved.validated);
+    return { path: resolved.display, deleted: true };
   }
 }

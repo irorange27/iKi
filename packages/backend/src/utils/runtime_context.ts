@@ -30,13 +30,9 @@ export type ToolRuntimeContext = {
   availableTools?: AgentTool[];
   conversationModel?: ToolRuntimeConversationModel;
   delegationDepth?: number;
-  /**
-   * Lazily-frozen workspace selection for this run. The first filesystem or
-   * shell tool call resolves the thread's workspace from the database and
-   * pins it here, so changing the thread's workspace mid-run cannot redirect
-   * later tools in the same run to a different root. Boxed so "resolved to
-   * no workspace" (selection: null) stays distinct from "not resolved yet".
-   */
+
+  registerChildRunAlias?: (parentRunId: string, childRunId: string) => () => void;
+
   workspaceSelectionBox?: { selection: unknown };
 };
 
@@ -51,43 +47,41 @@ export const runWithToolRuntimeContext = async <T>(
   return await storage.run(context, fn);
 };
 
-export const bindToolRuntimeContextToGenerator = <T, TReturn = unknown, TNext = unknown>(
-  context: ToolRuntimeContext,
-  generator: AsyncGenerator<T, TReturn, TNext>
-): AsyncGenerator<T, TReturn, TNext> => {
-  const invoke = <K extends 'next' | 'return' | 'throw'>(
-    method: K,
-    value?: unknown
-  ): Promise<IteratorResult<T, TReturn>> => {
-    const target = generator[method] as
-      | ((arg?: unknown) => Promise<IteratorResult<T, TReturn>>)
-      | undefined;
+export type ConversationModelDefaults = {
+  provider_type: string;
+  provider_id: string | null;
+  model: string;
+};
 
-    if (!target) {
-      if (method === 'throw') {
-        return Promise.reject(value);
-      }
-      return Promise.resolve({
-        done: true,
-        value: value as TReturn,
-      });
-    }
+export const resolveConversationModelDefaults = (args: {
+  providerType?: string;
+  providerId?: string;
+  model?: string;
+}): ConversationModelDefaults => {
+  const runtimeModel = getToolRuntimeContext().conversationModel;
+  const explicitProviderType = args.providerType?.trim() || '';
+  const providerType = explicitProviderType || runtimeModel?.providerType?.trim() || '';
+  const providerTypeMatchesRuntime =
+    !explicitProviderType ||
+    (runtimeModel?.providerType?.trim() || '') === explicitProviderType;
 
-    return storage.run(context, () => target.call(generator, value));
-  };
+  const model =
+    args.model?.trim() ||
+    (providerTypeMatchesRuntime ? runtimeModel?.model?.trim() || '' : '');
+  const providerId =
+    args.providerId?.trim() ||
+    (providerTypeMatchesRuntime ? runtimeModel?.providerId?.trim() || '' : '');
+
+  if (!providerType) {
+    throw new Error('providerType is required when no current chat model is available');
+  }
+  if (!model) {
+    throw new Error('model is required when it cannot be inferred from the current chat');
+  }
 
   return {
-    [Symbol.asyncIterator]() {
-      return this;
-    },
-    next(value?: TNext) {
-      return invoke('next', value);
-    },
-    return(value?: TReturn) {
-      return invoke('return', value);
-    },
-    throw(error?: unknown) {
-      return invoke('throw', error);
-    },
-  } as AsyncGenerator<T, TReturn, TNext>;
+    provider_type: providerType,
+    provider_id: providerId || null,
+    model,
+  };
 };

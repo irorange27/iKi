@@ -4,18 +4,18 @@ export interface ChatThread {
   model?: string;
   is_generating: boolean;
   reasoning_effort?: string;
-  metadata: string; // JSON string
+  metadata: string;
   created_at: string;
   updated_at: string;
   client_id?: string;
   prompt_app_id?: string;
-  tools?: string; // JSON string
-  is_favorited: number; // 0 or 1
-  is_incognito: number; // 0 or 1
+  tools?: string;
+  is_favorited: number;
+  is_incognito: number;
   workspace_id?: string;
-  enable_artifacts: number; // 0 or 1
+  enable_artifacts: number;
   artifact_workspace_id?: string;
-  skill_ids?: string; // JSON string
+  skill_ids?: string;
 }
 
 export interface ChatMessage {
@@ -24,26 +24,19 @@ export interface ChatMessage {
   parent_id?: string;
   slot_id?: string;
   depth: number;
-  message: string; // JSON string
+  message: string;
   timestamp: string;
-  metadata: string; // JSON string
+  metadata: string;
   created_at: string;
   updated_at: string;
 }
-
-export type {
-  ToolCallApproval,
-  ToolCallApprovalDecision,
-  ToolCallApprovalSession,
-  ToolCallApprovalState,
-} from './tool_call_approval';
 
 export interface Workspace {
   id: string;
   path: string;
   name: string;
-  is_temporary: number; // 0 or 1
-  show_in_list: number; // 0 or 1
+  is_temporary: number;
+  show_in_list: number;
   created_at: string;
   updated_at: string;
 }
@@ -54,16 +47,16 @@ export interface PromptApp {
   description?: string;
   icon?: string;
   prompt_template: string;
-  placeholders: string; // JSON string, default '[]'
+  placeholders: string;
   model?: string;
-  enabled: number; // 0 or 1
+  enabled: number;
   sort_order: number;
   created_at: string;
   updated_at: string;
-  tools?: string; // JSON string
+  tools?: string;
   reasoning_effort?: string;
-  expects_image_result: number; // 0 or 1
-  is_incognito: number; // 0 or 1
+  expects_image_result: number;
+  is_incognito: number;
   shortcut?: string;
   window_width?: number;
   window_height?: number;

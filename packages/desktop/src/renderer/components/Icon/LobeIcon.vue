@@ -67,7 +67,6 @@ const computedSize = computed(() => {
   return props.size;
 });
 
-// An unknown name falls back to the initials placeholder — never a network fetch.
 const svgMarkup = computed(() => getIconSvg(props.name));
 
 const iconStyle = computed<CSSProperties>(() => ({

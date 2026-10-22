@@ -8,8 +8,6 @@ import { getIconSvg } from '../../../packages/desktop/src/renderer/components/Ic
 import { getProviderIconName } from '../../../packages/desktop/src/renderer/modules/providers/provider_icons';
 import { BUILTIN_PROVIDERS } from '@iki/backend/constants/ProvidersSettings';
 
-// Every name the provider UI can ask for: each built-in provider's mark, plus the
-// `grid-2x2` glyph custom providers resolve to.
 const REQUIRED_NAMES = [
   ...BUILTIN_PROVIDERS.map(provider => getProviderIconName(provider.id)),
   'grid-2x2',

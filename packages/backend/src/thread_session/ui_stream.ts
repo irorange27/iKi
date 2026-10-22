@@ -1,16 +1,18 @@
 import { defaultToolRegistry } from '@iki/backend/tools';
-import { readUIMessageStream, type UIMessage, type UIMessageChunk } from 'ai';
+import { reduceChunkLogToMessage } from '@iki/backend/message/ui_chunk_reducer';
 import type {
-  AffectSignalPartData,
   ChatUiMessageChunk,
   SkillUsageEntry,
   TokenUsagePartData,
 } from '@iki/backend/message/message_parts';
-import type { AffectSignal } from '@iki/backend/types/affect';
 import { isObjectRecord } from '@iki/backend/message/tool_parts';
 import { createLogger } from '@iki/backend/logger';
 
-import type { ChatStreamTarget, ChatStreamEvent, PersistedTurnMessage, UiChunkEmitter } from './types';
+import type {
+  ChatStreamTarget,
+  ChatStreamEvent,
+  UiChunkEmitter,
+} from './types';
 import { createPrefixedId } from '@iki/backend/utils/id';
 
 const uiStreamLogger = createLogger({ module: 'ui_stream' });
@@ -123,6 +125,7 @@ const toUiChunkFromToolEvent = (event: ChatStreamEvent): ChatUiMessageChunk | nu
     return {
       type: 'tool-output-available',
       toolCallId,
+      toolName,
       output: event.output,
       dynamic: true,
       ...(typeof event.preliminary === 'boolean' ? { preliminary: event.preliminary } : {}),
@@ -132,6 +135,7 @@ const toUiChunkFromToolEvent = (event: ChatStreamEvent): ChatUiMessageChunk | nu
     return {
       type: 'tool-output-error',
       toolCallId,
+      toolName,
       errorText:
         typeof event.error === 'string'
           ? event.error
@@ -149,7 +153,9 @@ const toUiChunkFromToolEvent = (event: ChatStreamEvent): ChatUiMessageChunk | nu
   }
   if (event.type === 'tool-approval-request') {
     const approvalInput = isObjectRecord(event.toolCall)
-      ? (isObjectRecord(event.toolCall.args) ? event.toolCall.args : event.toolCall.input)
+      ? isObjectRecord(event.toolCall.args)
+        ? event.toolCall.args
+        : event.toolCall.input
       : undefined;
 
     return {
@@ -176,18 +182,12 @@ export const createUiChunkEmitter = (
   let reasoningStarted = false;
   let terminated = false;
   let textSegmentIndex = 0;
-  // Tool call ids that already have a tool part on the wire. The AI SDK
-  // stream processor attaches outputs/errors/denials/approvals onto an
-  // existing tool part and fails otherwise — the old hand-rolled renderer
-  // created parts on demand instead, so keep that tolerance here.
+
   const seededToolCallIds = new Set<string>();
-  // Every chunk the target receives, kept so the turn's durable message can
-  // be reduced from the same facts the client consumed.
+
   const chunkLog: ChatUiMessageChunk[] = [];
 
-  const emitChunk = (
-    chunk: ChatUiMessageChunk
-  ) => {
+  const emitChunk = (chunk: ChatUiMessageChunk) => {
     target.send('chat:ui-chunk', chunk);
     chunkLog.push(chunk);
   };
@@ -198,9 +198,6 @@ export const createUiChunkEmitter = (
     started = true;
   };
 
-  // Text is segmented around tool events so the SDK's id-keyed accumulation
-  // renders a multi-step turn interleaved (text → tool → text) instead of
-  // merging every segment into the first text part.
   const getTextSegmentId = (index: number): string => `${messageId}-t${index}`;
 
   const ensureTextStarted = () => {
@@ -219,8 +216,6 @@ export const createUiChunkEmitter = (
     textSegmentIndex += 1;
   };
 
-  // Reasoning streams into its own SDK-accumulated reasoning part so the UI
-  // can render it as a live "thinking" block instead of inline answer text.
   const ensureReasoningStarted = () => {
     ensureStarted();
     if (terminated) return;
@@ -243,7 +238,7 @@ export const createUiChunkEmitter = (
       type: 'tool-input-available',
       toolCallId,
       toolName,
-      input,
+      ...(input !== undefined ? { input } : {}),
       dynamic: true,
       ...(title ? { title } : {}),
     });
@@ -252,6 +247,13 @@ export const createUiChunkEmitter = (
 
   return {
     messageId,
+
+    settleParts: () => {
+      if (terminated) return;
+      ensureStarted();
+      closeText();
+      closeReasoning();
+    },
     emitTextDelta: delta => {
       if (!delta || terminated) return;
       ensureTextStarted();
@@ -277,11 +279,11 @@ export const createUiChunkEmitter = (
         const toolName = getToolNameFromEvent(event);
         const input =
           event.type === 'tool-approval-request' && event.toolCall
-            ? (isObjectRecord(event.toolCall.args)
-                ? event.toolCall.args
-                : event.toolCall.input)
+            ? isObjectRecord(event.toolCall.args)
+              ? event.toolCall.args
+              : event.toolCall.input
             : undefined;
-        ensureToolPartSeeded(toolCallId, toolName, input ?? {});
+        ensureToolPartSeeded(toolCallId, toolName, input);
       }
       const uiChunk = toUiChunkFromToolEvent(event);
       if (uiChunk) {
@@ -303,46 +305,11 @@ export const createUiChunkEmitter = (
         },
       });
     },
-    emitMemoryRetrieval: payload => {
-      if (terminated) return;
-      ensureStarted();
-      emitChunk({
-        type: 'data-memory-retrieval',
-        id: 'memory-retrieval',
-        data: {
-          query: payload?.query ?? '',
-          results: Array.isArray(payload?.results) ? payload.results : [],
-        },
-      });
-    },
-    emitAffectSignal: (payload: AffectSignal) => {
-      if (terminated) return;
-      ensureStarted();
-      const data: AffectSignalPartData = {
-        source: payload.source,
-        guardActive: payload.guardActive,
-        label: payload.state.label,
-        confidence: payload.state.confidence,
-        ...(typeof payload.state.valence === 'number' ? { valence: payload.state.valence } : {}),
-        ...(typeof payload.state.arousal === 'number' ? { arousal: payload.state.arousal } : {}),
-        ...(payload.state.emotions ? { emotions: payload.state.emotions } : {}),
-        sampleCount: payload.state.sampleCount,
-        windowSize: payload.state.windowSize,
-        startAt: payload.state.startAt,
-        endAt: payload.state.endAt,
-        ageMinutes: payload.state.ageMinutes,
-        windowMinutes: payload.state.windowMinutes,
-      };
-      emitChunk({
-        type: 'data-affect-signal',
-        id: 'affect-signal',
-        data,
-      });
-    },
     emitTokenUsage: payload => {
       if (terminated) return;
       ensureStarted();
-      const data: TokenUsagePartData = {        ...(typeof payload?.inputTokens === 'number' ? { inputTokens: payload.inputTokens } : {}),
+      const data: TokenUsagePartData = {
+        ...(typeof payload?.inputTokens === 'number' ? { inputTokens: payload.inputTokens } : {}),
         ...(typeof payload?.outputTokens === 'number'
           ? { outputTokens: payload.outputTokens }
           : {}),
@@ -383,9 +350,7 @@ export const createUiChunkEmitter = (
           : {}),
         ...(typeof payload?.steps === 'number' ? { steps: payload.steps } : {}),
         ...(typeof payload?.toolCalls === 'number' ? { toolCalls: payload.toolCalls } : {}),
-        ...(payload?.contextComposition
-          ? { contextComposition: payload.contextComposition }
-          : {}),
+        ...(payload?.contextComposition ? { contextComposition: payload.contextComposition } : {}),
       };
       emitChunk({
         type: 'data-token-usage',
@@ -395,40 +360,14 @@ export const createUiChunkEmitter = (
     },
     buildPersistedMessage: async (seedParts?: unknown[]) => {
       if (!started || chunkLog.length === 0) return null;
-      // Reduce through the AI SDK's own UI-message reducer — the same
-      // reduction the renderer's Chat client applies to these chunks — so the
-      // persisted parts match the renderer-accumulated message and the
-      // dual-write paths converge on identical content.
-      let reduced: UIMessage | undefined;
-      const chunkStream = new ReadableStream<UIMessageChunk>({
-        start(controller) {
-          for (const chunk of chunkLog) {
-            controller.enqueue(chunk as unknown as UIMessageChunk);
-          }
-          controller.close();
-        },
-      });
+
+      let reduced: { parts: unknown[] } | null = null;
       try {
-        for await (const message of readUIMessageStream({
-          message: {
-            id: messageId,
-            role: 'assistant',
-            parts: (seedParts ?? []) as UIMessage['parts'],
-          },
-          stream: chunkStream,
-          terminateOnError: false,
-          onError: error => {
-            uiStreamLogger.event({
-              level: 'warn',
-              event: 'chat.ui_stream.persist_reduce',
-              outcome: 'degraded',
-              message: 'UI chunk reduction skipped a chunk while building the persisted message.',
-              error,
-            });
-          },
-        })) {
-          reduced = message;
-        }
+        reduced = reduceChunkLogToMessage(chunkLog, {
+
+          messageId,
+          ...(Array.isArray(seedParts) ? { seed: { messageId, parts: seedParts as never } } : {}),
+        });
       } catch (error) {
         uiStreamLogger.event({
           level: 'warn',
@@ -440,7 +379,7 @@ export const createUiChunkEmitter = (
         return null;
       }
       if (!reduced) return null;
-      return { id: messageId, role: 'assistant', parts: reduced.parts as unknown[] };
+      return { id: messageId, role: 'assistant', parts: reduced.parts };
     },
     finish: () => {
       if (terminated) return;

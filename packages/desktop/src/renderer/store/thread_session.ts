@@ -13,7 +13,6 @@ import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 import { getCurrentLocale, translateWithLocale } from '../i18n';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
-import type { UiMessagePersistence } from '../modules/chat/ui_message_persistence';
 import {
   parseJsonRecord,
   parseThreadLlmSelectionState,
@@ -35,16 +34,9 @@ type DraftComposerSelection = {
   providerId: string | null;
 };
 
-/**
- * Non-serializable runtime collaborators, injected once by the chat view.
- * Everything else lives in pinia state so composer components can read/write
- * thread-scoped preferences directly instead of prop-drilling through
- * ChatView -> ChatInput -> selectors.
- */
 type ThreadSessionRuntime = {
-  electronAPI: Pick<ElectronApi, 'chat' | 'toolModel' | 'tasks'>;
+  electronAPI: Pick<ElectronApi, 'chat' | 'toolModel'>;
   messageStore: ChatMessageStore;
-  persistence: UiMessagePersistence;
   scrollToBottom: () => void;
   preferredDraftModel?: Pick<Ref<string | null | undefined>, 'value'>;
   preferredDraftProviderId?: Pick<Ref<string | null | undefined>, 'value'>;
@@ -65,7 +57,6 @@ const normalizeWorkspaceId = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-/** Scratch/worktree workspaces are thread-private — they never carry over. */
 const isThreadPrivateWorkspaceId = (workspaceId: string): boolean =>
   workspaceId.startsWith(THREAD_SCRATCH_WORKSPACE_PREFIX) ||
   workspaceId.startsWith(THREAD_WORKTREE_WORKSPACE_PREFIX);
@@ -82,7 +73,6 @@ const normalizeProviderId = (value: unknown): string | null => {
 };
 
 export const useThreadSessionStore = defineStore('threadSession', () => {
-  // ── State ────────────────────────────────────────────────────────────
   const currentThread = ref<ChatThread | null>(null);
   const currentModel = ref('');
   const currentProviderId = ref<string | null>(null);
@@ -93,12 +83,9 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   const selectedWorkspaceId = ref<string | null>(null);
   const showWelcome = ref(!localStorage.getItem('iki-welcome-seen'));
 
-  // ── Runtime (injected once) ─────────────────────────────────────────
   let runtime: ThreadSessionRuntime | null = null;
   const initRuntime = (deps: ThreadSessionRuntime) => {
     runtime = deps;
-    // Registered here (not in setup) because the watched sources live on the
-    // injected refs; a plain closure variable is not reactive on its own.
     watch(
       () =>
         [
@@ -121,7 +108,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     return runtime;
   };
 
-  // ── Draft selection helpers ─────────────────────────────────────────
   const readPreferredDraftSelection = (): DraftComposerSelection => ({
     model: normalizeModelId(runtime?.preferredDraftModel?.value),
     providerId: normalizeProviderId(runtime?.preferredDraftProviderId?.value),
@@ -163,7 +149,8 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
 
   const syncApprovalPolicyState = (thread: ChatThread | null) => {
     const metadata = thread ? parseJsonRecord(thread.metadata) : {};
-    currentApprovalPolicy.value = parseApprovalPolicy(metadata[THREAD_APPROVAL_POLICY_KEY]) ?? '';
+    currentApprovalPolicy.value =
+      parseApprovalPolicy(metadata[THREAD_APPROVAL_POLICY_KEY]) ?? 'askRisky';
   };
 
   const restoreDraftComposerSelection = () => {
@@ -307,7 +294,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       .filter(message => message.role === 'user')
       .map(message => extractTextFromMessage(message).trim())
       .filter(text => text.length > 0);
-    // Prefer a substantive message (over 10 chars) for better fallback titles.
     const bestText = userTexts.find(text => text.length > 10) ?? userTexts[0];
     if (!bestText) return null;
     return bestText.slice(0, 50) + (bestText.length > 50 ? '...' : '');
@@ -320,8 +306,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     const assistantMessageCount = messages.filter(message => message.role === 'assistant').length;
     if (assistantMessageCount === 0) return false;
     if (DEFAULT_THREAD_TITLES.has(currentTitle)) return true;
-    // Regenerate on every turn for the first N assistant messages so the title
-    // converges quickly; afterward fall back to periodic updates.
     if (assistantMessageCount <= TITLE_FORCE_REGEN_LIMIT) return true;
     return assistantMessageCount % Math.max(TITLE_REGEN_INTERVAL, 2) === 0;
   };
@@ -369,7 +353,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     mode?: ThreadWorkMode;
     workspaceId?: string | null;
   }) => {
-    const { electronAPI, messageStore, persistence } = requireRuntime();
+    const { electronAPI, messageStore } = requireRuntime();
     const mode: ThreadWorkMode = options?.mode === 'work' ? 'work' : 'chat';
     const model = options?.model;
     try {
@@ -378,13 +362,21 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       const draftPersonality = currentPersonality.value;
       const metadata: Record<string, unknown> = { mode };
       if (draftPersonality) metadata.personality = draftPersonality;
+      metadata[THREAD_APPROVAL_POLICY_KEY] = currentApprovalPolicy.value || 'askRisky';
       const thread = await electronAPI.chat.threads.create({
         title: translateWithLocale(getCurrentLocale(), 'chat.thread.newTitle'),
         model: model || null,
         reasoning_effort: draftEffort || null,
         metadata: JSON.stringify(metadata),
         is_incognito: isIncognito.value ? 1 : 0,
-        workspace_id: mode === 'work' ? (options?.workspaceId ?? null) : null,
+        workspace_id:
+          options?.workspaceId ??
+          (() => {
+            const draftWorkspaceId = normalizeWorkspaceId(selectedWorkspaceId.value);
+            return draftWorkspaceId && !isThreadPrivateWorkspaceId(draftWorkspaceId)
+              ? draftWorkspaceId
+              : null;
+          })(),
       });
       currentThread.value = thread;
       currentModel.value = typeof thread.model === 'string' ? thread.model : model || '';
@@ -394,10 +386,10 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       }
       syncIncognitoState(thread);
       syncWorkspaceState(thread);
+      syncApprovalPolicyState(thread);
       syncReasoningEffortState(thread);
       syncPersonalityState(thread);
       messageStore.clear();
-      persistence.resetPersistedMessageIds();
       resetToolUiStateMap();
       showWelcome.value = false;
 
@@ -416,11 +408,10 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const loadThreadMessages = async (threadId: string) => {
-    const { electronAPI, messageStore, persistence, scrollToBottom } = requireRuntime();
+    const { electronAPI, messageStore, scrollToBottom } = requireRuntime();
     try {
       const dbMessages = await electronAPI.chat.messages.list(threadId);
 
-      // Discard if the active thread changed while loading
       if (currentThread.value?.id !== threadId) return;
 
       const rows = Array.isArray(dbMessages)
@@ -432,8 +423,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
               typeof message.message === 'string'
           )
         : [];
-      persistence.resetPersistedMessageIds(rows.map(row => row.id));
-
       const chatMessages = rows.map(row => parseStoredUiMessage(row));
       messageStore.setAll(chatMessages);
       resetToolUiStateMap();
@@ -477,6 +466,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       syncProviderState(thread);
       syncIncognitoState(thread);
       syncWorkspaceState(thread);
+      syncApprovalPolicyState(thread);
       syncReasoningEffortState(thread);
       syncPersonalityState(thread);
       syncApprovalPolicyState(thread);
@@ -496,7 +486,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const handleThreadDeleted = async (threadId: string) => {
-    const { messageStore, persistence } = requireRuntime();
+    const { messageStore } = requireRuntime();
     if (currentThread.value?.id !== threadId) return;
 
     currentThread.value = null;
@@ -506,15 +496,12 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     currentApprovalPolicy.value = '';
     selectedWorkspaceId.value = null;
     messageStore.clear();
-    persistence.resetPersistedMessageIds();
     resetToolUiStateMap();
     showWelcome.value = true;
     restoreDraftComposerSelection();
   };
 
   const handleNewChat = async () => {
-    // With a project selected, "new chat" opens the next session under that
-    // project (work binding); without one it stays a plain workspace-free chat.
     const workspaceId = normalizeWorkspaceId(selectedWorkspaceId.value);
     const inheritProject = workspaceId !== null && !isThreadPrivateWorkspaceId(workspaceId);
     return createNewThread({
@@ -525,7 +512,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const clearCurrentThread = async () => {
-    const { electronAPI, messageStore, persistence } = requireRuntime();
+    const { electronAPI, messageStore } = requireRuntime();
     const activeThread = currentThread.value;
     if (!activeThread) return null;
 
@@ -547,7 +534,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       syncReasoningEffortState(recreatedThread);
       syncPersonalityState(recreatedThread);
       messageStore.clear();
-      persistence.resetPersistedMessageIds();
       resetToolUiStateMap();
       showWelcome.value = false;
 
@@ -612,7 +598,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
               thread_id: threadId,
             },
           });
-          // Rollback optimistic mutations on IPC failure, only if no newer selection has been made
           if (currentModel.value === data.model) {
             currentModel.value = previousModel;
             currentProviderId.value = previousProviderId;
@@ -778,7 +763,10 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   const setApprovalPolicy = async (nextValue: string) => {
     const normalizedValue = parseApprovalPolicy(nextValue);
     const activeThread = currentThread.value;
-    if (!activeThread) return;
+    if (!activeThread) {
+      currentApprovalPolicy.value = normalizedValue ?? '';
+      return;
+    }
     const previousValue = parseApprovalPolicy(
       parseJsonRecord(activeThread.metadata)[THREAD_APPROVAL_POLICY_KEY]
     );
@@ -879,16 +867,11 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     void refreshThreads();
   };
 
-  const handleTaskPush = async (payload: unknown) => {
-    await handleThreadResultPush(payload, 'task-result');
-  };
-
   const handleAwaiterPush = async (payload: unknown) => {
     await handleThreadResultPush(payload, 'awaiter-result');
   };
 
   return {
-    // state
     threadListRevision,
     currentThread,
     currentModel,
@@ -899,9 +882,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     isIncognito,
     selectedWorkspaceId,
     showWelcome,
-    // runtime
     initRuntime,
-    // actions
     dismissWelcome,
     getCurrentThreadId,
     refreshThreads,
@@ -920,7 +901,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     setApprovalPolicy,
     ensureWorkspaceForCurrentThread,
     handleAssistantMessagePersisted,
-    handleTaskPush,
     handleAwaiterPush,
   };
 });

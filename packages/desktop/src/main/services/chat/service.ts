@@ -4,15 +4,6 @@ import { dialog } from 'electron';
 import { createChatService } from '@iki/backend/thread_session';
 import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
 import { companionService } from '../companion/companion_service';
-import {
-  getAssistantProfileContextMessage,
-  retrieveRelevantContinuity,
-  onMessagePersisted as onContinuityMessagePersisted,
-} from '../continuity/continuity_service';
-import {
-  getAutoPinnedSkillIds,
-  recordAutoSkillSelection,
-} from '../workflow/workflow_optimizer';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import * as agentEvalDb from '@iki/backend/db/agent_eval';
 import { toIsoNow } from '@iki/backend/utils/text';
@@ -70,11 +61,6 @@ const platformDeps: ChatServicePlatformDeps = {
       return { success: false, error: String(err) };
     }
   },
-  getAssistantProfileContextMessage,
-  retrieveRelevantContinuity,
-  onMessagePersisted: onContinuityMessagePersisted,
-  getAutoPinnedSkillIds,
-  recordAutoSkillSelection,
 };
 
 export const chatService = createChatService(platformDeps);

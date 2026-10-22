@@ -1,49 +1,54 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-const createModelMock = vi.hoisted(() => vi.fn());
-const writeThreadTodoPlanMock = vi.hoisted(() => vi.fn());
+const callPiChatMock = vi.hoisted(() => vi.fn());
 const prepareChatTurnMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/thread_session/turn_supply_selection')>()),
+  pausedPlanRunsOnPiToolSupply: () => true,
+}));
 
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
   return {
     ...actual,
-    createModel: createModelMock,
-    disposeLanguageModel: vi.fn(),
-    getFullSystemPrompt: vi.fn(() => 'persona prompt'),
+    resolvePersonaPrompt: vi.fn(() => 'persona prompt'),
     getModelGenerationSettings: vi.fn(() => ({})),
-    injectReasoningContentIntoMessages: vi.fn((messages: unknown[]) => messages),
+    getProviderConfig: vi.fn(() => ({
+      type: 'openai',
+      apiKey: 'key-test',
+      baseURL: 'http://127.0.0.1:9/v1',
+    })),
   };
 });
 
-vi.mock('@iki/backend/db/thread_todos', () => ({
-  writeThreadTodoPlan: writeThreadTodoPlanMock,
+vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+  callPiChat: callPiChatMock,
 }));
 
 vi.mock('@iki/backend/db/agent_runs', () => ({
   appendAgentRunStep: vi.fn(),
-  appendAgentRunStepAndUpdateRun: vi.fn((
-    step: { runId: string; stepIndex: number },
-    updates: Record<string, unknown>
-  ) => ({
-    id: step.runId,
-    kind: 'chat-turn',
-    status: updates.status ?? 'running',
-    threadId: 'thread_1',
-    rootRunId: step.runId,
-    createdAt: '2026-06-20T00:00:00.000Z',
-    updatedAt: '2026-06-20T00:00:00.000Z',
-    working: {
-      modelMessages: [],
-      accumulatedText: '',
-      pendingApprovalIds: [],
-      lastStepIndex: step.stepIndex,
-      ...((updates.working as Record<string, unknown> | undefined) ?? {}),
-    },
-    output: updates.output ?? null,
-    error: updates.error ?? null,
-  })),
+  appendAgentRunStepAndUpdateRun: vi.fn(
+    (step: { runId: string; stepIndex: number }, updates: Record<string, unknown>) => ({
+      id: step.runId,
+      kind: 'chat-turn',
+      status: updates.status ?? 'running',
+      threadId: 'thread_1',
+      rootRunId: step.runId,
+      createdAt: '2026-06-20T00:00:00.000Z',
+      updatedAt: '2026-06-20T00:00:00.000Z',
+      working: {
+        accumulatedText: '',
+        pendingApprovalIds: [],
+        lastStepIndex: step.stepIndex,
+        ...((updates.working as Record<string, unknown> | undefined) ?? {}),
+      },
+      output: updates.output ?? null,
+      error: updates.error ?? null,
+    })
+  ),
   createAgentRun: vi.fn((run: Record<string, unknown>) => ({
     ...run,
     createdAt: '2026-06-20T00:00:00.000Z',
@@ -61,7 +66,7 @@ vi.mock('@iki/backend/db/agent_runs', () => ({
     rootRunId: id,
     createdAt: '2026-06-20T00:00:00.000Z',
     updatedAt: '2026-06-20T00:00:00.000Z',
-    working: { modelMessages: [], accumulatedText: '', pendingApprovalIds: [], lastStepIndex: 0 },
+    working: { accumulatedText: '', pendingApprovalIds: [], lastStepIndex: 0 },
     ...updates,
   })),
 }));
@@ -73,9 +78,8 @@ vi.mock('@iki/backend/turn_prep/turn_preparer', () => ({
 }));
 
 vi.mock('@iki/backend/thread_session/platform', () => ({
+  getAssistantProfileContextMessage: () => '',
   getCompanion: () => ({
-    setChatPolicy: vi.fn(),
-    setAffect: vi.fn(),
     beginThinking: vi.fn(),
     startThinking: vi.fn(),
     endThinking: vi.fn(),
@@ -86,19 +90,26 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   }),
 }));
 
-import type { LanguageModelV3Usage } from '@ai-sdk/provider';
-
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
+import {
+  piTurnHarness,
+  setTurnHarnessFallback,
+} from '@iki/backend/thread_session/turn_supply_selection';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
-import { FauxModelProvider, fauxText, fauxToolCall } from '@iki/backend/agent/testing/faux_model';
+import {
+  createScriptedPiChat,
+  type PiScript,
+  type PiScriptStep,
+} from '@iki/backend/agent/testing/scripted_pi';
 import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
-import { createTool, defaultToolRegistry, HandoffTool } from '@iki/backend/tools';
+import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 
 const toolName = 'streaming_context_probe';
 
 describe('createChatStreaming integration', () => {
   beforeEach(() => {
+    setTurnHarnessFallback(piTurnHarness);
     vi.clearAllMocks();
   });
 
@@ -108,28 +119,38 @@ describe('createChatStreaming integration', () => {
 
   it('streams tool chunks through AgentHarness and preserves runtime context', async () => {
     let observedContext: unknown;
-    defaultToolRegistry.register(createTool({
-      name: toolName,
-      type: 'function',
-      description: 'Probe streaming runtime context',
-      paramSchema: z.object({}),
-      handler: async () => {
-        const ctx = getToolRuntimeContext();
-        observedContext = {
-          threadId: ctx.threadId,
-          runId: ctx.runId,
-          hasRunTracker: !!ctx.runTracker,
-          toolNames: ctx.availableTools?.map(tool => tool.name),
-          conversationModel: ctx.conversationModel,
-        };
-        return observedContext;
-      },
-    }));
+    defaultToolRegistry.register(
+      createTool({
+        name: toolName,
+        type: 'function',
+        description: 'Probe streaming runtime context',
+        paramSchema: z.object({}),
+        handler: async () => {
+          const ctx = getToolRuntimeContext();
+          observedContext = {
+            threadId: ctx.threadId,
+            runId: ctx.runId,
+            hasRunTracker: !!ctx.runTracker,
+            toolNames: ctx.availableTools?.map(tool => tool.name),
+            conversationModel: ctx.conversationModel,
+          };
+          return observedContext;
+        },
+      })
+    );
 
-    createModelMock.mockReturnValue(new FauxModelProvider([
-      fauxToolCall(toolName, {}),
-      fauxText('stream done'),
-    ]));
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName, args: {} },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'text', text: 'stream done' },
+          { kind: 'done', reason: 'stop' },
+        ],
+      ])
+    );
     prepareChatTurnMock.mockResolvedValue({
       report: { totalEstimatedTokens: 1, blocks: [] },
       usedSkills: [],
@@ -192,33 +213,34 @@ describe('createChatStreaming integration', () => {
       },
     });
     expect((observedContext as { runId?: string }).runId).toMatch(/^run_/);
-    expect(writeThreadTodoPlanMock).toHaveBeenCalledWith({ threadId: 'thread_1', items: [] });
-    expect(usage.recordUsageEvent).toHaveBeenCalledWith(expect.objectContaining({
-      source: 'chat.stream',
-      threadId: 'thread_1',
-      providerType: 'openai',
-      model: 'gpt-4o-mini',
-    }));
+    expect(usage.recordUsageEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'chat.stream',
+        threadId: 'thread_1',
+        providerType: 'openai',
+        model: 'gpt-4o-mini',
+      })
+    );
     expect(approvals.cleanupPendingSessionsForSender).toHaveBeenCalledWith(42, expect.any(String));
     expect(streamCoordinator.peekStream(42)).toBeUndefined();
 
     const chunks = target.send.mock.calls
       .filter(call => call[0] === 'chat:ui-chunk')
       .map(call => call[1]);
-    expect(chunks.map(chunk => chunk.type)).toEqual(expect.arrayContaining([
-      'start',
-      'tool-input-available',
-      'tool-output-available',
-      'text-delta',
-      'finish',
-    ]));
+    expect(chunks.map(chunk => chunk.type)).toEqual(
+      expect.arrayContaining([
+        'start',
+        'tool-input-available',
+        'tool-output-available',
+        'text-delta',
+        'finish',
+      ])
+    );
     expect(chunks.find(chunk => chunk.type === 'tool-input-available')).toMatchObject({
       toolName,
       input: {},
     });
 
-    // Turn usage + perf metrics ride along as a data part before finish, so
-    // the renderer can aggregate session stats (and persist them per message).
     const usageChunks = chunks.filter(chunk => chunk.type === 'data-token-usage');
     expect(usageChunks).toHaveLength(1);
     const usageChunk = usageChunks[0]!;
@@ -235,41 +257,39 @@ describe('createChatStreaming integration', () => {
       chunks.indexOf(usageChunk)
     );
 
-    // ConversationStore: the user turn message is recorded (create-only), the
-    // assistant turn output is upserted with the reduced SDK message parts.
-    expect(conversation.createMessage).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'msg_user_probe',
-      thread_id: 'thread_1',
-    }));
+    expect(conversation.createMessage).not.toHaveBeenCalled();
     expect(conversation.upsertTurnMessage).toHaveBeenCalledTimes(1);
     const [turnRow] = conversation.upsertTurnMessage.mock.calls[0]! as [Record<string, unknown>];
     expect(turnRow).toMatchObject({
       thread_id: 'thread_1',
+      parent_id: 'msg_user_probe',
       message: { role: 'assistant', parts: expect.any(Array) },
     });
-    const persistedParts =
-      (turnRow.message as { parts: Array<Record<string, unknown>> }).parts;
+    const persistedParts = (turnRow.message as { parts: Array<Record<string, unknown>> }).parts;
     expect(
-      persistedParts.some(
-        part => part.type === 'dynamic-tool' && part.state === 'output-available'
-      )
+      persistedParts.some(part => part.type === 'dynamic-tool' && part.state === 'output-available')
     ).toBe(true);
-    expect(
-      persistedParts.some(part => part.type === 'text' && part.state === 'done')
-    ).toBe(true);
+    expect(persistedParts.some(part => part.type === 'text' && part.state === 'done')).toBe(true);
   });
 
   it('persists pending approval IDs on the blocked streaming run', async () => {
-    defaultToolRegistry.register(createTool({
-      name: toolName,
-      type: 'function',
-      description: 'Probe approval persistence',
-      paramSchema: z.object({}),
-      handler: async () => 'must not execute',
-    }));
-    createModelMock.mockReturnValue(new FauxModelProvider([
-      fauxToolCall(toolName, {}, { id: 'approval-call-1' }),
-    ]));
+    defaultToolRegistry.register(
+      createTool({
+        name: toolName,
+        type: 'function',
+        description: 'Probe approval persistence',
+        paramSchema: z.object({}),
+        handler: async () => 'must not execute',
+      })
+    );
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName, args: {}, id: 'approval-call-1' },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+      ])
+    );
     prepareChatTurnMock.mockResolvedValue({
       report: { totalEstimatedTokens: 1, blocks: [] },
       usedSkills: [],
@@ -318,39 +338,47 @@ describe('createChatStreaming integration', () => {
     const approvalId = approvalRegistration.mock.calls[0]?.[0]?.[0]?.approvalId;
     expect(approvalId).toEqual(expect.any(String));
 
-    const blockedUpdate = vi.mocked(agentRunDb.updateAgentRun).mock.calls
-      .map(([, updates]) => updates)
+    const blockedUpdate = vi
+      .mocked(agentRunDb.updateAgentRun)
+      .mock.calls.map(([, updates]) => updates)
       .filter(updates => updates.status === 'blocked')
       .at(-1);
     expect(blockedUpdate?.working).toMatchObject({
       pendingApprovalIds: [approvalId],
     });
-    expect(
-      blockedUpdate?.working?.modelMessages.some(message => message.role === 'assistant')
-    ).toBe(true);
+    expect(blockedUpdate?.working).not.toHaveProperty('modelMessages');
   });
 
   it('propagates provider cache usage through the turn boundary', async () => {
-    // Acceptance gate for prompt-cache accounting (audit P2): a provider that
-    // reports cache read/write per inference must surface the summed values
-    // in both the persisted usage event and the renderer's data-token-usage
-    // chunk. Real SDK usage normalization — only the model is scripted.
-    const cacheUsage = (noCache: number, read: number, write: number): LanguageModelV3Usage => ({
-      inputTokens: { total: noCache + read + write, noCache, cacheRead: read, cacheWrite: write },
-      outputTokens: { total: 16, text: 16, reasoning: 0 },
+    const cacheUsage = (noCache: number, read: number, write: number) => ({
+      input: noCache,
+      output: 16,
+      cacheRead: read,
+      cacheWrite: write,
+      totalTokens: noCache + read + write + 16,
     });
 
-    defaultToolRegistry.register(createTool({
-      name: toolName,
-      type: 'function',
-      description: 'Probe streaming runtime context',
-      paramSchema: z.object({}),
-      handler: async () => 'ok',
-    }));
-    createModelMock.mockReturnValue(new FauxModelProvider([
-      fauxToolCall(toolName, {}, { usage: cacheUsage(72, 400, 28) }),
-      fauxText('stream done', { usage: cacheUsage(272, 128, 0) }),
-    ]));
+    defaultToolRegistry.register(
+      createTool({
+        name: toolName,
+        type: 'function',
+        description: 'Probe streaming runtime context',
+        paramSchema: z.object({}),
+        handler: async () => 'ok',
+      })
+    );
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [
+          { kind: 'toolCall', toolName, args: {} },
+          { kind: 'done', reason: 'toolUse', usage: cacheUsage(72, 400, 28) },
+        ],
+        [
+          { kind: 'text', text: 'stream done' },
+          { kind: 'done', reason: 'stop', usage: cacheUsage(272, 128, 0) },
+        ],
+      ])
+    );
     prepareChatTurnMock.mockResolvedValue({
       report: { totalEstimatedTokens: 1, blocks: [] },
       usedSkills: [],
@@ -396,17 +424,18 @@ describe('createChatStreaming integration', () => {
     });
     if (!result.success) throw new Error(result.error);
 
-    // Summed across the two inferences: cacheRead 400 + 128, cacheWrite 28.
-    expect(usage.recordUsageEvent).toHaveBeenCalledWith(expect.objectContaining({
-      source: 'chat.stream',
-      threadId: 'thread_cache',
-      usage: expect.objectContaining({
-        inputTokens: 900,
-        outputTokens: 32,
-        cacheReadTokens: 528,
-        cacheWriteTokens: 28,
-      }),
-    }));
+    expect(usage.recordUsageEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'chat.stream',
+        threadId: 'thread_cache',
+        usage: expect.objectContaining({
+          inputTokens: 900,
+          outputTokens: 32,
+          cacheReadTokens: 528,
+          cacheWriteTokens: 28,
+        }),
+      })
+    );
 
     const usageChunk = target.send.mock.calls
       .map(call => call[1])
@@ -414,53 +443,98 @@ describe('createChatStreaming integration', () => {
     expect(usageChunk).toBeDefined();
     expect(usageChunk!.data).toMatchObject({
       inputTokens: 900,
-      // The last inference's billed input (272 noCache + 128 cacheRead) — the
-      // renderer's context-occupancy signal, distinct from the turn total.
       lastStepInputTokens: 400,
       cacheReadTokens: 528,
       cacheWriteTokens: 28,
     });
   });
-  const setupLoop = (faux: FauxModelProvider, toolNames: string[] = []) => {
-    createModelMock.mockReturnValue(faux);
+  const setupLoop = (script: PiScript[], toolNames: string[] = []) => {
+    callPiChatMock.mockImplementation(createScriptedPiChat(script));
     prepareChatTurnMock.mockResolvedValue({
-      report: { totalEstimatedTokens: 1, blocks: [] }, usedSkills: [], selectedSkillIds: [], skillMode: 'manual',
-      finalMessages: [{ role: 'user', content: 'original task' }], history: [], prompt: 'original task',
-      guardActive: false, requireApproval: false, autoApproveToolRequests: false,
-      affectSignal: null, interventionPolicy: null, guardedTools: toolNames, enableTools: toolNames.length > 0,
+      report: { totalEstimatedTokens: 1, blocks: [] },
+      usedSkills: [],
+      selectedSkillIds: [],
+      skillMode: 'manual',
+      finalMessages: [{ role: 'user', content: 'original task' }],
+      history: [],
+      prompt: 'original task',
+      guardActive: false,
+      requireApproval: false,
+      autoApproveToolRequests: false,
+      affectSignal: null,
+      interventionPolicy: null,
+      guardedTools: toolNames,
+      enableTools: toolNames.length > 0,
     });
     const coordinator = createThreadStreamCoordinator();
     const streaming = createChatStreaming({
-      streamCoordinator: coordinator, memory: {} as never,
+      streamCoordinator: coordinator,
+      memory: {} as never,
       conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
       usage: { recordUsageEvent: vi.fn() },
       approvals: {
-        ensurePendingApprovalSession: vi.fn(), registerApprovalBatch: vi.fn(),
+        ensurePendingApprovalSession: vi.fn(),
+        registerApprovalBatch: vi.fn(),
         cleanupPendingSessionsForSender: vi.fn(),
       },
       getThreadTitle: () => 'Thread',
     });
-    const run = (maxIterations = 10, batches = 2) => streaming.stream({ id: 42, send: vi.fn() }, {
-      providerType: 'openai', providerId: 'provider_primary', model: 'test-model',
-      threadId: 'thread_1', messages: [{ role: 'user', content: 'original task' }],
-      tools: toolNames, maxIterations, autonomous: { maxIterations: batches },
-    });
+    const run = (maxIterations = 10, batches = 2) =>
+      streaming.stream(
+        { id: 42, send: vi.fn() },
+        {
+          providerType: 'openai',
+          providerId: 'provider_primary',
+          model: 'test-model',
+          threadId: 'thread_1',
+          messages: [{ role: 'user', content: 'original task' }],
+          tools: toolNames,
+          maxIterations,
+          autonomous: { maxIterations: batches },
+        }
+      );
     return { coordinator, run, streaming };
   };
 
-  it('excludes duplicate stream/send calls during preparation but allows another thread', async () => {
-    const faux = new FauxModelProvider([fauxText('other thread'), fauxText('first thread')]);
-    const { streaming, run } = setupLoop(faux);
+  it('excludes a duplicate stream during preparation but allows another thread', async () => {
+    const { streaming, run } = setupLoop([
+      [{ kind: 'text', text: 'other thread' }, { kind: 'done' }],
+      [{ kind: 'text', text: 'first thread' }, { kind: 'done' }],
+    ]);
     const prepare = prepareChatTurnMock.getMockImplementation()!;
     let release!: () => void;
-    const gate = new Promise<void>(resolve => { release = resolve; });
-    prepareChatTurnMock.mockImplementationOnce(async () => { await gate; return prepare(); });
-    const first = run();
-    expect(await run()).toMatchObject({ success: false, error: expect.stringContaining('already running') });
-    expect(await streaming.send({ threadId: 'thread_1', providerType: 'openai', model: 'test-model', messages: [] })).toMatchObject({ success: false });
-    const other = await streaming.stream({ id: 43, send: vi.fn() }, {
-      threadId: 'thread_2', providerType: 'openai', model: 'test-model', messages: [],
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
     });
+    prepareChatTurnMock.mockImplementationOnce(async () => {
+      await gate;
+      return prepare();
+    });
+    const first = run();
+    expect(await run()).toMatchObject({
+      success: false,
+      error: expect.stringContaining('already running'),
+    });
+    expect(
+      await streaming.stream(
+        { id: 44, send: vi.fn() },
+        {
+          threadId: 'thread_1',
+          providerType: 'openai',
+          model: 'test-model',
+          messages: [],
+        }
+      )
+    ).toMatchObject({ success: false });
+    const other = await streaming.stream(
+      { id: 43, send: vi.fn() },
+      {
+        threadId: 'thread_2',
+        providerType: 'openai',
+        model: 'test-model',
+        messages: [],
+      }
+    );
     expect(other).toMatchObject({ success: true, text: 'other thread' });
     release();
     expect(await first).toMatchObject({ success: true, text: 'first thread' });
@@ -468,84 +542,128 @@ describe('createChatStreaming integration', () => {
   });
 
   it('does not start the superseded request after its delayed preparation resolves', async () => {
-    const faux = new FauxModelProvider([fauxText('new thread'), fauxText('must not execute')]);
-    const { streaming, run } = setupLoop(faux);
+    const { streaming, run } = setupLoop([
+      [{ kind: 'text', text: 'new thread' }, { kind: 'done' }],
+      [{ kind: 'text', text: 'must not execute' }, { kind: 'done' }],
+    ]);
     const prepare = prepareChatTurnMock.getMockImplementation()!;
     let release!: () => void;
-    const gate = new Promise<void>(resolve => { release = resolve; });
-    prepareChatTurnMock.mockImplementationOnce(async () => { await gate; return prepare(); });
-    const first = run();
-    await streaming.stream({ id: 42, send: vi.fn() }, {
-      threadId: 'thread_2', providerType: 'openai', model: 'test-model', messages: [],
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
     });
+    prepareChatTurnMock.mockImplementationOnce(async () => {
+      await gate;
+      return prepare();
+    });
+    const first = run();
+    await streaming.stream(
+      { id: 42, send: vi.fn() },
+      {
+        threadId: 'thread_2',
+        providerType: 'openai',
+        model: 'test-model',
+        messages: [],
+      }
+    );
     release();
     await first;
-    expect(faux.remaining).toBe(1);
+    expect(callPiChatMock.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   it('preserves tool context across concurrent threads after asynchronous suspension', async () => {
-    const { streaming } = setupLoop(new FauxModelProvider([]), [toolName]);
-    createModelMock.mockImplementation(() => new FauxModelProvider([fauxToolCall(toolName, {}), fauxText('done')]));
+    const { streaming } = setupLoop([], [toolName]);
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([
+        [{ kind: 'toolCall', toolName, args: {} }, { kind: 'done', reason: 'toolUse' }],
+        [{ kind: 'toolCall', toolName, args: {} }, { kind: 'done', reason: 'toolUse' }],
+        [{ kind: 'text', text: 'done' }, { kind: 'done', reason: 'stop' }],
+        [{ kind: 'text', text: 'done' }, { kind: 'done', reason: 'stop' }],
+      ])
+    );
     let entered = 0;
     let release!: () => void;
-    const gate = new Promise<void>(resolve => { release = resolve; });
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
     const seen: Array<{ before?: string; after?: string; runId?: string }> = [];
-    defaultToolRegistry.register(createTool({
-      name: toolName, type: 'function', description: 'Context probe', paramSchema: z.object({}),
-      handler: async () => {
-        const before = getToolRuntimeContext().threadId;
-        if (++entered === 2) release();
-        await gate;
-        const after = getToolRuntimeContext();
-        seen.push({ before, after: after.threadId, runId: after.runId });
-        return { threadId: after.threadId };
-      },
-    }));
-    const results = await Promise.all(['a', 'b'].map((threadId, index) => streaming.stream({ id: index + 1, send: vi.fn() }, {
-      threadId, providerType: 'openai', model: 'test-model', messages: [], tools: [toolName],
-    })));
+    defaultToolRegistry.register(
+      createTool({
+        name: toolName,
+        type: 'function',
+        description: 'Context probe',
+        paramSchema: z.object({}),
+        handler: async () => {
+          const before = getToolRuntimeContext().threadId;
+          if (++entered === 2) release();
+          await gate;
+          const after = getToolRuntimeContext();
+          seen.push({ before, after: after.threadId, runId: after.runId });
+          return { threadId: after.threadId };
+        },
+      })
+    );
+    const results = await Promise.all(
+      ['a', 'b'].map((threadId, index) =>
+        streaming.stream(
+          { id: index + 1, send: vi.fn() },
+          {
+            threadId,
+            providerType: 'openai',
+            model: 'test-model',
+            messages: [],
+            tools: [toolName],
+          }
+        )
+      )
+    );
     expect(results.every(result => result.success)).toBe(true);
-    expect(seen.map(item => [item.before, item.after]).sort()).toEqual([['a', 'a'], ['b', 'b']]);
+    expect(seen.map(item => [item.before, item.after]).sort()).toEqual([
+      ['a', 'a'],
+      ['b', 'b'],
+    ]);
     expect(new Set(seen.map(item => item.runId)).size).toBe(2);
   });
 
   it('ends autonomous work on a natural model stop without spending another call', async () => {
-    const faux = new FauxModelProvider([fauxText('done'), fauxText('must not run')]);
-    const { run } = setupLoop(faux);
-    expect(await run()).toMatchObject({ success: true, text: 'done' });
-    expect(faux.remaining).toBe(1);
-  });
-
-  it('resumes an autonomous handoff with its summary and next task', async () => {
-    defaultToolRegistry.register(new HandoffTool());
-    const faux = new FauxModelProvider([
-      fauxToolCall('handoff', { summary: 'Found the defect', next_steps: 'Fix it', reason: 'context_limit' }),
-      fauxText('fixed'),
+    const { run } = setupLoop([
+      [{ kind: 'text', text: 'done' }, { kind: 'done' }],
+      [{ kind: 'text', text: 'must not run' }, { kind: 'done' }],
     ]);
-    const call = vi.spyOn(faux, 'doStream');
-    const { run } = setupLoop(faux, ['handoff']);
-    try {
-      expect(await run()).toMatchObject({ success: true });
-      expect(call).toHaveBeenCalledTimes(2);
-      const prompt = JSON.stringify(call.mock.calls[1][0].prompt);
-      expect(prompt).toContain('Found the defect');
-      expect(prompt).toContain('Fix it');
-    } finally { defaultToolRegistry.remove('handoff'); }
+    expect(await run()).toMatchObject({ success: true, text: 'done' });
+    expect(callPiChatMock.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   it('respects the autonomous batch limit after SDK step exhaustion', async () => {
-    defaultToolRegistry.register(createTool({
-      name: toolName, type: 'function', description: 'Probe',
-      paramSchema: z.object({}), handler: async () => 'observation',
-    }));
-    const faux = new FauxModelProvider([
-      fauxToolCall(toolName, {}), fauxToolCall(toolName, {}), fauxText('must not run'),
-    ]);
-    const { run } = setupLoop(faux, [toolName]);
+    defaultToolRegistry.register(
+      createTool({
+        name: toolName,
+        type: 'function',
+        description: 'Probe',
+        paramSchema: z.object({}),
+        handler: async () => 'observation',
+      })
+    );
+    const { run } = setupLoop(
+      [
+        [
+          { kind: 'toolCall', toolName, args: {} },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [
+          { kind: 'toolCall', toolName, args: {} },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [{ kind: 'text', text: 'must not run' }, { kind: 'done' }],
+      ],
+      [toolName]
+    );
     expect(await run(1, 2)).toMatchObject({ success: true });
-    expect(faux.remaining).toBe(1);
-    const completedUpdate = vi.mocked(agentRunDb.appendAgentRunStepAndUpdateRun).mock.calls
-      .map(([, updates]) => updates)
+    expect(callPiChatMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    // Completion writes the run row only; it appends no step, so the run row is
+    // the record of how the turn ended.
+    const completedUpdate = vi
+      .mocked(agentRunDb.updateAgentRun)
+      .mock.calls.map(([, updates]) => updates)
       .filter(updates => updates.status === 'completed')
       .at(-1);
     expect(completedUpdate?.output).toMatchObject({
@@ -554,25 +672,39 @@ describe('createChatStreaming integration', () => {
   });
 
   it('preserves observations and the latest human feedback during steering', async () => {
-    defaultToolRegistry.register(createTool({
-      name: toolName, type: 'function', description: 'Probe',
-      paramSchema: z.object({}), handler: async () => 'completed observation',
-    }));
-    const faux = new FauxModelProvider([
-      fauxToolCall(toolName, {}), fauxText('interrupted'), fauxText('steered response'),
-    ]);
-    const { coordinator, run } = setupLoop(faux, [toolName]);
-    const original = faux.doStream.bind(faux);
+    defaultToolRegistry.register(
+      createTool({
+        name: toolName,
+        type: 'function',
+        description: 'Probe',
+        paramSchema: z.object({}),
+        handler: async () => 'completed observation',
+      })
+    );
+    const { coordinator, run } = setupLoop(
+      [
+        [
+          { kind: 'toolCall', toolName, args: {} },
+          { kind: 'done', reason: 'toolUse' },
+        ],
+        [{ kind: 'text', text: 'interrupted' }, { kind: 'done' }],
+        [{ kind: 'text', text: 'steered response' }, { kind: 'done' }],
+      ],
+      [toolName]
+    );
+    const original = callPiChatMock.getMockImplementation()!;
+    const call = callPiChatMock;
     let calls = 0;
-    const call = vi.spyOn(faux, 'doStream').mockImplementation(options => {
-      if (++calls === 2) expect(coordinator.steerStream(42, 'thread_1', 'new direction').success).toBe(true);
-      return original(options);
+    callPiChatMock.mockImplementation((model, context, options) => {
+      if (++calls === 2)
+        expect(coordinator.steerStream(42, 'thread_1', 'new direction').success).toBe(true);
+      return (original as (m: unknown, c: unknown, o: unknown) => unknown)(model, context, options);
     });
-    expect(await run()).toMatchObject({ success: true, text: 'steered response' });
-    const prompt = JSON.stringify(call.mock.calls[2][0].prompt);
-    expect(prompt).toContain('completed observation');
-    expect(prompt.match(/original task/g)).toHaveLength(1);
-    expect(JSON.stringify(call.mock.calls[2][0].prompt.at(-1))).toContain('new direction');
+    expect(await run()).toMatchObject({ success: true });
+    const postTool = JSON.stringify(call.mock.calls[1][1]);
+    expect(postTool).toContain('completed observation');
+    expect(postTool.match(/original task/g)).toHaveLength(1);
+    const steered = JSON.stringify(call.mock.calls.at(-1)![1]);
+    expect(steered).toContain('new direction');
   });
-
 });

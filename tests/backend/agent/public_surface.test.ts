@@ -1,32 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
-import * as currentAgentApi from '@iki/backend/agent';
+import * as agentApi from '@iki/backend/agent';
+import * as harnessApi from '@iki/backend/agent/harness';
 
-describe('core agent public surface', () => {
-  it('exports types, schemas, and config but not implementation runners', () => {
-    expect(currentAgentApi).toHaveProperty('AgentConfigSchema');
-    expect(currentAgentApi).toHaveProperty('AgentToolSchema');
-    expect(currentAgentApi).not.toHaveProperty('createPlanThenExecutePrepareStep');
-    expect(currentAgentApi).not.toHaveProperty('composePrepareSteps');
+describe('agent public surface', () => {
+  it('re-exports the tool registry and schemas the agent layer is built from', () => {
+    expect(agentApi).toHaveProperty('defaultToolRegistry');
+    expect(agentApi).toHaveProperty('registerStandardTools');
+    expect(agentApi).toHaveProperty('AgentConfigSchema');
+    expect(agentApi).toHaveProperty('AgentToolSchema');
+  });
 
-    // Implementation runners moved to @iki/backend/agent/runners/
-    expect(currentAgentApi).not.toHaveProperty('createSimpleAgentRunner');
-    expect(currentAgentApi).not.toHaveProperty('SimpleAgentRunner');
-    expect(currentAgentApi).not.toHaveProperty('createAgentRunTracker');
-    expect(currentAgentApi).not.toHaveProperty('AgentRunTracker');
-    expect(currentAgentApi).not.toHaveProperty('ClaudeCodeRunner');
-    expect(currentAgentApi).not.toHaveProperty('createClaudeCodeRunner');
+  it('does not export the harness, the run tracker, or the turn driver', () => {
+    expect(agentApi).not.toHaveProperty('startPiTurnHarness');
+    expect(agentApi).not.toHaveProperty('TurnDriverHarness');
+    expect(agentApi).not.toHaveProperty('createAgentRunTracker');
+    expect(agentApi).not.toHaveProperty('AgentRunTracker');
+  });
 
-    // Legacy agent exports removed
-    expect(currentAgentApi).not.toHaveProperty('createSimpleConversationRunner');
-    expect(currentAgentApi).not.toHaveProperty('SimpleConversationRunner');
-    expect(currentAgentApi).not.toHaveProperty('SimpleAgent');
-    expect(currentAgentApi).not.toHaveProperty('Agent');
-    expect(currentAgentApi).not.toHaveProperty('createAgent');
-    expect(currentAgentApi).not.toHaveProperty('getAgentConfig');
-    expect(currentAgentApi).not.toHaveProperty('BaseAgent');
-    expect(currentAgentApi).not.toHaveProperty('AgentMessageSchema');
-    expect(currentAgentApi).not.toHaveProperty('AgentStateSchema');
-    expect(currentAgentApi).not.toHaveProperty('AgentHookContextSchema');
+  it('reaches the harness entry point through the harness subpath', () => {
+    expect(harnessApi).toHaveProperty('startPiTurnHarness');
   });
 });

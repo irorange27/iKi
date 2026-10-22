@@ -56,12 +56,12 @@ export const useProvidersSettingsEditor = (params: {
     const value = isResponseApi ? 'responses' : 'chat-completions';
     const options = [
       {
-        value: 'chat-completions' as const,
-        label: t('settings.providers.modal.apiFormat.chatCompletions'),
-      },
-      {
         value: 'responses' as const,
         label: t('settings.providers.modal.apiFormat.responses'),
+      },
+      {
+        value: 'chat-completions' as const,
+        label: t('settings.providers.modal.apiFormat.chatCompletions'),
       },
     ];
 
@@ -99,7 +99,7 @@ export const useProvidersSettingsEditor = (params: {
       models: '',
       base_url: '',
       enabled: true,
-      is_response_api: false,
+      is_response_api: true,
       available_models: '[]',
     };
     showProviderEditor.value = true;

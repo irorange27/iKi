@@ -149,14 +149,14 @@ export const toPlainData = <T>(value: T): T => {
     try {
       return structuredClone(value);
     } catch {
-      // Fall through to the object/array copier for Proxy-backed or otherwise non-cloneable values.
-    }
+    // Intentionally ignored: the caller cannot act on it.
+  }
   }
 
   try {
     return cloneFallback(value, new WeakMap()) as T;
   } catch {
-    // Fall through to the JSON round-trip as a final plain-data backstop.
+    // Intentionally ignored: the caller cannot act on it.
   }
 
   try {

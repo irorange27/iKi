@@ -1,20 +1,11 @@
 import {
   appendAgentRunStepAndUpdateRun,
+  updateAgentRunIfStatus,
   createAgentRun,
   getAgentRun,
-  listAgentRunSteps,
-  listAgentRunsByStatus,
   updateAgentRun,
 } from '@iki/backend/db/agent_runs';
-import { getChatMessages, updateChatMessage } from '@iki/backend/db/chat_message';
-import { expirePendingToolCallApprovalsByRunIds } from '@iki/backend/db/tool_call_approval';
-import type { DynamicToolPart } from '@iki/backend/message/tool_parts';
-import {
-  interruptedToolPartErrorText,
-  isObjectRecord,
-  isTerminalDynamicToolPart,
-  toInterruptedToolPart,
-} from '@iki/backend/message/tool_parts';
+import { claimQueuedAgentRun } from '@iki/backend/db/agent_runs';
 import type {
   AgentRun,
   AgentRunError,
@@ -47,19 +38,23 @@ type CreateAgentRunTrackerParams = {
   availableSkillIds: string[];
   input: AgentRunInput;
   working: AgentRunWorkingState;
+
+  adoptExistingRunId?: string;
 };
 
 type FinalizeRunParams = {
   text?: string;
   finishReason?: string;
   usage?: Record<string, unknown>;
+
+  pendingToolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
 };
 
 type BlockRunParams = FinalizeRunParams & {
   pendingApprovalIds?: string[];
 };
 
-type FailRunParams = AgentRunError;
+type FailRunParams = AgentRunError & Pick<FinalizeRunParams, 'text'>;
 
 const ALLOWED_STATUS_TRANSITIONS: Record<AgentRunStatus, readonly AgentRunStatus[]> = {
   queued: ['running', 'failed', 'cancelled'],
@@ -84,6 +79,9 @@ const buildOutput = (params: FinalizeRunParams): AgentRunOutput | null => {
     ...(typeof params.text === 'string' ? { text: params.text } : {}),
     ...(typeof params.finishReason === 'string' ? { finishReason: params.finishReason } : {}),
     ...(params.usage && typeof params.usage === 'object' ? { usage: params.usage } : {}),
+    ...(Array.isArray(params.pendingToolCalls) && params.pendingToolCalls.length > 0
+      ? { pendingToolCalls: params.pendingToolCalls }
+      : {}),
   };
   return Object.keys(output).length > 0 ? output : null;
 };
@@ -102,14 +100,7 @@ export type AgentRunTracker = {
   id: string;
   getRun: () => AgentRun;
   recordModelStep: (record: ModelInferenceRecord) => void;
-  syncModelMessages: (messages: unknown[]) => AgentRun;
   recordAgentStep: (step: AgentStep) => void;
-  recordApprovalResponse: (params: {
-    approvalId: string;
-    toolCallId?: string;
-    approved: boolean;
-    reason?: string;
-  }) => AgentRun;
   markResumed: (params: { childRunId: string }) => AgentRun;
   recordChildRun: (params: {
     childRunId: string;
@@ -121,12 +112,16 @@ export type AgentRunTracker = {
   markCompleted: (params: FinalizeRunParams) => AgentRun;
   markBlocked: (params: BlockRunParams) => AgentRun;
   markFailed: (params: FailRunParams) => AgentRun;
+
+  markFailedIfStatus: (
+    expectedStatuses: readonly AgentRunStatus[],
+    params: FailRunParams
+  ) => AgentRun | null;
   markCancelled: (params?: Pick<FinalizeRunParams, 'text'>) => AgentRun;
 };
 
 const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
   let currentRun = initialRun;
-  let recordedApprovalResponseIds: Set<string> | null = null;
 
   const persist = (updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>) => {
     if (updates.status) assertRunStatusTransition(currentRun, updates.status);
@@ -175,6 +170,19 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
     return step;
   };
 
+  const failedState = (params: FailRunParams): Pick<AgentRun, 'status' | 'working' | 'error'> => {
+    const { text, ...error } = params;
+    return {
+      status: 'failed',
+      working: {
+        ...currentRun.working,
+        pendingApprovalIds: [],
+        ...(typeof text === 'string' ? { accumulatedText: text } : {}),
+      },
+      error,
+    };
+  };
+
   return {
     id: currentRun.id,
     getRun: () => currentRun,
@@ -183,7 +191,6 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
         type: 'model',
         status: 'completed',
         summary: 'Model inference',
-        input: { messages: record.messages, systemPrompt: record.systemPrompt },
         output: {
           inference: true,
           content: record.content,
@@ -191,15 +198,6 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
           usage: record.usage,
         },
       });
-    },
-    syncModelMessages: messages => {
-      persist({
-        working: {
-          ...currentRun.working,
-          modelMessages: Array.isArray(messages) ? structuredClone(messages) : [],
-        },
-      });
-      return currentRun;
     },
     recordAgentStep: step => {
       if (step.type === 'tool_execution_start') {
@@ -265,48 +263,15 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
         }
       }
     },
-    recordApprovalResponse: params => {
-      const approvalId = normalizeWhitespace(params.approvalId);
-      if (!approvalId) return currentRun;
-      recordedApprovalResponseIds ??= new Set(
-        listAgentRunSteps(currentRun.id)
-          .filter(step => step.type === 'approval-response')
-          .map(step => normalizeWhitespace(step.input?.approvalId))
-          .filter(Boolean)
-      );
-      if (recordedApprovalResponseIds.has(approvalId)) return currentRun;
-      appendStep({
-        type: 'approval-response',
-        status: 'completed',
-        summary: 'Tool approval ' + (params.approved ? 'approved' : 'rejected'),
-        input: {
-          approvalId,
-          ...(params.toolCallId ? { toolCallId: params.toolCallId } : {}),
-          approved: params.approved,
-          ...(params.reason ? { reason: params.reason } : {}),
-        },
-      });
-      recordedApprovalResponseIds.add(approvalId);
-      return currentRun;
-    },
     markResumed: params => {
       const childRunId = normalizeWhitespace(params.childRunId);
       if (!childRunId) throw new Error('Resumed Run requires a child Run ID');
       const text = currentRun.output?.text ?? currentRun.working.accumulatedText;
       const usage = currentRun.output?.usage;
-      appendStep({
-        type: 'finalize',
-        status: 'completed',
-        summary: 'Approval answered; continuation started',
-        input: {
-          childRunId,
-          answeredApprovalIds: currentRun.working.pendingApprovalIds,
-        },
-        output: {
-          ...(text ? { text } : {}),
-          finishReason: 'approval-resumed',
-        },
-      }, {
+      // Same rule as the other terminal transitions: the row records the
+      // outcome, so no step. The child run carries its own start fact and the
+      // approval decisions live in the session log, so nothing here is lost.
+      persist({
         status: 'completed',
         working: {
           ...currentRun.working,
@@ -339,18 +304,11 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
       return currentRun;
     },
     markCompleted: params => {
-      appendStep({
-        type: 'model',
-        status: 'completed',
-        summary: toSummary('Run completed successfully', 'Run completed'),
-        output: {
-          ...(typeof params.text === 'string' ? { text: params.text } : {}),
-          ...(typeof params.finishReason === 'string'
-            ? { finishReason: params.finishReason }
-            : {}),
-          ...(params.usage && typeof params.usage === 'object' ? { usage: params.usage } : {}),
-        },
-      }, {
+      // No step: the run row already carries the final text, finish reason and
+      // usage, and the trajectory shows the last model step as the answer. A
+      // second record of the same text is what made every turn look like it
+      // ended in a separate "finalize" event.
+      persist({
         status: 'completed',
         working: {
           ...currentRun.working,
@@ -401,32 +359,24 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
       return currentRun;
     },
     markFailed: params => {
-      appendStep({
-        type: 'error',
-        status: 'failed',
-        summary: toSummary(params.message, 'Run failed'),
-        output: {
-          message: params.message,
-          ...(typeof params.code === 'string' ? { code: params.code } : {}),
-          ...(typeof params.retryable === 'boolean' ? { retryable: params.retryable } : {}),
-        },
-      }, {
-        status: 'failed',
-        working: {
-          ...currentRun.working,
-          pendingApprovalIds: [],
-        },
-        error: params,
-      });
+      // The run row's `error` holds message/code/retryable; a step repeated the
+      // same three fields and rendered as a failure "event" on the timeline.
+      persist(failedState(params));
+      return currentRun;
+    },
+    markFailedIfStatus: (expectedStatuses, params) => {
+      const claimed = updateAgentRunIfStatus(
+        currentRun.id,
+        failedState(params),
+        expectedStatuses
+      );
+      if (!claimed) return null;
+      currentRun = claimed;
       return currentRun;
     },
     markCancelled: params => {
-      appendStep({
-        type: 'finalize',
-        status: 'completed',
-        summary: toSummary('Run cancelled', 'Run cancelled'),
-        output: typeof params?.text === 'string' ? { text: params.text } : null,
-      }, {
+      // Same rule as markCompleted: the row carries the outcome, so no step.
+      persist({
         status: 'cancelled',
         working: {
           ...currentRun.working,
@@ -446,6 +396,15 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
 export const createAgentRunTracker = (
   params: CreateAgentRunTrackerParams
 ): AgentRunTracker => {
+  if (params.adoptExistingRunId) {
+    const adopted = claimQueuedAgentRun(params.adoptExistingRunId);
+    if (!adopted) {
+      throw new Error(
+        'Queued run "' + params.adoptExistingRunId + '" was already claimed or is not claimable.'
+      );
+    }
+    return createAgentRunTrackerForRun(adopted);
+  }
   const runId = createPrefixedId('run');
   const normalizedParentRunId = normalizeWhitespace(params.parentRunId) || null;
   const resolvedRootRunId =
@@ -475,87 +434,4 @@ export const createAgentRunTracker = (
 export const rehydrateAgentRunTracker = (runId: string): AgentRunTracker | null => {
   const run = getAgentRun(normalizeWhitespace(runId));
   return run ? createAgentRunTrackerForRun(run) : null;
-};
-
-export type RunRecoveryResult = {
-  failedRuns: number;
-  blockedRuns: number;
-  totalRuns: number;
-  expiredApprovals: number;
-  interruptedToolParts: number;
-};
-
-export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
-  const stuckStatuses: AgentRunStatus[] = ['running', 'blocked'];
-  const runs = listAgentRunsByStatus(stuckStatuses);
-  let failedRuns = 0;
-  let blockedRuns = 0;
-
-  const runIds = runs.map(run => run.id);
-  const expiredApprovals =
-    runIds.length > 0 ? expirePendingToolCallApprovalsByRunIds(runIds).length : 0;
-  const threadIds = Array.from(
-    new Set(runs.map(run => run.threadId).filter((id): id is string => typeof id === 'string'))
-  );
-  let interruptedToolParts = 0;
-  for (const threadId of threadIds) {
-    for (const messageRow of getChatMessages(threadId)) {
-      if (!messageRow.message.includes('"dynamic-tool"')) continue;
-      let parsed: { parts?: unknown[] } | null = null;
-      try {
-        parsed = JSON.parse(messageRow.message);
-      } catch {
-        continue;
-      }
-      if (!Array.isArray(parsed?.parts)) continue;
-
-      let changed = false;
-      const parts = parsed.parts.map(part => {
-        if (!isObjectRecord(part) || part.type !== 'dynamic-tool') return part;
-        if (isTerminalDynamicToolPart(part)) return part;
-        changed = true;
-        interruptedToolParts += 1;
-        return toInterruptedToolPart(
-          part as unknown as DynamicToolPart,
-          interruptedToolPartErrorText(part as unknown as DynamicToolPart)
-        );
-      });
-      if (changed) {
-        updateChatMessage(messageRow.id, {
-          message: JSON.stringify({ ...parsed, parts }),
-        });
-      }
-    }
-  }
-
-  // Reconcile approval and UI records before making the Run terminal. If any
-  // reconciliation fails, the next startup still finds the Run as stuck and
-  // can retry the remaining work.
-  for (const run of runs) {
-    const tracker = rehydrateAgentRunTracker(run.id);
-    if (!tracker) continue;
-    if (run.status === 'running') {
-      tracker.markFailed({
-        message: 'Run interrupted by process restart',
-        code: 'PROCESS_RESTART',
-        retryable: true,
-      });
-      failedRuns += 1;
-    } else if (run.status === 'blocked') {
-      tracker.markFailed({
-        message: 'Run blocked at restart — approval session lost',
-        code: 'APPROVAL_SESSION_LOST',
-        retryable: true,
-      });
-      blockedRuns += 1;
-    }
-  }
-
-  return {
-    failedRuns,
-    blockedRuns,
-    totalRuns: runs.length,
-    expiredApprovals,
-    interruptedToolParts,
-  };
 };

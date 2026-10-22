@@ -19,11 +19,9 @@ const createMinimalApi = () => ({
     onUpdated: vi.fn(() => vi.fn()),
   },
   mcp: { list: vi.fn(async () => []), onUpdated: vi.fn(() => vi.fn()) },
-  napcat: { list: vi.fn(async () => []), onUpdated: vi.fn(() => vi.fn()) },
   skills: { list: vi.fn(async () => []) },
   speech: { status: vi.fn(async () => ({ available: false })) },
   memory: { getStatus: vi.fn(async () => ({})) },
-  tasks: { list: vi.fn(async () => []) },
   usage: { summary: vi.fn(async () => ({})) },
   companion: {
     getSnapshot: vi.fn(async () => null),
@@ -57,7 +55,6 @@ describe('SettingsView smoke', () => {
 
     expect(wrapper.find('.settings-view').exists() || wrapper.find('section').exists()).toBe(true);
 
-    // Switch to a data-heavy section and back — exercises the async loaders.
     const sections = wrapper.findAll('button, [role="tab"]');
     expect(sections.length).toBeGreaterThan(0);
     await wrapper.unmount();

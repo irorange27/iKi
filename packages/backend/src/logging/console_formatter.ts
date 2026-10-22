@@ -83,8 +83,8 @@ const formatConsoleTime = (ts: string | undefined, timeZone?: string): string =>
       });
       return formatter.format(date);
     } catch {
-      // fall back to the local console clock when the requested zone is invalid
-    }
+    // Intentionally ignored: the caller cannot act on it.
+  }
   }
 
   return [
@@ -143,7 +143,6 @@ const buildExtrasLabel = (entry: StructuredConsoleFormatterInput): string => {
     parts.push(`sid=${entry.session_id.slice(0, 8)}`);
   }
 
-  // Flatten top-level scalar values from the data bag
   if (entry.data && typeof entry.data === 'object' && !Array.isArray(entry.data)) {
     for (const [key, value] of Object.entries(entry.data)) {
       if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -162,7 +161,7 @@ const buildExtrasLabel = (entry: StructuredConsoleFormatterInput): string => {
   return parts.join('  ');
 };
 
-export const createStructuredConsoleSegments = (
+const createStructuredConsoleSegments = (
   entry: StructuredConsoleFormatterInput,
   options?: ConsoleFormatterOptions
 ): ConsoleLogSegments => {

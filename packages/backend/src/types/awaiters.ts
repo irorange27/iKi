@@ -108,14 +108,3 @@ export interface Awaiter {
   created_at: string;
   updated_at: string;
 }
-
-export interface AwaiterWakeEvent {
-  id: string;
-  awaiter_id: string;
-  run_id?: string | null;
-  trigger_fired_at: string;
-  trigger_snapshot_json?: string | null;
-  outcome: 'success' | 'error';
-  error?: string | null;
-  created_at: string;
-}

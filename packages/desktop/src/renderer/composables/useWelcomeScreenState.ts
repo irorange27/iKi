@@ -1,11 +1,10 @@
 import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue';
 
 import type { Provider } from '@iki/backend/types/provider';
-import { parseModelList } from '@iki/backend/utils/provider_models';
 import { resolveProviderSelection } from './useChatProviderSelection';
 import { useI18n } from '../i18n';
 import { getProviderDisplayName } from '../modules/providers/provider_display';
-import { getElectronApiMethod, getOptionalElectronAPI } from '../services/electron_api';
+import { getOptionalElectronAPI } from '../services/electron_api';
 
 export const useWelcomeScreenState = (params: {
   activeModel: Readonly<Ref<string | undefined>>;
@@ -13,7 +12,6 @@ export const useWelcomeScreenState = (params: {
   onComposeStarter: (text: string) => void;
 }) => {
   const electronAPI = getOptionalElectronAPI();
-  const openSettingsWindow = getElectronApiMethod('openSettings');
   const { t } = useI18n();
 
   const providers = ref<Provider[]>([]);
@@ -101,7 +99,7 @@ export const useWelcomeScreenState = (params: {
   ]);
 
   const openSettingsOverview = () => {
-    openSettingsWindow?.();
+    window.location.hash = 'settings';
   };
 
   const focusBlankDraft = () => {

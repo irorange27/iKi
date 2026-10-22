@@ -66,53 +66,11 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
       preferredModel: '',
     },
   },
-  memory: {
-    enabled: false,
-    autoSummarize: false,
-    maxRetrievalCount: 5,
-    similarThreshold: 0.1,
-    embeddingModel: {
-      providerId: '',
-      providerType: '',
-      model: '',
-    },
-    context: {
-      enabled: true,
-      recentMessageCount: 10,
-      maxRecentTokens: 2400,
-      maxMessageTokens: 420,
-      maxIdentityTokens: 320,
-      summaryTriggerMessages: 14,
-      summaryRecentMessages: 6,
-      maxSummaryTokens: 500,
-      maxMemoryTokens: 500,
-      maxSkillTokens: 1200,
-    },
-    emotion: {
-      enabled: true,
-      injectToSystemPrompt: true,
-      realtimeAnalysis: false,
-      minConfidence: 0.45,
-      minSampleCount: 2,
-      windowSize: 8,
-      halfLifeMinutes: 60,
-      maxAgeMinutes: 180,
-      includeNeutral: false,
-      toolGuard: {
-        enabled: true,
-        minConfidence: 0.6,
-        minArousal: 0.6,
-        maxValence: -0.2,
-        requireApproval: true,
-        disableAutoTools: false,
-      },
-    },
-  },
-  continuity: {
+
+  context: {
     enabled: true,
-    autoCaptureExplicitFacts: true,
-    injectToSystemPrompt: true,
-    maxRetrievedItems: 6,
+    maxIdentityTokens: 320,
+    maxSkillTokens: 1200,
   },
   speech: {
     enabled: false,
@@ -143,36 +101,6 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   daemon: {
     host: DEFAULT_DAEMON_HOST,
     port: DEFAULT_DAEMON_PORT,
-  },
-  bridges: {
-    napcat: {
-      enabled: false,
-      accessToken: '',
-      providerType: '',
-      model: '',
-      tools: [],
-      requireMention: true,
-    },
-  },
-  workflowOptimization: {
-    enabled: true,
-    autoPinSkills: true,
-    minAutoSkillRuns: 6,
-    minSkillSelections: 3,
-    pinConfidence: 0.6,
-    unpinConfidence: 0.4,
-    maxPinnedSkills: 4,
-  },
-  agent: {
-    enabled: false,
-    systemPrompt: 'You are a helpful AI assistant. You are capable, autonomous, and helpful.',
-    providerType: '',
-    model: '',
-    temperature: 0.1,
-    maxTokens: 2000,
-    maxIterations: 10,
-    enableTools: false,
-    enableMemory: false,
   },
 };
 
@@ -253,29 +181,11 @@ export const mergeAppConfigWithBase = (
         ...((rawConfig.chat ?? {}).composer ?? {}),
       },
     },
-    memory: {
-      ...base.memory,
-      ...(rawConfig.memory ?? {}),
-      embeddingModel: {
-        ...base.memory.embeddingModel,
-        ...((rawConfig.memory ?? {}).embeddingModel ?? {}),
-      },
-      context: {
-        ...base.memory.context,
-        ...((rawConfig.memory ?? {}).context ?? {}),
-      },
-      emotion: {
-        ...base.memory.emotion,
-        ...((rawConfig.memory ?? {}).emotion ?? {}),
-        toolGuard: {
-          ...base.memory.emotion.toolGuard,
-          ...(((rawConfig.memory ?? {}).emotion ?? {}).toolGuard ?? {}),
-        },
-      },
-    },
-    continuity: {
-      ...base.continuity,
-      ...(rawConfig.continuity ?? {}),
+
+    context: {
+      enabled: rawConfig.context?.enabled ?? base.context.enabled,
+      maxIdentityTokens: rawConfig.context?.maxIdentityTokens ?? base.context.maxIdentityTokens,
+      maxSkillTokens: rawConfig.context?.maxSkillTokens ?? base.context.maxSkillTokens,
     },
     speech: {
       ...base.speech,
@@ -302,22 +212,6 @@ export const mergeAppConfigWithBase = (
     daemon: {
       ...base.daemon,
       ...(rawConfig.daemon ?? {}),
-    },
-    bridges: {
-      ...base.bridges,
-      ...(rawConfig.bridges ?? {}),
-      napcat: {
-        ...base.bridges.napcat,
-        ...((rawConfig.bridges ?? {}).napcat ?? {}),
-      },
-    },
-    workflowOptimization: {
-      ...base.workflowOptimization,
-      ...(rawConfig.workflowOptimization ?? {}),
-    },
-    agent: {
-      ...base.agent,
-      ...(rawConfig.agent ?? {}),
     },
   };
 };

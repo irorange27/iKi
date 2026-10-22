@@ -142,9 +142,6 @@ const createHarness = (
       tasks: {},
     } as never,
     messageStore: messageStore as never,
-    persistence: {
-      resetPersistedMessageIds: vi.fn(),
-    } as never,
     scrollToBottom,
     preferredDraftModel,
     preferredDraftProviderId,
@@ -225,7 +222,7 @@ describe('threadSession store', () => {
     expect(state.isIncognito.value).toBe(false);
   });
 
-  it('keeps chat threads workspace-free while work threads bind the picked folder', async () => {
+  it('binds a picked folder to a chat thread, since tools need it', async () => {
     const { state, createThread, updateThread } = createHarness();
 
     await state.setWorkspace('workspace_alpha');
@@ -238,14 +235,12 @@ describe('threadSession store', () => {
     expect(createThread).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'gpt-4.1',
-        workspace_id: null,
+        workspace_id: 'workspace_alpha',
         metadata: expect.stringContaining('"mode":"chat"'),
       })
     );
-    // Chats have no workspace concept: the binding is dropped on the created row
-    // and the local draft is resynced from the thread.
-    expect(createdThread?.workspace_id).toBeUndefined();
-    expect(state.selectedWorkspaceId.value).toBeNull();
+    expect(createdThread?.workspace_id).toBe('workspace_alpha');
+    expect(state.selectedWorkspaceId.value).toBe('workspace_alpha');
 
     const workThread = await state.createNewThread({
       model: 'gpt-4.1',
@@ -378,8 +373,6 @@ describe('threadSession store', () => {
         workspace_id: 'workspace_alpha',
       })
     );
-    // Recorded tool hints are history, not runtime state — they must not follow the
-    // cleared thread into its replacement.
     expect(clearThread.mock.calls[0]?.[1]).not.toHaveProperty('tools');
     expect(clearedThread?.id).toBe('thread_clear_me');
     expect(clearedThread?.title).toBe('New Chat');
@@ -600,7 +593,6 @@ describe('threadSession store', () => {
   });
 
   it('discards stale message-load results when a newer thread selection has started', async () => {
-    // Thread A: slow message load. Thread B: instant message load.
     const threadA = createStoredThread({ id: 'thread_A', title: 'Thread A', model: 'gpt-4o' });
     const threadB = createStoredThread({
       id: 'thread_B',
@@ -627,7 +619,6 @@ describe('threadSession store', () => {
       },
     ];
 
-    // Thread A's message list is deferred so we can control ordering
     let resolveAList: (value: ChatMessage[]) => void;
     const aListPromise = new Promise<ChatMessage[]>(resolve => {
       resolveAList = resolve;
@@ -667,7 +658,6 @@ describe('threadSession store', () => {
         tasks: {},
       } as never,
       messageStore: messageStore as never,
-      persistence: { resetPersistedMessageIds: vi.fn() } as never,
       scrollToBottom: vi.fn(),
       preferredDraftModel: ref(''),
       preferredDraftProviderId: ref(null),
@@ -678,24 +668,19 @@ describe('threadSession store', () => {
       handleModelSelected: store.handleModelSelected,
     };
 
-    // Start selecting thread A — its message load will block
     const aSelectPromise = state.selectThread('thread_A');
 
-    // While A is loading, immediately select thread B (completes synchronously)
     await state.selectThread('thread_B');
 
     expect(state.currentThread.value?.id).toBe('thread_B');
     expect(state.currentModel.value).toBe('deepseek-chat');
 
-    // Now resolve A's stale message load
     resolveAList!(aMessages);
     await aSelectPromise;
 
-    // After stale resolution, thread B must still be the active thread
     expect(state.currentThread.value?.id).toBe('thread_B');
     expect(state.currentModel.value).toBe('deepseek-chat');
 
-    // The final setAll call must carry thread B's messages, not A's
     const setAllCalls = messageStore.setAll.mock.calls;
     expect(setAllCalls.length).toBeGreaterThanOrEqual(1);
     const lastSetAllArg = setAllCalls[setAllCalls.length - 1][0] as Array<{ id?: string }>;
@@ -743,7 +728,6 @@ describe('threadSession store', () => {
         hasId: vi.fn(() => false),
         setAll: vi.fn(),
       } as never,
-      persistence: { resetPersistedMessageIds: vi.fn() } as never,
       scrollToBottom: vi.fn(),
       preferredDraftModel: ref(''),
       preferredDraftProviderId: ref(null),
@@ -757,22 +741,16 @@ describe('threadSession store', () => {
     await state.selectThread('thread_rollback');
     expect(state.currentThread.value?.model).toBe('gpt-4o');
 
-    // Change model — IPC will fail
     state.handleModelSelected({
       model: 'deepseek-chat',
       provider: { id: 'deepseek', type: 'deepseek' },
     });
 
-    // Optimistic update has been applied
     expect(state.currentModel.value).toBe('deepseek-chat');
     expect(state.currentProviderId.value).toBe('deepseek');
 
-    // Wait for the failed IPC to settle
     await vi.waitFor(() => expect(updateThread).toHaveBeenCalled(), { timeout: 1000 });
 
-    // After IPC failure, the composer state should be rolled back
-    // NOTE: With the current bug, these will still be 'deepseek-chat' / 'deepseek'
-    // The fix should restore them to 'gpt-4o' / 'openai'
     expect(state.currentModel.value).toBe('gpt-4o');
     expect(state.currentProviderId.value).toBe('openai');
     expect(state.currentThread.value?.model).toBe('gpt-4o');

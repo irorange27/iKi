@@ -1,22 +1,14 @@
 import { ref } from 'vue';
 import { PHASE_VOICE } from './useCompanionSprites';
 
-/**
- * Plays pre-recorded voice clips on companion phase transitions.
- * One Audio element reused — stops any in-progress clip before playing the next.
- */
 export function useCompanionVoice() {
   const muted = ref(false);
   let currentAudio: HTMLAudioElement | null = null;
 
-  const playPhaseVoice = (phase: string, nudgeKind?: string) => {
+  const playPhaseVoice = (phase: string) => {
     if (muted.value) return;
 
-    const key = phase === 'nudge'
-      ? (nudgeKind === 'task-error' ? 'nudge-error' : 'nudge-success')
-      : phase;
-
-    const src = PHASE_VOICE[key];
+    const src = PHASE_VOICE[phase];
     if (!src) return;
 
     if (currentAudio) {
@@ -27,7 +19,7 @@ export function useCompanionVoice() {
     const audio = new Audio(src);
     audio.volume = 0.7;
     audio.play().catch(() => {
-      // Browser may block autoplay; that's fine, just skip.
+      /* autoplay can be blocked by the browser; the voice simply stays silent */
     });
     currentAudio = audio;
   };
