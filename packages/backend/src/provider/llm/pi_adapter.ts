@@ -76,16 +76,6 @@ export type PiModel = {
   cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
 };
 
-export type PiModelCapability = {
-
-  input?: string[];
-  reasoning?: boolean | null;
-  contextWindow?: number | null;
-  maxTokens?: number | null;
-
-  cost?: { input?: number | null; output?: number | null; cacheRead?: number | null; cacheWrite?: number | null };
-};
-
 const piInputModalities = (input: readonly string[] | undefined): Array<'text' | 'image'> => {
   const modalities = new Set<'text' | 'image'>();
   for (const value of input ?? []) {

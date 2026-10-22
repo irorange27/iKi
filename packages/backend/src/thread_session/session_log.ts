@@ -74,14 +74,6 @@ export type SteeringInputAcceptedPayload = {
   text: string;
 };
 
-export type ModelTextCommittedPayload = {
-  runId: string;
-  messageId: string;
-
-  seq: number;
-  text: string;
-};
-
 export type ModelOutputCommittedPayload = {
   runId: string;
   messageId: string;
@@ -95,15 +87,6 @@ export type TurnTerminalPayload = {
   status: AgentRunStatus;
   finishReason?: string;
   errorText?: string;
-};
-
-export type ApprovalRequestedPayload = {
-  approvalId: string;
-  sessionId: string;
-  runId?: string;
-  toolCallId?: string | null;
-  toolName?: string | null;
-  args?: Record<string, unknown> | null;
 };
 
 export type ApprovalDecidedPayload = {

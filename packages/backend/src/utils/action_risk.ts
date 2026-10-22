@@ -1,5 +1,3 @@
-export type ActionRisk = 'safe' | 'escalate';
-
 export type ToolApprovalDecision = 'allow' | 'ask';
 
 export type ApprovalPolicy = 'never' | 'trustWorkspace' | 'askRisky' | 'always';

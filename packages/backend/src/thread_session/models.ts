@@ -94,5 +94,3 @@ export const createChatStreamingModels = () => {
 
   return { getModels, isProviderConfigured };
 };
-
-export type ChatStreamingModels = ReturnType<typeof createChatStreamingModels>;

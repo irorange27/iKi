@@ -1,4 +1,4 @@
-import type { ModelMessage, ToolApprovalResponse } from '../message/model_history';
+import type { ModelMessage } from '../message/model_history';
 import type { AgentRunKind } from '@iki/backend/types/agent_run';
 import type { ToolApprovalRequest } from '@iki/backend/agent';
 import type { ExecutionPlan } from './execution_plan';
@@ -19,19 +19,6 @@ export type RegisterApprovalBatch = (
     recoveryContext?: ApprovalRecoveryContext;
   }
 ) => void;
-
-/**
- * A pending approval session rebuilt from persisted state. `target` is supplied
- * by the caller because it is the live stream, not something the log records.
- */
-export type RecoveredApprovalSession = {
-  sessionId?: string;
-  target: ChatStreamTarget;
-  history: ModelMessage[];
-  recoveryContext: ApprovalRecoveryContext;
-  pendingApprovalIds: Set<string>;
-  collectedApprovalResponses: Map<string, ToolApprovalResponse>;
-};
 
 export const describeApprovalRequiredTools = (
   requests: Array<{ toolCall?: { toolName: string } }>

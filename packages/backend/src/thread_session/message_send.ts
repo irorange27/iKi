@@ -533,5 +533,3 @@ export const createMessageSend = (deps: MessageSendDeps) => {
 
   return { send };
 };
-
-export type MessageSend = ReturnType<typeof createMessageSend>;

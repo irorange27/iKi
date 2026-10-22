@@ -525,5 +525,3 @@ export const createChatStreaming = (deps: {
     steerStream: coordinator.steerStream,
   };
 };
-
-export type ChatStreaming = ReturnType<typeof createChatStreaming>;

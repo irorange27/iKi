@@ -239,5 +239,3 @@ export const AppConfigSchema = z
   })
   .passthrough()
   .catch(toCatchRecord(DEFAULT_APP_CONFIG));
-
-export type AppConfigSchemaType = AppConfig;

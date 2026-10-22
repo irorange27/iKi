@@ -326,5 +326,3 @@ export const createChatPersistence = () => {
     },
   };
 };
-
-export type ChatPersistence = ReturnType<typeof createChatPersistence>;

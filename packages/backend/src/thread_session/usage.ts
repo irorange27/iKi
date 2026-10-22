@@ -182,5 +182,3 @@ export const createChatUsage = () => {
     getUsageSummary,
   };
 };
-
-export type ChatUsageService = ReturnType<typeof createChatUsage>;

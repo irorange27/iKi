@@ -214,5 +214,3 @@ export const createChatTurnPreparer = (deps: {
 
   return { prepareChatTurn };
 };
-
-export type ChatTurnPreparer = ReturnType<typeof createChatTurnPreparer>;

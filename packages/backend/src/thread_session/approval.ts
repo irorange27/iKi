@@ -439,5 +439,3 @@ export const createChatApproval = (deps: {
     cancelPendingApprovalsForRun,
   };
 };
-
-export type ChatApproval = ReturnType<typeof createChatApproval>;

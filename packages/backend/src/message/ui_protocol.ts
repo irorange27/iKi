@@ -146,8 +146,6 @@ export type ChatUiChunk =
   | { type: 'abort' }
   | { type: 'finish'; messageId?: string };
 
-export type ChatUiChunkType = ChatUiChunk['type'];
-
 export type UiChatTransport = {
   sendMessages: (params: {
     chatId: string;

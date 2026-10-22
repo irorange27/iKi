@@ -187,5 +187,3 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
     return { success: true, newRunId };
   },
 });
-
-export type ChatRuns = ReturnType<typeof createChatRuns>;

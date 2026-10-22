@@ -103,5 +103,3 @@ export const createChatContextAssembler = (deps: {
 
   return { assemble };
 };
-
-export type ChatContextAssembler = ReturnType<typeof createChatContextAssembler>;
