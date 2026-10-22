@@ -496,7 +496,7 @@ describe('createChatStreaming integration', () => {
     return { coordinator, run, streaming };
   };
 
-  it('excludes duplicate stream/send calls during preparation but allows another thread', async () => {
+  it('excludes a duplicate stream during preparation but allows another thread', async () => {
     const { streaming, run } = setupLoop([
       [{ kind: 'text', text: 'other thread' }, { kind: 'done' }],
       [{ kind: 'text', text: 'first thread' }, { kind: 'done' }],
@@ -516,12 +516,15 @@ describe('createChatStreaming integration', () => {
       error: expect.stringContaining('already running'),
     });
     expect(
-      await streaming.send({
-        threadId: 'thread_1',
-        providerType: 'openai',
-        model: 'test-model',
-        messages: [],
-      })
+      await streaming.stream(
+        { id: 44, send: vi.fn() },
+        {
+          threadId: 'thread_1',
+          providerType: 'openai',
+          model: 'test-model',
+          messages: [],
+        }
+      )
     ).toMatchObject({ success: false });
     const other = await streaming.stream(
       { id: 43, send: vi.fn() },

@@ -234,16 +234,13 @@ describe('execution plan admission boundaries', () => {
     expect(prompt).not.toContain(`(${path.join(root, 'b')})`);
   });
 
-  it.each(['stream', 'send'] as const)(
-    'releases the admission when world resolution fails in %s (R2)',
-    async mode => {
+  it(
+    'releases the admission when world resolution fails (R2)',
+    async () => {
       updateChatThread('thread_bound', { workspace_id: null });
       await fs.writeFile(path.join(root, 'thread-workspaces'), 'not a directory');
 
-      const attempt =
-        mode === 'stream'
-          ? streaming.stream({ id: 602, send: vi.fn() }, options())
-          : streaming.send(options());
+      const attempt = streaming.stream({ id: 602, send: vi.fn() }, options());
       const settled = await attempt.then(
         value => ({ value }),
         reason => ({ unhandled: reason })

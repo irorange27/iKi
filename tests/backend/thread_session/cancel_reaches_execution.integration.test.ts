@@ -124,7 +124,7 @@ describe('cancelling a run reaches the execution that owns it', () => {
     );
 
     const pending = service
-      .send({
+      .stream({ id: 41, send: () => undefined }, {
         providerType: 'openai',
         providerId: 'provider_cancel',
         model: 'cancel-model',

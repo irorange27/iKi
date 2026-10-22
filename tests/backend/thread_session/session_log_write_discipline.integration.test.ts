@@ -42,7 +42,6 @@ import {
 } from '@iki/backend/thread_session/turn_supply_selection';
 import { listAgentRunsByThread } from '@iki/backend/db/agent_runs';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
-import { createMessageSend } from '@iki/backend/thread_session/message_send';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 
@@ -116,40 +115,6 @@ const runStream = async () => {
   return { result, errors, runs: listAgentRunsByThread('review_settle') };
 };
 
-const runSend = async () => {
-  const send = createMessageSend({
-    tryAcquireThreadRun: () => () => undefined,
-    checkThreadRunRate: () => ({ allowed: true }),
-    usage: { recordUsageEvent: () => undefined },
-    conversation: conversation as never,
-    turnPreparer: {
-      prepareChatTurn: async () => ({
-        report: { totalEstimatedTokens: 1 },
-        usedSkills: [] as string[],
-        selectedSkillIds: [] as string[],
-        skillMode: 'manual' as const,
-        finalMessages: [{ role: 'user' as const, content: 'send probe' }],
-        history: [] as unknown[],
-        prompt: 'send probe',
-        guardActive: false,
-        requireApproval: false,
-        autoApproveToolRequests: false,
-        affectSignal: null as null,
-        interventionPolicy: null as null,
-        guardedTools: [] as string[],
-        enableTools: false,
-      }),
-    } as never,
-  }).send;
-  return send({
-    providerType: 'openai',
-    model: 'review-model',
-    threadId: 'review_settle',
-    approvalPolicy: 'never',
-    messages: [{ id: 'send_input', role: 'user', parts: [{ type: 'text', text: 'send probe' }] }],
-  });
-};
-
 it('losing the input/start fact fails the stream before any model call', async () => {
   rejectEventType('input_accepted');
   const evidence = await runStream();
@@ -159,9 +124,9 @@ it('losing the input/start fact fails the stream before any model call', async (
   expect(evidence.runs[0]).toMatchObject({ status: 'failed' });
 });
 
-it('losing the committed output fact fails the send instead of reporting success', async () => {
+it('losing the committed output fact fails the turn instead of reporting success', async () => {
   rejectEventType('model_output_committed');
-  const result = await runSend();
+  const { result } = await runStream();
   expect(result.success).toBe(false);
   expect(listAgentRunsByThread('review_settle')[0]).toMatchObject({ status: 'failed' });
 });

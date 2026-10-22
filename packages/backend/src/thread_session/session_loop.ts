@@ -12,8 +12,6 @@ import { summarizeContextComposition } from '../turn_prep/context_helpers';
 import { selectTurnHarness } from './turn_supply_selection';
 import { createChatStreamingModels } from './models';
 import { createChatTurnPreparer, type ChatTurnOptions } from '../turn_prep/turn_preparer';
-import { createMessageSend } from './message_send';
-export type { MessageSendResult } from './message_send';
 import type { ActiveStreamState, ChatStreamTarget, RunStatusEvent } from './types';
 import { createUiChunkEmitter } from './ui_stream';
 import {
@@ -25,6 +23,7 @@ import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import {
   persistAssistantTurnMessage,
   persistUserTurnMessage,
+  pickIdLessSendInput,
   pickUserTurnMessage,
 } from './turn_persistence';
 import {
@@ -98,20 +97,6 @@ export const createChatStreaming = (deps: {
   });
   const streamingModels = createChatStreamingModels();
   const coordinator = deps.streamCoordinator;
-
-  const { send } = createMessageSend({
-    turnPreparer,
-    usage: deps.usage,
-    checkThreadRunRate: coordinator.checkThreadRunRate,
-    tryAcquireThreadRun: coordinator.tryAcquireThreadRun,
-    registerExecution: coordinator.registerExecution,
-    registerChildRunAlias: coordinator.registerChildRunAlias,
-    conversation: deps.conversation,
-    approvals: {
-      ensurePendingApprovalSession: deps.approvals.ensurePendingApprovalSession,
-      registerApprovalBatch: deps.approvals.registerApprovalBatch,
-    },
-  });
 
   const stream = async (target: ChatStreamTarget, options: ChatTurnOptions) => {
     const senderId = target.id;
@@ -248,11 +233,19 @@ export const createChatStreaming = (deps: {
       execution.setRunId(runTracker.id);
       sessionLogTracker = runTracker;
 
+      // A caller that sends without message ids (a wake, a scheduled turn) still
+      // accepted input, so synthesise the id from the run. A resumed or retried
+      // turn replays an input that already has a fact: recording another one
+      // would move the replay tail onto this attempt and strand its own retry.
       const userTurnInput = pickUserTurnMessage(options);
+      const idLessInput =
+        userTurnInput === undefined && !plan.adoptRunId
+          ? pickIdLessSendInput(options, runTracker.id)
+          : undefined;
       const acceptedInput =
         userTurnInput && asChatUiMessage(userTurnInput.message)
           ? { messageId: userTurnInput.messageId, message: asChatUiMessage(userTurnInput.message)! }
-          : undefined;
+          : idLessInput;
       recordSessionEvents(
         options.threadId ?? '',
         turnFactsToEvents({
@@ -415,6 +408,7 @@ export const createChatStreaming = (deps: {
         awaitingApproval: streamResult.outcome === 'awaiting-approval',
         ...(finalResponse ? { text: finalResponse } : {}),
         stopped: streamState.stoppedByUser,
+        runId: finalRunTracker.id,
       };
     } catch (error: unknown) {
       if (streamState.cancelled) {
@@ -495,7 +489,11 @@ export const createChatStreaming = (deps: {
         });
       }
       uiChunkEmitter.error(message);
-      return { success: false, error: message };
+      return {
+        success: false,
+        error: message,
+        ...(failedTracker ? { runId: failedTracker.id } : {}),
+      };
     } finally {
       getCompanion().clearConversationPreview();
       getCompanion().endThinking(companionThinkingKey);
@@ -518,7 +516,6 @@ export const createChatStreaming = (deps: {
   return {
     getModels: streamingModels.getModels,
     isProviderConfigured: streamingModels.isProviderConfigured,
-    send,
     stream,
     stopStream: coordinator.stopStream,
     steerStream: coordinator.steerStream,

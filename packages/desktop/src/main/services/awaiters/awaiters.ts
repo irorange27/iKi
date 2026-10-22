@@ -6,6 +6,7 @@ import {
   type AwaiterRunner,
 } from '@iki/backend/awaiters/awaiter_runner';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
+import type { ChatStreamTarget } from '@iki/backend/thread_session';
 import { chatService } from '../chat/service';
 
 const awaiterLogger = createLogger({ module: 'awaiters' });
@@ -47,8 +48,16 @@ const showDesktopNotification = (params: { title: string; body: string }) => {
   }
 };
 
+// A wake is a turn like any other: it rides the streaming transport and throws
+// its chunks away, because the transcript is rebuilt from the session log.
+const AWAITER_TARGET: ChatStreamTarget = { id: -1, send: () => undefined };
+
 const runner: AwaiterRunner = createAwaiterRunner({
-  chat: chatService,
+  chat: {
+    getThread: chatService.getThread,
+    createMessage: chatService.createMessage,
+    stream: options => chatService.stream(AWAITER_TARGET, options),
+  },
   host: {
     notify: showDesktopNotification,
     pushAwaiterEvent: sendPushEventToRenderers,

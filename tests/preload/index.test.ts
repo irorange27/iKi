@@ -110,11 +110,6 @@ describe('preload task IPC payload serialization', () => {
 
     await exposedApi.chat.getModels('openai');
     await exposedApi.chat.isProviderConfigured('openai');
-    await exposedApi.chat.send({
-      providerType: 'openai',
-      model: 'gpt-4.1',
-      messages: [],
-    });
     await exposedApi.chat.stream({
       providerType: 'openai',
       model: 'gpt-4.1',
@@ -214,7 +209,6 @@ describe('preload task IPC payload serialization', () => {
         'providers:delete',
         'chat:getModels',
         'chat:isProviderConfigured',
-        'chat:send',
         'chat:stream',
         'chat:stop-stream',
         'chat:approve-tool',

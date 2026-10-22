@@ -80,10 +80,6 @@ export const registerChatIpc = (): void => {
     return chatService.steerStream(event.sender.id, threadId, message);
   });
 
-  ipcMain.handle('chat:send', async (_, options) => {
-    return await chatService.send(options);
-  });
-
   ipcMain.handle('chat:stream', async (event, options) => {
     const target = toChatStreamTarget(event.sender);
     return await chatService.stream(target, options);

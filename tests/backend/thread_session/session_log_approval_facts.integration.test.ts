@@ -47,7 +47,6 @@ import {
   APPROVAL_REQUESTED,
   APPROVAL_DECIDED,
 } from '@iki/backend/thread_session/session_log';
-import { createMessageSend } from '@iki/backend/thread_session/message_send';
 import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { defaultToolRegistry } from '@iki/backend/tools';
@@ -202,54 +201,6 @@ describe('session log approval facts across entries', () => {
     expect(JSON.stringify(last.parts)).toContain('written and done');
   });
 
-  it('records send facts from the waiter transport', async () => {
-    const send = createMessageSend({
-      tryAcquireThreadRun: coordinator.tryAcquireThreadRun,
-      checkThreadRunRate: () => ({ allowed: true }),
-      usage: { recordUsageEvent: vi.fn() },
-      conversation: conversation as never,
-      turnPreparer: {
-        prepareChatTurn: vi.fn(async () => ({
-          report: { totalEstimatedTokens: 1 },
-          usedSkills: [],
-          selectedSkillIds: [],
-          skillMode: 'manual' as const,
-          finalMessages: [{ role: 'user' as const, content: 'send probe' }],
-          history: [],
-          prompt: 'send probe',
-          guardActive: false,
-          requireApproval: false,
-          autoApproveToolRequests: false,
-          affectSignal: null,
-          interventionPolicy: null,
-          guardedTools: [],
-          enableTools: false,
-        })),
-      } as never,
-    }).send;
-
-    const result = await send({
-      providerType: 'openai',
-      providerId: 'provider_primary',
-      model: 'test-model',
-      threadId: 'thread_facts',
-      approvalPolicy: 'never',
-      messages: [
-        { id: 'msg_facts_2', role: 'user', parts: [{ type: 'text', text: 'send probe' }] },
-      ],
-    });
-    expect(result).toMatchObject({ success: true, text: 'send answer' });
-
-    const view = rebuildThreadViewFromEvents('thread_facts');
-    const sendTurn = view.turns.at(-1)!;
-    expect(sendTurn).toMatchObject({ status: 'completed', kind: 'chat-turn' });
-    expect(view.messages.map(message => message.id)).toContain('msg_facts_2');
-    const sendRunMessages = view.messages.filter(message =>
-      String(message.id).startsWith(`assistant_${sendTurn.runId}`)
-    );
-    expect(sendRunMessages).toHaveLength(1);
-    expect(JSON.stringify(sendRunMessages[0]!.parts)).toContain('send answer');
-  });
   it('a decided fact lost to a write failure is re-recorded when the decision is retried', async () => {
     const approvals = buildApprovals();
     const streaming = createChatStreaming({

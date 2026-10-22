@@ -10,7 +10,7 @@ Headless HTTP + WebSocket server. Exposes the same chat/agent surface as the des
 
 | Path | What |
 |---|---|
-| `server_http.ts` | REST: `/v1/chat/send`, `/v1/chat/approve-tool`, `/v1/chat/stop-stream`, threads, messages, runs (plus trajectory, cancel/retry/resume), `/v1/health`, `/v1/clients/register` (setup-token bootstrap), `/v1/mcp/servers` CRUD + connect/refresh |
+| `server_http.ts` | REST: `/v1/chat/approve-tool`, `/v1/chat/stop-stream`, threads, messages, runs (plus trajectory, cancel/retry/resume), `/v1/health`, `/v1/clients/register` (setup-token bootstrap), `/v1/mcp/servers` CRUD + connect/refresh |
 | `server_ws.ts` | WS `/v1/chat/stream` — message types: `start`, `approve-tool`, `steer`, `stop`. Adapts each WS session to a `ChatStreamTarget` (`{ id, send }`) so it can reuse `thread_session.stream` unchanged. |
 | `tool_access.ts` | Per-client tool filtering: individual MCP tool grants stay individual; `mcp:server:<id>` / `mcp:*` explicitly grant wider access. Server activation filters alone do not authorize tools. |
 

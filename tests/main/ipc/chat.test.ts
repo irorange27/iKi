@@ -99,7 +99,6 @@ describe('chat IPC', () => {
     const event = { sender };
     const threadPayload = { title: 'Thread' };
     const messagePayload = { thread_id: 'thread_1', message: '{}' };
-    const sendPayload = { providerType: 'openai', model: 'gpt-4.1', messages: [] };
     const streamPayload = {
       providerType: 'openai',
       model: 'gpt-4.1',
@@ -175,10 +174,6 @@ describe('chat IPC', () => {
       success: true,
       senderId: 77,
     });
-    expect(await ipcHandlers.get('chat:send')?.(null, sendPayload)).toEqual({
-      success: true,
-      options: sendPayload,
-    });
     expect(await ipcHandlers.get('chat:stream')?.(event, streamPayload)).toEqual({
       success: true,
       target: sender,
@@ -210,7 +205,6 @@ describe('chat IPC', () => {
     expect(chatServiceMock.getModels).toHaveBeenCalledWith('openai', undefined, null);
     expect(chatServiceMock.isProviderConfigured).toHaveBeenCalledWith('openai', undefined);
     expect(chatServiceMock.stopStream).toHaveBeenCalledWith(77);
-    expect(chatServiceMock.send).toHaveBeenCalledWith(sendPayload);
     expect(chatServiceMock.stream).toHaveBeenCalledWith(sender, streamPayload);
     expect(chatServiceMock.approveTool).toHaveBeenCalledWith(sender, 'approval_1', true);
     expect(chatServiceMock.getUsageSummary).toHaveBeenCalledWith('30d');

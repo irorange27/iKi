@@ -2,7 +2,6 @@ import http from 'node:http';
 
 import { createAppClient } from '@iki/backend/db/app_clients';
 import type { McpManager } from '@iki/backend/mcp';
-import type { ChatTransportMessage } from '@iki/backend/thread_session';
 import type { ChatService } from '@iki/backend/thread_session';
 import { rotateBootstrapToken } from './bootstrap_token';
 import {
@@ -11,26 +10,18 @@ import {
   writeClientPayloadFailure,
 } from './server_logging';
 import {
-  readRequestedMcpServerIds,
-  resolveMcpServerIdsForClient,
-  resolveToolsForClient,
-} from './tool_access';
-import {
   getSchemaErrorMessage,
   type ApproveToolPayload,
   type ChatMessageCreatePayload,
-  type ChatSendPayload,
   type ChatThreadCreatePayload,
   type ClientRegistrationPayload,
   parseApproveToolPayload,
   parseChatMessageCreatePayload,
-  parseChatSendPayload,
   parseChatThreadCreatePayload,
   parseClientRegistrationPayload,
   parseMcpServerCreatePayload,
   parseMcpServerUpdatePayload,
 } from './server_schemas';
-import { createRateLimiter } from '@iki/backend/rate_limiter';
 import {
   authenticateRequest,
   getThreadOrError,
@@ -69,24 +60,6 @@ const readParsedBody = async <T>(
 export const createDaemonRequestHandler = (
   deps: CreateDaemonRequestHandlerDeps
 ): http.RequestListener => {
-  const chatSendLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30 });
-
-  const checkRateLimit = (
-    clientId: string,
-    limiter: ReturnType<typeof createRateLimiter>,
-    res: http.ServerResponse
-  ): boolean => {
-    const result = limiter.check(clientId);
-    if (!result.allowed) {
-      res.setHeader('Retry-After', Math.ceil((result.retryAfterMs ?? 1000) / 1000));
-      writeJson(res, 429, {
-        success: false,
-        error: 'Too many requests',
-      });
-      return false;
-    }
-    return true;
-  };
 
   return async (req, res) => {
     withCors(res);
@@ -260,63 +233,6 @@ export const createDaemonRequestHandler = (
         });
 
         writeJson(res, 200, { success: true, message });
-        return;
-      }
-
-      if (req.method === 'POST' && pathName === '/v1/chat/send') {
-        if (!hasScope(client, 'chat:write')) {
-          writeJson(res, 403, { success: false, error: 'Missing chat:write scope' });
-          return;
-        }
-        if (!checkRateLimit(clientId, chatSendLimiter, res)) return;
-        const body = await readParsedBody<ChatSendPayload>(
-          req,
-          res,
-          parseChatSendPayload,
-          'Invalid chat payload'
-        );
-        if (!body) return;
-
-        const threadId = body.threadId;
-        if (!threadId) {
-          writeJson(res, 400, {
-            success: false,
-            error:
-              'thread_id is required for chat/send. Create a thread first via POST /v1/chat/threads.',
-          });
-          return;
-        }
-        const access = getThreadOrError(threadId, client.id);
-        if (!access.thread) {
-          writeJson(res, access.status || 404, { success: false, error: access.error });
-          return;
-        }
-
-        const messages = body.messages as ChatTransportMessage[];
-        const tools = resolveToolsForClient(body.tools, client.allowedTools);
-        const requestedMcpServerIds = readRequestedMcpServerIds(body);
-        const mcpServerIds = resolveMcpServerIdsForClient(
-          requestedMcpServerIds,
-          client.allowedTools
-        );
-        if ((tools.length > 0 || mcpServerIds.length > 0) && !hasScope(client, 'tools:run')) {
-          writeJson(res, 403, { success: false, error: 'Missing tools:run scope' });
-          return;
-        }
-
-        const result = await deps.chatService.send({
-          providerType: body.providerType,
-          model: body.model,
-          messages,
-          tools,
-          mcpServerIds,
-          skillIds: body.skillIds,
-          skillMode: body.skillMode,
-          threadId,
-          experimentalContext: body.experimentalContext,
-        });
-
-        writeJson(res, 200, result);
         return;
       }
 

@@ -138,7 +138,6 @@ export interface ElectronApi {
       providerOverride?: ProviderModelDiscoveryOverride | null
     ) => Promise<ProviderModelDescriptor[]>;
     isProviderConfigured: (providerType: string, providerId?: string) => Promise<boolean>;
-    send: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stream: (options: ChatInvocationOptions) => Promise<ChatInvocationResult>;
     stopStream: () => Promise<ChatInvocationResult>;
     steerStream: (threadId: string | undefined, message: string) => Promise<ChatInvocationResult>;

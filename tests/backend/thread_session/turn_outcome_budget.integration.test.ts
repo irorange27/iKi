@@ -38,7 +38,6 @@ import { addWorkspace } from '@iki/backend/db/workspaces';
 import { getAgentRun, listAgentRunsByThread } from '@iki/backend/db/agent_runs';
 import { getSessionEvents } from '@iki/backend/db/session_events';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
-import { createMessageSend } from '@iki/backend/thread_session/message_send';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import {
   piTurnHarness,
@@ -158,58 +157,6 @@ describe('turn outcome: one authority, two explicit budgets', () => {
 
     const output = run.output as { pendingToolCalls?: Array<{ name: string }> } | null;
     expect(output?.pendingToolCalls?.map(call => call.name)).toEqual([PROBE]);
-  });
-
-  it('records a non-autonomous step-budget exhaustion the same way when the transport is send', async () => {
-    const threadId = 'thread_outcome_send';
-    seedThread(threadId);
-    const send = createMessageSend({
-      tryAcquireThreadRun: () => () => undefined,
-      checkThreadRunRate: () => ({ allowed: true }),
-      usage: { recordUsageEvent: vi.fn() },
-      conversation: { createMessage: vi.fn(), upsertTurnMessage: vi.fn() },
-      turnPreparer: {
-        prepareChatTurn: vi.fn(async () => ({
-          report: { totalEstimatedTokens: 1 },
-          usedSkills: [],
-          selectedSkillIds: [],
-          skillMode: 'manual' as const,
-          finalMessages: [{ role: 'user' as const, content: 'probe once' }],
-          history: [],
-          prompt: 'probe once',
-          guardActive: false,
-          requireApproval: false,
-          autoApproveToolRequests: false,
-          affectSignal: null,
-          interventionPolicy: null,
-          guardedTools: [PROBE],
-          enableTools: true,
-        })),
-      } as never,
-    }).send;
-
-    const result = await send({
-      providerType: 'openai',
-      providerId: 'provider_outcome',
-      model: 'outcome-model',
-      threadId,
-      maxIterations: 1,
-      messages: [{ id: 'msg_budget_send', role: 'user', content: 'probe once' }],
-      tools: [PROBE],
-    });
-    expect(result).toMatchObject({ success: true });
-
-    const runs = listAgentRunsByThread(threadId);
-    expect(runs).toHaveLength(1);
-    const run = runs[0]!;
-    expect(run.status).toBe('completed');
-    expect((run.output as { finishReason?: string } | null)?.finishReason).toBe(
-      'budget-exhausted'
-    );
-    const payload = terminalFactFor(threadId, run.id)?.payload as
-      | { status: string; finishReason?: string }
-      | undefined;
-    expect(payload?.finishReason).toBe('budget-exhausted');
   });
 
   it('lets the batch bound continue a turn whose step budget ran out', async () => {

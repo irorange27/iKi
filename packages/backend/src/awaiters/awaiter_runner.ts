@@ -60,7 +60,7 @@ export type AwaiterRunnerHostPort = {
 export type AwaiterRunnerChatPort = {
   getThread: (threadId: string) => { id: string } | null;
   createMessage: (input: unknown) => unknown;
-  send: (options: ChatTurnOptions) => Promise<{
+  stream: (options: ChatTurnOptions) => Promise<{
     success: boolean;
     error?: string;
     text?: string;
@@ -211,7 +211,7 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
       content: buildAwaiterWakePrompt(awaiter, { startedAt }),
     });
 
-    const result = await chat.send({
+    const result = await chat.stream({
       providerType: awaiter.provider_type,
       providerId: awaiter.provider_id ?? undefined,
       model: awaiter.model,

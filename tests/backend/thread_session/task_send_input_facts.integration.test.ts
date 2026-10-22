@@ -41,6 +41,7 @@ import {
   piTurnHarness,
   setTurnHarnessFallback,
 } from '@iki/backend/thread_session/turn_supply_selection';
+import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import {
   INPUT_ACCEPTED,
   TURN_STARTED,
@@ -59,7 +60,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
   const target = { id: 3, send: vi.fn() };
 
   const taskSend = (threadId: string, kind: 'awaiter-wake') =>
-    service.send({
+    service.stream(target, {
       providerType: 'openai',
       model: 'resume-model',
       messages: [
@@ -116,6 +117,12 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     ]);
   };
 
+  const scriptReply = (text: string) => {
+    callPiChatMock.mockImplementation(
+      createScriptedPiChat([[{ kind: 'text', text }, { kind: 'done', reason: 'stop' }]])
+    );
+  };
+
   const singleShotResult = (text: string) => ({
     text,
     usage: {
@@ -160,7 +167,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
   });
 
   it('records the accepted input of an id-less send as a fact (run id + system config)', async () => {
-    generateSingleShotMock.mockResolvedValue(singleShotResult('task done'));
+    scriptReply('task done');
     const result = (await taskSend('thread_task139', 'awaiter-wake')) as { runId?: string };
     expect(result).toMatchObject({ success: true, runId: expect.any(String) });
 
@@ -182,7 +189,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
   });
 
   it('records the same facts for an awaiter wake', async () => {
-    generateSingleShotMock.mockResolvedValue(singleShotResult('awake'));
+    scriptReply('awake');
     const result = (await taskSend('thread_wake139', 'awaiter-wake')) as { runId?: string };
     expect(result).toMatchObject({ success: true, runId: expect.any(String) });
 
@@ -198,7 +205,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
   });
 
   it('a failed awaiter-wake run retries as an awaiter-wake run of the recorded task', async () => {
-    generateSingleShotMock.mockRejectedValueOnce(new Error('provider down'));
+    callPiChatMock.mockImplementationOnce(() => { throw new Error('provider down'); });
     const failed = (await taskSend('thread_retry139', 'awaiter-wake')) as { runId?: string };
     expect(failed).toMatchObject({ success: false, runId: expect.any(String) });
     const failedRunId = failed.runId!;
@@ -234,6 +241,8 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
       .filter(turn => turn.status === 'completed')
       .map(turn => turn.kind);
     expect(completedKinds).toContain('awaiter-wake');
+    // The retry replays the accepted input rather than accepting a new one, so
+    // the thread keeps a single input fact.
     expect(view.events.filter(event => event.type === INPUT_ACCEPTED)).toHaveLength(1);
   });
 
@@ -254,12 +263,12 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
   });
 
   it('a retry whose replay tail was recorded for a LATER send refuses instead of re-running the wrong task', async () => {
-    generateSingleShotMock.mockRejectedValueOnce(new Error('provider down'));
+    callPiChatMock.mockImplementationOnce(() => { throw new Error('provider down'); });
     const failedA = (await taskSend('thread_retry139', 'awaiter-wake')) as { runId?: string };
     expect(failedA).toMatchObject({ success: false });
     const runAId = failedA.runId!;
 
-    generateSingleShotMock.mockRejectedValueOnce(new Error('provider still down'));
+    callPiChatMock.mockImplementationOnce(() => { throw new Error('provider still down'); });
     await taskSend('thread_retry139', 'awaiter-wake');
 
     const retryA = await service.retryAndExecute(target, runAId);
@@ -268,7 +277,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
   });
 
   it('a retried successor passes the attribution join through its ancestry', async () => {
-    generateSingleShotMock.mockRejectedValueOnce(new Error('provider down'));
+    callPiChatMock.mockImplementationOnce(() => { throw new Error('provider down'); });
     const failed = (await taskSend('thread_retry139', 'awaiter-wake')) as { runId?: string };
     const runAId = failed.runId!;
 
@@ -339,8 +348,8 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
   });
 
   it('an unrepresentable id-less input records no fact rather than a partial one', async () => {
-    generateSingleShotMock.mockResolvedValue(singleShotResult('done'));
-    await service.send({
+    scriptReply('done');
+    await service.stream(target, {
       providerType: 'openai',
       model: 'resume-model',
       messages: [

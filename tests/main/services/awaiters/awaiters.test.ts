@@ -40,7 +40,7 @@ vi.mock('../../../../packages/desktop/src/main/services/chat/service', () => ({
   chatService: {
     getThread: vi.fn(),
     createMessage: vi.fn(),
-    send: vi.fn(),
+    stream: vi.fn(),
   },
 }));
 
@@ -101,7 +101,7 @@ describe('runAwaiterWake', () => {
   const chatServiceMock = chatService as unknown as {
     getThread: ReturnType<typeof vi.fn>;
     createMessage: ReturnType<typeof vi.fn>;
-    send: ReturnType<typeof vi.fn>;
+    stream: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -126,7 +126,7 @@ describe('runAwaiterWake', () => {
       .mockReturnValueOnce(baseAwaiter({ status: 'waking' }))
       .mockReturnValue(baseAwaiter({ status: 'completed', next_wake_at: null }));
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
-    chatServiceMock.send.mockResolvedValue({
+    chatServiceMock.stream.mockResolvedValue({
       success: true,
       text: 'Wake complete.',
       runId: 'run_wake_1',
@@ -155,7 +155,8 @@ describe('runAwaiterWake', () => {
       })
     );
 
-    expect(chatServiceMock.send).toHaveBeenCalledWith(
+    expect(chatServiceMock.stream).toHaveBeenCalledWith(
+      expect.objectContaining({ id: -1 }),
       expect.objectContaining({
         providerId: 'provider_primary',
         threadId: 'thread_1',
@@ -204,7 +205,7 @@ describe('runAwaiterWake', () => {
       .mockReturnValueOnce(baseAwaiter({ status: 'waking' }))
       .mockReturnValue(baseAwaiter({ status: 'failed', next_wake_at: null, last_error: 'Boom' }));
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
-    chatServiceMock.send.mockResolvedValue({
+    chatServiceMock.stream.mockResolvedValue({
       success: false,
       error: 'Boom',
       runId: 'run_failed_1',
@@ -263,7 +264,7 @@ describe('runAwaiterWake', () => {
         next_wake_at: null,
       })
     );
-    expect(chatServiceMock.send).not.toHaveBeenCalled();
+    expect(chatServiceMock.stream).not.toHaveBeenCalled();
   });
 
   it('rejects overlapping wakes while the same awaiter is already in flight', async () => {
@@ -271,7 +272,7 @@ describe('runAwaiterWake', () => {
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
 
     const deferred = createDeferred<{ success: true; text: string; runId: string }>();
-    chatServiceMock.send.mockReturnValue(deferred.promise);
+    chatServiceMock.stream.mockReturnValue(deferred.promise);
 
     const firstRun = runAwaiterWake('awaiter_1');
     const secondRun = await runAwaiterWake('awaiter_1');
@@ -285,7 +286,7 @@ describe('runAwaiterWake', () => {
   it('retries a persisted waking awaiter so restart does not strand it forever', async () => {
     getAwaiterMock.mockReturnValue(baseAwaiter({ status: 'waking' }));
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
-    chatServiceMock.send.mockResolvedValue({
+    chatServiceMock.stream.mockResolvedValue({
       success: true,
       text: 'Recovered wake complete.',
       runId: 'run_wake_recovered',
@@ -294,7 +295,7 @@ describe('runAwaiterWake', () => {
     const result = await runAwaiterWake('awaiter_1');
 
     expect(result).toEqual({ success: true, runId: 'run_wake_recovered' });
-    expect(chatServiceMock.send).toHaveBeenCalledTimes(1);
+    expect(chatServiceMock.stream).toHaveBeenCalledTimes(1);
   });
 
   it('does not clobber a mid-flight reschedule when the awaiter was re-armed', async () => {
@@ -320,7 +321,7 @@ describe('runAwaiterWake', () => {
         })
       );
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
-    chatServiceMock.send.mockResolvedValue({
+    chatServiceMock.stream.mockResolvedValue({
       success: true,
       text: 'Wake complete.',
       runId: 'run_wake_rearmed',
@@ -358,7 +359,7 @@ describe('runAwaiterWake', () => {
       .mockReturnValueOnce(baseAwaiter())
       .mockReturnValueOnce(null);
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
-    chatServiceMock.send.mockResolvedValue({
+    chatServiceMock.stream.mockResolvedValue({
       success: true,
       text: 'Wake complete.',
       runId: 'run_wake_deleted',
@@ -381,7 +382,7 @@ describe('runAwaiterWake', () => {
     listDueAwaitersMock.mockReturnValueOnce([baseAwaiter()]).mockReturnValue([]);
     getAwaiterMock.mockReturnValue(baseAwaiter());
     chatServiceMock.getThread.mockReturnValue({ id: 'thread_1' });
-    chatServiceMock.send.mockResolvedValue({
+    chatServiceMock.stream.mockResolvedValue({
       success: true,
       text: 'Wake complete.',
       runId: 'run_wake_sched_1',
@@ -391,11 +392,11 @@ describe('runAwaiterWake', () => {
     await vi.runAllTicks();
     await Promise.resolve();
 
-    expect(chatServiceMock.send).toHaveBeenCalledTimes(1);
+    expect(chatServiceMock.stream).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(30_000);
 
     expect(listDueAwaitersMock).toHaveBeenCalledTimes(2);
-    expect(chatServiceMock.send).toHaveBeenCalledTimes(1);
+    expect(chatServiceMock.stream).toHaveBeenCalledTimes(1);
   });
 });

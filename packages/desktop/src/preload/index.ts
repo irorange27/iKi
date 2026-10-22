@@ -88,7 +88,6 @@ const electronApi: ElectronApi = {
     ) => ipcRenderer.invoke('chat:getModels', providerType, providerId, providerOverride ?? null),
     isProviderConfigured: (providerType: string, providerId?: string) =>
       ipcRenderer.invoke('chat:isProviderConfigured', providerType, providerId),
-    send: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:send', options),
     stream: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:stream', options),
     stopStream: () => ipcRenderer.invoke('chat:stop-stream'),
     steerStream: (threadId: string | undefined, message: string) =>
