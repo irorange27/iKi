@@ -115,6 +115,25 @@ describe('agent run tracker', () => {
     expect(getAgentRun(tracker.id)!.working.lastStepIndex).toBe(1);
   });
 
+  it('records a terminal transition on the run row without appending a step', () => {
+    const { parentId, threadId } = seedParent();
+
+    for (const finish of ['completed', 'cancelled'] as const) {
+      const tracker = buildTracker({ parentId, threadId });
+      const before = listAgentRunSteps(tracker.id).length;
+
+      if (finish === 'completed') tracker.markCompleted({ text: 'the answer' });
+      else tracker.markCancelled({ text: 'the answer' });
+
+      const run = getAgentRun(tracker.id)!;
+      expect(run.status).toBe(finish);
+      expect(run.output?.text).toBe('the answer');
+      // The text lives on the row. A step would duplicate it and render as a
+      // separate "finalize" event at the end of every turn.
+      expect(listAgentRunSteps(tracker.id)).toHaveLength(before);
+    }
+  });
+
   it('refuses a status transition out of a terminal run, leaving the row completed', () => {
     const { parentId, threadId } = seedParent();
     const tracker = buildTracker({ parentId, threadId });

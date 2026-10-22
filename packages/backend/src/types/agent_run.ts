@@ -26,6 +26,12 @@ export type ReviewQueueItem = {
   error?: string;
 };
 
+/**
+ * `finalize` is retained for rows written before a terminal run transition
+ * stopped appending a step. Nothing writes it any more: completion, cancellation
+ * and approval resume all record the run row alone, because the step duplicated
+ * `output.text` and made every turn look like it ended in a separate event.
+ */
 export type AgentRunStepType =
   | 'model'
   | 'tool-call'

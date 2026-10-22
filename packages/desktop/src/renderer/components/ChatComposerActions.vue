@@ -114,10 +114,10 @@
     <span
       v-if="props.runActive"
       class="run-indicator run-active"
-      :title="`Agent run ${props.runStatus ?? 'active'}`"
+      :title="runIndicatorTitle"
     >
       <span class="run-dot" />
-      {{ props.runStatus === 'blocked' ? 'Awaiting' : 'Working' }}
+      {{ runIndicatorLabel }}
     </span>
     <button
       class="composer-icon-btn send-btn h-8 w-8 rounded-full flex items-center justify-center"
@@ -182,6 +182,19 @@ defineEmits<{
 }>();
 
 const { t } = useI18n();
+// "Blocked" is the run status for a turn paused on an approval. The composer
+// said "Awaiting" for it while the trajectory said "Blocked" — same state, two
+// words, one of them hardcoded.
+const runIndicatorLabel = computed(() =>
+  props.runStatus === 'blocked'
+    ? t('chat.input.awaitingApproval')
+    : t('chat.input.working')
+);
+const runIndicatorTitle = computed(() =>
+  props.runStatus === 'blocked'
+    ? t('chat.input.awaitingApprovalDetail')
+    : t('chat.input.workingDetail')
+);
 const incognitoAriaLabel = computed(() =>
   props.isIncognito ? t('chat.input.disableIncognito') : t('chat.input.enableIncognito')
 );

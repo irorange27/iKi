@@ -345,19 +345,10 @@ const createAgentRunTrackerForRun = (initialRun: AgentRun): AgentRunTracker => {
       if (!childRunId) throw new Error('Resumed Run requires a child Run ID');
       const text = currentRun.output?.text ?? currentRun.working.accumulatedText;
       const usage = currentRun.output?.usage;
-      appendStep({
-        type: 'finalize',
-        status: 'completed',
-        summary: 'Approval answered; continuation started',
-        input: {
-          childRunId,
-          answeredApprovalIds: currentRun.working.pendingApprovalIds,
-        },
-        output: {
-          ...(text ? { text } : {}),
-          finishReason: 'approval-resumed',
-        },
-      }, {
+      // Same rule as the other terminal transitions: the row records the
+      // outcome, so no step. The child run carries its own start fact and the
+      // approval decisions live in the session log, so nothing here is lost.
+      persist({
         status: 'completed',
         working: {
           ...currentRun.working,
