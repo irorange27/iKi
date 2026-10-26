@@ -20,23 +20,6 @@ export type RegisterApprovalBatch = (
   }
 ) => void;
 
-export const describeApprovalRequiredTools = (
-  requests: Array<{ toolCall?: { toolName: string } }>
-): string => {
-  const toolNames = requests
-    .map(request => request.toolCall?.toolName)
-    .filter(
-      (toolName): toolName is string => typeof toolName === 'string' && toolName.trim().length > 0
-    )
-    .filter((toolName, index, list) => list.indexOf(toolName) === index);
-
-  if (toolNames.length === 0) {
-    return 'Tool approval required for non-interactive chat';
-  }
-
-  return `Tool approval required for non-interactive chat: ${toolNames.join(', ')}`;
-};
-
 export const createApprovalRecoveryContext = (params: {
   plan: ExecutionPlan;
   sessionId: string;

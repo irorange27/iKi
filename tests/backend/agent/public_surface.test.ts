@@ -4,11 +4,9 @@ import * as agentApi from '@iki/backend/agent';
 import * as harnessApi from '@iki/backend/agent/harness';
 
 describe('agent public surface', () => {
-  it('re-exports the tool registry and schemas the agent layer is built from', () => {
-    expect(agentApi).toHaveProperty('defaultToolRegistry');
-    expect(agentApi).toHaveProperty('registerStandardTools');
-    expect(agentApi).toHaveProperty('AgentConfigSchema');
-    expect(agentApi).toHaveProperty('AgentToolSchema');
+  it('does not re-export the tool registry; consumers import @iki/backend/tools directly', () => {
+    expect(agentApi).not.toHaveProperty('defaultToolRegistry');
+    expect(agentApi).not.toHaveProperty('registerStandardTools');
   });
 
   it('does not export the harness, the run tracker, or the turn driver', () => {
