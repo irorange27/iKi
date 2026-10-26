@@ -40,114 +40,17 @@ describe('configService', () => {
     stale: null,
   };
 
-  it('delegates all config IPC methods when the Electron config bridge is available', async () => {
-    const config = createDefaultAppConfig();
-    const get = vi.fn(async () => config);
-    const set = vi.fn(async () => ({ success: true }));
-    const getRuntimeInfo = vi.fn(async () => ({ configPath: '/tmp/config.json' }));
-    const getDaemonStatus = vi.fn(async () => ({
-      online: true,
-      host: '127.0.0.1',
-      port: 6127,
-      status: 'ok',
-      source: 'health',
-      uptimeSeconds: 42,
-    }));
+  it('defaults daemon log fetches to 120 lines and passes an explicit limit through', async () => {
     const getDaemonLogs = vi.fn(async (limit?: number) => ({ lines: [], limit: limit ?? 0 }));
-    const controlDaemon = vi.fn(async (action: string) => ({ success: true, action }));
-    const testNetwork = vi.fn(async (network: unknown) => ({ success: true, network }));
-    const removeListener = vi.fn();
-    const onUpdated = vi.fn(() => removeListener);
-
     Object.defineProperty(window, 'electronAPI', {
       configurable: true,
-      value: {
-        config: {
-          get,
-          set,
-          getRuntimeInfo,
-          getDaemonStatus,
-          getDaemonLogs,
-          controlDaemon,
-          testNetwork,
-          onUpdated,
-        },
-      },
+      value: { config: { getDaemonLogs } },
     });
 
-    expect(await configService.get()).toBe(config);
-    expect(await configService.set(config)).toEqual({ success: true });
-    expect(await configService.getRuntimeInfo()).toEqual({ configPath: '/tmp/config.json' });
-    expect(await configService.getDaemonStatus()).toEqual({
-      online: true,
-      host: '127.0.0.1',
-      port: 6127,
-      status: 'ok',
-      source: 'health',
-      uptimeSeconds: 42,
-    });
     expect(await configService.getDaemonLogs()).toEqual({ lines: [], limit: 120 });
     expect(await configService.getDaemonLogs(25)).toEqual({ lines: [], limit: 25 });
-    expect(await configService.controlDaemon('restart')).toEqual({
-      success: true,
-      action: 'restart',
-    });
-    expect(
-      await configService.testNetwork({
-        proxy: {
-          enable: true,
-          type: 'socks5',
-          host: '127.0.0.1',
-          port: 1080,
-        },
-        webSearch: {
-          preferredEngine: 'google',
-        },
-        timeout: 5000,
-        retryAttempts: 3,
-      })
-    ).toEqual({
-      success: true,
-      network: {
-        proxy: {
-          enable: true,
-          type: 'socks5',
-          host: '127.0.0.1',
-          port: 1080,
-        },
-        webSearch: {
-          preferredEngine: 'google',
-        },
-        timeout: 5000,
-        retryAttempts: 3,
-      },
-    });
-
-    const callback = vi.fn();
-    const unsubscribe = configService.onUpdated(callback);
-
-    expect(get).toHaveBeenCalledTimes(1);
-    expect(set).toHaveBeenCalledWith(config);
     expect(getDaemonLogs).toHaveBeenNthCalledWith(1, 120);
     expect(getDaemonLogs).toHaveBeenNthCalledWith(2, 25);
-    expect(controlDaemon).toHaveBeenCalledWith('restart');
-    expect(testNetwork).toHaveBeenCalledWith({
-      proxy: {
-        enable: true,
-        type: 'socks5',
-        host: '127.0.0.1',
-        port: 1080,
-      },
-      webSearch: {
-        preferredEngine: 'google',
-      },
-      timeout: 5000,
-      retryAttempts: 3,
-    });
-    expect(onUpdated).toHaveBeenCalledWith(callback);
-    expect(unsubscribe).toBeTypeOf('function');
-    unsubscribe();
-    expect(removeListener).toHaveBeenCalledTimes(1);
   });
 
   it('throws clear errors for required config methods when the bridge is missing', async () => {

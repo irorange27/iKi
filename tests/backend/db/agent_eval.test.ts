@@ -43,21 +43,20 @@ describe('agent_eval db', () => {
     expect(label.stepId).toBe('step_1');
   });
 
-  it('creates a run-level label with null step_id', () => {
+  it('creates a run-level label when no step_id is given', () => {
     const runMock = vi.fn();
     const prepareMock = vi.fn(() => ({ run: runMock }));
     getDbMock.mockReturnValue({ prepare: prepareMock } as unknown as ReturnType<typeof getDb>);
 
     const label = createEvalLabel({
       runId: 'run_1',
-      stepId: null,
       label: 'note',
       note: 'baseline run',
     });
 
     const params = runMock.mock.calls[0][0] as Record<string, unknown>;
     expect(params.step_id).toBeNull();
-    expect(params.label).toBe('note');
+    expect(label.stepId).toBeNull();
   });
 
   it('lists labels by run', () => {
@@ -86,9 +85,8 @@ describe('agent_eval db', () => {
 
     const labels = listEvalLabelsByRun('run_1');
     expect(labels).toHaveLength(2);
-    expect(labels[0].label).toBe('correct');
-    expect(labels[1].label).toBe('note');
-    expect(labels[1].note).toBe('general note');
+    expect(labels[0]).toMatchObject({ id: 'eval_1', runId: 'run_1', stepId: 'step_1' });
+    expect(labels[1]).toMatchObject({ id: 'eval_2', runId: 'run_1', stepId: null, note: 'general note' });
   });
 
   it('lists labels by step', () => {
@@ -108,7 +106,7 @@ describe('agent_eval db', () => {
 
     const labels = listEvalLabelsByStep('step_1');
     expect(labels).toHaveLength(1);
-    expect(labels[0].label).toBe('incorrect');
+    expect(labels[0]).toMatchObject({ id: 'eval_1', runId: 'run_1', stepId: 'step_1' });
   });
 
   it('returns empty array for empty run_id', () => {
@@ -116,7 +114,7 @@ describe('agent_eval db', () => {
     expect(listEvalLabelsByRun('  ')).toEqual([]);
   });
 
-  it('updates a label', () => {
+  it('updates a label with a dynamic SET covering only the provided fields', () => {
     const runMock = vi.fn();
     const getMock = vi.fn(() => ({
       id: 'eval_1',
@@ -131,7 +129,13 @@ describe('agent_eval db', () => {
     getDbMock.mockReturnValue({ prepare: prepareMock } as unknown as ReturnType<typeof getDb>);
 
     const updated = updateEvalLabel('eval_1', { label: 'correct', note: 'updated note' });
-    expect(updated?.label).toBe('correct');
+    const fullParams = runMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(Object.keys(fullParams).sort()).toEqual(['id', 'label', 'note', 'updated_at']);
+
+    runMock.mockClear();
+    updateEvalLabel('eval_1', { label: 'renamed' });
+    const partialParams = runMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(Object.keys(partialParams).sort()).toEqual(['id', 'label', 'updated_at']);
     expect(updated?.note).toBe('updated note');
   });
 

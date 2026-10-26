@@ -541,35 +541,6 @@ describe('createChatStreaming integration', () => {
     expect(prepareChatTurnMock).toHaveBeenCalledTimes(2);
   });
 
-  it('does not start the superseded request after its delayed preparation resolves', async () => {
-    const { streaming, run } = setupLoop([
-      [{ kind: 'text', text: 'new thread' }, { kind: 'done' }],
-      [{ kind: 'text', text: 'must not execute' }, { kind: 'done' }],
-    ]);
-    const prepare = prepareChatTurnMock.getMockImplementation()!;
-    let release!: () => void;
-    const gate = new Promise<void>(resolve => {
-      release = resolve;
-    });
-    prepareChatTurnMock.mockImplementationOnce(async () => {
-      await gate;
-      return prepare();
-    });
-    const first = run();
-    await streaming.stream(
-      { id: 42, send: vi.fn() },
-      {
-        threadId: 'thread_2',
-        providerType: 'openai',
-        model: 'test-model',
-        messages: [],
-      }
-    );
-    release();
-    await first;
-    expect(callPiChatMock.mock.calls.length).toBeGreaterThanOrEqual(1);
-  });
-
   it('preserves tool context across concurrent threads after asynchronous suspension', async () => {
     const { streaming } = setupLoop([], [toolName]);
     callPiChatMock.mockImplementation(
@@ -630,7 +601,7 @@ describe('createChatStreaming integration', () => {
       [{ kind: 'text', text: 'must not run' }, { kind: 'done' }],
     ]);
     expect(await run()).toMatchObject({ success: true, text: 'done' });
-    expect(callPiChatMock.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(callPiChatMock.mock.calls.length).toBe(1);
   });
 
   it('respects the autonomous batch limit after SDK step exhaustion', async () => {

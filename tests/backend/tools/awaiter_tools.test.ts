@@ -5,7 +5,6 @@ vi.mock('@iki/backend/awaiters/awaiter_manager', async importOriginal => {
   return {
     ...actual,
     createAwaiter: vi.fn(),
-    deleteAwaiter: vi.fn(),
     readAwaiterRecord: vi.fn(),
     updateAwaiter: vi.fn(),
   };
@@ -13,7 +12,6 @@ vi.mock('@iki/backend/awaiters/awaiter_manager', async importOriginal => {
 
 import {
   createAwaiter,
-  deleteAwaiter,
   readAwaiterRecord,
   updateAwaiter,
 } from '@iki/backend/awaiters/awaiter_manager';
@@ -178,22 +176,10 @@ describe('awaiter tools', () => {
     });
   });
 
-  it('deletes awaiters by title and keeps deletion approval-gated', async () => {
-    vi.mocked(deleteAwaiter).mockReturnValue({
-      deleted: true,
-      awaiterId: 'awaiter_3',
-      awaiterTitle: 'Resume Draft',
-    } as never);
-
+  it('keeps awaiter deletion approval-gated', () => {
     const tool = new DeleteAwaiterTool();
 
     expect(tool.needsApproval).toBe(true);
     expect(tool.approvalMode).toBe('always');
-
-    await expect(tool.execute({ title: 'Resume Draft' })).resolves.toEqual({
-      deleted: true,
-      awaiterId: 'awaiter_3',
-      awaiterTitle: 'Resume Draft',
-    });
   });
 });

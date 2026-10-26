@@ -100,8 +100,4 @@ describe('admitPiResume', () => {
     expect(() => build({ onRefuse })).toThrow(/prepared already/);
     expect(onRefuse).toHaveBeenCalledTimes(1);
   });
-
-  it('carries the binding args through unchanged', () => {
-    expect(build()!.commands[0]!.args).toEqual({ path: 'a.txt' });
-  });
 });

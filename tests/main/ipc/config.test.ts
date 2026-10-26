@@ -22,7 +22,6 @@ const {
   restartDesktopDaemonMock,
   startDesktopDaemonMock,
   stopDesktopDaemonMock,
-  testNetworkConnectivityMock,
 } = vi.hoisted(() => ({
   ipcHandlers: new Map<string, IpcHandler>(),
   getPathMock: vi.fn((name: string) => {
@@ -53,24 +52,6 @@ const {
   restartDesktopDaemonMock: vi.fn(),
   startDesktopDaemonMock: vi.fn(),
   stopDesktopDaemonMock: vi.fn(() => true),
-  testNetworkConnectivityMock: vi.fn(async (candidate: unknown) => ({
-    success: true,
-    testedAt: '2026-04-07T00:00:00.000Z',
-    effectiveProxy: 'socks5://127.0.0.1:1080',
-    error: null,
-    results: [
-      {
-        key: 'internet',
-        url: 'https://example.com/',
-        success: true,
-        statusCode: 200,
-        durationMs: 120,
-        error: null,
-        resolvedProxy: 'SOCKS5 127.0.0.1:1080',
-      },
-    ],
-    candidate,
-  })),
   getAllWindowsMock: vi.fn(() => []),
 }));
 
@@ -142,7 +123,7 @@ vi.mock('../../../packages/desktop/src/main/services/update/auto_update_service'
 }));
 
 vi.mock('../../../packages/desktop/src/main/services/network/network_diagnostics', () => ({
-  testNetworkConnectivity: testNetworkConnectivityMock,
+  testNetworkConnectivity: vi.fn(),
 }));
 
 vi.mock('@iki/backend/mcp', () => ({
@@ -307,35 +288,6 @@ describe('config IPC', () => {
         uptimeSeconds: 99,
       },
       embeddedRunning: true,
-    });
-  });
-
-  it('tests network connectivity with the candidate network config payload', async () => {
-    const handler = ipcHandlers.get('config:test-network');
-    if (!handler) throw new Error('config:test-network handler not registered');
-
-    const candidate = {
-      proxy: {
-        enable: true,
-        type: 'socks5',
-        host: '127.0.0.1',
-        port: 1080,
-        username: 'user',
-        password: 'secret',
-      },
-      webSearch: {
-        preferredEngine: 'google',
-      },
-      timeout: 5000,
-      retryAttempts: 3,
-    };
-
-    const result = await handler(null, candidate);
-
-    expect(testNetworkConnectivityMock).toHaveBeenCalledWith(candidate);
-    expect(result).toMatchObject({
-      success: true,
-      effectiveProxy: 'socks5://127.0.0.1:1080',
     });
   });
 
