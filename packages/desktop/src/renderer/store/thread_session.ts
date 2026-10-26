@@ -22,7 +22,7 @@ import {
   parseApprovalPolicy,
   THREAD_APPROVAL_POLICY_KEY,
   THREAD_SCRATCH_WORKSPACE_PREFIX,
-  type ThreadApprovalPolicy,
+  type ApprovalPolicy,
 } from '@iki/backend/workspaces/thread_mode';
 import { THREAD_WORKTREE_WORKSPACE_PREFIX } from '@iki/backend/workspaces/worktree_ids';
 import type { ThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
@@ -78,7 +78,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   const currentProviderId = ref<string | null>(null);
   const currentReasoningEffort = ref('');
   const currentPersonality = ref('');
-  const currentApprovalPolicy = ref<ThreadApprovalPolicy | ''>('');
+  const currentApprovalPolicy = ref<ApprovalPolicy | ''>('');
   const isIncognito = ref(false);
   const selectedWorkspaceId = ref<string | null>(null);
   const showWelcome = ref(!localStorage.getItem('iki-welcome-seen'));

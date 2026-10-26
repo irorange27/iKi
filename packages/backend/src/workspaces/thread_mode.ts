@@ -1,20 +1,21 @@
+import type { ApprovalPolicy } from '@iki/backend/utils/action_risk';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 import { THREAD_WORKTREE_WORKSPACE_PREFIX } from './worktree_ids';
 
 export type ThreadWorkMode = 'chat' | 'work';
 
-export type ThreadApprovalPolicy = 'never' | 'trustWorkspace' | 'askRisky' | 'always';
+export type { ApprovalPolicy };
 
 export const THREAD_APPROVAL_POLICY_KEY = 'approvalPolicy';
 
-const THREAD_APPROVAL_POLICIES: readonly ThreadApprovalPolicy[] = [
+const THREAD_APPROVAL_POLICIES: readonly ApprovalPolicy[] = [
   'never',
   'trustWorkspace',
   'askRisky',
   'always',
 ];
 
-export const parseApprovalPolicy = (value: unknown): ThreadApprovalPolicy | null => {
+export const parseApprovalPolicy = (value: unknown): ApprovalPolicy | null => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim().toLowerCase();
   return THREAD_APPROVAL_POLICIES.find(policy => policy.toLowerCase() === trimmed) ?? null;
