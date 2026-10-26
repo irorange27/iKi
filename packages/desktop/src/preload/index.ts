@@ -204,9 +204,6 @@ const electronApi: ElectronApi = {
     read: (id: string, options?: { maxChars?: number }) =>
       ipcRenderer.invoke('skills:read', id, options),
   },
-  workflow: {
-    resetAutoPinnedSkills: () => ipcRenderer.invoke('workflow:reset-auto-skills'),
-  },
   awaiters: {
     onPush: (callback: (payload: unknown) => void) => subscribe('awaiters:push', callback),
   },

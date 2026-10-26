@@ -259,9 +259,6 @@ export interface ElectronApi {
     openSkill: (id: string) => Promise<WindowActionResult>;
     read: (id: string, options?: { maxChars?: number }) => Promise<SkillReadResult>;
   };
-  workflow: {
-    resetAutoPinnedSkills: () => Promise<WindowActionResult>;
-  };
   awaiters: {
     onPush: (callback: (payload: unknown) => void) => () => void;
   };
