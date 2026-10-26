@@ -3,7 +3,6 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
 import { z } from 'zod';
@@ -31,9 +30,9 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
 });
 
 import { createTool, defaultToolRegistry, registerStandardTools } from '@iki/backend/tools';
-import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { startPiTurnHarness } from '@iki/backend/agent/harness';
-import { getToolModel } from '@iki/backend/provider/tool_model';
+import { delegatedAgentRuntime } from '../../helpers/delegated_runtime';
+
+
 import {
   PiToolTurnHarness,
   type PiToolModelCall,
@@ -41,11 +40,7 @@ import {
 import type { HarnessConfig, TurnEvent } from '@iki/backend/agent/harness/harness_types';
 
 registerStandardTools({
-  delegatedAgentRuntime: {
-    createRunTracker: createAgentRunTracker,
-    getConversationToolModel: getToolModel,
-    createHarness: startPiTurnHarness,
-  },
+  delegatedAgentRuntime,
 });
 
 const assistantMessage = (content: AssistantMessage['content']): AssistantMessage => ({

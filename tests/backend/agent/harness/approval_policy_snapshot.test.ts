@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { registerStandardTools } from '@iki/backend/tools';
-import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { startPiTurnHarness } from '@iki/backend/agent/harness';
-import { getToolModel } from '@iki/backend/provider/tool_model';
+import { delegatedAgentRuntime } from '../../helpers/delegated_runtime';
+
+
 import type { AgentTool } from '@iki/backend/agent/types';
 import {
   advanceApprovalPolicySnapshot,
@@ -13,11 +12,7 @@ import {
 } from '@iki/backend/agent/harness/tool_resolver';
 
 registerStandardTools({
-  delegatedAgentRuntime: {
-    createRunTracker: createAgentRunTracker,
-    getConversationToolModel: getToolModel,
-    createHarness: startPiTurnHarness,
-  },
+  delegatedAgentRuntime,
 });
 
 const resolveWithBox = (box: ApprovalPolicyBox): AgentTool[] =>

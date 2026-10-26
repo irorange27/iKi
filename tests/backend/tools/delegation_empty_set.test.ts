@@ -1,18 +1,13 @@
 import { describe, expect, it } from 'vitest';
-
 import { defaultToolRegistry, registerStandardTools } from '@iki/backend/tools';
-import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { startPiTurnHarness } from '@iki/backend/agent/harness';
-import { getToolModel } from '@iki/backend/provider/tool_model';
+import { delegatedAgentRuntime } from '../helpers/delegated_runtime';
+
+
 import { resolveTools } from '@iki/backend/agent/harness/tool_resolver';
 import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
 
 registerStandardTools({
-  delegatedAgentRuntime: {
-    createRunTracker: createAgentRunTracker,
-    getConversationToolModel: getToolModel,
-    createHarness: startPiTurnHarness,
-  },
+  delegatedAgentRuntime,
 });
 
 const delegate = async (

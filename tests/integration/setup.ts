@@ -1,11 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-
 import { registerStandardTools, defaultToolRegistry } from '@iki/backend/tools';
-import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { startPiTurnHarness } from '@iki/backend/agent/harness';
-import { getToolModel } from '@iki/backend/provider/tool_model';
+import { delegatedAgentRuntime } from '../backend/helpers/delegated_runtime';
+
+
 import { type AgentTool } from '@iki/backend/agent';
 
 const AUTH_PATH = path.join(os.homedir(), '.iki', 'agent', 'auth.json');
@@ -25,11 +24,7 @@ let toolsRegistered = false;
 const ensureTools = () => {
   if (!toolsRegistered) {
     registerStandardTools({
-      delegatedAgentRuntime: {
-        createRunTracker: createAgentRunTracker,
-        getConversationToolModel: getToolModel,
-        createHarness: startPiTurnHarness,
-      },
+      delegatedAgentRuntime,
     });
     toolsRegistered = true;
   }

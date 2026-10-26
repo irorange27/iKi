@@ -1,21 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
 import { registerStandardTools } from '@iki/backend/tools';
 import {
   ElementSourceTool,
   setElementSourceResolver,
 } from '@iki/backend/tools/element_source_tool';
 import type { DevToolsResolveRequest } from '@iki/backend/types/devtools';
-import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { startPiTurnHarness } from '@iki/backend/agent/harness';
-import { getToolModel } from '@iki/backend/provider/tool_model';
+import { delegatedAgentRuntime } from '../helpers/delegated_runtime';
+
+
 
 const runtime = {
-  delegatedAgentRuntime: {
-    createRunTracker: createAgentRunTracker,
-    getConversationToolModel: getToolModel,
-    createHarness: startPiTurnHarness,
-  },
+  delegatedAgentRuntime,
 };
 
 const ask = async (input: Record<string, unknown>) => {

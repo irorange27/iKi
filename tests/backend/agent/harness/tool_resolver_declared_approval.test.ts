@@ -1,18 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-
 import { createTool, defaultToolRegistry, registerStandardTools } from '@iki/backend/tools';
-import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { startPiTurnHarness } from '@iki/backend/agent/harness';
-import { getToolModel } from '@iki/backend/provider/tool_model';
+import { delegatedAgentRuntime } from '../../helpers/delegated_runtime';
+
+
 import { resolveTools } from '@iki/backend/agent/harness/tool_resolver';
 
 registerStandardTools({
-  delegatedAgentRuntime: {
-    createRunTracker: createAgentRunTracker,
-    getConversationToolModel: getToolModel,
-    createHarness: startPiTurnHarness,
-  },
+  delegatedAgentRuntime,
 });
 
 const needsApprovalFor = async (
