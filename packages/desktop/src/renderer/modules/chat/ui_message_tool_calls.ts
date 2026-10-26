@@ -173,10 +173,6 @@ const TOOL_ICON_COMPONENTS: Record<string, Component> = {
   read_awaiter: Clock3,
   write_awaiter: Clock3,
   delete_awaiter: Trash2,
-  list_proactive_tasks: Clock3,
-  read_proactive_task: Clock3,
-  write_proactive_task: Clock3,
-  delete_proactive_task: Trash2,
 };
 
 export const getToolIconComponent = (part: unknown): Component => {
@@ -267,29 +263,6 @@ export const getToolTitle = (part: unknown): string => {
       if (typeof input.id === 'string' && input.id.trim()) {
         return normalizeSingleLineText(input.id);
       }
-    }
-
-    if (
-      toolKey === 'read_proactive_task' ||
-      toolKey === 'write_proactive_task' ||
-      toolKey === 'delete_proactive_task'
-    ) {
-      if (typeof input.name === 'string' && input.name.trim()) {
-        return normalizeSingleLineText(input.name);
-      }
-      if (typeof input.currentName === 'string' && input.currentName.trim()) {
-        return normalizeSingleLineText(input.currentName);
-      }
-      if (typeof input.id === 'string' && input.id.trim()) {
-        return normalizeSingleLineText(input.id);
-      }
-    }
-
-    if (toolKey === 'list_proactive_tasks') {
-      if (typeof input.query === 'string' && input.query.trim()) {
-        return normalizeSingleLineText(input.query);
-      }
-      return 'Proactive tasks';
     }
 
     if (toolKey === 'list_awaiters') {
