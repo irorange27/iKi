@@ -12,6 +12,7 @@ Electron shell. Three layers:
 
 - Don't put business logic in `main/`. Anything more than "translate IPC arg → backend call → return result" belongs in `@iki/backend`.
 - Don't use `ipcMain.on` for anything that can throw — it doesn't catch exceptions. Use `ipcMain.handle`. See repo `postmortem/backend-bugs-2026-04.md` Bug #2.
+- Don't ship a preload channel without a main handler (or the reverse), or a push nobody subscribes to. `tests/main/ipc/channel_registry.test.ts` cross-checks every channel in both directions; the mirror-style per-module tests were deleted in favor of it.
 - Don't bundle native or OTel deps into the Vite main chunk. Add them to `VITE_EXTERNAL_RUNTIME_DEPS` in `src/build/runtime_packaging.ts`.
 - Don't poll or persist the system clipboard for automatic agent context. Explicit paste into the composer remains user supplied message content.
 - Don't style teleported reka-ui popover/panel roots with scoped CSS — the portal mounts on `<body>` outside the component subtree, so the parent's scope attributes never reach it. Global styles own those surfaces (`assets/styles/globals.css`: `selector-panel`, `permission-panel`, `sidebar-project-panel`, …).

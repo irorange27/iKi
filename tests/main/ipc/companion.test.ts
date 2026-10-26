@@ -4,7 +4,6 @@ type IpcHandler = (...args: unknown[]) => unknown | Promise<unknown>;
 
 const {
   ipcHandlers,
-  getSnapshotMock,
   refreshAvailabilityMock,
   showMainWindowMock,
   getAppConfigMock,
@@ -14,7 +13,6 @@ const {
   sendMock,
 } = vi.hoisted(() => ({
   ipcHandlers: new Map<string, IpcHandler>(),
-  getSnapshotMock: vi.fn(),
   refreshAvailabilityMock: vi.fn(),
   showMainWindowMock: vi.fn(),
   getAppConfigMock: vi.fn(),
@@ -34,7 +32,6 @@ vi.mock('electron', () => ({
 
 vi.mock('../../../packages/desktop/src/main/services/companion/companion_service', () => ({
   companionService: {
-    getSnapshot: getSnapshotMock,
     refreshAvailability: refreshAvailabilityMock,
   },
 }));
@@ -67,22 +64,6 @@ beforeEach(() => {
 });
 
 describe('companion IPC', () => {
-  it('returns the current companion snapshot', async () => {
-    const snapshot = {
-      phase: 'idle',
-      label: 'Ready',
-      headline: 'Here',
-      detail: 'Waiting',
-      updatedAt: '2026-04-12T00:00:00.000Z',
-    };
-    getSnapshotMock.mockReturnValue(snapshot);
-
-    const handler = ipcHandlers.get('companion:get-snapshot');
-    if (!handler) throw new Error('companion:get-snapshot handler not registered');
-
-    expect(handler()).toEqual(snapshot);
-  });
-
   it('shows the main window on request', async () => {
     const handler = ipcHandlers.get('companion:open-main-window');
     if (!handler) throw new Error('companion:open-main-window handler not registered');

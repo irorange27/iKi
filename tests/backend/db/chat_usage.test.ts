@@ -5,12 +5,7 @@ vi.mock('@iki/backend/db/database', () => ({
 }));
 
 import { getDb } from '@iki/backend/db/database';
-import {
-  addChatUsageEvent,
-  getChatUsageTotals,
-  listChatUsageDaily,
-  listChatUsageMonthly,
-} from '@iki/backend/db/chat_usage';
+import { addChatUsageEvent } from '@iki/backend/db/chat_usage';
 
 const getDbMock = vi.mocked(getDb);
 
@@ -52,70 +47,5 @@ describe('chat_usage db', () => {
     expect(params.estimated_cost_usd).toBe(0);
     expect(params.source).toBe('chat');
     expect(params.metadata).toBe('{}');
-  });
-
-  it('maps daily and monthly aggregates', () => {
-    const allMock = vi
-      .fn()
-      .mockReturnValueOnce([
-        {
-          date: '2026-03-19',
-          messageCount: 2,
-          inputTokens: 50,
-          outputTokens: 10,
-          totalTokens: 60,
-          cacheReadTokens: 40,
-          cacheWriteTokens: 0,
-          reasoningTokens: 0,
-          estimatedCostUsd: 0.01,
-        },
-      ])
-      .mockReturnValueOnce([
-        {
-          month: '2026-03',
-          messageCount: 4,
-          inputTokens: 140,
-          outputTokens: 30,
-          totalTokens: 170,
-          cacheReadTokens: 90,
-          cacheWriteTokens: 3,
-          reasoningTokens: 5,
-          estimatedCostUsd: 0.031,
-        },
-      ]);
-
-    const prepareMock = vi.fn(() => ({ all: allMock }));
-    getDbMock.mockReturnValue({ prepare: prepareMock } as unknown as ReturnType<typeof getDb>);
-
-    const daily = listChatUsageDaily();
-    const monthly = listChatUsageMonthly();
-
-    expect(daily).toEqual([
-      {
-        date: '2026-03-19',
-        messageCount: 2,
-        inputTokens: 50,
-        outputTokens: 10,
-        totalTokens: 60,
-        cacheReadTokens: 40,
-        cacheWriteTokens: 0,
-        reasoningTokens: 0,
-        estimatedCostUsd: 0.01,
-      },
-    ]);
-
-    expect(monthly).toEqual([
-      {
-        month: '2026-03',
-        messageCount: 4,
-        inputTokens: 140,
-        outputTokens: 30,
-        totalTokens: 170,
-        cacheReadTokens: 90,
-        cacheWriteTokens: 3,
-        reasoningTokens: 5,
-        estimatedCostUsd: 0.031,
-      },
-    ]);
   });
 });
