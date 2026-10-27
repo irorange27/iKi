@@ -3,14 +3,14 @@ import type { AppConfig } from '@iki/backend/types/config';
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 
 export const DEFAULT_OPENAI_MODEL = 'whisper-1';
-export const DEFAULT_WHISPER_NODE_MODEL = 'base.en';
+const DEFAULT_WHISPER_NODE_MODEL = 'base.en';
 export const DEFAULT_WHISPER_MODEL_BASE_URL =
   'https://huggingface.co/ggerganov/whisper.cpp/resolve/main';
 export const FALLBACK_WHISPER_MODEL_BASE_URLS = [
   'https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main',
 ];
 
-export const DEFAULT_SPEECH_CONFIG: AppConfig['speech'] = {
+const DEFAULT_SPEECH_CONFIG: AppConfig['speech'] = {
   ...DEFAULT_APP_CONFIG.speech,
   model: DEFAULT_OPENAI_MODEL,
 };

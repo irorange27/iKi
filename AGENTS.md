@@ -31,6 +31,7 @@ Read the [backend ownership and regression map](packages/backend/README.md#runti
 | Change context budget / compaction | `packages/backend/src/agent/context_budget.ts` + runner `prepareStep`; see backend contract |
 | Change prompt assembly | `packages/backend/src/turn_prep/context.ts`, `context_blocks.ts` |
 | LLM-call surface / add a provider | `packages/backend/src/provider/llm/factory.ts` |
+| Understand a module's contract surface before editing | `pnpm run arch:context <module-id>` (generated per-module context; registry: `scripts/module_registry.json`) — see the `architecture-governance` skill |
 | Tool approval UX | `packages/backend/src/thread_session/approval.ts` + renderer `modules/chat/tool_approval_controller.ts` |
 | New IPC channel | `desktop/src/preload/index.ts` + `main/ipc/` + types in `packages/backend/src/types/electron_api.ts` |
 | New daemon route | `packages/daemon/src/server_http.ts` or `server_ws.ts` |

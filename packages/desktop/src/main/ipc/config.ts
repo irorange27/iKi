@@ -1,38 +1,19 @@
 import { app, ipcMain } from 'electron';
-import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
 
 import { setConfig, migrateFromJson } from '@iki/backend/db/database';
 import { getAppConfig } from '@iki/backend/config';
-import { readRecentDaemonLogs } from '@iki/backend/daemon_logs';
 import { applyAppLoggingConfig, createLogger } from '@iki/backend/logger';
 import { getMcpManager } from '@iki/backend/mcp';
 import { normalizeAppConfig } from '@iki/backend/config/normalize';
 import type {
   AppConfig,
   ConfigRuntimeInfo,
-  DaemonControlAction,
-  DaemonControlResult,
-  DaemonLogsInfo,
-  DaemonStatusInfo,
   NetworkDiagnosticResult,
 } from '@iki/backend/types/config';
-import {
-  applyDesktopDaemonConfigUpdate,
-  getDesktopEmbeddedDaemonStatus,
-  isDesktopDaemonEmbeddedRunning,
-  restartDesktopDaemon,
-  startDesktopDaemon,
-  stopDesktopDaemon,
-} from '../services/daemon/daemon_lifecycle';
 import { testNetworkConnectivity } from '../services/network/network_diagnostics';
 import { applyAppUpdateConfig } from '../services/update/auto_update_service';
-import {
-  DEFAULT_DAEMON_HOST,
-  DEFAULT_DAEMON_PORT,
-} from '@iki/backend/constants/daemon';
-import { getAllBrowserWindows } from '../utils/browser_windows';
+import { broadcastToRenderers } from '../utils/ipc_helpers';
 import { companionService } from '../services/companion/companion_service';
 import { syncCompanionWindowToConfig } from '../windows/companion_window';
 
@@ -40,7 +21,7 @@ let configIpcRegistered = false;
 let configMigrationRun = false;
 const configLogger = createLogger({ module: 'config_ipc' });
 
-export const migrateLegacyConfig = (): void => {
+const migrateLegacyConfig = (): void => {
   if (configMigrationRun) return;
   configMigrationRun = true;
 
@@ -51,209 +32,11 @@ export const migrateLegacyConfig = (): void => {
 
 const loadConfig = () => getAppConfig();
 
-const readOptionalTextFile = (filePath: string): string | null => {
-  try {
-    const value = fs.readFileSync(filePath, 'utf8').trim();
-    return value || null;
-  } catch {
-    return null;
-  }
-};
-
-const resolveDaemonHost = (config: AppConfig): string => {
-  const rawHost = config.daemon?.host;
-  if (typeof rawHost !== 'string' || !rawHost.trim()) return DEFAULT_DAEMON_HOST;
-  return rawHost.trim();
-};
-
-const resolveDaemonPort = (config: AppConfig): number => {
-  const rawPort = config.daemon?.port;
-  if (!Number.isFinite(rawPort)) return DEFAULT_DAEMON_PORT;
-  const parsed = Math.trunc(rawPort);
-  if (parsed < 1 || parsed > 65535) return DEFAULT_DAEMON_PORT;
-  return parsed;
-};
-
-const readRecordedDaemonLocation = (userDataPath: string, config: AppConfig) => {
-  const recordedHost = readOptionalTextFile(path.join(userDataPath, 'daemon.host'));
-  const recordedPort = readOptionalTextFile(path.join(userDataPath, 'daemon.port'));
-
-  const configuredHost = resolveDaemonHost(config);
-  const configuredPort = resolveDaemonPort(config);
-  const parsedPort = Number(recordedPort || '');
-
-  return {
-    host: recordedHost || configuredHost,
-    port: Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : configuredPort,
-    source: (recordedHost || recordedPort ? 'recorded' : 'default') as 'recorded' | 'default',
-  };
-};
-
-const requestDaemonHealth = (port: number): Promise<{ statusCode: number; body: string }> =>
-  new Promise((resolve, reject) => {
-    const req = http.get(
-      {
-        host: '127.0.0.1',
-        port,
-        path: '/v1/health',
-        timeout: 1000,
-      },
-      res => {
-        let body = '';
-        res.setEncoding('utf8');
-        res.on('data', chunk => {
-          body += chunk;
-        });
-        res.on('end', () => {
-          resolve({ statusCode: res.statusCode || 0, body });
-        });
-      }
-    );
-
-    req.on('timeout', () => {
-      req.destroy(new Error('Daemon health check timed out'));
-    });
-    req.on('error', reject);
-  });
-
-const getDaemonStatus = async (): Promise<DaemonStatusInfo> => {
-  const userDataPath = app.getPath('userData');
-  const config = loadConfig();
-  const recorded = readRecordedDaemonLocation(userDataPath, config);
-  const embeddedStatus = getDesktopEmbeddedDaemonStatus();
-
-  if (embeddedStatus) {
-    return {
-      ...embeddedStatus,
-      host: embeddedStatus.host || recorded.host,
-      port: Number.isFinite(embeddedStatus.port) ? embeddedStatus.port : recorded.port,
-    };
-  }
-
-  try {
-    const health = await requestDaemonHealth(recorded.port);
-    if (health.statusCode !== 200) {
-      return {
-        online: false,
-        host: recorded.host,
-        port: recorded.port,
-        status: 'offline',
-        source: recorded.source,
-        uptimeSeconds: null,
-        error: `Health check returned HTTP ${health.statusCode}`,
-      };
-    }
-
-    const payload = JSON.parse(health.body) as {
-      host?: string;
-      port?: number;
-      status?: string;
-      uptime?: number;
-    };
-
-    return {
-      online: true,
-      host: typeof payload.host === 'string' && payload.host.trim() ? payload.host : recorded.host,
-      port:
-        typeof payload.port === 'number' && Number.isFinite(payload.port)
-          ? payload.port
-          : recorded.port,
-      status: typeof payload.status === 'string' && payload.status.trim() ? payload.status : 'ok',
-      source: 'health',
-      uptimeSeconds:
-        typeof payload.uptime === 'number' && Number.isFinite(payload.uptime)
-          ? payload.uptime
-          : null,
-    };
-  } catch (error) {
-    return {
-      online: false,
-      host: recorded.host,
-      port: recorded.port,
-      status: 'offline',
-      source: recorded.source,
-      uptimeSeconds: null,
-      error: error instanceof Error ? error.message : 'Failed to contact daemon',
-    };
-  }
-};
-
 const getRuntimeInfo = (): ConfigRuntimeInfo => {
   const userDataPath = app.getPath('userData');
-  const config = loadConfig();
-  const configuredHost = resolveDaemonHost(config);
-  const configuredPort = resolveDaemonPort(config);
   return {
     userDataPath,
     dbPath: path.join(userDataPath, 'iKi_v0.db'),
-    daemon: {
-      defaultHost: DEFAULT_DAEMON_HOST,
-      defaultPort: DEFAULT_DAEMON_PORT,
-      configuredHost,
-      configuredPort,
-    },
-  };
-};
-
-const getDaemonLogs = (limit = 120): DaemonLogsInfo => {
-  const userDataPath = app.getPath('userData');
-  const parsedLimit = Number(limit);
-  const normalizedLimit =
-    Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(Math.trunc(parsedLimit), 500) : 120;
-  return readRecentDaemonLogs(normalizedLimit, userDataPath);
-};
-
-const controlDesktopDaemon = async (action: DaemonControlAction): Promise<DaemonControlResult> => {
-  if (action === 'start') {
-    await startDesktopDaemon({ ignoreAutostartEnv: true });
-  } else if (action === 'restart') {
-    await restartDesktopDaemon();
-  } else {
-    stopDesktopDaemon();
-  }
-
-  const status = await getDaemonStatus();
-  const embeddedRunning = isDesktopDaemonEmbeddedRunning();
-
-  if (action === 'stop') {
-    if (!status.online) {
-      return {
-        success: true,
-        action,
-        message: 'Desktop-managed daemon stopped.',
-        status,
-        embeddedRunning,
-      };
-    }
-
-    return {
-      success: false,
-      action,
-      message: 'Embedded daemon stopped, but another daemon is still responding on this port.',
-      status,
-      embeddedRunning,
-    };
-  }
-
-  if (status.online) {
-    return {
-      success: true,
-      action,
-      message:
-        action === 'start'
-          ? `Daemon is online at ${status.host}:${status.port}.`
-          : `Daemon restarted and is online at ${status.host}:${status.port}.`,
-      status,
-      embeddedRunning,
-    };
-  }
-
-  return {
-    success: false,
-    action,
-    message: 'Daemon did not become healthy. Check Recent Logs for details.',
-    status,
-    embeddedRunning,
   };
 };
 
@@ -344,21 +127,6 @@ export const registerConfigIpc = (): void => {
     return getRuntimeInfo();
   });
 
-  ipcMain.handle('config:get-daemon-status', async () => {
-    return getDaemonStatus();
-  });
-
-  ipcMain.handle('config:get-daemon-logs', (_event, limit?: number) => {
-    return getDaemonLogs(limit);
-  });
-
-  ipcMain.handle('config:control-daemon', async (_event, action: DaemonControlAction) => {
-    if (action !== 'start' && action !== 'restart' && action !== 'stop') {
-      throw new Error(`Unsupported daemon action: ${String(action)}`);
-    }
-    return controlDesktopDaemon(action);
-  });
-
   ipcMain.handle(
     'config:test-network',
     async (_event, candidate: AppConfig['network']): Promise<NetworkDiagnosticResult> => {
@@ -376,22 +144,12 @@ export const registerConfigIpc = (): void => {
     const mcpUpdate = handleMcpConfigUpdate(prevConfig, normalized).catch(error => {
       configLogger.warn('Failed to apply MCP config update', error);
     });
-    const daemonUpdate = applyDesktopDaemonConfigUpdate(prevConfig, normalized).catch(error => {
-      configLogger.warn('Failed to apply daemon config update', error);
-    });
 
     if (shouldAwaitMcp) {
       await mcpUpdate;
-      await daemonUpdate;
     }
 
-    for (const win of getAllBrowserWindows()) {
-      try {
-        win.webContents.send('config:updated', normalized);
-      } catch {
-        /* empty: error is not actionable here */
-      }
-    }
+    broadcastToRenderers('config:updated', normalized);
 
     return true;
   });

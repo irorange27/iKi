@@ -11,7 +11,7 @@ const windowLogger = createLogger({ module: 'main_window' });
 
 let mainWindowRef: BrowserWindow | null = null;
 
-export const getMainWindow = (): BrowserWindow | null => {
+const getMainWindow = (): BrowserWindow | null => {
   if (!mainWindowRef || mainWindowRef.isDestroyed()) {
     mainWindowRef = null;
     return null;

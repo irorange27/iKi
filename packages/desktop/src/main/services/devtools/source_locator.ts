@@ -1,6 +1,6 @@
 
 
-export type DevToolsProbeTarget = 'selected' | 'hovered' | 'selector' | 'point';
+type DevToolsProbeTarget = 'selected' | 'hovered' | 'selector' | 'point';
 
 const cssString = (value: string): string => JSON.stringify(value);
 

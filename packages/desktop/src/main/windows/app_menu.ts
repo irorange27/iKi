@@ -11,13 +11,13 @@ import { restartApp, shouldOfferRestart } from './app_restart';
 
 export const RESTART_ACCELERATOR = 'CommandOrControl+Alt+R';
 
-export const DEVTOOLS_MENU_ENV = 'IKI_DEVTOOLS_MENU';
+const DEVTOOLS_MENU_ENV = 'IKI_DEVTOOLS_MENU';
 
-export const shouldInstallDevToolsMenu = (
+const shouldInstallDevToolsMenu = (
   env: string | undefined = process.env[DEVTOOLS_MENU_ENV]
 ): boolean => parseBooleanEnv(env) ?? true;
 
-export const resolveDevToolsTargetWindow = (): BrowserWindow | null => {
+const resolveDevToolsTargetWindow = (): BrowserWindow | null => {
   const focused =
     typeof BrowserWindow.getFocusedWindow === 'function' ? BrowserWindow.getFocusedWindow() : null;
   if (focused && !focused.isDestroyed()) return focused;

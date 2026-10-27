@@ -115,7 +115,7 @@ const applyWindowOptions = (win: BrowserWindow, config: AppConfig) => {
   }
 };
 
-export const createCompanionWindow = (config: AppConfig = getAppConfig()): BrowserWindow => {
+const createCompanionWindow = (config: AppConfig = getAppConfig()): BrowserWindow => {
   const existing = getCompanionWindow();
   if (existing) {
     applyWindowOptions(existing, config);
@@ -205,7 +205,7 @@ export const createCompanionWindow = (config: AppConfig = getAppConfig()): Brows
   return companionWindow;
 };
 
-export const closeCompanionWindow = (): void => {
+const closeCompanionWindow = (): void => {
   const win = getCompanionWindow();
   if (!win) return;
   win.close();
@@ -221,4 +221,3 @@ export const syncCompanionWindowToConfig = (config: AppConfig = getAppConfig()):
   applyWindowOptions(win, config);
 };
 
-export { getCompanionWindow };

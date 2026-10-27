@@ -93,7 +93,7 @@ const buildStreaming = (approvalsOverride?: {
     approvalId: string,
     session: {
       target: { id: number; send: (channel: string, payload: unknown) => void };
-      history?: import('ai').ModelMessage[];
+      history?: import('@iki/backend/message/model_history').ModelMessage[];
       recoveryContext?: unknown;
     }
   ) => unknown;

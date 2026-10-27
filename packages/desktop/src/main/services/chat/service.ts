@@ -9,7 +9,7 @@ import * as agentEvalDb from '@iki/backend/db/agent_eval';
 import { toIsoNow } from '@iki/backend/utils/text';
 import type { EvalExportPayload } from '@iki/backend/types/agent_run';
 
-export type { ChatStreamTarget, ChatService } from '@iki/backend/thread_session';
+export type { ChatStreamTarget } from '@iki/backend/thread_session';
 
 const platformDeps: ChatServicePlatformDeps = {
   companion: companionService,

@@ -8,7 +8,8 @@ import {
   listSkills,
   readSkillContent,
 } from '@iki/backend/tools/skills';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage } from '@iki/backend/utils/errors';
+import { withIpcLogging } from '../utils/ipc_helpers';
 
 let skillsIpcRegistered = false;
 const skillsIpcLogger = createLogger({ module: 'skills_ipc' });
@@ -17,33 +18,17 @@ export const registerSkillsIpc = (): void => {
   if (skillsIpcRegistered) return;
   skillsIpcRegistered = true;
 
-  ipcMain.handle('skills:list', async () => {
-    try {
-      return await listSkills({ forceRefresh: true });
-    } catch (error: unknown) {
-      skillsIpcLogger.event({
-        level: 'error',
-        event: 'ipc.skills.list',
-        outcome: 'failed',
-        error,
-      });
-      return [];
-    }
-  });
+  ipcMain.handle('skills:list', () =>
+    withIpcLogging<Awaited<ReturnType<typeof listSkills>>>(skillsIpcLogger, 'ipc.skills.list', () => listSkills({ forceRefresh: true }), {
+      onError: () => [],
+    })
+  );
 
-  ipcMain.handle('skills:roots', () => {
-    try {
-      return getSkillRootsForUi();
-    } catch (error: unknown) {
-      skillsIpcLogger.event({
-        level: 'error',
-        event: 'ipc.skills.roots',
-        outcome: 'failed',
-        error,
-      });
-      return [];
-    }
-  });
+  ipcMain.handle('skills:roots', () =>
+    withIpcLogging<ReturnType<typeof getSkillRootsForUi>>(skillsIpcLogger, 'ipc.skills.roots', () => getSkillRootsForUi(), {
+      onError: () => [],
+    })
+  );
 
   ipcMain.handle('skills:open-root', async (_event, source?: string) => {
     try {

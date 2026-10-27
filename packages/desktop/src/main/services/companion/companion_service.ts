@@ -330,6 +330,5 @@ export const createCompanionService = (deps: CompanionServiceDeps = {}) => {
   };
 };
 
-export type CompanionService = ReturnType<typeof createCompanionService>;
 
 export const companionService = createCompanionService();

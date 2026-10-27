@@ -1,0 +1,28 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "tags": ["-lintignore"],
+  "ignoreBinaries": ["ffmpeg", "pgrep"],
+  "ignoreDependencies": [
+    "tailwindcss",
+    "tw-animate-css",
+    "reka-ui",
+    "vue-markdown-render",
+    "highlight.js",
+    "katex"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": ["vitest*.config.mts", "scripts/**/*.{mjs,cjs,ts}", "tests/**/*.{ts,mts}"],
+      "project": ["scripts/**/*.{mjs,cjs,ts}", "tests/**/*.{ts,mts}"]
+    },
+    "packages/backend": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/theme": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/desktop": {
+      "project": ["src/main/**/*.ts", "src/preload/**/*.ts"]
+    }
+  }
+}

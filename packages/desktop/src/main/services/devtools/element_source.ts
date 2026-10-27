@@ -20,7 +20,7 @@ export type ProbeRequest = Pick<
   'target' | 'selector' | 'point' | 'webContentsId'
 >;
 
-export const resolveRepoRoot = (): string | null => {
+const resolveRepoRoot = (): string | null => {
   if (app.isPackaged) return null;
   return path.resolve(app.getAppPath(), '../../../..');
 };
@@ -65,7 +65,7 @@ export const armElementRecorder = (): void => {
   });
 };
 
-export const probeElement = async (
+const probeElement = async (
   contents: Electron.WebContents,
   request: ProbeRequest
 ): Promise<DevToolsSourceResult> => {

@@ -48,6 +48,39 @@
       "rules": {
         "vue/no-parsing-error": "error"
       }
+    },
+    {
+      "files": [
+        "packages/*/src/**/*.ts",
+        "packages/*/src/**/*.vue"
+      ],
+      "excludedFiles": [
+        "**/i18n/catalogs/**"
+      ],
+      "rules": {
+        "max-lines": [
+          "error",
+          {
+            "max": 800,
+            "skipBlankLines": false,
+            "skipComments": false
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/backend/src/agent/runners/pi_tool_turn_harness.ts",
+        "packages/desktop/src/renderer/components/ChatInput.vue",
+        "packages/desktop/src/renderer/components/Sidebar.vue",
+        "packages/desktop/src/renderer/components/chat/ChatMessageParts.vue",
+        "packages/desktop/src/renderer/components/ChatModelSelector.vue",
+        "packages/desktop/src/renderer/store/thread_session.ts",
+        "packages/desktop/src/renderer/views/ChatView.vue"
+      ],
+      "rules": {
+        "max-lines": "off"
+      }
     }
   ],
   "ignorePatterns": [

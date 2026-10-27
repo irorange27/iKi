@@ -78,7 +78,7 @@ const canReachRendererDevServer = async (url: string): Promise<boolean> => {
   }
 };
 
-export const waitForRendererDevServer = async (url: string): Promise<boolean> => {
+const waitForRendererDevServer = async (url: string): Promise<boolean> => {
   const deadline = Date.now() + DEV_SERVER_WAIT_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
