@@ -130,7 +130,7 @@ beforeAll(async () => {
   seedTurnProvider({ providerId: 'provider_primary', model: 'test-model' });
   server = await createScriptedPiServer();
   defaultToolRegistry.register(readFileTool);
-  conversation = createChatPersistence({
+  conversation = createChatPersistence({ rebuildMessages: (threadId: string) => rebuildThreadViewFromEvents(threadId).messages,
     memory: {} as never,
   });
   conversation.createThread({ id: 'thread_diff_current' });

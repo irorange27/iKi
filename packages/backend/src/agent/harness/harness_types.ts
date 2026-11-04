@@ -39,6 +39,30 @@ export type InlineExecutionRecord = {
   output: unknown;
 };
 
+/**
+ * What an approval-gated tool call came back as, across the harness/session boundary.
+ *
+ * The harness receives it through an injected port and may not import thread_session
+ * (dependency rule R3); the session produces it. It lives at the boundary because both
+ * sides need one definition — two hand-kept copies drift, and the drift shows up as a
+ * call the harness believed had an outcome when the journal said it never decided one.
+ */
+export type ToolExecutionInterruption = {
+  code: 'tool-execution-interrupted';
+  message: string;
+  storedReplay: 'safe' | 'unsafe';
+  declaredReplay: 'safe' | 'unsafe';
+};
+
+export type ToolExecutionOutcome =
+  | { kind: 'pending' | 'unknown' | 'busy' }
+  | {
+      kind: 'completed';
+      reused: boolean;
+      result: { type: 'tool-result'; toolCallId: string; toolName: string; output: unknown };
+      interrupted?: ToolExecutionInterruption;
+    };
+
 export type TurnInput = {
   prompt: string;
   history?: ModelMessage[];

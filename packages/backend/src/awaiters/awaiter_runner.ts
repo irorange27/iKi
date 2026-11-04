@@ -52,12 +52,12 @@ const buildAwaiterWakePrompt = (
   return sections.filter(Boolean).join('\n\n');
 };
 
-export type AwaiterRunnerHostPort = {
+type AwaiterRunnerHostPort = {
   notify?: (params: { title: string; body: string }) => void;
   pushAwaiterEvent?: (payload: unknown) => void;
 };
 
-export type AwaiterRunnerChatPort = {
+type AwaiterRunnerChatPort = {
   getThread: (threadId: string) => { id: string } | null;
   createMessage: (input: unknown) => unknown;
   stream: (options: ChatTurnOptions) => Promise<{
@@ -68,7 +68,7 @@ export type AwaiterRunnerChatPort = {
   }>;
 };
 
-export type AwaiterRunnerDeps = {
+type AwaiterRunnerDeps = {
   chat: AwaiterRunnerChatPort;
   host: AwaiterRunnerHostPort;
 };

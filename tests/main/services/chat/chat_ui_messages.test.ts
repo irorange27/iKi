@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { toModelInputMessages } from '@iki/backend/message/ui_messages';
+import { sanitizeModelConversationMessages } from '@iki/backend/agent/model_messages';
 
 describe('chat_ui message conversion', () => {
   it('strips canonical metadata parts before AI SDK model conversion', async () => {
@@ -101,7 +102,7 @@ describe('chat_ui message conversion', () => {
       expect(interruptedResult).toBeDefined();
     });
 
-    it('keeps a live approval-requested call as a tool-call + tool-approval-request pair when repair is off', async () => {
+    it('leaves a live approval-requested call unanswered when repair is off, for the pairing owner to settle', async () => {
       const converted = await toModelInputMessages(
         [
           {
@@ -133,17 +134,26 @@ describe('chat_ui message conversion', () => {
         type: string;
         toolCallId?: string;
         toolName?: string;
-        approvalId?: string;
       }>;
+      // The call survives, un-invented: the projection may not fabricate a result
+      // for a decision the human has not made.
       expect(content.find(part => part.type === 'tool-call')).toMatchObject({
         toolCallId: 'toolu_live_approval',
         toolName: 'approval_probe',
       });
-      expect(content.find(part => part.type === 'tool-approval-request')).toMatchObject({
-        approvalId: 'approval_live_1',
-        toolCallId: 'toolu_live_approval',
-      });
+      // No provider accepts an approval marker in model content, so the projection
+      // no longer produces one; pairing is decided from toolCallId downstream.
+      expect(content.find(part => part.type === 'tool-approval-request')).toBeUndefined();
       expect(converted.some(message => message.role === 'tool')).toBe(false);
+
+      // The one owner of sendability settles it with an explicit "never answered".
+      const sanitized = sanitizeModelConversationMessages(converted);
+      const results = sanitized.messages
+        .filter(message => message.role === 'tool')
+        .flatMap(message => (message.content ?? []) as Array<Record<string, unknown>>);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ type: 'tool-result', toolCallId: 'toolu_live_approval' });
+      expect(JSON.stringify(results[0])).toContain('never answered');
     });
 
     it('keeps an issued-but-unrecorded tool call visible instead of silently dropping it', async () => {

@@ -2,7 +2,7 @@ import ts from 'typescript';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const roots = ['packages/backend/src', 'packages/desktop/src', 'packages/daemon/src', 'tests'];
+const roots = ['packages/backend/src', 'packages/desktop/src', 'tests'];
 const files = [];
 const walk = d => {
   for (const e of fs.readdirSync(d, { withFileTypes: true })) {

@@ -2,7 +2,7 @@
 
 export type EscapeHtml = (value: string) => string;
 
-export type MarkdownToken = {
+type MarkdownToken = {
   content?: string;
   markup?: string;
   info?: string;
@@ -10,7 +10,7 @@ export type MarkdownToken = {
   meta?: Record<string, unknown>;
 };
 
-export type MarkdownRenderRule = (
+type MarkdownRenderRule = (
   tokens: MarkdownToken[],
   idx: number,
   options: unknown,
@@ -25,7 +25,7 @@ export type MarkdownInlineState = {
   push: (type: string, tag: string, nesting: number) => MarkdownToken;
 };
 
-export type MarkdownBlockState = {
+type MarkdownBlockState = {
   src: string;
   bMarks: number[];
   eMarks: number[];
@@ -43,7 +43,7 @@ export type MarkdownBlockRule = (
   silent: boolean
 ) => boolean;
 
-export type MarkdownCore = {
+type MarkdownCore = {
   utils: { escapeHtml: EscapeHtml };
   renderer: { rules: Record<string, MarkdownRenderRule | undefined> };
 };

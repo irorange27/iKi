@@ -1,16 +1,9 @@
 import * as agentRunDb from '@iki/backend/db/agent_runs';
-import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import type {
-  AgentRun,
-  AgentRunKind,
-  AgentRunStatus,
-  ReviewQueueItem,
-} from '@iki/backend/types/agent_run';
+import type { AgentRunStatus } from '@iki/backend/types/agent_run';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { rehydrateAgentRunTracker } from './run_tracker';
 import { recordFailureTerminalEvent, TURN_STARTED, turnFactsToEvents } from './session_log';
 import { getSessionEvents } from '@iki/backend/db/session_events';
-import { buildRunTrajectory, type AtifTrajectory } from './atif_export';
 
 type ChatRunsDeps = {
 
@@ -22,43 +15,11 @@ type ChatRunsDeps = {
   cancelPendingApprovalsForRun?: (runId: string) => number;
 };
 
-const REVIEW_QUEUE_KINDS: AgentRunKind[] = ['awaiter-wake'];
-const SUMMARY_MAX_CHARS = 280;
-
 const runHasStartedFact = (threadId: string, runId: string): boolean =>
   getSessionEvents(threadId, [TURN_STARTED], {
     path: '$.runId',
     value: runId,
   }).length > 0;
-
-const buildReviewQueueItem = (run: AgentRun): ReviewQueueItem => {
-  const thread = run.threadId ? chatThreadDb.getChatThread(run.threadId) : null;
-  const summarySource = run.output?.text || run.working?.accumulatedText || '';
-  const truncated =
-    summarySource.length > SUMMARY_MAX_CHARS
-      ? `${summarySource.slice(0, SUMMARY_MAX_CHARS).trimEnd()}…`
-      : summarySource;
-
-  return {
-    runId: run.id,
-    kind: run.kind,
-    status: run.status,
-    threadId: run.threadId,
-    threadTitle: thread?.title || undefined,
-    startedAt: run.createdAt,
-    updatedAt: run.updatedAt,
-    summary: truncated,
-    error: run.error?.message,
-  };
-};
-
-export const listReviewQueue = (limit = 20): ReviewQueueItem[] =>
-  agentRunDb
-    .listAgentRunsByKinds(REVIEW_QUEUE_KINDS, {
-      statuses: ['completed', 'failed'],
-      limit,
-    })
-    .map(buildReviewQueueItem);
 
 export const createChatRuns = (deps: ChatRunsDeps) => ({
   listRuns: (threadId: string) => agentRunDb.listAgentRunsByThread(threadId),
@@ -66,17 +27,7 @@ export const createChatRuns = (deps: ChatRunsDeps) => ({
   listRunsByStatus: (statuses: AgentRunStatus[], opts?: { clientId?: string; limit?: number }) =>
     agentRunDb.listAgentRunsByStatus(statuses, opts),
 
-  listReviewQueue: (limit?: number) => listReviewQueue(limit),
-
   getRunTrace: (runId: string) => agentRunDb.getAgentRunTrace(runId),
-
-  getRunTrajectory: (runId: string): AtifTrajectory | null => {
-    const trace = agentRunDb.getAgentRunTrace(runId);
-    if (!trace) return null;
-    return buildRunTrajectory(trace.run, trace.steps);
-  },
-
-  getRunTree: (rootRunId: string) => agentRunDb.getAgentRunTree(rootRunId),
 
   cancelRun: (runId: string): { success: boolean; error?: string } => {
     const run = agentRunDb.getAgentRun(runId);

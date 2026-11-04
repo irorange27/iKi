@@ -10,15 +10,27 @@ import {
   TOOL_EXECUTED,
   type RebuiltThreadView,
 } from './session_log';
-import { TOOL_EXECUTION_FINISHED, TOOL_EXECUTION_STARTED } from './tool_execution';
+import {
+  exchangeToModelMessages,
+  readToolExecutionFact,
+} from './tool_execution';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
+import type { ThreadWorkspaceSelection } from '../workspaces/thread_workspace';
 import { resolveToolCallMaxIterations } from './constants';
 
-export type RunTurnPlan = {
+/**
+ * The turn plan recovered from a persisted run row, for resume and retry.
+ *
+ * No system prompt lives here on purpose: `turn_prep` composes the prompt for the
+ * turn being started now. A resumed turn that replayed the prompt recorded on the
+ * dead run would send two system prompts (the stale one plus the current one), and
+ * the stale copy carries a workspace, skill list and instructions that may no
+ * longer be true.
+ */
+type RunTurnPlan = {
   providerType: string;
   providerId?: string;
   model: string;
-  systemPrompt: string;
   enabledTools: string[];
   availableSkillIds: string[];
   approvalPolicy?: ApprovalPolicy;
@@ -31,87 +43,83 @@ export type RunTurnPlan = {
 
   autonomous?: { maxIterations: number; continuePrompt?: string };
 
-  workspaceSelection?: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null;
+  workspaceSelection?: ThreadWorkspaceSelection | null;
 };
 
-export type RunTurnPlanFallback = {
-  providerType?: string | null;
-  providerId?: string | null;
-  model?: string | null;
-  systemPrompt?: string | null;
-  enabledTools?: string[] | null;
-  availableSkillIds?: string[] | null;
-  maxIterations?: number | null;
-};
-
-const trimmedOrUndefined = (value: string | null | undefined): string | undefined => {
+const trimmedOrUndefined = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const getRunMaxIterations = (run: AgentRun | null | undefined): number | undefined => {
-  const value = run?.input?.metadata?.maxIterations;
+const getRunMaxIterations = (run: AgentRun): number | undefined => {
+  const value = run.input?.metadata?.maxIterations;
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   return Math.max(1, Math.trunc(value));
 };
 
-export const deriveRunTurnPlan = (
-  run: AgentRun | null | undefined,
-  fallback?: RunTurnPlanFallback
-): RunTurnPlan => {
-  const metadata = run?.input?.metadata ?? {};
+export const deriveRunTurnPlan = (run: AgentRun): RunTurnPlan => {
+  const metadata = run.input?.metadata ?? {};
   const requireApproval =
     typeof metadata.requireApproval === 'boolean' ? metadata.requireApproval : undefined;
-  const reasoningEffort =
-    typeof metadata.reasoningEffort === 'string' && metadata.reasoningEffort.trim()
-      ? metadata.reasoningEffort.trim()
-      : undefined;
+  const reasoningEffort = trimmedOrUndefined(metadata.reasoningEffort);
   const workspaceSelectionMetadata = metadata.workspaceSelection;
   const workspaceSelection =
     workspaceSelectionMetadata === null ||
     (workspaceSelectionMetadata && typeof workspaceSelectionMetadata === 'object')
-      ? (workspaceSelectionMetadata as import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null)
+      ? (workspaceSelectionMetadata as ThreadWorkspaceSelection | null)
       : undefined;
   const autonomousMetadata = metadata.autonomous as
     | { maxIterations?: unknown; continuePrompt?: unknown }
     | undefined;
   const autonomous =
-    autonomousMetadata && typeof autonomousMetadata === 'object' && typeof autonomousMetadata.maxIterations === 'number' && Number.isFinite(autonomousMetadata.maxIterations)
+    autonomousMetadata &&
+    typeof autonomousMetadata === 'object' &&
+    typeof autonomousMetadata.maxIterations === 'number' &&
+    Number.isFinite(autonomousMetadata.maxIterations)
       ? {
           maxIterations: Math.max(1, Math.trunc(autonomousMetadata.maxIterations)),
-          ...(typeof autonomousMetadata.continuePrompt === 'string' && autonomousMetadata.continuePrompt
+          ...(typeof autonomousMetadata.continuePrompt === 'string' &&
+          autonomousMetadata.continuePrompt
             ? { continuePrompt: autonomousMetadata.continuePrompt }
             : {}),
         }
       : undefined;
 
   return {
-    providerType:
-      trimmedOrUndefined(run?.providerType) ?? trimmedOrUndefined(fallback?.providerType) ?? '',
-    providerId:
-      trimmedOrUndefined(run?.providerId) ?? trimmedOrUndefined(fallback?.providerId),
-    model: trimmedOrUndefined(run?.model) ?? trimmedOrUndefined(fallback?.model) ?? '',
-    systemPrompt:
-      typeof run?.systemPrompt === 'string' && run.systemPrompt.length > 0
-        ? run.systemPrompt
-        : typeof fallback?.systemPrompt === 'string'
-          ? fallback.systemPrompt
-          : '',
-    enabledTools: run?.enabledTools ?? fallback?.enabledTools ?? [],
-    availableSkillIds: run?.availableSkillIds ?? fallback?.availableSkillIds ?? [],
+    providerType: trimmedOrUndefined(run.providerType) ?? '',
+    providerId: trimmedOrUndefined(run.providerId),
+    model: trimmedOrUndefined(run.model) ?? '',
+    enabledTools: run.enabledTools ?? [],
+    availableSkillIds: run.availableSkillIds ?? [],
     approvalPolicy: parseApprovalPolicy(metadata.approvalPolicy) ?? undefined,
     requireApproval,
     ...(reasoningEffort ? { reasoningEffort } : {}),
     ...(autonomous ? { autonomous } : {}),
     ...(workspaceSelection !== undefined ? { workspaceSelection } : {}),
-    maxIterations: resolveToolCallMaxIterations(
-      getRunMaxIterations(run) ?? fallback?.maxIterations ?? undefined
-    ),
+    maxIterations: resolveToolCallMaxIterations(getRunMaxIterations(run)),
   };
 };
 
 type ResumeKind = NonNullable<NonNullable<ChatTurnOptions['runConfig']>['kind']>;
+
+/** A journal entry whose shape this build cannot read. */
+export class UnrepresentableExecutionError extends Error {
+  constructor() {
+    super('A journaled tool execution of the dead chain cannot be represented from the log.');
+    this.name = 'UnrepresentableExecutionError';
+  }
+}
+
+/** An execution that began but never recorded what it did. */
+export class UnfinishedExecutionError extends Error {
+  constructor() {
+    super(
+      'A tool execution of the dead chain started but never recorded its outcome; its effect is unknown and the recovery cannot continue.'
+    );
+    this.name = 'UnfinishedExecutionError';
+  }
+}
 
 export const journaledExchangePairs = (
   events: RebuiltThreadView['events'],
@@ -120,10 +128,6 @@ export const journaledExchangePairs = (
   if (chainRunIds.length === 0) return [];
   const chain = new Set(chainRunIds);
   const chainApprovalIds = new Set<string>();
-
-  const startedApprovalIds = new Set<string>();
-
-  const finishedApprovalIds = new Set<string>();
   for (const event of events) {
     if (event.type !== APPROVAL_REQUESTED) continue;
     const payload = event.payload as { approvalId?: unknown; runId?: unknown };
@@ -135,116 +139,61 @@ export const journaledExchangePairs = (
       chainApprovalIds.add(payload.approvalId);
     }
   }
-  if (chainApprovalIds.size === 0 && !events.some(event => event.type === TOOL_EXECUTED)) return [];
-  const pairs: ModelMessage[] = [];
-  const pushPair = (
-    toolCallId: string,
-    toolName: string,
-    args: unknown,
-    output: unknown
-  ) => {
-    pairs.push(
-      {
-        role: 'assistant',
-        content: [{ type: 'tool-call', toolCallId, toolName, input: args }],
-      },
-      {
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId,
-            toolName,
 
-            output: output as Extract<
-              Extract<ModelMessage, { role: 'tool' }>['content'][number],
-              { type: 'tool-result' }
-            >['output'],
-          },
-        ],
-      }
-    );
-  };
-  const unrepresentable = () =>
-    new Error('A journaled tool execution of the dead chain cannot be represented from the log.');
+  const pairs: ModelMessage[] = [];
+  const finishedApprovalIds = new Set<string>();
+  const startedApprovalIds = new Set<string>();
+
   for (const event of events) {
-    if (event.type === TOOL_EXECUTION_STARTED) {
-      const payload = event.payload as { binding?: { approvalId?: unknown } };
-      const approvalId = payload.binding?.approvalId;
-      if (typeof approvalId === 'string' && chainApprovalIds.has(approvalId)) {
-        startedApprovalIds.add(approvalId);
+    const fact = readToolExecutionFact(event);
+    if (fact) {
+      if (!chainApprovalIds.has(fact.approvalId)) continue;
+      if (fact.kind === 'unreadable') throw new UnrepresentableExecutionError();
+      startedApprovalIds.add(fact.approvalId);
+      if (fact.kind === 'exchange') {
+        finishedApprovalIds.add(fact.approvalId);
+        pairs.push(...exchangeToModelMessages(fact.exchange));
       }
       continue;
     }
-    if (event.type === TOOL_EXECUTION_FINISHED) {
-      const payload = event.payload as {
-        binding?: {
-          approvalId?: unknown;
-          toolCallId?: unknown;
-          toolName?: unknown;
-          args?: unknown;
-        };
-        result?: { toolCallId?: unknown; toolName?: unknown; output?: unknown };
-      };
-      const binding = payload.binding;
-      const result = payload.result;
-      if (
-        !binding ||
-        typeof binding.approvalId !== 'string' ||
-        !chainApprovalIds.has(binding.approvalId)
-      )
-        continue;
-      if (
-        typeof binding.toolCallId !== 'string' ||
-        typeof binding.toolName !== 'string' ||
-        typeof binding.args !== 'object' ||
-        binding.args === null ||
-        !result ||
-        result.toolCallId !== binding.toolCallId ||
-        result.toolName !== binding.toolName
-      ) {
-        throw unrepresentable();
-      }
-      finishedApprovalIds.add(binding.approvalId);
-      pushPair(binding.toolCallId, binding.toolName, binding.args, result.output);
-      continue;
+    if (event.type !== TOOL_EXECUTED) continue;
+    const payload = event.payload as {
+      runId?: unknown;
+      toolCallId?: unknown;
+      toolName?: unknown;
+      args?: unknown;
+      output?: unknown;
+    };
+    if (typeof payload.runId !== 'string' || !chain.has(payload.runId)) continue;
+    if (
+      typeof payload.toolCallId !== 'string' ||
+      !payload.toolCallId ||
+      typeof payload.toolName !== 'string' ||
+      !payload.toolName ||
+      payload.output === undefined
+    ) {
+      throw new UnrepresentableExecutionError();
     }
-    if (event.type === TOOL_EXECUTED) {
-      const payload = event.payload as {
-        runId?: unknown;
-        toolCallId?: unknown;
-        toolName?: unknown;
-        args?: unknown;
-        result?: { toolCallId?: unknown; toolName?: unknown; output?: unknown };
-      };
-      if (typeof payload.runId !== 'string' || !chain.has(payload.runId)) continue;
-      if (
-        typeof payload.toolCallId !== 'string' ||
-        payload.toolCallId.length === 0 ||
-        typeof payload.toolName !== 'string' ||
-        typeof payload.args !== 'object' ||
-        payload.args === null ||
-        !payload.result ||
-        payload.result.toolCallId !== payload.toolCallId ||
-        payload.result.toolName !== payload.toolName
-      ) {
-        throw unrepresentable();
-      }
-      pushPair(payload.toolCallId, payload.toolName, payload.args, payload.result.output);
-    }
+    pairs.push(
+      ...exchangeToModelMessages({
+        toolCallId: payload.toolCallId,
+        toolName: payload.toolName,
+        args: payload.args,
+        output: payload.output,
+      })
+    );
   }
 
+  // An execution that started but never recorded its outcome has an unknown effect:
+  // the tool may have half-run. Rebuilding history around it would tell the model
+  // the call produced something, so recovery refuses to continue instead.
   for (const approvalId of startedApprovalIds) {
-    if (!finishedApprovalIds.has(approvalId)) {
-      throw new Error(
-        'A tool execution of the dead chain started but never recorded its outcome; its effect is unknown and the recovery cannot continue.'
-      );
-    }
+    if (!finishedApprovalIds.has(approvalId)) throw new UnfinishedExecutionError();
   }
   return pairs;
 };
 
-export const resumeHistoryFromReplay = async (
+const resumeHistoryFromReplay = async (
   replay: RebuiltThreadView
 ): Promise<ModelMessage[] | null> => {
   if (replay.messages.length === 0) return null;
@@ -256,7 +205,6 @@ export const rebuildResumeHistoryFromEvents = async (
   excludeRunIds?: string[]
 ): Promise<{
   history: ModelMessage[];
-  systemPrompts: string[];
   continuation: boolean;
   inputRunId?: string;
 } | null> => {
@@ -266,7 +214,6 @@ export const rebuildResumeHistoryFromEvents = async (
   const exchanges = journaledExchangePairs(replay.events, excludeRunIds ?? []);
   return {
     history: [...history, ...exchanges],
-    systemPrompts: replay.inputSystemPrompts,
     continuation: exchanges.length > 0,
     ...(replay.inputRunId ? { inputRunId: replay.inputRunId } : {}),
   };
@@ -284,15 +231,10 @@ export const deriveResumeStreamOptions = (
     adoptRunId?: string;
 
     inputMessages?: ModelMessage[];
-
-    systemPrompts?: string[];
   }
 ): ChatTurnOptions => {
   const plan = deriveRunTurnPlan(run);
   const recordedMessages = overrides.inputMessages ?? [];
-  const systemMessages = (overrides.systemPrompts ?? []).map(
-    content => ({ role: 'system', content }) as ModelMessage
-  );
 
   const continuation = recordedMessages.at(-1)?.role === 'tool';
   const { continuation: _stripped, ...callerMetadata } = (overrides.metadata ??
@@ -319,7 +261,7 @@ export const deriveResumeStreamOptions = (
       : {}),
     maxIterations: plan.maxIterations,
 
-    messages: [...systemMessages, ...recordedMessages] as ChatTurnOptions['messages'],
+    messages: recordedMessages as ChatTurnOptions['messages'],
     threadId: run.threadId ?? undefined,
     tools: plan.enabledTools,
     skillIds: plan.availableSkillIds,

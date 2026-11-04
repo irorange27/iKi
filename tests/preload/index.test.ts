@@ -71,9 +71,6 @@ describe('preload task IPC payload serialization', () => {
 
     await exposedApi.config.get();
     await exposedApi.config.getRuntimeInfo();
-    await exposedApi.config.getDaemonStatus();
-    await exposedApi.config.getDaemonLogs(10);
-    await exposedApi.config.controlDaemon('restart');
     await exposedApi.config.testNetwork({
       proxy: {
         enable: true,
@@ -126,32 +123,17 @@ describe('preload task IPC payload serialization', () => {
     await exposedApi.chat.threads.update('thread_1', { title: 'Updated' });
     await exposedApi.chat.threads.delete('thread_1');
     await exposedApi.chat.messages.list('thread_1');
-    await exposedApi.chat.messages.get('message_1');
     await exposedApi.chat.messages.update('message_1', { message: '{}' });
     await exposedApi.chat.messages.truncateAfter('thread_1', 'message_1');
     await exposedApi.chat.runs.list('thread_1');
     await exposedApi.chat.runs.getTrace('run_1');
-    await exposedApi.chat.runs.getTree('run_root_1');
     await exposedApi.chat.usage.summary('30d');
 
     await exposedApi.workspaces.list();
-    await exposedApi.workspaces.get('workspace_1');
-    await exposedApi.workspaces.getByPath('/tmp');
     await exposedApi.workspaces.getVisible();
     await exposedApi.workspaces.pickDirectory();
-    await exposedApi.workspaces.create({ id: 'workspace_1', path: '/tmp', name: 'tmp' });
-    await exposedApi.workspaces.update('workspace_1', { name: 'tmp-2' });
-    await exposedApi.workspaces.delete('workspace_1');
-    await exposedApi.workspaces.toggleVisibility('workspace_1');
 
-    await exposedApi.promptApps.list();
-    await exposedApi.promptApps.get('app_1');
     await exposedApi.promptApps.getEnabled();
-    await exposedApi.promptApps.create({ id: 'app_1', name: 'App' });
-    await exposedApi.promptApps.update('app_1', { description: 'Updated' });
-    await exposedApi.promptApps.delete('app_1');
-    await exposedApi.promptApps.toggleEnabled('app_1');
-    await exposedApi.promptApps.updateSortOrder('app_1', 3);
 
     await exposedApi.toolModel.get();
     await exposedApi.toolModel.generateTitle('Conversation');
@@ -194,9 +176,6 @@ describe('preload task IPC payload serialization', () => {
       expect.arrayContaining([
         'config:get',
         'config:get-runtime-info',
-        'config:get-daemon-status',
-        'config:get-daemon-logs',
-        'config:control-daemon',
         'config:test-network',
         'config:set',
         'updates:get-status',
@@ -218,29 +197,14 @@ describe('preload task IPC payload serialization', () => {
         'chat:threads:update',
         'chat:threads:delete',
         'chat:messages:list',
-        'chat:messages:get',
         'chat:messages:update',
         'chat:runs:list',
         'chat:runs:trace:get',
-        'chat:runs:tree:get',
         'chat:usage:summary',
         'workspaces:list',
-        'workspaces:get',
-        'workspaces:getByPath',
         'workspaces:getVisible',
         'workspaces:pickDirectory',
-        'workspaces:create',
-        'workspaces:update',
-        'workspaces:delete',
-        'workspaces:toggleVisibility',
-        'promptApps:list',
-        'promptApps:get',
         'promptApps:getEnabled',
-        'promptApps:create',
-        'promptApps:update',
-        'promptApps:delete',
-        'promptApps:toggleEnabled',
-        'promptApps:updateSortOrder',
         'toolModel:get',
         'toolModel:generateTitle',
         'toolModel:testLatency',

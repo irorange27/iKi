@@ -19,14 +19,8 @@ import {
 } from '@iki/backend/thread_session/turn_finalize';
 import { getToolModel } from '@iki/backend/provider/tool_model';
 import { resolveElement } from './main/services/devtools/element_source';
-import { startDaemonServer } from '@iki/daemon/server';
 import { electronFetchWithTimeout } from './main/services/network/electron_fetch';
 import { registerMainIpc } from './main/ipc';
-import {
-  DAEMON_MODE_ARG,
-  startDesktopDaemon,
-  stopDesktopDaemon,
-} from './main/services/daemon/daemon_lifecycle';
 import {
   startBackgroundRuntime,
   stopBackgroundRuntime,
@@ -38,14 +32,10 @@ import { installApplicationMenu } from './main/windows/app_menu';
 import { setDevDockIcon } from './main/windows/dev_dock_icon';
 import { syncCompanionWindowToConfig } from './main/windows/companion_window';
 
-const isDaemonMode = process.argv.includes(DAEMON_MODE_ARG);
 const appLogger = createLogger({ module: 'app' });
 
-setBaseLogContext({ process: isDaemonMode ? 'daemon' : 'main' });
-
-if (!isDaemonMode) {
-  setConsoleLoggingEnabled(false);
-}
+setBaseLogContext({ process: 'main' });
+setConsoleLoggingEnabled(false);
 
 wirePlatformContext();
 setHostFetch(electronFetchWithTimeout);
@@ -73,131 +63,93 @@ const updatePlatformDisplayScale = () => {
   }
 };
 
-if (isDaemonMode) {
-  const portEnv = Number(process.env.IKI_DAEMON_PORT || '');
-  const port = Number.isFinite(portEnv) && portEnv > 0 ? portEnv : undefined;
-  const host = process.env.IKI_DAEMON_HOST?.trim() || undefined;
+setPlatformInfo({
+  userDataPath: app.getPath('userData'),
+  locale: app.getLocale(),
+});
+syncLoggingConfig();
+appLogger.event({
+  level: 'info',
+  event: 'app.start',
+  message: 'Desktop process booting',
+  data: {
+    packaged: app.isPackaged,
+    platform: process.platform,
+  },
+});
 
-  appLogger.event({
-    level: 'info',
-    event: 'app.start',
-    message: 'Daemon process booting',
-    data: {
-      daemon_mode: true,
-      host: host || null,
-      port: port || null,
-    },
-  });
-  const daemonServer = startDaemonServer({ port, host });
-  startBackgroundRuntime();
-  void daemonServer.ready.catch(error => {
-    appLogger.event({
-      level: 'error',
-      event: 'app.start',
-      outcome: 'failed',
-      error,
-      message: 'Daemon process failed during startup.',
-      data: {
-        daemon_mode: true,
-        host: host || null,
-        port: port || null,
-      },
-    });
-    stopBackgroundRuntime();
-    process.exitCode = 1;
-  });
+if (app.isReady()) {
+  updatePlatformTheme();
+  updatePlatformDisplayScale();
 } else {
-  setPlatformInfo({
-    userDataPath: app.getPath('userData'),
-    locale: app.getLocale(),
+  app.on('ready', () => {
+    updatePlatformTheme();
+    updatePlatformDisplayScale();
   });
+}
+
+nativeTheme.on('updated', () => {
+  updatePlatformTheme();
+});
+
+registerStandardTools({
+  elementSourceResolver: request => resolveElement(request),
+  delegatedAgentRuntime: {
+    createRunTracker: createAgentRunTracker,
+    getConversationToolModel: getToolModel,
+    createHarness: startPiTurnHarness,
+    finalize: {
+      finalizeFailure: finalizeTurnFailure,
+      finalizeSuccess: finalizeHarnessTurn,
+    },
+  },
+});
+void getMcpManager().initialize();
+registerMainIpc();
+
+if (started) {
+  app.quit();
+}
+
+app.on('ready', () => {
   syncLoggingConfig();
   appLogger.event({
     level: 'info',
-    event: 'app.start',
-    message: 'Desktop process booting',
+    event: 'app.ready',
+    message: 'Application ready',
     data: {
-      daemon_mode: false,
       packaged: app.isPackaged,
       platform: process.platform,
     },
   });
+  installApplicationMenu();
+  startBackgroundRuntime();
+  startAppUpdateService(getAppConfig());
+  setDevDockIcon();
+  createMainWindow();
+  syncCompanionWindowToConfig(getAppConfig());
+  companionService.refreshAvailability();
+});
 
-  if (app.isReady()) {
-    updatePlatformTheme();
-    updatePlatformDisplayScale();
-  } else {
-    app.on('ready', () => {
-      updatePlatformTheme();
-      updatePlatformDisplayScale();
-    });
-  }
-
-  nativeTheme.on('updated', () => {
-    updatePlatformTheme();
+app.on('before-quit', () => {
+  appLogger.event({
+    level: 'info',
+    event: 'app.shutdown',
+    message: 'Application shutting down',
   });
+  stopBackgroundRuntime();
+});
 
-  registerStandardTools({
-    elementSourceResolver: request => resolveElement(request),
-    delegatedAgentRuntime: {
-      createRunTracker: createAgentRunTracker,
-      getConversationToolModel: getToolModel,
-      createHarness: startPiTurnHarness,
-      finalize: {
-        finalizeFailure: finalizeTurnFailure,
-        finalizeSuccess: finalizeHarnessTurn,
-      },
-    },
-  });
-  void getMcpManager().initialize();
-  registerMainIpc();
-
-  if (started) {
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
     app.quit();
   }
+});
 
-  app.on('ready', () => {
-    syncLoggingConfig();
-    appLogger.event({
-      level: 'info',
-      event: 'app.ready',
-      message: 'Application ready',
-      data: {
-        packaged: app.isPackaged,
-        platform: process.platform,
-      },
-    });
-    installApplicationMenu();
-    startBackgroundRuntime();
-    startAppUpdateService(getAppConfig());
-    void startDesktopDaemon();
-    setDevDockIcon();
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
     createMainWindow();
     syncCompanionWindowToConfig(getAppConfig());
     companionService.refreshAvailability();
-  });
-
-  app.on('before-quit', () => {
-    appLogger.event({
-      level: 'info',
-      event: 'app.shutdown',
-      message: 'Application shutting down',
-    });
-    stopBackgroundRuntime();
-    stopDesktopDaemon();
-  });
-
-  app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-      app.quit();
-    }
-  });
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
-      syncCompanionWindowToConfig(getAppConfig());
-      companionService.refreshAvailability();
-    }
-  });
-}
+  }
+});

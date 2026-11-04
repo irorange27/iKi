@@ -1,8 +1,6 @@
 import { createLogger } from '@iki/backend/logger';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import type { AgentRunStatus } from '@iki/backend/types/agent_run';
-import type { ExecutionPlan } from './execution_plan';
-import { parseExecutionPlanValue } from './execution_plan_codec';
 import {
   appendSessionFacts,
   getSessionEvents,
@@ -33,37 +31,61 @@ export class SessionLogWriteError extends Error {
   }
 }
 
-export const INPUT_ACCEPTED = 'input_accepted';
-export const TURN_STARTED = 'turn_started';
+export class SessionLogVersionError extends Error {
+  constructor(subject: string) {
+    super(`Unsupported ${subject} event version.`);
+    this.name = 'SessionLogVersionError';
+  }
+}
 
-export const TOOL_EXECUTED = 'tool_executed';
+// The event names and version are defined once, in types/session_events.ts, so
+// that the DB module and turn_prep's persistence port can stamp and match the same
+// strings without reaching up into thread_session/. Re-exported here because the
+// session log is where a thread's facts are appended and read back.
+export {
+  INPUT_ACCEPTED,
+  TURN_STARTED,
+  TOOL_EXECUTED,
+  STEERING_INPUT_ACCEPTED,
+  MODEL_TEXT_COMMITTED,
+  MODEL_OUTPUT_COMMITTED,
+  APPROVAL_REQUESTED,
+  APPROVAL_DECIDED,
+  MESSAGES_TRUNCATED,
+  SESSION_EVENT_VERSION,
+} from '@iki/backend/types/session_events';
+import {
+  INPUT_ACCEPTED,
+  TURN_STARTED,
+  STEERING_INPUT_ACCEPTED,
+  MODEL_TEXT_COMMITTED,
+  MODEL_OUTPUT_COMMITTED,
+  APPROVAL_REQUESTED,
+  APPROVAL_DECIDED,
+  MESSAGES_TRUNCATED,
+  SESSION_EVENT_VERSION,
+} from '@iki/backend/types/session_events';
 
-export const STEERING_INPUT_ACCEPTED = 'steering_input_accepted';
-export const MODEL_TEXT_COMMITTED = 'model_text_committed';
-export const MODEL_OUTPUT_COMMITTED = 'model_output_committed';
 const TURN_COMPLETED = 'turn_completed';
 const TURN_FAILED = 'turn_failed';
 const TURN_CANCELLED = 'turn_cancelled';
-export const APPROVAL_REQUESTED = 'approval_requested';
-export const APPROVAL_DECIDED = 'approval_decided';
 
-export const MESSAGES_TRUNCATED = 'messages_truncated';
-
-export const SESSION_EVENT_VERSION = 1;
-
-export type InputAcceptedPayload = {
+/**
+ * The accepted input of a turn. Only the conversation travels here: the system
+ * prompt is composed fresh by `turn_prep` on every turn, so storing a copy of it
+ * would give a second owner to a value that has one, and a resume would replay a
+ * stale prompt alongside the current one.
+ */
+type InputAcceptedPayload = {
   messageId: string;
   message: ChatUiMessage;
 
   runId?: string;
-
-  system?: string[];
 };
 
-export type TurnStartedPayload = {
+type TurnStartedPayload = {
   runId: string;
   kind: string;
-  plan: ExecutionPlan;
 };
 
 export type SteeringInputAcceptedPayload = {
@@ -74,7 +96,7 @@ export type SteeringInputAcceptedPayload = {
   text: string;
 };
 
-export type ModelOutputCommittedPayload = {
+type ModelOutputCommittedPayload = {
   runId: string;
   messageId: string;
 
@@ -82,7 +104,7 @@ export type ModelOutputCommittedPayload = {
   transport: string;
 };
 
-export type TurnTerminalPayload = {
+type TurnTerminalPayload = {
   runId: string;
   status: AgentRunStatus;
   finishReason?: string;
@@ -134,7 +156,7 @@ export const recordFailureTerminalEvent = (
   }
 };
 
-export type TurnFact = {
+type TurnFact = {
   input?: InputAcceptedPayload;
   started?: TurnStartedPayload;
   committed?: ModelOutputCommittedPayload;
@@ -159,17 +181,15 @@ export const turnFactsToEvents = (facts: TurnFact): NewSessionEvent[] => {
   return events;
 };
 
-export type RebuiltTurn = {
+type RebuiltTurn = {
   runId: string;
   kind: string;
   status: AgentRunStatus;
   finishReason?: string;
   errorText?: string;
-
-  plan?: ExecutionPlan;
 };
 
-export type RebuiltApproval = {
+type RebuiltApproval = {
   approvalId: string;
   status: 'pending' | 'approved' | 'rejected';
   sessionId?: string;
@@ -182,13 +202,10 @@ export type RebuiltApproval = {
 };
 
 export type RebuiltThreadView = {
-  messageId: string;
   events: StoredSessionEvent[];
   messages: ChatUiMessage[];
   turns: RebuiltTurn[];
   approvals: RebuiltApproval[];
-
-  inputSystemPrompts: string[];
 
   inputRunId?: string;
 };
@@ -199,6 +216,20 @@ export const asChatUiMessage = (value: unknown): ChatUiMessage | null => {
   if (typeof candidate.id !== 'string' || typeof candidate.role !== 'string') return null;
   if (!Array.isArray(candidate.parts)) return null;
   return value as ChatUiMessage;
+};
+
+/**
+ * One guard for every reader that cannot make sense of an event stamped with a
+ * version this build does not understand. Failing here is better than rebuilding
+ * a thread from facts whose shape we are guessing.
+ */
+export const assertSupportedEventVersions = (
+  events: readonly StoredSessionEvent[],
+  subject: string
+): void => {
+  if (events.some(event => event.version !== SESSION_EVENT_VERSION)) {
+    throw new SessionLogVersionError(subject);
+  }
 };
 
 export const rebuildThreadViewFromEvents = (
@@ -219,10 +250,9 @@ export const rebuildThreadViewFromEvents = (
   const messages: ChatUiMessage[] = [];
   const turns = new Map<string, RebuiltTurn>();
   const approvals = new Map<string, RebuiltApproval>();
-  let inputSystemPrompts: string[] = [];
-  let inputRunId: string | undefined;
-
-  const inputBindings: { messageId: string; system: string[]; runId?: string }[] = [];
+  // Accepted inputs in log order, so a truncation can move the replay tail to the
+  // newest input that survived rather than to one that was just deleted.
+  const inputs: { messageId: string; runId?: string }[] = [];
 
   for (const event of events) {
     const payload = event.payload as Record<string, unknown>;
@@ -235,17 +265,9 @@ export const rebuildThreadViewFromEvents = (
         if (existing >= 0) messages[existing] = message;
         else messages.push(message);
         if (event.type === INPUT_ACCEPTED) {
-
-          const system = payload.system;
-          inputSystemPrompts =
-            Array.isArray(system) && system.every(item => typeof item === 'string' && item.trim())
-              ? [...(system as string[])]
-              : [];
-          inputRunId = typeof payload.runId === 'string' ? payload.runId : undefined;
-          inputBindings.push({
+          inputs.push({
             messageId: message.id,
-            system: inputSystemPrompts,
-            ...(inputRunId ? { runId: inputRunId } : {}),
+            ...(typeof payload.runId === 'string' ? { runId: payload.runId } : {}),
           });
         }
         break;
@@ -299,12 +321,9 @@ export const rebuildThreadViewFromEvents = (
           if (deleted.has(messages[index]?.id ?? '')) messages.splice(index, 1);
         }
 
-        for (let index = inputBindings.length - 1; index >= 0; index -= 1) {
-          if (deleted.has(inputBindings[index]?.messageId ?? '')) inputBindings.splice(index, 1);
+        for (let index = inputs.length - 1; index >= 0; index -= 1) {
+          if (deleted.has(inputs[index]?.messageId ?? '')) inputs.splice(index, 1);
         }
-        const tail = inputBindings[inputBindings.length - 1];
-        inputSystemPrompts = tail ? [...tail.system] : [];
-        inputRunId = tail?.runId;
         break;
       }
       case APPROVAL_REQUESTED: {
@@ -340,13 +359,10 @@ export const rebuildThreadViewFromEvents = (
       case TURN_STARTED: {
         const runId = typeof payload.runId === 'string' ? payload.runId : '';
         if (!runId) break;
-
-        const plan = parseExecutionPlanValue(payload.plan);
         turns.set(runId, {
           runId,
           kind: typeof payload.kind === 'string' ? payload.kind : 'chat-turn',
           status: 'running',
-          ...(plan ? { plan } : {}),
         });
         break;
       }
@@ -375,13 +391,12 @@ export const rebuildThreadViewFromEvents = (
     }
   }
 
+  const tailInput = inputs[inputs.length - 1];
   return {
-    messageId: `replay:${threadId}`,
     events,
     messages,
     turns: [...turns.values()],
     approvals: [...approvals.values()],
-    inputSystemPrompts,
-    ...(inputRunId ? { inputRunId } : {}),
+    ...(tailInput?.runId ? { inputRunId: tailInput.runId } : {}),
   };
 };

@@ -9,8 +9,7 @@ import {
 } from './skills';
 import { BaseTool } from '@iki/backend/tools/base';
 import { zodSchemaToJsonSchema } from '@iki/backend/tools/json_schema';
-import { LoadSkillInputSchema, LoadSkillOutputSchema } from './schemas';
-import {
+import { LoadSkillInputSchema, LoadSkillOutputSchema ,
   DEFAULT_PERSONAL_SKILL_LIST_LIMIT,
   DEFAULT_PERSONAL_SKILL_READ_MAX_CHARS,
   DeletePersonalSkillInputSchema,

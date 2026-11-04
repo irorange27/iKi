@@ -1,6 +1,5 @@
 import type { AppConfig, WebSearchEngine } from '../types/config';
-import { clonePlainData } from '@iki/backend/utils/clone';
-import { DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT } from '@iki/backend/constants/daemon';
+import { toPlainData as clonePlainData } from '@iki/backend/utils/plain_clone';
 import { createDefaultThemeConfig } from '@iki/theme/registry';
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
@@ -97,10 +96,6 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     defaultApprovalMode: 'safe-only',
     requestTimeoutMs: 20000,
     maxConcurrentRequests: 4,
-  },
-  daemon: {
-    host: DEFAULT_DAEMON_HOST,
-    port: DEFAULT_DAEMON_PORT,
   },
 };
 
@@ -208,10 +203,6 @@ export const mergeAppConfigWithBase = (
     mcp: {
       ...base.mcp,
       ...(rawConfig.mcp ?? {}),
-    },
-    daemon: {
-      ...base.daemon,
-      ...(rawConfig.daemon ?? {}),
     },
   };
 };

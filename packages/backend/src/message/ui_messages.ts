@@ -10,11 +10,9 @@ import type {
   UiMessagePart,
 } from '@iki/backend/message/message_parts';
 import { isChatUiMetadataPart } from '@iki/backend/message/message_parts';
-import { isTerminalDynamicToolPart, toInterruptedToolPart } from '@iki/backend/message/tool_parts';
+import { isTerminalDynamicToolPart, toInterruptedToolPart , normalizeToolPartForValidation , isObjectRecord } from '@iki/backend/message/tool_parts';
 import type { ChatInputMessage, ChatTransportMessage, LlmChatMessage } from './chat_message_types';
 import { createPrefixedId } from '@iki/backend/utils/id';
-import { normalizeToolPartForValidation } from '@iki/backend/message/tool_parts';
-import { isObjectRecord } from '@iki/backend/message/tool_parts';
 
 const normalizeUiMessagesForValidation = (
   messages: ChatUiMessage[],
@@ -115,23 +113,15 @@ export const toModelInputMessages = async (
     );
     if (normalizedUiMessages.length === 0) return [];
 
-    const stampLiveApprovalRequests = (messages: ChatUiMessage[]): ChatUiMessage[] =>
-      messages.map(message => ({
-        ...message,
-        parts: message.parts.map((part): UiMessagePart => {
-          if (part.type !== 'dynamic-tool' || part.state !== 'approval-requested') return part;
-
-          const stamped = { ...part, state: 'approval-responded' };
-          return stamped as unknown as UiMessagePart;
-        }),
-      }));
-
-    const conversionReady =
-      options?.repairInterruptedTools === false
-        ? stampLiveApprovalRequests(normalizedUiMessages)
-        : normalizedUiMessages;
-
-    return convertUiMessagesToModel(conversionReady);
+    // `repairInterruptedTools: false` means "do not settle what is still open": a
+    // replay that may still be resumed keeps its non-terminal parts intact, and
+    // whatever is genuinely unanswered gets settled once, downstream, by the pairing
+    // owner (`agent/model_messages.ts: sanitizeModelConversationMessages`). This used
+    // to also stamp pending approvals into a `tool-approval-request` model part, a
+    // shape no provider accepts, which is why a strip step had to sit in front of
+    // every Pi request. The call's own id says it was asked; the pairing owner says
+    // it was never answered.
+    return convertUiMessagesToModel(normalizedUiMessages);
   }
 
   return messages as ChatInputMessage[];

@@ -13,20 +13,7 @@ type UiPartLike = {
   input?: unknown;
   output?: unknown;
   errorText?: unknown;
-  approval?: unknown;
 };
-
-const readApproval = (approval: unknown): { id?: string; approved?: boolean } => {
-  if (typeof approval !== 'object' || approval === null) return {};
-  const record = approval as { id?: unknown; approved?: unknown };
-  return {
-    ...(typeof record.id === 'string' && record.id.length > 0 ? { id: record.id } : {}),
-    ...(typeof record.approved === 'boolean' ? { approved: record.approved } : {}),
-  };
-};
-
-const readableApprovalId = (approval: unknown, toolCallId: string): string =>
-  readApproval(approval).id ?? toolCallId;
 
 const isObjectPart = (value: unknown): value is UiPartLike =>
   typeof value === 'object' && value !== null && typeof (value as { type?: unknown }).type === 'string';
@@ -107,18 +94,13 @@ const toModelMessage = (role: string, parts: UiPartLike[]): ModelMessage[] => {
 
     const state = readString(part.state);
 
-    const answered = readApproval(part.approval).approved;
-    if (state === 'approval-requested' || (state === 'approval-responded' && answered === undefined)) {
-      const approvalId = readableApprovalId(part.approval, toolCallId);
-      assistantParts.push({
-        type: 'tool-approval-request',
-        approvalId,
-        toolCallId,
-        ...(toolName ? { toolName } : {}),
-      });
-      continue;
-    }
-
+    // An unsettled call stays unsettled: this projection emits the call and stops.
+    // Pairing is one owner's job — `agent/model_messages.ts:
+    // sanitizeModelConversationMessages` answers whatever has no result, with text
+    // that says the call was never answered. The projection used to carry its own
+    // `tool-approval-request` marker for that purpose, which no provider understands
+    // and which forced a strip step upstream of every Pi request just to keep the
+    // wire legal.
     if (!isSettledToolState(state)) continue;
 
     toolResults.push({

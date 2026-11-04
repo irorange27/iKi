@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  buildThreadMarkdown,
-  parseStoredMessageForExport,
-} from '../../../packages/backend/src/message/thread_markdown_export';
+import { buildThreadMarkdown } from '@iki/backend/message/thread_markdown_export';
 
 describe('thread_markdown_export', () => {
   it('renders a header and only user/assistant text messages', () => {
@@ -45,14 +42,4 @@ describe('thread_markdown_export', () => {
     expect(markdown).toContain('no exportable messages');
   });
 
-  it('parses persisted message rows and rejects malformed ones', () => {
-    const parsed = parseStoredMessageForExport(
-      JSON.stringify({ role: 'user', parts: [{ type: 'text', text: 'hi' }] })
-    );
-    expect(parsed?.role).toBe('user');
-
-    expect(parseStoredMessageForExport('not json')).toBeNull();
-    expect(parseStoredMessageForExport(JSON.stringify({ parts: [] }))).toBeNull();
-    expect(parseStoredMessageForExport('')).toBeNull();
-  });
 });

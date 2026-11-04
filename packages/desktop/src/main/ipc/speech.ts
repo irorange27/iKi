@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 
 import { createLogger } from '@iki/backend/logger';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import {
   downloadWhisperNodeModel,
   getSpeechStatus,
@@ -8,6 +9,7 @@ import {
   transcribeSpeech,
 } from '../services/speech/speech_service';
 import type { SpeechTranscriptionInput } from '@iki/backend/types/speech';
+import { withIpcLogging } from '../utils/ipc_helpers';
 
 let speechIpcRegistered = false;
 const speechIpcLogger = createLogger({ module: 'speech_ipc' });
@@ -16,68 +18,42 @@ export const registerSpeechIpc = (): void => {
   if (speechIpcRegistered) return;
   speechIpcRegistered = true;
 
-  ipcMain.handle('speech:get-status', () => {
-    try {
-      return getSpeechStatus();
-    } catch (error: unknown) {
-      speechIpcLogger.event({
-        level: 'error',
-        event: 'ipc.speech.get_status',
-        outcome: 'failed',
-        error,
-      });
-      return { available: false, reason: 'Speech service unavailable' };
-    }
-  });
+  ipcMain.handle('speech:get-status', () =>
+    withIpcLogging<ReturnType<typeof getSpeechStatus>>(speechIpcLogger, 'ipc.speech.get_status', () => getSpeechStatus(), {
+      onError: () => ({ available: false, reason: 'Speech service unavailable' }),
+    })
+  );
 
-  ipcMain.handle('speech:transcribe', async (_event, input: SpeechTranscriptionInput) => {
-    try {
-      return await transcribeSpeech(input);
-    } catch (error: unknown) {
-      speechIpcLogger.event({
-        level: 'error',
-        event: 'ipc.speech.transcribe',
-        outcome: 'failed',
-        error,
-      });
-      throw error;
-    }
-  });
+  ipcMain.handle('speech:transcribe', (_event, input: SpeechTranscriptionInput) =>
+    withIpcLogging<Awaited<ReturnType<typeof transcribeSpeech>>>(speechIpcLogger, 'ipc.speech.transcribe', () => transcribeSpeech(input), {
+      onError: error => {
+        throw error;
+      },
+    })
+  );
 
-  ipcMain.handle('speech:list-models', () => {
-    try {
-      return listWhisperNodeModels();
-    } catch (error: unknown) {
-      speechIpcLogger.event({
-        level: 'error',
-        event: 'ipc.speech.list_models',
-        outcome: 'failed',
-        error,
-      });
-      return [];
-    }
-  });
+  ipcMain.handle('speech:list-models', () =>
+    withIpcLogging<Awaited<ReturnType<typeof listWhisperNodeModels>>>(speechIpcLogger, 'ipc.speech.list_models', () => listWhisperNodeModels(), {
+      onError: () => [],
+    })
+  );
 
-  ipcMain.handle('speech:download-model', async (event, modelName: string) => {
-    try {
-      return await downloadWhisperNodeModel(modelName, payload => {
-        event.sender.send('speech:download-progress', payload);
-      });
-    } catch (error: unknown) {
-      speechIpcLogger.event({
-        level: 'error',
-        event: 'ipc.speech.download_model',
-        outcome: 'failed',
-        error,
-        entity: {
+  ipcMain.handle('speech:download-model', (event, modelName: string) =>
+    withIpcLogging(
+      speechIpcLogger,
+      'ipc.speech.download_model',
+      () =>
+        downloadWhisperNodeModel(modelName, payload => {
+          event.sender.send('speech:download-progress', payload);
+        }),
+      {
+        entity: { model: modelName },
+        onError: error => ({
           model: modelName,
-        },
-      });
-      return {
-        model: modelName,
-        success: false,
-        error: error instanceof Error ? error.message : 'Download failed',
-      };
-    }
-  });
+          success: false,
+          error: getErrorMessage(error),
+        }),
+      }
+    )
+  );
 };

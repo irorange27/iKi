@@ -124,30 +124,19 @@
 </template>
 
 <script setup lang="ts">
-import SettingsSwitch from './SettingsSwitch.vue';
 import { computed, ref, watch } from 'vue';
-import { storeToRefs } from 'pinia';
 import { RefreshCw } from 'lucide-vue-next';
 
-import { useConfigStore } from '../../store/config';
 import { useI18n } from '../../i18n';
-import { getElectronApiSlice, getElectronApiSliceMethod } from '../../services/electron_api';
-import type { AppConfig } from '@iki/backend/types/config';
+import { getElectronApiSlice } from '../../services/electron_api';
 import type { SkillSummary } from '@iki/backend/types/skill';
 import { getErrorMessage } from '@iki/backend/utils/errors';
-
-const emit = defineEmits<{
-  'config-change': [];
-}>();
 
 const props = defineProps<{
   active: boolean;
 }>();
 const { t } = useI18n();
 const skillsApi = getElectronApiSlice('skills', ['list', 'roots', 'openRoot', 'openSkill', 'read']);
-
-const configStore = useConfigStore();
-const { config } = storeToRefs(configStore);
 
 const skills = ref<SkillSummary[]>([]);
 const skillsLoading = ref(false);

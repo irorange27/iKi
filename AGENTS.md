@@ -2,7 +2,7 @@
 
 **iKi**: an agent harness for durable, multi-agent, long-horizon work, with flexible control/admin surfaces. Supports any model provider.
 
-**Golden rule:** all business logic lives in `packages/backend` (pure Node/TS). `desktop/` (Electron) and `daemon/` (headless HTTP+WS) are thin shells; dependencies point one way only: `desktop`/`daemon` → `backend`.
+**Golden rule:** all business logic lives in `packages/backend` (pure Node/TS). `desktop/` (Electron) is a thin shell; dependencies point one way only: `desktop` → `backend`.
 
 ## Workflow
 
@@ -34,16 +34,14 @@ Read the [backend ownership and regression map](packages/backend/README.md#runti
 | Understand a module's contract surface before editing | `pnpm run arch:context <module-id>` (generated per-module context; registry: `scripts/module_registry.json`) — see the `architecture-governance` skill |
 | Tool approval UX | `packages/backend/src/thread_session/approval.ts` + renderer `modules/chat/tool_approval_controller.ts` |
 | New IPC channel | `desktop/src/preload/index.ts` + `main/ipc/` + types in `packages/backend/src/types/electron_api.ts` |
-| New daemon route | `packages/daemon/src/server_http.ts` or `server_ws.ts` |
 | Understand the chat-turn pipeline / harness | `packages/backend/README.md` (pipeline) + `docs/harness.md` (concepts) |
-| Test/debug/change iKi end-to-end from inside iKi (dogfood) | `docs/dogfood.md` — daemon-API + CDP loops, captured from a live run |
 | Package the app / cut a release | `packages/desktop/forge.config.ts` + `src/build/runtime_packaging.ts`; runbook: `docs/design/packaging-release.md` |
 
 ## Details live here (read on demand)
 
 - `packages/backend/README.md` — chat-turn pipeline, backend directory map, harness invariants (memory, approval, observability)
 - `docs/harness.md` — runtime concept model in current framework vocabulary (context engineering, op-loop/steering, HITL approvals, durable execution); read before renaming or moving these concepts
-- `packages/{desktop,daemon}/README.md` — shell boundary rules
+- `packages/desktop/README.md` — shell boundary rules
 - `docs/conventions.md` — code conventions, prohibited actions, landmines, testing, commit governance
 - `docs/decisions/` — ADRs: why `AgentHarness` exists, why `turn_prep/` is the boundary, why `@iki/core` was deleted
 - `postmortem/backend-bugs-2026-04.md` — bug patterns (pre-monorepo paths, see its banner)

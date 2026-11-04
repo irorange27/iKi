@@ -15,7 +15,6 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
     updateThread: vi.fn((id: string, thread: Record<string, unknown>) => ({ id, ...thread })),
     deleteThread: vi.fn((id: string) => ({ success: true, id })),
     listMessages: vi.fn((threadId: string) => [{ id: 'message_1', thread_id: threadId }]),
-    getMessage: vi.fn((id: string) => ({ id })),
     createMessage: vi.fn((message: Record<string, unknown>) => ({ id: 'message_new', ...message })),
     updateMessage: vi.fn((id: string, message: Record<string, unknown>) => ({ id, ...message })),
     truncateAfterMessage: vi.fn((threadId: string, messageId: string) => ({
@@ -31,7 +30,6 @@ const { ipcHandlers, ipcHandleMock, chatServiceMock } = vi.hoisted(() => ({
       latestCheckpoint: null,
       children: [],
     })),
-    getRunTree: vi.fn((rootRunId: string) => ({ rootRunId, traces: [] })),
     getModels: vi.fn(async (providerType: string) => [
       {
         id: `${providerType}-model`,
@@ -132,9 +130,6 @@ describe('chat IPC', () => {
     expect(await ipcHandlers.get('chat:messages:list')?.(null, 'thread_1')).toEqual([
       { id: 'message_1', thread_id: 'thread_1' },
     ]);
-    expect(await ipcHandlers.get('chat:messages:get')?.(null, 'message_1')).toEqual({
-      id: 'message_1',
-    });
     expect(
       await ipcHandlers.get('chat:messages:update')?.(null, 'message_1', messagePayload)
     ).toEqual({
@@ -154,10 +149,6 @@ describe('chat IPC', () => {
       steps: [],
       latestCheckpoint: null,
       children: [],
-    });
-    expect(await ipcHandlers.get('chat:runs:tree:get')?.(null, 'run_root_1')).toEqual({
-      rootRunId: 'run_root_1',
-      traces: [],
     });
 
     expect(await ipcHandlers.get('chat:getModels')?.(null, 'openai')).toEqual([
@@ -197,11 +188,9 @@ describe('chat IPC', () => {
     expect(chatServiceMock.updateThread).toHaveBeenCalledWith('thread_1', threadPayload);
     expect(chatServiceMock.deleteThread).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.listMessages).toHaveBeenCalledWith('thread_1');
-    expect(chatServiceMock.getMessage).toHaveBeenCalledWith('message_1');
     expect(chatServiceMock.updateMessage).toHaveBeenCalledWith('message_1', messagePayload);
     expect(chatServiceMock.listRuns).toHaveBeenCalledWith('thread_1');
     expect(chatServiceMock.getRunTrace).toHaveBeenCalledWith('run_1');
-    expect(chatServiceMock.getRunTree).toHaveBeenCalledWith('run_root_1');
     expect(chatServiceMock.getModels).toHaveBeenCalledWith('openai', undefined, null);
     expect(chatServiceMock.isProviderConfigured).toHaveBeenCalledWith('openai', undefined);
     expect(chatServiceMock.stopStream).toHaveBeenCalledWith(77);

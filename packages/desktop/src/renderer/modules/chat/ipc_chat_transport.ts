@@ -1,7 +1,7 @@
 import type { UiChatTransport } from '@iki/backend/message/ui_protocol';
 
 import type { ChatInvocationOptions, ElectronApi } from '@iki/backend/types/electron_api';
-import { clonePlainData } from '@iki/backend/utils/clone';
+import { toPlainData as clonePlainData } from '@iki/backend/utils/plain_clone';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 import { createLogger } from '../../logger';
 import type { ChatUiMessageChunk } from '@iki/backend/message/message_parts';

@@ -1,14 +1,12 @@
 import { defineStore } from 'pinia';
 import { ref, watch, type Ref } from 'vue';
 
-import type { ChatUiMessage } from '@iki/backend/message/message_parts';
-
 import { toUiMessages } from '../modules/chat/ui_message_convert';
 import { parseStoredUiMessage } from '../modules/chat/ui_message_storage';
 import { resetToolUiStateMap } from '../modules/chat/tool_ui_state';
-import { extractTextFromMessage } from '../modules/chat/ui_message_text';
 import { isObjectRecord } from '@iki/backend/utils/guards';
-import type { ChatMessage, ChatThread as StoredChatThread } from '@iki/backend/types/chat';
+import type { ChatThread as StoredChatThread } from '@iki/backend/types/chat';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 import { getCurrentLocale, translateWithLocale } from '../i18n';
@@ -21,11 +19,16 @@ import { normalizePersonality } from '@iki/backend/message/personality';
 import {
   parseApprovalPolicy,
   THREAD_APPROVAL_POLICY_KEY,
-  THREAD_SCRATCH_WORKSPACE_PREFIX,
   type ApprovalPolicy,
+  type ThreadWorkMode,
 } from '@iki/backend/workspaces/thread_mode';
-import { THREAD_WORKTREE_WORKSPACE_PREFIX } from '@iki/backend/workspaces/worktree_ids';
-import type { ThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
+import {
+  isThreadPrivateWorkspaceId,
+  normalizeModelId,
+  normalizeProviderId,
+  normalizeWorkspaceId,
+} from './thread_session/normalize';
+import { createThreadTitleActions } from './thread_session/thread_title';
 
 export type ChatThread = StoredChatThread;
 
@@ -43,34 +46,7 @@ type ThreadSessionRuntime = {
   persistDraftModelSelection?: (selection: DraftComposerSelection) => Promise<void> | void;
 };
 
-const TITLE_REGEN_INTERVAL = 2;
-const TITLE_FORCE_REGEN_LIMIT = 5;
 const threadSessionLogger = createLogger({ module: 'thread_session_store' });
-const DEFAULT_THREAD_TITLES = new Set([
-  translateWithLocale('en', 'chat.thread.newTitle'),
-  translateWithLocale('zh-CN', 'chat.thread.newTitle'),
-]);
-
-const normalizeWorkspaceId = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
-const isThreadPrivateWorkspaceId = (workspaceId: string): boolean =>
-  workspaceId.startsWith(THREAD_SCRATCH_WORKSPACE_PREFIX) ||
-  workspaceId.startsWith(THREAD_WORKTREE_WORKSPACE_PREFIX);
-
-const normalizeModelId = (value: unknown): string => {
-  if (typeof value !== 'string') return '';
-  return value.trim();
-};
-
-const normalizeProviderId = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
 
 export const useThreadSessionStore = defineStore('threadSession', () => {
   const currentThread = ref<ChatThread | null>(null);
@@ -86,6 +62,8 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   let runtime: ThreadSessionRuntime | null = null;
   const initRuntime = (deps: ThreadSessionRuntime) => {
     runtime = deps;
+    // Registered here (not at store creation) so the getter can track the
+    // draft-preference refs once they exist; the store body cannot.
     watch(
       () =>
         [
@@ -178,175 +156,17 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     }
   };
 
-  watch(
-    () =>
-      [
-        runtime?.preferredDraftModel?.value,
-        runtime?.preferredDraftProviderId?.value,
-        currentThread.value?.id ?? null,
-      ] as const,
-    ([, , activeThreadId]) => {
-      if (activeThreadId) return;
-      restoreDraftComposerSelection();
-    },
-    { immediate: true }
-  );
-
   const threadListRevision = ref(0);
   const refreshThreads = async () => {
     threadListRevision.value += 1;
   };
 
-  const buildClearedThreadInput = (thread: ChatThread): Partial<ChatThread> => ({
-    id: thread.id,
-    title: translateWithLocale(getCurrentLocale(), 'chat.thread.newTitle'),
-    model: typeof thread.model === 'string' && thread.model.trim() ? thread.model : undefined,
-    reasoning_effort:
-      typeof thread.reasoning_effort === 'string' && thread.reasoning_effort.trim()
-        ? thread.reasoning_effort
-        : undefined,
-    metadata:
-      typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
-    client_id:
-      typeof thread.client_id === 'string' && thread.client_id.trim()
-        ? thread.client_id
-        : undefined,
-    is_favorited: thread.is_favorited ? 1 : 0,
-    is_incognito: thread.is_incognito ? 1 : 0,
-    workspace_id: normalizeWorkspaceId(thread.workspace_id) ?? undefined,
-    enable_artifacts: thread.enable_artifacts ? 1 : 0,
-    artifact_workspace_id:
-      typeof thread.artifact_workspace_id === 'string' && thread.artifact_workspace_id.trim()
-        ? thread.artifact_workspace_id
-        : undefined,
-  });
-
-  const updateThreadTitle = async (title: string) => {
-    const { electronAPI } = requireRuntime();
-    if (!currentThread.value) return;
-    if (currentThread.value.title === title) return;
-
-    try {
-      await electronAPI.chat.threads.update(currentThread.value.id, { title });
-      if (currentThread.value) {
-        currentThread.value.title = title;
-      }
-      await refreshThreads();
-    } catch (error) {
-      threadSessionLogger.event({
-        level: 'error',
-        event: 'chat.thread.title_update',
-        outcome: 'failed',
-        error,
-        entity: {
-          thread_id: currentThread.value.id,
-        },
-      });
-    }
-  };
-
-  const updateThreadTitleById = async (threadId: string, title: string) => {
-    const { electronAPI } = requireRuntime();
-    if (!threadId || !title.trim()) return;
-
-    if (currentThread.value?.id === threadId) {
-      await updateThreadTitle(title);
-      return;
-    }
-
-    try {
-      await electronAPI.chat.threads.update(threadId, { title });
-      await refreshThreads();
-    } catch (error) {
-      threadSessionLogger.event({
-        level: 'error',
-        event: 'chat.thread.title_update',
-        outcome: 'failed',
-        error,
-        entity: {
-          thread_id: threadId,
-        },
-      });
-    }
-  };
-
-  const getConversationContentForTitle = (messages: ChatUiMessage[]): string => {
-    const lines: string[] = [];
-
-    for (const message of messages) {
-      const text = extractTextFromMessage(message).trim();
-      if (!text) continue;
-
-      if (message.role === 'user') {
-        lines.push(`User: ${text}`);
-      } else if (message.role === 'assistant') {
-        const truncated = text.length > 300 ? text.slice(0, 297) + '...' : text;
-        lines.push(`Assistant: ${truncated}`);
-      }
-    }
-
-    return lines.join('\n');
-  };
-
-  const getFallbackThreadTitle = (messages: ChatUiMessage[]): string | null => {
-    const userTexts = [...messages]
-      .reverse()
-      .filter(message => message.role === 'user')
-      .map(message => extractTextFromMessage(message).trim())
-      .filter(text => text.length > 0);
-    const bestText = userTexts.find(text => text.length > 10) ?? userTexts[0];
-    if (!bestText) return null;
-    return bestText.slice(0, 50) + (bestText.length > 50 ? '...' : '');
-  };
-
-  const shouldRegenerateThreadTitle = (
-    messages: ChatUiMessage[],
-    currentTitle: string
-  ): boolean => {
-    const assistantMessageCount = messages.filter(message => message.role === 'assistant').length;
-    if (assistantMessageCount === 0) return false;
-    if (DEFAULT_THREAD_TITLES.has(currentTitle)) return true;
-    if (assistantMessageCount <= TITLE_FORCE_REGEN_LIMIT) return true;
-    return assistantMessageCount % Math.max(TITLE_REGEN_INTERVAL, 2) === 0;
-  };
-
-  const generateThreadTitle = async (messages: ChatUiMessage[]): Promise<string | null> => {
-    const { electronAPI } = requireRuntime();
-    try {
-      const conversationContent = getConversationContentForTitle(messages);
-      if (!conversationContent.trim()) {
-        return getFallbackThreadTitle(messages);
-      }
-
-      const title = await electronAPI.toolModel.generateTitle(conversationContent);
-      return title || getFallbackThreadTitle(messages);
-    } catch (error) {
-      threadSessionLogger.event({
-        level: 'error',
-        event: 'chat.thread.title_generate',
-        outcome: 'failed',
-        error,
-      });
-      return getFallbackThreadTitle(messages);
-    }
-  };
-
-  const handleAssistantMessagePersisted = async (params: {
-    threadId: string;
-    messagesSnapshot: ChatUiMessage[];
-  }) => {
-    if (!currentThread.value || currentThread.value.id !== params.threadId) return;
-
-    if (
-      params.messagesSnapshot.length > 0 &&
-      shouldRegenerateThreadTitle(params.messagesSnapshot, currentThread.value.title)
-    ) {
-      const generatedTitle = await generateThreadTitle(params.messagesSnapshot);
-      if (generatedTitle) {
-        await updateThreadTitleById(params.threadId, generatedTitle);
-      }
-    }
-  };
+  const {
+    buildClearedThreadInput,
+    updateThreadTitle,
+    updateThreadTitleById,
+    handleAssistantMessagePersisted,
+  } = createThreadTitleActions({ requireRuntime, currentThread, refreshThreads });
 
   const createNewThread = async (options?: {
     model?: string;
@@ -414,16 +234,11 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
 
       if (currentThread.value?.id !== threadId) return;
 
-      const rows = Array.isArray(dbMessages)
-        ? dbMessages.filter(
-            (message): message is ChatMessage =>
-              isObjectRecord(message) &&
-              typeof message.id === 'string' &&
-              typeof message.thread_id === 'string' &&
-              typeof message.message === 'string'
-          )
-        : [];
-      const chatMessages = rows.map(row => parseStoredUiMessage(row));
+      // The session-log rebuild crosses the IPC as structured messages; the
+      // codec's normalizer is the defensive boundary, not a row parser.
+      const chatMessages = (Array.isArray(dbMessages) ? dbMessages : [])
+        .map(message => parseStoredUiMessage(message))
+        .filter((message): message is ChatUiMessage => message !== null && message.id !== '');
       messageStore.setAll(chatMessages);
       resetToolUiStateMap();
       scrollToBottom();
@@ -469,7 +284,6 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       syncApprovalPolicyState(thread);
       syncReasoningEffortState(thread);
       syncPersonalityState(thread);
-      syncApprovalPolicyState(thread);
       showWelcome.value = false;
       await loadThreadMessages(threadId);
     } catch (error) {

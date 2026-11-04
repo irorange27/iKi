@@ -44,6 +44,7 @@ import { listAgentRunsByThread } from '@iki/backend/db/agent_runs';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
+import { rebuildThreadViewFromEvents } from '@iki/backend/thread_session/session_log';
 
 let root: string;
 let conversation: ReturnType<typeof createChatPersistence>;
@@ -62,7 +63,7 @@ beforeEach(async () => {
   external.userData.mockReturnValue(root);
   initializeDatabase({ dbPath: path.join(root, 'discipline.db') });
     seedTurnProvider({ providerId: 'provider_primary', providerType: 'openai', model: 'test-model' });
-  conversation = createChatPersistence({
+  conversation = createChatPersistence({ rebuildMessages: (threadId: string) => rebuildThreadViewFromEvents(threadId).messages,
     memory: memory as never,
   });
   conversation.createThread({ id: 'review_settle', metadata: '{"mode":"chat"}' });

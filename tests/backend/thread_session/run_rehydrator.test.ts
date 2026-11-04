@@ -45,7 +45,6 @@ describe('deriveRunTurnPlan', () => {
       providerType: 'openai',
       providerId: 'prov_1',
       model: 'test-model',
-      systemPrompt: 'system prompt',
       enabledTools: ['read_file', 'shell'],
       availableSkillIds: ['skill_a'],
       approvalPolicy: 'trustWorkspace',
@@ -54,25 +53,8 @@ describe('deriveRunTurnPlan', () => {
     });
   });
 
-  it('falls back to the approval-session layer when the run row is missing', () => {
-    const plan = deriveRunTurnPlan(null, {
-      providerType: 'anthropic',
-      providerId: '  ',
-      model: 'fallback-model',
-      systemPrompt: 'fallback prompt',
-      enabledTools: ['web'],
-      availableSkillIds: null,
-      maxIterations: 5,
-    });
-    expect(plan.providerType).toBe('anthropic');
-    expect(plan.providerId).toBeUndefined();
-    expect(plan.model).toBe('fallback-model');
-    expect(plan.systemPrompt).toBe('fallback prompt');
-    expect(plan.enabledTools).toEqual(['web']);
-    expect(plan.availableSkillIds).toEqual([]);
-    expect(plan.approvalPolicy).toBeUndefined();
-    expect(plan.requireApproval).toBeUndefined();
-    expect(plan.maxIterations).toBe(5);
+  it('keeps the system prompt out of the resumed plan: turn_prep owns it', () => {
+    expect(deriveRunTurnPlan(baseRun)).not.toHaveProperty('systemPrompt');
   });
 
   it('uses nullish semantics for arrays: an empty run array is a value, not a gap', () => {
@@ -201,12 +183,7 @@ describe('journaledExchangePairs: an unknown effect is not continuable', () => {
       fact(4, 'tool_execution_finished', {
         binding,
         decision: 'approved',
-        result: {
-          type: 'tool-result',
-          toolCallId: binding.toolCallId,
-          toolName: binding.toolName,
-          output: { type: 'text', value: 'written' },
-        },
+        output: { type: 'text', value: 'written' },
       }),
     ];
 

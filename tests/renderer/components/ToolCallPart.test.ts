@@ -89,7 +89,7 @@ describe('ToolCallPart', () => {
     expect(wrapper.find('.tool-card-section').text()).toContain('Command');
     expect(wrapper.text()).toContain('pwd');
     expect(wrapper.text()).toContain('cwd: /tmp/demo');
-    expect(wrapper.text()).toContain('1.5 s');
+    expect(wrapper.text()).toContain('1.5s');
     expect(wrapper.find('.tool-call-id-value').text()).toBe('call_2');
 
     await wrapper.find('.tool-collapse-btn').trigger('click');

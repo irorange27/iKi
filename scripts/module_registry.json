@@ -3,78 +3,120 @@
   "modules": [
     {
       "id": "backend/thread_session",
-      "roots": ["packages/backend/src/thread_session"],
+      "roots": [
+        "packages/backend/src/thread_session"
+      ],
       "layer": "orchestration",
       "role": "Turn orchestration: session loop, streaming, approval persistence, recovery, run tracker, session-log authority",
-      "tests": ["tests/backend/thread_session"],
+      "tests": [
+        "tests/backend/thread_session"
+      ],
       "notes": "The durable-execution core. Approval/recovery/replay invariants here are pinned by the ownership map in packages/backend/README.md and protected by HARNESS_REVIEW.md."
     },
     {
       "id": "backend/agent",
-      "roots": ["packages/backend/src/agent"],
+      "roots": [
+        "packages/backend/src/agent"
+      ],
       "layer": "orchestration",
       "role": "Agent loop and harness: Pi turn harnesses, step budget, compaction, tool resolution",
-      "tests": ["tests/backend/agent"],
+      "tests": [
+        "tests/backend/agent"
+      ],
       "notes": "No abstraction layer between AgentHarness and AgentRunner (AGENTS.md non-negotiable)."
     },
     {
       "id": "backend/tools",
-      "roots": ["packages/backend/src/tools"],
+      "roots": [
+        "packages/backend/src/tools"
+      ],
       "layer": "domain",
       "role": "Concrete tools: registry, schemas, file/shell/web/skill/awaiter/agent tools",
-      "tests": ["tests/backend/tools"]
+      "tests": [
+        "tests/backend/tools"
+      ]
     },
     {
       "id": "backend/turn_prep",
-      "roots": ["packages/backend/src/turn_prep"],
+      "roots": [
+        "packages/backend/src/turn_prep"
+      ],
       "layer": "app",
       "role": "Pre-turn assembly: context blocks, tool guard, prompt inputs",
-      "tests": ["tests/backend/turn_prep"],
+      "tests": [
+        "tests/backend/turn_prep"
+      ],
       "notes": "thread_session reaches turn_prep only via injected ports (depcruiser R5)."
     },
     {
       "id": "backend/provider",
-      "roots": ["packages/backend/src/provider"],
+      "roots": [
+        "packages/backend/src/provider"
+      ],
       "layer": "domain",
       "role": "Model supply: LLM factory, pi adapter, model discovery, tool model",
-      "tests": ["tests/backend/provider"],
+      "tests": [
+        "tests/backend/provider"
+      ],
       "notes": "Leaf module — must not reach up into tools/session/orchestration (depcruiser R1)."
     },
     {
       "id": "backend/db",
-      "roots": ["packages/backend/src/db"],
+      "roots": [
+        "packages/backend/src/db"
+      ],
       "layer": "domain",
       "role": "SQLite persistence: schema baseline, migrations, row codecs",
-      "tests": ["tests/backend/db"],
+      "tests": [
+        "tests/backend/db"
+      ],
       "notes": "Migration modules must not reach for the getDb singleton (depcruiser db-migration-above-database)."
     },
     {
       "id": "backend/message",
-      "roots": ["packages/backend/src/message"],
+      "roots": [
+        "packages/backend/src/message"
+      ],
       "layer": "domain",
       "role": "Message codecs, ui/model conversions, system prompt assembly, markdown export",
-      "tests": ["tests/backend/message", "tests/backend/context"]
+      "tests": [
+        "tests/backend/message",
+        "tests/backend/context"
+      ]
     },
     {
       "id": "backend/mcp",
-      "roots": ["packages/backend/src/mcp"],
+      "roots": [
+        "packages/backend/src/mcp"
+      ],
       "layer": "app",
       "role": "MCP server lifecycle, transports, remote tool registration",
-      "tests": ["tests/backend/mcp"]
+      "tests": [
+        "tests/backend/mcp"
+      ]
     },
     {
       "id": "backend/awaiters",
-      "roots": ["packages/backend/src/awaiters"],
+      "roots": [
+        "packages/backend/src/awaiters"
+      ],
       "layer": "app",
       "role": "Continue-later wakes: awaiter manager, schedule, wake runs",
-      "tests": ["tests/backend/awaiters", "tests/main/services/awaiters"]
+      "tests": [
+        "tests/backend/awaiters",
+        "tests/main/services/awaiters"
+      ]
     },
     {
       "id": "backend/workspaces",
-      "roots": ["packages/backend/src/workspaces"],
+      "roots": [
+        "packages/backend/src/workspaces"
+      ],
       "layer": "domain",
       "role": "Workspace and thread modes: scratch workspaces, worktrees, approval-policy parse",
-      "tests": ["tests/backend/workspaces"]
+      "tests": [
+        "tests/backend/workspaces"
+      ]
     },
     {
       "id": "backend/foundation",
@@ -90,37 +132,62 @@
       ],
       "layer": "foundation",
       "role": "Shared foundation: guards, errors, config, types, logging, locale, http, aux-model runtimes",
-      "tests": ["tests/backend/utils", "tests/backend/network", "tests/backend/runtimes", "tests/shared"]
+      "tests": [
+        "tests/backend/utils",
+        "tests/backend/network",
+        "tests/backend/runtimes",
+        "tests/shared"
+      ]
     },
     {
       "id": "backend/standalone",
-      "roots": ["packages/backend/src"],
+      "roots": [
+        "packages/backend/src"
+      ],
       "layer": "foundation",
-      "role": "Top-level backend files (chat_platform, persona, logger, daemon logs) — catch-all below the named modules",
-      "tests": ["tests/backend/persona.test.ts", "tests/backend/logger.test.ts"],
+      "role": "Top-level backend files (chat_platform, persona, logger) — catch-all below the named modules",
+      "tests": [
+        "tests/backend/persona.test.ts",
+        "tests/backend/logger.test.ts"
+      ],
       "notes": "Any file here that grows a real job should be promoted into a named module."
     },
     {
       "id": "desktop/main",
-      "roots": ["packages/desktop/src/main", "packages/desktop/src/main.ts", "packages/desktop/src/preload"],
+      "roots": [
+        "packages/desktop/src/main",
+        "packages/desktop/src/main.ts",
+        "packages/desktop/src/preload"
+      ],
       "layer": "shell",
       "role": "Electron shell: IPC translate layer, windows, platform services. No business logic allowed.",
-      "tests": ["tests/main", "tests/preload"]
+      "tests": [
+        "tests/main",
+        "tests/preload"
+      ]
     },
     {
       "id": "desktop/renderer",
-      "roots": ["packages/desktop/src/renderer"],
+      "roots": [
+        "packages/desktop/src/renderer"
+      ],
       "layer": "ui",
       "role": "Vue 3 SPA: components, composables, stores, chat module. electronAPI is the only backend door.",
-      "tests": ["tests/renderer"],
+      "tests": [
+        "tests/renderer"
+      ],
       "notes": "Imports only pure backend types/utils (depcruiser renderer-backend-whitelist). knip does not parse .vue — renderer surface is guarded by vue-tsc + eslint instead."
     },
     {
       "id": "theme",
-      "roots": ["packages/theme/src"],
+      "roots": [
+        "packages/theme/src"
+      ],
       "layer": "foundation",
       "role": "Theme tokens, base46 compilation, theme editor logic",
-      "tests": ["tests/shared/theme_registry.test.ts"]
+      "tests": [
+        "tests/shared/theme_registry.test.ts"
+      ]
     }
   ]
 }

@@ -1,17 +1,16 @@
 import { createLogger } from '@iki/backend/logger';
-import { parseStoredUiMessageRow } from '@iki/backend/message/ui_message_codec';
-import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import { normalizeUiMessage } from '@iki/backend/message/ui_message_codec';
+import { isObjectRecord } from '@iki/backend/utils/guards';
 import { findMessageEvent } from '@iki/backend/db/session_events';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 
 const logger = createLogger({ module: 'turn_persistence' });
 
-export type ConversationStore = {
+type ConversationStore = {
   createMessage: (input: unknown) => unknown;
   upsertTurnMessage: (input: unknown) => unknown;
 };
-
-const UI_MESSAGE_METADATA_FORMAT = 'ai-ui-message-v1';
 
 export const pickUserTurnMessage = (
   options: ChatTurnOptions
@@ -26,53 +25,43 @@ export const pickUserTurnMessage = (
 export const pickIdLessSendInput = (
   options: ChatTurnOptions,
   runId: string
-): { messageId: string; message: ChatUiMessage; runId: string; system?: string[] } | undefined => {
+): { messageId: string; message: ChatUiMessage; runId: string } | undefined => {
   const lastUser = [...options.messages].reverse().find(message => message.role === 'user');
   const content = (lastUser as { content?: unknown } | undefined)?.content;
   if (!lastUser || typeof content !== 'string' || !content.trim()) return undefined;
-  const system: string[] = [];
-  for (const message of options.messages) {
-    if (message.role !== 'system') continue;
-    const systemContent = (message as { content?: unknown }).content;
-    if (typeof systemContent !== 'string') return undefined;
-    if (systemContent.trim()) system.push(systemContent);
-  }
   const messageId = `input_${runId}`;
   return {
     messageId,
     message: { id: messageId, role: 'user', parts: [{ type: 'text', text: content }] },
     runId,
-    ...(system.length > 0 ? { system } : {}),
   };
-};
-
-export const persistUserTurnMessage = (
-  _conversation: Pick<ConversationStore, 'createMessage'>,
-  options: ChatTurnOptions
-): string | undefined => {
-  if (!options.threadId) return undefined;
-  const picked = pickUserTurnMessage(options);
-  if (!picked) return undefined;
-  return picked.messageId;
 };
 
 const assistantUpsertChains = new Map<string, Promise<void>>();
 
+/**
+ * Persist the assistant message reduced from the UI chunk log the client
+ * consumed. `opts` is a required positional object, not loose trailing args:
+ * the call site must name the run that is writing the fact. That runId is what
+ * lets the replay's dead-chain exclusion drop every committed copy of a failed
+ * run — an unstamped copy survives exclusion and its settled tool parts re-enter
+ * the retry request as a duplicate tool-call the provider rejects.
+ */
 export const persistAssistantTurnMessage = (
   conversation: Pick<ConversationStore, 'upsertTurnMessage'>,
   threadId: string,
   message: { id: string; role: 'assistant'; parts: unknown[] },
   transport: string,
-  parentId?: string
+  opts: { runId: string }
 ): Promise<void> => {
   const run = (assistantUpsertChains.get(message.id) ?? Promise.resolve()).then(async () => {
     try {
       await conversation.upsertTurnMessage({
         id: message.id,
         thread_id: threadId,
-        ...(parentId ? { parent_id: parentId } : {}),
+        runId: opts.runId,
+        transport,
         message,
-        metadata: JSON.stringify({ format: UI_MESSAGE_METADATA_FORMAT, transport }),
       });
     } catch (error) {
       logger.event({
@@ -81,7 +70,7 @@ export const persistAssistantTurnMessage = (
         outcome: 'degraded',
         message: 'Failed to persist the assistant turn message.',
         error,
-        data: { thread_id: threadId, message_id: message.id },
+        data: { thread_id: threadId, message_id: message.id, run_id: opts.runId },
       });
     }
   });
@@ -100,14 +89,9 @@ export const loadPersistedAssistantParts = (messageId: string): unknown[] | unde
 
     const found = findMessageEvent(messageId);
     if (!found) return undefined;
-    const message = (found.payload as { message?: unknown }).message;
-    const parsed = parseStoredUiMessageRow({
-      id: messageId,
-      message: JSON.stringify(message ?? {}),
-    });
-    const parts =
-      parsed && typeof parsed === 'object' ? (parsed as { parts?: unknown }).parts : null;
-    return Array.isArray(parts) ? parts : undefined;
+    const payload = isObjectRecord(found.payload) ? found.payload : {};
+    const ui = normalizeUiMessage(payload.message, { fallbackId: messageId });
+    return ui ? ui.parts : undefined;
   } catch (error) {
     logger.event({
       level: 'warn',

@@ -7,10 +7,7 @@ import {
 import { isObjectRecord } from './message_parts';
 import { normalizeToolPartForValidation } from './tool_parts';
 
-export type StoredUiMessageRow = { id: string; message: string };
-export type ParsedUiMessage = ChatUiMessage;
-
-const normalizeRole = (role: unknown): ParsedUiMessage['role'] => {
+const normalizeRole = (role: unknown): ChatUiMessage['role'] => {
   if (role === 'system' || role === 'assistant' || role === 'user') {
     return role;
   }
@@ -22,40 +19,6 @@ const createTextPart = (text: string, state?: TextPart['state']): TextPart => ({
   text,
   ...(state ? { state } : {}),
 });
-
-export const sanitizeUiMessageJsonForStorage = (raw: string): string => {
-  if (typeof raw !== 'string') return String(raw);
-  const trimmed = raw.trim();
-  if (!trimmed) return raw;
-
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (!isObjectRecord(parsed)) return raw;
-
-    const role =
-      parsed.role === 'system' || parsed.role === 'assistant' || parsed.role === 'user'
-        ? parsed.role
-        : null;
-    if (!role) return raw;
-
-    const sanitized: Record<string, unknown> = { role };
-    const parts = Array.isArray(parsed.parts) ? parsed.parts : null;
-
-    if (parts) {
-      const nextParts = parts
-        .map((part, index) => normalizePart(part, `${role}_tool_${index}`))
-        .filter((part): part is UiMessagePart => part !== null);
-
-      sanitized.parts = nextParts;
-    } else if (typeof parsed.content === 'string') {
-      sanitized.parts = [createTextPart(parsed.content)];
-    }
-
-    return JSON.stringify(sanitized);
-  } catch {
-    return raw;
-  }
-};
 
 const normalizePart = (
   part: unknown,
@@ -94,7 +57,7 @@ const normalizeParts = (
   parts: unknown,
   content: unknown,
   fallbackId: string
-): ParsedUiMessage['parts'] => {
+): ChatUiMessage['parts'] => {
   if (Array.isArray(parts)) {
     const normalizedParts = parts
       .map((part, index) => normalizePart(part, `${fallbackId}_tool_${index}`))
@@ -112,13 +75,20 @@ const normalizeParts = (
   return [createTextPart('')];
 };
 
+/**
+ * The codec's one entry: normalize the structured message the session log stores
+ * into the ChatUiMessage shape. There is no JSON-string storage form any more —
+ * the sanitizer that pre-serialized strings and the row parser that re-parsed
+ * them existed to shuttle one structure through a fake `message` column, and the
+ * session-log rebuild hands the object to every reader directly.
+ */
 export const normalizeUiMessage = (
   value: unknown,
   options: {
     fallbackId: string;
-    fallbackRole?: ParsedUiMessage['role'];
+    fallbackRole?: ChatUiMessage['role'];
   }
-): ParsedUiMessage | null => {
+): ChatUiMessage | null => {
   if (!isObjectRecord(value)) return null;
 
   const id =
@@ -129,26 +99,5 @@ export const normalizeUiMessage = (
     role: normalizeRole(value.role ?? options.fallbackRole),
     ...(value.metadata !== undefined ? { metadata: value.metadata } : {}),
     parts: normalizeParts(value.parts, value.content, id),
-  };
-};
-
-export const parseStoredUiMessageRow = (row: StoredUiMessageRow): ParsedUiMessage => {
-  try {
-    const parsed = JSON.parse(row.message);
-    const normalized = normalizeUiMessage(parsed, {
-      fallbackId: row.id,
-      fallbackRole: 'user',
-    });
-    if (normalized) {
-      return normalized;
-    }
-  } catch {
-    // Intentionally ignored: the caller cannot act on it.
-  }
-
-  return {
-    id: row.id,
-    role: 'user',
-    parts: [createTextPart(row.message)],
   };
 };

@@ -6,10 +6,10 @@ import type {
   AgentRunOutput,
   AgentRunStatus,
   AgentRunTrace,
-  AgentRunTree,
   AgentRunStep,
   AgentRunWorkingState,
 } from '@iki/backend/types/agent_run';
+import { parseJsonOr } from '@iki/backend/utils/json';
 import { normalizeWhitespace, toIsoNow } from '@iki/backend/utils/text';
 
 type AgentRunRow = {
@@ -46,15 +46,8 @@ type AgentRunStepRow = {
   finished_at?: string | null;
 };
 
-const parseJsonValue = <T>(value: unknown, fallback: T): T => {
-  if (typeof value !== 'string' || !value.trim()) return fallback;
-  try {
-    const parsed = JSON.parse(value) as T;
-    return parsed ?? fallback;
-  } catch {
-    return fallback;
-  }
-};
+const parseJsonValue = <T>(value: unknown, fallback: T): T =>
+  parseJsonOr(value, parsed => parsed as T | null, fallback);
 
 const normalizeStringArray = (value: unknown): string[] => {
   const parsed = Array.isArray(value) ? value : parseJsonValue<unknown[]>(value, []);
@@ -163,29 +156,6 @@ const mapAgentRunStepRow = (row: AgentRunStepRow): AgentRunStep => ({
   finishedAt: row.finished_at ?? null,
 });
 
-const normalizeRunIds = (runIds: string[]): string[] => {
-  const normalized: string[] = [];
-  const seen = new Set<string>();
-
-  for (const runId of runIds) {
-    const normalizedRunId = normalizeWhitespace(runId);
-    if (!normalizedRunId || seen.has(normalizedRunId)) continue;
-    seen.add(normalizedRunId);
-    normalized.push(normalizedRunId);
-  }
-
-  return normalized;
-};
-
-const buildInClause = (values: string[]): { placeholders: string; values: string[] } | null => {
-  const normalizedValues = normalizeRunIds(values);
-  if (normalizedValues.length === 0) return null;
-  return {
-    placeholders: normalizedValues.map(() => '?').join(', '),
-    values: normalizedValues,
-  };
-};
-
 export const createAgentRun = (
   input: Omit<AgentRun, 'createdAt' | 'updatedAt'>
 ): AgentRun => {
@@ -249,16 +219,6 @@ export const listAgentRunsByThread = (threadId: string): AgentRun[] => {
   return rows.map(mapAgentRunRow);
 };
 
-export const listAgentRunsByRootRunId = (rootRunId: string): AgentRun[] => {
-  const normalizedRootRunId = normalizeWhitespace(rootRunId);
-  if (!normalizedRootRunId) return [];
-
-  const rows = getDb()
-    .prepare('SELECT * FROM agent_runs WHERE root_run_id = ? ORDER BY created_at ASC, id ASC')
-    .all(normalizedRootRunId) as AgentRunRow[];
-  return rows.map(mapAgentRunRow);
-};
-
 export const listAgentRunsByStatus = (
   statuses: AgentRun['status'][],
   opts?: { clientId?: string; limit?: number }
@@ -276,48 +236,6 @@ export const listAgentRunsByStatus = (
     return `@status_${index}`;
   });
   conditions.push(`status IN (${statusPlaceholders.join(', ')})`);
-
-  if (opts?.clientId) {
-    conditions.push('thread_id IN (SELECT id FROM chat_threads WHERE client_id = @client_id)');
-    params.client_id = normalizeWhitespace(opts.clientId);
-  }
-
-  const limitClause =
-    typeof opts?.limit === 'number' && opts.limit > 0 ? ` LIMIT ${Math.trunc(opts.limit)}` : '';
-
-  const rows = getDb()
-    .prepare(
-      `SELECT * FROM agent_runs WHERE ${conditions.join(' AND ')} ORDER BY updated_at DESC${limitClause}`
-    )
-    .all(params) as AgentRunRow[];
-  return rows.map(mapAgentRunRow);
-};
-
-export const listAgentRunsByKinds = (
-  kinds: AgentRun['kind'][],
-  opts?: { clientId?: string; limit?: number; statuses?: AgentRun['status'][] }
-): AgentRun[] => {
-  const normalizedKinds = kinds.map(kind => normalizeWhitespace(kind)).filter(Boolean);
-  if (normalizedKinds.length === 0) return [];
-
-  const conditions: string[] = [];
-  const params: Record<string, unknown> = {};
-
-  const kindPlaceholders: string[] = [];
-  normalizedKinds.forEach((kind, index) => {
-    kindPlaceholders.push(`@kind_${index}`);
-    params[`kind_${index}`] = kind;
-  });
-  conditions.push(`kind IN (${kindPlaceholders.join(', ')})`);
-
-  if (opts?.statuses?.length) {
-    const statusPlaceholders: string[] = [];
-    opts.statuses.forEach((status, index) => {
-      statusPlaceholders.push(`@run_status_${index}`);
-      params[`run_status_${index}`] = normalizeWhitespace(status);
-    });
-    conditions.push(`status IN (${statusPlaceholders.join(', ')})`);
-  }
 
   if (opts?.clientId) {
     conditions.push('thread_id IN (SELECT id FROM chat_threads WHERE client_id = @client_id)');
@@ -528,34 +446,6 @@ export const listAgentRunSteps = (runId: string): AgentRunStep[] => {
   return rows.map(mapAgentRunStepRow);
 };
 
-const listAgentRunStepsByRunIds = (runIds: string[]): Map<string, AgentRunStep[]> => {
-  const clause = buildInClause(runIds);
-  if (!clause) return new Map();
-
-  const rows = getDb()
-    .prepare(
-      `
-        SELECT * FROM agent_run_steps
-        WHERE run_id IN (${clause.placeholders})
-        ORDER BY run_id ASC, step_index ASC
-      `
-    )
-    .all(...clause.values) as AgentRunStepRow[];
-
-  const stepsByRunId = new Map<string, AgentRunStep[]>();
-  for (const row of rows) {
-    const step = mapAgentRunStepRow(row);
-    const steps = stepsByRunId.get(step.runId);
-    if (steps) {
-      steps.push(step);
-    } else {
-      stepsByRunId.set(step.runId, [step]);
-    }
-  }
-
-  return stepsByRunId;
-};
-
 export const getAgentRunTrace = (runId: string): AgentRunTrace | null => {
   const normalizedRunId = normalizeWhitespace(runId);
   if (!normalizedRunId) return null;
@@ -599,39 +489,4 @@ export const cleanupOldAgentRuns = (maxAgeDays: number): { deletedRuns: number }
     .run(...runIds);
 
   return { deletedRuns: result.changes };
-};
-
-export const getAgentRunTree = (rootRunId: string): AgentRunTree => {
-  const normalizedRootRunId = normalizeWhitespace(rootRunId);
-  if (!normalizedRootRunId) {
-    return {
-      rootRunId: '',
-      traces: [],
-    };
-  }
-
-  const runs = listAgentRunsByRootRunId(normalizedRootRunId);
-  const runIds = runs.map(run => run.id);
-  const stepsByRunId = listAgentRunStepsByRunIds(runIds);
-  const childrenByParentRunId = new Map<string, AgentRun[]>();
-
-  for (const run of runs) {
-    const parentRunId = normalizeWhitespace(run.parentRunId);
-    if (!parentRunId) continue;
-    const siblings = childrenByParentRunId.get(parentRunId);
-    if (siblings) {
-      siblings.push(run);
-    } else {
-      childrenByParentRunId.set(parentRunId, [run]);
-    }
-  }
-
-  return {
-    rootRunId: normalizedRootRunId,
-    traces: runs.map(run => ({
-      run,
-      steps: stepsByRunId.get(run.id) ?? [],
-      children: childrenByParentRunId.get(run.id) ?? [],
-    })),
-  };
 };

@@ -1,4 +1,7 @@
 import type { AssistantMessage, Message as PiMessage, Tool as PiTool, ToolCall } from '@earendil-works/pi-ai';
+import { toolResultIsError, toolResultText } from '@iki/backend/message/model_history';
+
+export { toolResultText, toolResultIsError };
 
 export type PiLoopTool = PiTool & {
 
@@ -11,7 +14,7 @@ export type PiLoopToolCall = {
   arguments: Record<string, unknown>;
 };
 
-export type PiLoopStep = {
+type PiLoopStep = {
   index: number;
   text: string;
 
@@ -51,7 +54,7 @@ export type PiLoopEvent =
       output: unknown;
     };
 
-export type PiLoopOutcome = {
+type PiLoopOutcome = {
   status: 'completed' | 'budget-exhausted' | 'awaiting-approval';
   finalText: string;
   steps: PiLoopStep[];
@@ -81,9 +84,9 @@ export type PiLoopModelCall = (context: {
       final: Promise<AssistantMessage>;
     }>;
 
-export type PiLoopToolExecutor = (call: PiLoopToolCall) => Promise<unknown>;
+type PiLoopToolExecutor = (call: PiLoopToolCall) => Promise<unknown>;
 
-export type PiLoopApprovalRequester = (call: PiLoopToolCall) => Promise<void>;
+type PiLoopApprovalRequester = (call: PiLoopToolCall) => Promise<void>;
 
 const EMPTY_USAGE: PiUsageBuckets = {
   input: 0,
@@ -270,28 +273,4 @@ export const runPiAgentLoop = async function* (
   }
 
   return { status: 'budget-exhausted', finalText: lastText, steps, usage, pendingToolCalls: [] };
-};
-
-export const toolResultText = (output: unknown): string => {
-  if (output === null || typeof output !== 'object' || !('type' in output)) {
-    return JSON.stringify(output ?? null);
-  }
-  const o = output as { type: string; value?: unknown; reason?: unknown };
-  switch (o.type) {
-    case 'text':
-    case 'error-text':
-    case 'json':
-    case 'error-json':
-      return typeof o.value === 'string' ? o.value : JSON.stringify(o.value ?? null);
-    case 'execution-denied':
-      return typeof o.reason === 'string' ? o.reason : 'Tool call execution denied.';
-    default:
-      return JSON.stringify(o.value ?? null);
-  }
-};
-
-export const toolResultIsError = (output: unknown): boolean => {
-  if (output === null || typeof output !== 'object' || !('type' in output)) return false;
-  const t = (output as { type: string }).type;
-  return t === 'error-text' || t === 'error-json' || t === 'execution-denied';
 };

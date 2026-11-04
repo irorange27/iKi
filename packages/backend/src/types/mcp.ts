@@ -52,7 +52,7 @@ export type McpServerUpdate = Partial<McpServerInput> & {
   last_error?: string | null;
 };
 
-export type McpToolAnnotation = {
+type McpToolAnnotation = {
   title?: string;
   readOnlyHint?: boolean;
   destructiveHint?: boolean;

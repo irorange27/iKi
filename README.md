@@ -40,7 +40,6 @@ On first launch, add a provider (OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, Oll
 
 - **Multi-provider chat** — one chat surface for OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, Ollama, and ACP-backed agents. Conversations persist in local SQLite.
 - **Tool calling** — read, write, edit, and delete files; run shell commands; search the web; write personal skill instructions; delegate work to sub-agents. Destructive operations require approval. File and shell tools are scoped to a selected workspace directory.
-- **Daemon mode** — a headless HTTP + WebSocket server exposes the same chat and tool surface to external clients.
 - **Awaiters** — one-shot deferred reminders that continue a thread later.
 - **Companion overlay** — a small desktop window showing the agent's current phase.
 

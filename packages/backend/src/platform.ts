@@ -1,9 +1,9 @@
 import os from 'node:os';
 import path from 'node:path';
 
-export type PlatformTheme = 'light' | 'dark';
+type PlatformTheme = 'light' | 'dark';
 
-export type PlatformInfo = {
+type PlatformInfo = {
   userDataPath?: string;
   locale?: string;
   theme?: PlatformTheme;
@@ -71,7 +71,7 @@ export const getDisplayScale = (): number => {
   return 1;
 };
 
-export type HostFetch = (
+type HostFetch = (
   url: string,
   init: RequestInit | undefined,
   timeoutMs: number

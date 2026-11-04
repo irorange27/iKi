@@ -44,12 +44,12 @@ import {
 import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import {
   INPUT_ACCEPTED,
+  MESSAGES_TRUNCATED,
   TURN_STARTED,
   rebuildThreadViewFromEvents,
   recordSessionEvents,
   SESSION_EVENT_VERSION,
 } from '@iki/backend/thread_session/session_log';
-import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 
 const TASK_SYSTEM = 'WAKE_TASK_AGENT_SYSTEM_PROMPT_139';
 const TASK_TEXT = 'E2E_TASK_139 run the weekly report';
@@ -166,7 +166,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     await fs.rm(root, { recursive: true, force: true });
   });
 
-  it('records the accepted input of an id-less send as a fact (run id + system config)', async () => {
+  it('records the accepted input of an id-less send as a fact (run id + message)', async () => {
     scriptReply('task done');
     const result = (await taskSend('thread_task139', 'awaiter-wake')) as { runId?: string };
     expect(result).toMatchObject({ success: true, runId: expect.any(String) });
@@ -181,7 +181,10 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
       message?: { parts?: Array<{ text?: string }> };
     };
     expect(payload.runId).toBe(result.runId);
-    expect(payload.system).toEqual([TASK_SYSTEM]);
+    // The composed system prompt is not a fact about the accepted input: turn_prep
+    // rebuilds it for whichever turn is starting, so a replay cannot send a stale copy
+    // alongside the current one.
+    expect(payload.system).toBeUndefined();
     expect(JSON.stringify(payload.message)).toContain(TASK_TEXT);
     expect(payload.messageId).toBe(`input_${result.runId}`);
     const started = view.events.find(event => event.type === TURN_STARTED);
@@ -199,7 +202,7 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
       system?: string[];
     };
     expect(payload.runId).toBe(result.runId);
-    expect(payload.system).toEqual([TASK_SYSTEM]);
+    expect(payload.system).toBeUndefined();
     const started = view.events.find(event => event.type === TURN_STARTED);
     expect((started!.payload as { kind?: string }).kind).toBe('awaiter-wake');
   });
@@ -298,53 +301,34 @@ describe('id-less wake/task sends record input facts and retry as their kind', (
     expect(agentRunDb.getAgentRun(secondRetry.newRunId!)).toMatchObject({ kind: 'awaiter-wake' });
   });
 
-  it('the system-prompt binding follows the LAST input fact and resets on malformed data', () => {
+  it('the replay tail follows the LAST input fact, and moves back when it is truncated', () => {
+    const inputFact = (messageId: string, runId: string, extra: Record<string, unknown> = {}) => ({
+      type: INPUT_ACCEPTED,
+      version: SESSION_EVENT_VERSION,
+      payload: {
+        messageId,
+        message: { id: messageId, role: 'user', parts: [{ type: 'text', text: messageId }] } as never,
+        runId,
+        ...extra,
+      },
+    });
     recordSessionEvents('thread_task139', [
-      {
-        type: INPUT_ACCEPTED,
-        version: SESSION_EVENT_VERSION,
-        payload: {
-          messageId: 'input_task',
-          message: {
-            id: 'input_task',
-            role: 'user',
-            parts: [{ type: 'text', text: 'task' }],
-          } as never,
-          runId: 'run_task',
-          system: ['task persona'],
-        },
-      },
-      {
-        type: INPUT_ACCEPTED,
-        version: SESSION_EVENT_VERSION,
-        payload: {
-          messageId: 'input_chat',
-          message: {
-            id: 'input_chat',
-            role: 'user',
-            parts: [{ type: 'text', text: 'chat' }],
-          } as never,
-        },
-      },
+      inputFact('input_task', 'run_task', { system: ['task persona'] }),
+      inputFact('input_chat', 'run_chat'),
     ]);
-    expect(rebuildThreadViewFromEvents('thread_task139').inputSystemPrompts).toEqual([]);
+    // The run of the newest input is what a resume is admitted against.
+    expect(rebuildThreadViewFromEvents('thread_task139').inputRunId).toBe('run_chat');
+    // A copy of the system prompt written by an older build is not replayed.
+    expect(rebuildThreadViewFromEvents('thread_task139')).not.toHaveProperty('inputSystemPrompts');
 
     recordSessionEvents('thread_task139', [
       {
-        type: INPUT_ACCEPTED,
+        type: MESSAGES_TRUNCATED,
         version: SESSION_EVENT_VERSION,
-        payload: {
-          messageId: 'input_malformed',
-          message: {
-            id: 'input_malformed',
-            role: 'user',
-            parts: [{ type: 'text', text: 'x' }],
-          } as never,
-          system: ['ok persona', 42],
-        },
+        payload: { afterMessageId: 'input_task', deletedMessageIds: ['input_chat'] },
       },
     ]);
-    expect(rebuildThreadViewFromEvents('thread_task139').inputSystemPrompts).toEqual([]);
+    expect(rebuildThreadViewFromEvents('thread_task139').inputRunId).toBe('run_task');
   });
 
   it('an unrepresentable id-less input records no fact rather than a partial one', async () => {

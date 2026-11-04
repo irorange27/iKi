@@ -1,4 +1,4 @@
-export type SpeechProviderType = 'openai' | 'whisper-node';
+type SpeechProviderType = 'openai' | 'whisper-node';
 
 export type SpeechStatus = {
   available: boolean;

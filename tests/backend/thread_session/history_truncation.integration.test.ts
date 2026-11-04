@@ -19,7 +19,7 @@ import { rebuildThreadViewFromEvents } from '@iki/backend/thread_session/session
 const THREAD_ID = 'thread_truncate';
 
 const seed = (ids: string[]) => {
-  const persistence = createChatPersistence();
+  const persistence = createChatPersistence({ rebuildMessages: (threadId: string) => rebuildThreadViewFromEvents(threadId).messages });
   for (const id of ids) {
     persistence.createMessage({
       id,

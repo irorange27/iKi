@@ -1,54 +1,9 @@
 import type { ThemeConfig } from '@iki/theme/types';
-import type {
-  StructuredLogEntry,
-  StructuredLogLevel,
-  StructuredLogOutcome,
-  StructuredLogProcess,
-} from './logging';
 import type { SupportedLocale } from '../i18n/locale';
 
 export interface ConfigRuntimeInfo {
   userDataPath: string;
   dbPath: string;
-  daemon: {
-    defaultHost: string;
-    defaultPort: number;
-    configuredHost: string;
-    configuredPort: number;
-  };
-}
-
-export interface DaemonStatusInfo {
-  online: boolean;
-  host: string;
-  port: number;
-  status: string;
-  source: 'health' | 'recorded' | 'default';
-  uptimeSeconds: number | null;
-  error?: string;
-}
-
-export interface DaemonLogEntry extends Omit<StructuredLogEntry, 'level' | 'process' | 'outcome'> {
-  level: StructuredLogLevel;
-  process?: StructuredLogProcess;
-  outcome?: StructuredLogOutcome;
-  timestamp: string;
-  source: string;
-}
-
-export interface DaemonLogsInfo {
-  filePath: string;
-  entries: DaemonLogEntry[];
-}
-
-export type DaemonControlAction = 'start' | 'restart' | 'stop';
-
-export interface DaemonControlResult {
-  success: boolean;
-  action: DaemonControlAction;
-  message: string;
-  status: DaemonStatusInfo;
-  embeddedRunning: boolean;
 }
 
 export type NetworkDiagnosticTargetKey = 'internet' | 'searchEngine';
@@ -169,9 +124,5 @@ export interface AppConfig {
     defaultApprovalMode: 'always' | 'safe-only' | 'never';
     requestTimeoutMs: number;
     maxConcurrentRequests: number;
-  };
-  daemon: {
-    host: string;
-    port: number;
   };
 }

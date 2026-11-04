@@ -1,19 +1,19 @@
 
 
-export type AtifToolCall = {
+type AtifToolCall = {
   tool_call_id: string;
   function_name: string;
   arguments?: unknown;
 };
 
-export type AtifObservation = {
+type AtifObservation = {
   results: Array<{
     source_call_id: string;
     content: unknown;
   }>;
 };
 
-export type AtifMetrics = {
+type AtifMetrics = {
   prompt_tokens?: number;
   completion_tokens?: number;
   cached_tokens?: number;

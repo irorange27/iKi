@@ -262,9 +262,14 @@ describe('createChatStreaming integration', () => {
     const [turnRow] = conversation.upsertTurnMessage.mock.calls[0]! as [Record<string, unknown>];
     expect(turnRow).toMatchObject({
       thread_id: 'thread_1',
-      parent_id: 'msg_user_probe',
       message: { role: 'assistant', parts: expect.any(Array) },
     });
+    // The commit carries the writing run's id; the fake row's parent_id and
+    // metadata tags died with the ChatMessage projection.
+    expect(typeof turnRow.runId).toBe('string');
+    expect((turnRow.runId as string).length).toBeGreaterThan(0);
+    expect(turnRow).not.toHaveProperty('parent_id');
+    expect(turnRow).not.toHaveProperty('metadata');
     const persistedParts = (turnRow.message as { parts: Array<Record<string, unknown>> }).parts;
     expect(
       persistedParts.some(part => part.type === 'dynamic-tool' && part.state === 'output-available')
@@ -640,42 +645,5 @@ describe('createChatStreaming integration', () => {
     expect(completedUpdate?.output).toMatchObject({
       finishReason: 'budget-exhausted',
     });
-  });
-
-  it('preserves observations and the latest human feedback during steering', async () => {
-    defaultToolRegistry.register(
-      createTool({
-        name: toolName,
-        type: 'function',
-        description: 'Probe',
-        paramSchema: z.object({}),
-        handler: async () => 'completed observation',
-      })
-    );
-    const { coordinator, run } = setupLoop(
-      [
-        [
-          { kind: 'toolCall', toolName, args: {} },
-          { kind: 'done', reason: 'toolUse' },
-        ],
-        [{ kind: 'text', text: 'interrupted' }, { kind: 'done' }],
-        [{ kind: 'text', text: 'steered response' }, { kind: 'done' }],
-      ],
-      [toolName]
-    );
-    const original = callPiChatMock.getMockImplementation()!;
-    const call = callPiChatMock;
-    let calls = 0;
-    callPiChatMock.mockImplementation((model, context, options) => {
-      if (++calls === 2)
-        expect(coordinator.steerStream(42, 'thread_1', 'new direction').success).toBe(true);
-      return (original as (m: unknown, c: unknown, o: unknown) => unknown)(model, context, options);
-    });
-    expect(await run()).toMatchObject({ success: true });
-    const postTool = JSON.stringify(call.mock.calls[1][1]);
-    expect(postTool).toContain('completed observation');
-    expect(postTool.match(/original task/g)).toHaveLength(1);
-    const steered = JSON.stringify(call.mock.calls.at(-1)![1]);
-    expect(steered).toContain('new direction');
   });
 });

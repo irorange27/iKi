@@ -81,9 +81,6 @@ const securityLogLevelOptions = computed(() => [
   { value: 'debug', label: t('settings.security.logLevel.debug') },
 ]);
 
-const getCheckedValue = (event: Event): boolean =>
-  (event.target as HTMLInputElement | null)?.checked ?? false;
-
 const getRangeValue = (event: Event): number =>
   Number.parseInt((event.target as HTMLInputElement | null)?.value || '0', 10);
 

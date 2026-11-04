@@ -29,7 +29,7 @@ export type ProviderDraft = {
   model_options: ProviderModelOptionsMap;
 };
 
-export type PersistedProviderSnapshot = {
+type PersistedProviderSnapshot = {
   api_key: string;
   base_url: string;
   enabled: boolean;

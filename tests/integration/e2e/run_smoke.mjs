@@ -17,9 +17,6 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 const CDP_PORT = Number(process.env.CDP_PORT || 18731);
 // Publish the resolved port so shared helpers (cdp.mjs) read THIS runner's port.
 process.env.CDP_PORT = String(CDP_PORT);
-// Private daemon port (IKI_DAEMON_PORT override) so the gate can run while
-// the user's real app holds the default 6127.
-const DAEMON_PORT = Number(process.env.IKI_E2E_DAEMON_PORT || 16127);
 const FAUX_PORT = Number(process.env.IKI_E2E_FAUX_PORT || 18730);
 const VITE_PORT = Number(process.env.IKI_VITE_PORT || 5173);
 const require = createRequire(import.meta.url);
@@ -78,7 +75,7 @@ const watchdog = setTimeout(() => {
 watchdog.unref?.();
 
 const portsFree = async () => {
-  for (const port of [CDP_PORT, VITE_PORT, DAEMON_PORT, FAUX_PORT]) {
+  for (const port of [CDP_PORT, VITE_PORT, FAUX_PORT]) {
     try {
       const out = execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN'], { encoding: 'utf8' });
       if (out.trim()) return false;
@@ -91,7 +88,7 @@ const portsFree = async () => {
 // or provider to make room for the gate; use a separate checkout and ports.
 const preflightPortsFree = async () => {
   if (!(await portsFree())) {
-    throw new Error('e2e ports are busy; use free CDP_PORT, IKI_VITE_PORT, IKI_E2E_DAEMON_PORT and IKI_E2E_FAUX_PORT values');
+    throw new Error('e2e ports are busy; use free CDP_PORT, IKI_VITE_PORT and IKI_E2E_FAUX_PORT values');
   }
 };
 
@@ -132,7 +129,6 @@ const launchApp = async label => {
       cwd: path.join(ROOT, 'packages/desktop'),
       env: {
         ...process.env,
-        IKI_DAEMON_PORT: String(DAEMON_PORT),
         IKI_VITE_PORT: String(VITE_PORT),
         // Keep this run's logs in the scene dir so the gate can assert on them.
         // Without an explicit dir the app writes to the developer's real

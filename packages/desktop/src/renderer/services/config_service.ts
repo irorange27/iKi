@@ -1,10 +1,6 @@
 import type {
   AppConfig,
   ConfigRuntimeInfo,
-  DaemonControlAction,
-  DaemonControlResult,
-  DaemonLogsInfo,
-  DaemonStatusInfo,
   NetworkDiagnosticResult,
 } from '@iki/backend/types/config';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
@@ -38,30 +34,6 @@ export const configService = {
       'window.electronAPI.config.getRuntimeInfo is missing'
     );
     return api.getRuntimeInfo();
-  },
-  async getDaemonStatus(): Promise<DaemonStatusInfo> {
-    const api = requireElectronApiSlice(
-      'config',
-      ['getDaemonStatus'],
-      'window.electronAPI.config.getDaemonStatus is missing'
-    );
-    return api.getDaemonStatus();
-  },
-  async getDaemonLogs(limit = 120): Promise<DaemonLogsInfo> {
-    const api = requireElectronApiSlice(
-      'config',
-      ['getDaemonLogs'],
-      'window.electronAPI.config.getDaemonLogs is missing'
-    );
-    return api.getDaemonLogs(limit);
-  },
-  async controlDaemon(action: DaemonControlAction): Promise<DaemonControlResult> {
-    const api = requireElectronApiSlice(
-      'config',
-      ['controlDaemon'],
-      'window.electronAPI.config.controlDaemon is missing'
-    );
-    return api.controlDaemon(action);
   },
   async testNetwork(network: AppConfig['network']): Promise<NetworkDiagnosticResult> {
     const api = requireElectronApiSlice(

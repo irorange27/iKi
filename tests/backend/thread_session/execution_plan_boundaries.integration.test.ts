@@ -62,6 +62,7 @@ import {
   INPUT_ACCEPTED,
   recordSessionEvents,
   SESSION_EVENT_VERSION,
+  rebuildThreadViewFromEvents,
 } from '@iki/backend/thread_session/session_log';
 import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { resolveThreadWorkspaceSelectionSnapshot } from '@iki/backend/workspaces/thread_workspace';
@@ -98,7 +99,7 @@ describe('execution plan admission boundaries', () => {
     await fs.writeFile(path.join(b, 'AGENTS.md'), 'SCOPE_MARKER_B');
     addWorkspace({ id: 'workspace_bound_a', path: a, name: 'A' });
     addWorkspace({ id: 'workspace_wt_bound_b', path: b, name: 'B' });
-    conversation = createChatPersistence({
+    conversation = createChatPersistence({ rebuildMessages: (threadId: string) => rebuildThreadViewFromEvents(threadId).messages,
       memory: memory as never,
     });
     conversation.createThread({

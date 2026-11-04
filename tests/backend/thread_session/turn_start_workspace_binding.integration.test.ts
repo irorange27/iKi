@@ -48,6 +48,7 @@ import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { getChatThread } from '@iki/backend/db/chat_thread';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
+import { rebuildThreadViewFromEvents } from '@iki/backend/thread_session/session_log';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import {
   piTurnHarness,
@@ -94,7 +95,7 @@ describe('stream binds the turn workspace at admission', () => {
     await fs.mkdir(b);
     addWorkspace({ id: 'workspace_a', path: a, name: 'a' });
     addWorkspace({ id: 'workspace_wt_binding', path: b, name: 'b' });
-    conversation = createChatPersistence({
+    conversation = createChatPersistence({ rebuildMessages: (threadId: string) => rebuildThreadViewFromEvents(threadId).messages,
       memory: memory as never,
     });
     conversation.createThread({

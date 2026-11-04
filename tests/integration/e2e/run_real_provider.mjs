@@ -14,7 +14,7 @@
 //   node tests/integration/e2e/run_real_provider.mjs
 //
 // Ports default to values distinct from run_smoke.mjs so the two can run
-// side by side. Override with CDP_PORT / IKI_VITE_PORT / IKI_E2E_DAEMON_PORT.
+// side by side. Override with CDP_PORT / IKI_VITE_PORT.
 import { execFileSync, spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -32,7 +32,6 @@ const CDP_PORT = Number(process.env.CDP_PORT || 18741);
 // Publish the resolved port so shared helpers (cdp.mjs) read THIS runner's port.
 process.env.CDP_PORT = String(CDP_PORT);
 
-const DAEMON_PORT = Number(process.env.IKI_E2E_DAEMON_PORT || 16137);
 const VITE_PORT = Number(process.env.IKI_VITE_PORT || 5177);
 const ROUTER_URL = (process.env.IKI_REAL_ROUTER_URL || 'http://127.0.0.1:3425/v1').replace(/\/+$/, '');
 const ROUTER_KEY = process.env.IKI_REAL_ROUTER_KEY || 'real-e2e';
@@ -99,10 +98,10 @@ const portBusy = port => {
 };
 
 const preflightPortsFree = () => {
-  for (const port of [CDP_PORT, VITE_PORT, DAEMON_PORT]) {
+  for (const port of [CDP_PORT, VITE_PORT]) {
     if (portBusy(port)) {
       throw new Error(
-        `port ${port} is busy; set CDP_PORT / IKI_VITE_PORT / IKI_E2E_DAEMON_PORT to free values`
+        `port ${port} is busy; set CDP_PORT / IKI_VITE_PORT to free values`
       );
     }
   }
@@ -144,7 +143,6 @@ const launchApp = async label => {
       cwd: path.join(ROOT, 'packages/desktop'),
       env: {
         ...process.env,
-        IKI_DAEMON_PORT: String(DAEMON_PORT),
         IKI_VITE_PORT: String(VITE_PORT),
         MAIN_WINDOW_VITE_DEV_SERVER_URL: `http://127.0.0.1:${VITE_PORT}`,
         // The gate drives the UI over CDP; an auto-opened dock only gets in the way.

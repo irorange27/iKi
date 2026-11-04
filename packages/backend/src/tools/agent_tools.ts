@@ -26,6 +26,7 @@ import {
   runWithToolRuntimeContext,
   type ToolRuntimeConversationModel,
 } from '../utils/runtime_context';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 
 const AGENT_TOOL_NAME = 'agent';
 const DEFAULT_AGENT_MAX_TOKENS = 2000;
@@ -46,7 +47,7 @@ type DelegatedAgentRunTrackerParams = {
   working: AgentRunWorkingState;
 };
 
-export type TerminalRunTracker = {
+type TerminalRunTracker = {
   id: string;
   getRun: () => AgentRun;
   markCompleted: (params: DelegateRunFinalizeParams) => AgentRun;
@@ -65,7 +66,7 @@ type DelegateRunFinalizeParams = {
 
 type DelegateRunFailureParams = { message: string; code?: string; retryable?: boolean; text?: string };
 
-export type DelegatedFinalizePort = {
+type DelegatedFinalizePort = {
 
   finalizeFailure: (params: {
     tracker: unknown;
@@ -466,7 +467,7 @@ export class DelegatedAgentTool extends BaseTool {
         tracker: runTracker.terminal,
         failure: {
           status: 'failed',
-          errorText: error instanceof Error ? error.message : String(error),
+          errorText: getErrorMessage(error),
         },
         transport: 'delegated-agent',
       });

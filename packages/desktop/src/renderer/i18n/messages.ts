@@ -6,7 +6,7 @@ import type { LocaleCatalog } from './shared';
 export type { TranslationEntry, TranslationParams } from './shared';
 
 export type TranslationKey = keyof typeof en;
-export type MessageCatalog = LocaleCatalog<typeof en>;
+type MessageCatalog = LocaleCatalog<typeof en>;
 
 export const messages = {
   en,

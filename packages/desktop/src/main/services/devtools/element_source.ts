@@ -15,7 +15,7 @@ import { readSourceMap } from './source_maps_io';
 
 const devtoolsLogger = createLogger({ module: 'devtools_source' });
 
-export type ProbeRequest = Pick<
+type ProbeRequest = Pick<
   DevToolsResolveRequest,
   'target' | 'selector' | 'point' | 'webContentsId'
 >;

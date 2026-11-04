@@ -1,6 +1,6 @@
 export type StructuredLogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-export type StructuredLogProcess = 'renderer' | 'preload' | 'main' | 'daemon';
+export type StructuredLogProcess = 'renderer' | 'preload' | 'main';
 
 export type StructuredLogOutcome =
   | 'started'

@@ -1,57 +1,14 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type IpcHandler = (...args: unknown[]) => unknown | Promise<unknown>;
-type HttpResponseEvent = 'data' | 'end';
-type HttpResponseMock = {
-  statusCode: number;
-  setEncoding: ReturnType<typeof vi.fn>;
-  on: (event: HttpResponseEvent, handler: (...args: unknown[]) => void) => HttpResponseMock;
-};
 
-const {
-  ipcHandlers,
-  getAllWindowsMock,
-  getPathMock,
-  readFileSyncMock,
-  httpGetMock,
-  readRecentDaemonLogsMock,
-  applyAppUpdateConfigMock,
-  applyDesktopDaemonConfigUpdateMock,
-  getDesktopEmbeddedDaemonStatusMock,
-  isDesktopDaemonEmbeddedRunningMock,
-  restartDesktopDaemonMock,
-  startDesktopDaemonMock,
-  stopDesktopDaemonMock,
-} = vi.hoisted(() => ({
+const { ipcHandlers, getAllWindowsMock, getPathMock, applyAppUpdateConfigMock } = vi.hoisted(() => ({
   ipcHandlers: new Map<string, IpcHandler>(),
   getPathMock: vi.fn((name: string) => {
     if (name === 'userData') return '/tmp/iki-user-data';
     return '/tmp/unknown';
   }),
-  readFileSyncMock: vi.fn((filePath: string) => {
-    if (filePath.endsWith('/daemon.host')) return '127.0.0.1';
-    if (filePath.endsWith('/daemon.port')) return '6131';
-    throw new Error(`Unexpected file read: ${filePath}`);
-  }),
-  httpGetMock: vi.fn(),
-  readRecentDaemonLogsMock: vi.fn((limit: number, userDataPath: string) => ({
-    filePath: `${userDataPath}/logs/daemon.log`,
-    entries: [
-      {
-        timestamp: '2026-03-19T00:00:00.000Z',
-        level: 'info',
-        source: 'daemon',
-        message: `log tail ${limit}`,
-      },
-    ],
-  })),
   applyAppUpdateConfigMock: vi.fn(),
-  applyDesktopDaemonConfigUpdateMock: vi.fn(async () => undefined),
-  getDesktopEmbeddedDaemonStatusMock: vi.fn(() => null),
-  isDesktopDaemonEmbeddedRunningMock: vi.fn(() => true),
-  restartDesktopDaemonMock: vi.fn(),
-  startDesktopDaemonMock: vi.fn(),
-  stopDesktopDaemonMock: vi.fn(() => true),
   getAllWindowsMock: vi.fn(() => []),
 }));
 
@@ -69,20 +26,6 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('node:fs', () => ({
-  default: {
-    readFileSync: readFileSyncMock,
-  },
-  readFileSync: readFileSyncMock,
-}));
-
-vi.mock('node:http', () => ({
-  default: {
-    get: httpGetMock,
-  },
-  get: httpGetMock,
-}));
-
 vi.mock('@iki/backend/db/database', () => ({
   setConfig: vi.fn(),
   migrateFromJson: vi.fn(),
@@ -90,10 +33,6 @@ vi.mock('@iki/backend/db/database', () => ({
 
 vi.mock('@iki/backend/config', () => ({
   getAppConfig: vi.fn(() => ({
-    daemon: {
-      host: '',
-      port: 6127,
-    },
     mcp: {
       enabled: false,
       connectOnStartup: false,
@@ -103,19 +42,6 @@ vi.mock('@iki/backend/config', () => ({
       maxConcurrentRequests: 4,
     },
   })),
-}));
-
-vi.mock('@iki/backend/daemon_logs', () => ({
-  readRecentDaemonLogs: readRecentDaemonLogsMock,
-}));
-
-vi.mock('../../../packages/desktop/src/main/services/daemon/daemon_lifecycle', () => ({
-  applyDesktopDaemonConfigUpdate: applyDesktopDaemonConfigUpdateMock,
-  getDesktopEmbeddedDaemonStatus: getDesktopEmbeddedDaemonStatusMock,
-  isDesktopDaemonEmbeddedRunning: isDesktopDaemonEmbeddedRunningMock,
-  restartDesktopDaemon: restartDesktopDaemonMock,
-  startDesktopDaemon: startDesktopDaemonMock,
-  stopDesktopDaemon: stopDesktopDaemonMock,
 }));
 
 vi.mock('../../../packages/desktop/src/main/services/update/auto_update_service', () => ({
@@ -147,44 +73,10 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getDesktopEmbeddedDaemonStatusMock.mockReturnValue(null);
 });
 
-const installHealthResponse = (uptimeSeconds: number) => {
-  httpGetMock.mockImplementation(
-    (_options: unknown, callback: (response: HttpResponseMock) => void) => {
-      const response: HttpResponseMock = {
-        statusCode: 200,
-        setEncoding: vi.fn(),
-        on: (event, handler) => {
-          if (event === 'data') {
-            handler(
-              JSON.stringify({
-                status: 'ok',
-                host: '127.0.0.1',
-                port: 6131,
-                uptime: uptimeSeconds,
-              })
-            );
-          }
-          if (event === 'end') {
-            handler();
-          }
-          return response;
-        },
-      };
-
-      callback(response);
-      return {
-        on: vi.fn().mockReturnThis(),
-        destroy: vi.fn(),
-      };
-    }
-  );
-};
-
 describe('config IPC', () => {
-  it('returns runtime info for daemon settings', async () => {
+  it('returns runtime info for the config surface', async () => {
     const handler = ipcHandlers.get('config:get-runtime-info');
     if (!handler) throw new Error('config:get-runtime-info handler not registered');
 
@@ -193,101 +85,6 @@ describe('config IPC', () => {
     expect(result).toEqual({
       userDataPath: '/tmp/iki-user-data',
       dbPath: '/tmp/iki-user-data/iKi_v0.db',
-      daemon: {
-        defaultHost: '127.0.0.1',
-        defaultPort: 6127,
-        configuredHost: '127.0.0.1',
-        configuredPort: 6127,
-      },
-    });
-  });
-
-  it('returns online daemon status from the local health endpoint', async () => {
-    installHealthResponse(42);
-
-    const handler = ipcHandlers.get('config:get-daemon-status');
-    if (!handler) throw new Error('config:get-daemon-status handler not registered');
-
-    const result = await handler(null);
-
-    expect(result).toEqual({
-      online: true,
-      host: '127.0.0.1',
-      port: 6131,
-      status: 'ok',
-      source: 'health',
-      uptimeSeconds: 42,
-    });
-  });
-
-  it('prefers in-process embedded daemon runtime status over localhost probing', async () => {
-    getDesktopEmbeddedDaemonStatusMock.mockReturnValue({
-      online: true,
-      host: '127.0.0.1',
-      port: 6127,
-      status: 'ok',
-      source: 'health',
-      uptimeSeconds: 84,
-    });
-
-    const handler = ipcHandlers.get('config:get-daemon-status');
-    if (!handler) throw new Error('config:get-daemon-status handler not registered');
-
-    const result = await handler(null);
-
-    expect(httpGetMock).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      online: true,
-      host: '127.0.0.1',
-      port: 6127,
-      status: 'ok',
-      source: 'health',
-      uptimeSeconds: 84,
-    });
-  });
-
-  it('returns recent daemon logs from the shared log store', async () => {
-    const handler = ipcHandlers.get('config:get-daemon-logs');
-    if (!handler) throw new Error('config:get-daemon-logs handler not registered');
-
-    const result = await handler(null, 50);
-
-    expect(readRecentDaemonLogsMock).toHaveBeenCalledWith(50, '/tmp/iki-user-data');
-    expect(result).toEqual({
-      filePath: '/tmp/iki-user-data/logs/daemon.log',
-      entries: [
-        {
-          timestamp: '2026-03-19T00:00:00.000Z',
-          level: 'info',
-          source: 'daemon',
-          message: 'log tail 50',
-        },
-      ],
-    });
-  });
-
-  it('controls the desktop-managed daemon and returns updated status', async () => {
-    installHealthResponse(99);
-
-    const handler = ipcHandlers.get('config:control-daemon');
-    if (!handler) throw new Error('config:control-daemon handler not registered');
-
-    const result = await handler(null, 'restart');
-
-    expect(restartDesktopDaemonMock).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({
-      success: true,
-      action: 'restart',
-      message: 'Daemon restarted and is online at 127.0.0.1:6131.',
-      status: {
-        online: true,
-        host: '127.0.0.1',
-        port: 6131,
-        status: 'ok',
-        source: 'health',
-        uptimeSeconds: 99,
-      },
-      embeddedRunning: true,
     });
   });
 
@@ -298,10 +95,6 @@ describe('config IPC', () => {
     const nextConfig = {
       general: {
         autoUpdate: false,
-      },
-      daemon: {
-        host: '127.0.0.1',
-        port: 6127,
       },
       mcp: {
         enabled: false,
@@ -338,7 +131,6 @@ describe('config IPC', () => {
 
     const nextConfig = {
       general: { autoUpdate: false },
-      daemon: { host: '127.0.0.1', port: 6127 },
       mcp: {
         enabled: false,
         connectOnStartup: false,

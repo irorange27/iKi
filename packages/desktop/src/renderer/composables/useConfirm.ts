@@ -1,6 +1,6 @@
 import { readonly, ref } from 'vue';
 
-export interface ConfirmOptions {
+interface ConfirmOptions {
   
   message: string;
   title?: string;

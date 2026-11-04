@@ -1,13 +1,10 @@
 import { listAgentRunsByStatus } from '@iki/backend/db/agent_runs';
-import {
-  MESSAGE_EVENT_TYPES,
-  appendSessionFacts,
-  getSessionEvents,
-} from '@iki/backend/db/session_events';
+import { appendSessionFacts, getSessionEvents } from '@iki/backend/db/session_events';
 import { hasLiveThreadRunLease } from '@iki/backend/db/thread_run_locks';
 import {
   APPROVAL_REQUESTED,
   APPROVAL_DECIDED,
+  MODEL_OUTPUT_COMMITTED,
   recordFailureTerminalEvent,
   SESSION_EVENT_VERSION,
   turnFactsToEvents,
@@ -22,7 +19,7 @@ import {
 import type { AgentRunStatus } from '@iki/backend/types/agent_run';
 import { rehydrateAgentRunTracker } from './run_tracker';
 
-export type RunRecoveryResult = {
+type RunRecoveryResult = {
   failedRuns: number;
   blockedRuns: number;
   totalRuns: number;
@@ -58,10 +55,14 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
   // so the log stays append-only and the projection picks the newest commit.
   let interruptedToolParts = 0;
   for (const threadId of threadIds) {
-    const rejected = new Map<string, { toolCallId: string; toolName: string; args: unknown }>();
+    const rejected = new Map<
+      string,
+      { toolCallId: string; toolName: string; args: unknown; runId: string }
+    >();
     for (const event of getSessionEvents(threadId, [APPROVAL_REQUESTED])) {
       const payload = event.payload as {
         sessionId?: unknown;
+        runId?: unknown;
         toolCallId?: unknown;
         toolName?: unknown;
         args?: unknown;
@@ -71,12 +72,13 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
         toolCallId: payload.toolCallId,
         toolName: typeof payload.toolName === 'string' ? payload.toolName : 'tool',
         args: payload.args,
+        runId: typeof payload.runId === 'string' ? payload.runId : '',
       });
     }
     if (rejected.size === 0) continue;
 
     const committed = new Map<string, { messageId: string; message: Record<string, unknown> }>();
-    for (const event of getSessionEvents(threadId, [MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED])) {
+    for (const event of getSessionEvents(threadId, [MODEL_OUTPUT_COMMITTED])) {
       const payload = event.payload as { messageId?: unknown; message?: unknown };
       if (typeof payload?.messageId !== 'string' || !isObjectRecord(payload.message)) continue;
       committed.set(payload.messageId, { messageId: payload.messageId, message: payload.message });
@@ -87,38 +89,57 @@ export const recoverStuckRunsOnStartup = (): RunRecoveryResult => {
       const target = committed.get(sessionId);
       if (!target) continue;
       const parts = Array.isArray(target.message.parts) ? target.message.parts : [];
-      const alreadyTerminal = parts.some(
+      const interruptedPart = toInterruptedToolPart(
+        {
+          type: 'dynamic-tool',
+          toolCallId: call.toolCallId,
+          toolName: call.toolName,
+          state: 'approval-requested',
+          input: call.args ?? {},
+        } as unknown as DynamicToolPart,
+        APPROVAL_PENDING_INTERRUPTED_ERROR_TEXT
+      );
+      const matching = parts.filter(
         part =>
           isObjectRecord(part) &&
           part.type === 'dynamic-tool' &&
-          (part as { toolCallId?: unknown }).toolCallId === call.toolCallId &&
-          isTerminalDynamicToolPart(part as unknown as DynamicToolPart)
+          (part as { toolCallId?: unknown }).toolCallId === call.toolCallId
       );
-      if (alreadyTerminal) continue;
+      // One part per call is the invariant. Settling the pending part IN PLACE is
+      // what closes the card: appending a second part for the same call left the
+      // live `approval-requested` part in the transcript, so the restart showed the
+      // terminal error AND an answerable Approve button for a decision nobody can
+      // make any more.
+      if (
+        matching.length === 1 &&
+        isTerminalDynamicToolPart(matching[0] as unknown as DynamicToolPart)
+      ) {
+        continue;
+      }
 
       interruptedToolParts += 1;
       appendSessionFacts(threadId, [
         {
-          type: MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED,
+          type: MODEL_OUTPUT_COMMITTED,
           version: SESSION_EVENT_VERSION,
           payload: {
-            runId: '',
+            // The run whose call is being closed out, so a retry that discards that
+            // run's output discards this correction with it: the model then sees
+            // neither the call nor its outcome, instead of a call left unanswered.
+            runId: call.runId,
             messageId: target.messageId,
             message: {
               ...target.message,
-              parts: [
-                ...parts,
-                toInterruptedToolPart(
-                  {
-                    type: 'dynamic-tool',
-                    toolCallId: call.toolCallId,
-                    toolName: call.toolName,
-                    state: 'approval-requested',
-                    input: call.args ?? {},
-                  } as unknown as DynamicToolPart,
-                  APPROVAL_PENDING_INTERRUPTED_ERROR_TEXT
-                ),
-              ],
+              parts:
+                matching.length > 0
+                  ? parts.map(part =>
+                      isObjectRecord(part) &&
+                      part.type === 'dynamic-tool' &&
+                      (part as { toolCallId?: unknown }).toolCallId === call.toolCallId
+                        ? interruptedPart
+                        : part
+                    )
+                  : [...parts, interruptedPart],
             },
             transport: 'stream',
           },

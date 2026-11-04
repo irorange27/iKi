@@ -30,7 +30,7 @@ const closePart = (parts: ChatUiPart[], kind: 'text' | 'reasoning'): void => {
   if (part) part.state = 'done';
 };
 
-export type ReduceOptions = {
+type ReduceOptions = {
 
   messageId?: string;
 

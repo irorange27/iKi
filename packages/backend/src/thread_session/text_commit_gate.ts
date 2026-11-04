@@ -5,7 +5,7 @@ import {
   SessionLogCommitError,
 } from './session_log';
 
-export type TextCommitGate = {
+type TextCommitGate = {
   buffer: (text: string) => void;
   flush: () => void;
 };

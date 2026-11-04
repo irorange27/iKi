@@ -56,10 +56,7 @@ export const buildIdentityContext = (
   ]
     .filter(Boolean)
     .join('\n\n');
-  const identityClip = {
-    text: clipTextToTokenBudget(identityText, contextConfig.maxIdentityTokens).text,
-    truncated: clipTextToTokenBudget(identityText, contextConfig.maxIdentityTokens).truncated,
-  };
+  const identityClip = clipTextToTokenBudget(identityText, contextConfig.maxIdentityTokens);
 
   return {
     systemMessage: identityClip.text,

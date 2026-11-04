@@ -55,24 +55,14 @@ vi.mock('@iki/backend/db/providers', () => ({
 
 vi.mock('@iki/backend/db/workspaces', () => ({
   getWorkspaces: vi.fn(),
+  getVisibleWorkspaces: vi.fn(),
   getWorkspace: vi.fn(),
   getWorkspaceByPath: vi.fn(),
-  getVisibleWorkspaces: vi.fn(),
-  addWorkspace: vi.fn(),
   updateWorkspace: vi.fn(),
-  deleteWorkspace: vi.fn(),
-  toggleWorkspaceVisibility: vi.fn(),
 }));
 
 vi.mock('@iki/backend/db/prompt_apps', () => ({
-  getPromptApps: vi.fn(),
-  getPromptApp: vi.fn(),
   getEnabledPromptApps: vi.fn(),
-  addPromptApp: vi.fn(),
-  updatePromptApp: vi.fn(),
-  deletePromptApp: vi.fn(),
-  togglePromptAppEnabled: vi.fn(),
-  updatePromptAppSortOrder: vi.fn(),
 }));
 
 import { registerPromptAppsIpc } from '../../../packages/desktop/src/main/ipc/prompt_apps';
@@ -82,14 +72,7 @@ import * as promptAppDb from '@iki/backend/db/prompt_apps';
 import * as providerDb from '@iki/backend/db/providers';
 import * as workspaceDb from '@iki/backend/db/workspaces';
 
-const addPromptAppMock = vi.mocked(promptAppDb.addPromptApp);
-const deletePromptAppMock = vi.mocked(promptAppDb.deletePromptApp);
 const getEnabledPromptAppsMock = vi.mocked(promptAppDb.getEnabledPromptApps);
-const getPromptAppMock = vi.mocked(promptAppDb.getPromptApp);
-const getPromptAppsMock = vi.mocked(promptAppDb.getPromptApps);
-const togglePromptAppEnabledMock = vi.mocked(promptAppDb.togglePromptAppEnabled);
-const updatePromptAppMock = vi.mocked(promptAppDb.updatePromptApp);
-const updatePromptAppSortOrderMock = vi.mocked(promptAppDb.updatePromptAppSortOrder);
 
 const addProviderMock = vi.mocked(providerDb.addProvider);
 const deleteProviderMock = vi.mocked(providerDb.deleteProvider);
@@ -97,14 +80,10 @@ const getProviderMock = vi.mocked(providerDb.getProvider);
 const getProvidersMock = vi.mocked(providerDb.getProviders);
 const updateProviderMock = vi.mocked(providerDb.updateProvider);
 
-const addWorkspaceMock = vi.mocked(workspaceDb.addWorkspace);
-const deleteWorkspaceMock = vi.mocked(workspaceDb.deleteWorkspace);
 const getVisibleWorkspacesMock = vi.mocked(workspaceDb.getVisibleWorkspaces);
 const getWorkspaceByPathMock = vi.mocked(workspaceDb.getWorkspaceByPath);
 const getWorkspaceMock = vi.mocked(workspaceDb.getWorkspace);
 const getWorkspacesMock = vi.mocked(workspaceDb.getWorkspaces);
-const toggleWorkspaceVisibilityMock = vi.mocked(workspaceDb.toggleWorkspaceVisibility);
-const updateWorkspaceMock = vi.mocked(workspaceDb.updateWorkspace);
 
 beforeAll(() => {
   registerProvidersIpc();
@@ -194,7 +173,7 @@ describe('data access IPC modules', () => {
     addProviderMock.mockImplementationOnce(() => {
       throw addError;
     });
-    expect(() => ipcHandlers.get('providers:add')?.(null, { id: 'provider_bad' })).toThrow(
+    await expect(ipcHandlers.get('providers:add')?.(null, { id: 'provider_bad' })).rejects.toThrow(
       'add failed'
     );
     expect(loggerEventMock).toHaveBeenCalledWith(
@@ -210,9 +189,9 @@ describe('data access IPC modules', () => {
     updateProviderMock.mockImplementationOnce(() => {
       throw updateError;
     });
-    expect(() =>
+    await expect(
       ipcHandlers.get('providers:update')?.(null, 'provider_1', { enabled: false })
-    ).toThrow('update failed');
+    ).rejects.toThrow('update failed');
     expect(loggerEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         level: 'error',
@@ -223,7 +202,7 @@ describe('data access IPC modules', () => {
     );
   }, 15000);
 
-  it('creates workspace records with normalized defaults and forwards remaining workspace handlers', async () => {
+  it('forwards the surviving workspace handlers with normalized defaults', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-21T09:00:00.000Z'));
     vi.spyOn(Math, 'random').mockReturnValue(0.123456789);
@@ -232,22 +211,12 @@ describe('data access IPC modules', () => {
     getWorkspaceMock.mockImplementation((id: string) => ({ id, name: 'Workspace' }) as never);
     getWorkspaceByPathMock.mockReturnValue({ id: 'workspace_path' } as never);
     getVisibleWorkspacesMock.mockReturnValue([{ id: 'workspace_visible' } as never]);
-    updateWorkspaceMock.mockReturnValue({ success: true } as never);
-    deleteWorkspaceMock.mockReturnValue({ success: true } as never);
-    toggleWorkspaceVisibilityMock.mockReturnValue({ success: true } as never);
     showOpenDialogMock.mockResolvedValue({
       canceled: false,
       filePaths: ['/tmp/chosen'],
     });
 
     expect(await ipcHandlers.get('workspaces:list')?.(null)).toEqual([{ id: 'workspace_1' }]);
-    expect(await ipcHandlers.get('workspaces:get')?.(null, 'workspace_1')).toEqual({
-      id: 'workspace_1',
-      name: 'Workspace',
-    });
-    expect(await ipcHandlers.get('workspaces:getByPath')?.(null, '/tmp')).toEqual({
-      id: 'workspace_path',
-    });
     expect(await ipcHandlers.get('workspaces:getVisible')?.(null)).toEqual([
       { id: 'workspace_visible' },
     ]);
@@ -260,98 +229,11 @@ describe('data access IPC modules', () => {
       title: 'Choose workspace folder',
       buttonLabel: 'Use as Workspace',
     });
-
-    const created = await ipcHandlers.get('workspaces:create')?.(null, {
-      path: '/tmp/demo',
-      name: 'Demo',
-    });
-    const createdWorkspaceId = (created as { id: string }).id;
-    expect(created).toEqual({
-      id: expect.stringMatching(/^workspace_1774083600000_/),
-      name: 'Workspace',
-    });
-    expect(addWorkspaceMock).toHaveBeenCalledWith({
-      id: createdWorkspaceId,
-      path: '/tmp/demo',
-      name: 'Demo',
-      is_temporary: 0,
-      show_in_list: 1,
-    });
-    expect(getWorkspaceMock).toHaveBeenCalledWith(createdWorkspaceId);
-
-    expect(
-      await ipcHandlers.get('workspaces:update')?.(null, 'workspace_1', { name: 'Renamed' })
-    ).toEqual({
-      success: true,
-    });
-    expect(await ipcHandlers.get('workspaces:delete')?.(null, 'workspace_1')).toEqual({
-      success: true,
-    });
-    expect(await ipcHandlers.get('workspaces:toggleVisibility')?.(null, 'workspace_1')).toEqual({
-      success: true,
-    });
   });
 
-  it('creates prompt apps with normalized defaults and forwards remaining prompt app handlers', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-03-21T10:00:00.000Z'));
-    vi.spyOn(Math, 'random').mockReturnValue(0.987654321);
-
-    getPromptAppsMock.mockReturnValue([{ id: 'app_1' } as never]);
-    getPromptAppMock.mockImplementation((id: string) => ({ id, name: 'Prompt App' }) as never);
+  it('forwards prompt app getEnabled through the db layer', async () => {
     getEnabledPromptAppsMock.mockReturnValue([{ id: 'app_enabled' } as never]);
-    updatePromptAppMock.mockReturnValue({ success: true } as never);
-    deletePromptAppMock.mockReturnValue({ success: true } as never);
-    togglePromptAppEnabledMock.mockReturnValue({ success: true } as never);
-    updatePromptAppSortOrderMock.mockReturnValue({ success: true } as never);
 
-    expect(await ipcHandlers.get('promptApps:list')?.(null)).toEqual([{ id: 'app_1' }]);
-    expect(await ipcHandlers.get('promptApps:get')?.(null, 'app_1')).toEqual({
-      id: 'app_1',
-      name: 'Prompt App',
-    });
     expect(await ipcHandlers.get('promptApps:getEnabled')?.(null)).toEqual([{ id: 'app_enabled' }]);
-
-    const created = await ipcHandlers.get('promptApps:create')?.(null, {
-      name: 'Summarizer',
-      prompt_template: 'Summarize {{input}}',
-    });
-    const createdPromptAppId = (created as { id: string }).id;
-    expect(created).toEqual({
-      id: expect.stringMatching(/^promptApp_1774087200000_/),
-      name: 'Prompt App',
-    });
-    expect(addPromptAppMock).toHaveBeenCalledWith({
-      id: createdPromptAppId,
-      name: 'Summarizer',
-      description: null,
-      icon: null,
-      prompt_template: 'Summarize {{input}}',
-      placeholders: '[]',
-      model: null,
-      enabled: 1,
-      sort_order: 0,
-      tools: null,
-      reasoning_effort: null,
-      expects_image_result: 0,
-      is_incognito: 0,
-      shortcut: null,
-      window_width: null,
-      window_height: null,
-      font_size: null,
-    });
-
-    expect(
-      await ipcHandlers.get('promptApps:update')?.(null, 'app_1', { description: 'Updated' })
-    ).toEqual({
-      success: true,
-    });
-    expect(await ipcHandlers.get('promptApps:delete')?.(null, 'app_1')).toEqual({ success: true });
-    expect(await ipcHandlers.get('promptApps:toggleEnabled')?.(null, 'app_1')).toEqual({
-      success: true,
-    });
-    expect(await ipcHandlers.get('promptApps:updateSortOrder')?.(null, 'app_1', 3)).toEqual({
-      success: true,
-    });
   });
 });

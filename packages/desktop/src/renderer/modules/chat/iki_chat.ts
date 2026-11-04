@@ -8,7 +8,7 @@ import type {
 
 import { applyChatUiChunk } from './chat_chunk_apply';
 
-export type ChatFinishInfo = {
+type ChatFinishInfo = {
   message: ChatUiMessage;
   isAbort: boolean;
   isError: boolean;
@@ -21,11 +21,9 @@ export type ChatStateAdapter = {
   pushMessage: (message: ChatUiMessage) => void;
   popMessage: () => void;
   replaceMessage: (index: number, message: ChatUiMessage) => void;
-  
-  snapshot: (value: ChatUiMessage[]) => ChatUiMessage[];
 };
 
-export type IkiChatOptions = {
+type IkiChatOptions = {
   transport: UiChatTransport;
   state: ChatStateAdapter;
   generateId: () => string;

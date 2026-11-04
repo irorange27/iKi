@@ -9,8 +9,6 @@ import type { IpcChatTransport } from './ipc_chat_transport';
 
 const approvalLogger = createLogger({ module: 'tool_approval_controller' });
 
-export type ToolApprovalController = ReturnType<typeof createToolApprovalController>;
-
 export const createToolApprovalController = (deps: {
   chat: IkiChat;
   transport: IpcChatTransport;

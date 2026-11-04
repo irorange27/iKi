@@ -1,7 +1,6 @@
-import type { JsonValue } from '../types/provider';
+import type { JsonValue , ProviderModelOptions, ProviderModelOptionsMap } from '../types/provider';
 import { normalizeOptionalString } from './text';
 
-import type { ProviderModelOptions, ProviderModelOptionsMap } from '../types/provider';
 
 const normalizeModelList = (models: unknown[]): string[] =>
   models
@@ -92,10 +91,15 @@ export type ModelCapability = {
   modalities?: string[];
 
   costPerMillionTokens?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+
+  /** Whether this model supports Anthropic-style prompt cache control */
+  supportsCacheControl?: boolean | null;
+  /** Which cache control format this model accepts ("anthropic" for OpenAI-compatible with Anthropic cache support) */
+  cacheControlFormat?: "anthropic" | null;
   source: 'models.dev' | 'provider' | 'default';
 };
 
-export type ModelCapabilityLimits = Pick<
+type ModelCapabilityLimits = Pick<
   ModelCapability,
   'contextWindow' | 'maxInputTokens' | 'maxOutputTokens'
 >;
@@ -112,7 +116,10 @@ const asRecord = (value: unknown): Record<string, unknown> | null => {
   return value as Record<string, unknown>;
 };
 
-const parseJsonRecord = (value: unknown): Record<string, unknown> | null => {
+// Local tri-state JSON-object probe (null on any failure, passthrough for
+// already-parsed values). Named apart from thread_runtime_hints.parseJsonRecord,
+// whose fallback is {} — the two must never be confused.
+const tryParseJsonObject = (value: unknown): Record<string, unknown> | null => {
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (!trimmed) return null;
@@ -174,9 +181,16 @@ const getLimitRecord = (model: ModelsDevModelRecord): ModelsDevLimitRecord | nul
   return null;
 };
 
-const modalitiesIncludeImage = (modalities: unknown): boolean | null => {
+/** The catalog writes modality lists under `input`, older shapes at the top level. */
+const readModalityInputList = (modalities: unknown): unknown[] | null => {
   const record = asRecord(modalities);
-  const input = Array.isArray(record?.input) ? record!.input : Array.isArray(modalities) ? modalities : null;
+  const fromRecord = record?.input;
+  if (Array.isArray(fromRecord)) return fromRecord;
+  return Array.isArray(modalities) ? modalities : null;
+};
+
+const modalitiesIncludeImage = (modalities: unknown): boolean | null => {
+  const input = readModalityInputList(modalities);
   if (!input) return null;
 
   const normalized = input.filter((value): value is string => typeof value === 'string');
@@ -186,8 +200,7 @@ const modalitiesIncludeImage = (modalities: unknown): boolean | null => {
 };
 
 const readModalityList = (modalities: unknown): string[] | null => {
-  const record = asRecord(modalities);
-  const input = Array.isArray(record?.input) ? record!.input : Array.isArray(modalities) ? modalities : null;
+  const input = readModalityInputList(modalities);
   if (!input) return null;
 
   const normalized = input
@@ -305,7 +318,7 @@ export const parseModelList = (value: unknown): string[] => {
 };
 
 export const parseProviderModelOptionsMap = (value: unknown): ProviderModelOptionsMap => {
-  const record = parseJsonRecord(value);
+  const record = tryParseJsonObject(value);
   if (!record) return {};
 
   return Object.keys(record)

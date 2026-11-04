@@ -127,8 +127,6 @@ function detectProcessKind(): StructuredLogProcess {
   if (process.env.IKI_LOG_PROCESS === 'renderer') return 'renderer';
   if (process.env.IKI_LOG_PROCESS === 'preload') return 'preload';
   if (process.env.IKI_LOG_PROCESS === 'main') return 'main';
-  if (process.env.IKI_LOG_PROCESS === 'daemon') return 'daemon';
-  if (process.argv.includes('--iki-daemon')) return 'daemon';
   if (processType === 'renderer') {
     return typeof windowRef.window === 'undefined' ? 'preload' : 'renderer';
   }
@@ -581,7 +579,7 @@ export function setLoggingEnabled(enabled: boolean): void {
   runtimeConfig.enabled = Boolean(enabled);
 }
 
-export function setLogLevel(level: string): void {
+function setLogLevel(level: string): void {
   const normalized = normalizeLogLevel(level);
   if (!normalized) return;
   runtimeConfig.level = normalized;
@@ -605,19 +603,4 @@ export function applyAppLoggingConfig(
 
 export function getRuntimeLoggingConfig(): RuntimeLoggingConfig {
   return { ...runtimeConfig };
-}
-
-export function sanitizeLogData<T>(value: T): T {
-  return sanitizeUnknown(value) as T;
-}
-
-export function createStructuredLogEntry(
-  options: ModuleLoggerOptions,
-  input: LogEventInput
-): StructuredLogEntry {
-  return buildLogEntry(options, input);
-}
-
-export function writeStructuredLogEntry(entry: StructuredLogEntry): StructuredLogEntry {
-  return emitStructuredLog(entry);
 }

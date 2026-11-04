@@ -247,10 +247,7 @@ describe('pi tool resume through the real five-state owner (switch item 3b)', ()
     expect(denialFacts).toHaveLength(1);
     expect(denialFacts[0].payload).toMatchObject({
       decision: 'rejected',
-      result: {
-        toolCallId: 'call_owner_rejected',
-        output: { type: 'execution-denied', reason: 'integration rejection' },
-      },
+      output: { type: 'execution-denied', reason: 'integration rejection' },
     });
   });
 });

@@ -14,7 +14,7 @@ import type {
 
 const chatComposerSendLogger = createLogger({ module: 'chat_composer_send' });
 
-export type ComposerProviderReadyResult =
+type ComposerProviderReadyResult =
   | {
       ok: true;
       provider: Provider;

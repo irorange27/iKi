@@ -8,7 +8,7 @@ import {
   type MessagesTruncatedPayload,
 } from './session_log';
 
-export type TruncateHistoryResult = {
+type TruncateHistoryResult = {
   success: boolean;
   deletedIds: string[];
   error?: string;

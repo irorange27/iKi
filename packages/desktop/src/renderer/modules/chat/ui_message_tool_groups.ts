@@ -13,7 +13,7 @@ import {
 } from './ui_message_tool_calls';
 import { translate } from '../../i18n';
 
-export type ToolCallVerb =
+type ToolCallVerb =
   | 'read'
   | 'edit'
   | 'write'
@@ -93,7 +93,7 @@ export const getToolCallPathDirectory = (part: unknown): string => {
   return separator > 0 ? path.slice(0, separator + 1) : '';
 };
 
-export type ToolCallGroupMeta = {
+type ToolCallGroupMeta = {
   
   allSettled: boolean;
   

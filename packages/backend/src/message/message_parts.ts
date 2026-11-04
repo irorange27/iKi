@@ -11,7 +11,7 @@ export type SkillUsageEntry = {
   source?: SkillSource;
 };
 
-export type SkillUsagePartData = {
+type SkillUsagePartData = {
   mode?: 'manual' | 'auto';
   skills?: SkillUsageEntry[];
 };
@@ -28,7 +28,7 @@ export type ComposerInvocationPartData = {
   tokens?: ComposerInvocationToken[];
 };
 
-export type ContextReportItem = {
+type ContextReportItem = {
   kind?: 'recent-history' | 'identity' | 'thread-summary' | 'skills';
   status?: 'included' | 'truncated' | 'dropped';
   estimatedTokens?: number;
@@ -37,7 +37,7 @@ export type ContextReportItem = {
   sourceCount?: number;
 };
 
-export type ContextReportPartData = {
+type ContextReportPartData = {
   totalEstimatedTokens?: number;
   retainedRecentMessages?: number;
   compactedMessages?: number;
@@ -75,7 +75,7 @@ const isContextCompositionSummary = (value: unknown): value is ContextCompositio
   return typeof value.estimatedTotalTokens === 'number';
 };
 
-export type ChatUiDataTypes = {
+type ChatUiDataTypes = {
   'skill-usage': SkillUsagePartData;
   'composer-invocation': ComposerInvocationPartData;
   'context-report': ContextReportPartData;
@@ -103,11 +103,11 @@ export type UiMessagePart =
 
   | UiGenericDataPart;
 export type TextPart = Extract<UiMessagePart, { type: 'text' }>;
-export type ReasoningPart = Extract<UiMessagePart, { type: 'reasoning' }>;
-export type SkillUsagePart = Extract<UiMessagePart, { type: 'data-skill-usage' }>;
-export type ComposerInvocationPart = Extract<UiMessagePart, { type: 'data-composer-invocation' }>;
-export type ContextReportPart = Extract<UiMessagePart, { type: 'data-context-report' }>;
-export type TokenUsagePart = Extract<UiMessagePart, { type: 'data-token-usage' }>;
+type ReasoningPart = Extract<UiMessagePart, { type: 'reasoning' }>;
+type SkillUsagePart = Extract<UiMessagePart, { type: 'data-skill-usage' }>;
+type ComposerInvocationPart = Extract<UiMessagePart, { type: 'data-composer-invocation' }>;
+type ContextReportPart = Extract<UiMessagePart, { type: 'data-context-report' }>;
+type TokenUsagePart = Extract<UiMessagePart, { type: 'data-token-usage' }>;
 export type DynamicToolPart = Extract<UiMessagePart, { type: 'dynamic-tool' }>;
 
 type LegacySkillUsagePart = {
@@ -163,7 +163,7 @@ export type ToolApproval = {
   reason?: string;
 };
 
-export type ToolCallRef = {
+type ToolCallRef = {
   toolCallId?: string;
   toolName?: string;
   args?: unknown;
@@ -190,7 +190,7 @@ export type ToolCallPart = {
   state?: DynamicToolState | string;
 };
 
-export type ToolResultPart = {
+type ToolResultPart = {
   type: 'tool-result';
   toolCallId?: string;
   toolName?: string;
@@ -199,7 +199,7 @@ export type ToolResultPart = {
   state?: DynamicToolState | string;
 };
 
-export type ToolApprovalRequestPart = {
+type ToolApprovalRequestPart = {
   type: 'tool-approval-request';
   approvalId?: string;
   toolCallId?: string;
@@ -211,7 +211,7 @@ export type ToolApprovalRequestPart = {
   state?: DynamicToolState | string;
 };
 
-export type ToolApprovalResponsePart = {
+type ToolApprovalResponsePart = {
   type: 'tool-approval-response';
   approvalId?: string;
   approved?: boolean;
@@ -231,7 +231,7 @@ export type ToolPart =
   | ToolApprovalRequestPart
   | ToolApprovalResponsePart;
 
-export type ChatUiMetadataPart =
+type ChatUiMetadataPart =
   | SkillUsagePart
   | ComposerInvocationPart
   | ContextReportPart

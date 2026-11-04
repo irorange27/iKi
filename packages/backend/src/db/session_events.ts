@@ -1,4 +1,7 @@
 import { getDb } from './database';
+import { INPUT_ACCEPTED, MODEL_OUTPUT_COMMITTED } from '@iki/backend/types/session_events';
+
+const MESSAGE_EVENT_TYPES_SQL = `type IN ('${INPUT_ACCEPTED}','${MODEL_OUTPUT_COMMITTED}')`;
 
 export type StoredSessionEvent = {
   revision: number;
@@ -103,8 +106,13 @@ export const appendSessionEvents = (
   events: NewSessionEvent[]
 ) => append(threadId, expectedRevision, events);
 
+/**
+ * Append observed facts at the current head. Unlike `appendSessionEvents` there is
+ * no expected revision to lose against: an observed fact is recorded whatever else
+ * happened to land first, so ordering is the only invariant and it holds.
+ */
 export const appendSessionFacts = (threadId: string, events: NewSessionEvent[]): number =>
-  append(threadId, null, events)!;
+  append(threadId, null, events) ?? getSessionEventRevision(threadId);
 
 export const findMessageEvent = (
   messageId: string,
@@ -112,37 +120,30 @@ export const findMessageEvent = (
 ): { threadId: string; payload: unknown } | null => {
   const needle = messageId.trim();
   if (!needle) return null;
-  const like = `%${needle.replace(/[%_]/g, ch => `\\${ch}`)}%`;
+  // Ask SQLite for the payload's message id field. Matching the serialized blob
+  // with LIKE would also hit ids that merely appear inside message text or tool
+  // arguments, and a row limit could then drop the event that really carries it.
+  // `$.messageId` is what writers stamp; `$.message.id` covers events recorded
+  // before that field existed, so an old database still resolves.
+  const matchId =
+    "COALESCE(json_extract(payload, '$.messageId'), json_extract(payload, '$.message.id')) = ?";
   const sql = threadId
     ? `SELECT thread_id, payload FROM session_events
-        WHERE thread_id = ? AND type IN ('input_accepted','model_output_committed')
-          AND payload LIKE ? ORDER BY revision DESC LIMIT 20`
+        WHERE thread_id = ? AND ${MESSAGE_EVENT_TYPES_SQL}
+          AND ${matchId}
+        ORDER BY revision DESC LIMIT 1`
     : `SELECT thread_id, payload FROM session_events
-        WHERE type IN ('input_accepted','model_output_committed')
-          AND payload LIKE ? ORDER BY revision DESC LIMIT 20`;
-  const rows = (
-    threadId
-      ? getDb().prepare(sql).all(threadId, like)
-      : getDb().prepare(sql).all(like)
-  ) as Array<{ thread_id: string; payload: string }>;
-
-  for (const row of rows) {
-    try {
-      const payload = JSON.parse(row.payload) as { message?: { id?: unknown } };
-      if (payload?.message?.id === needle) {
-        return { threadId: row.thread_id, payload };
-      }
-    } catch {
-    // Intentionally ignored: the caller cannot act on it.
+        WHERE ${MESSAGE_EVENT_TYPES_SQL}
+          AND ${matchId}
+        ORDER BY revision DESC LIMIT 1`;
+  const row = (
+    threadId ? getDb().prepare(sql).get(threadId, needle) : getDb().prepare(sql).get(needle)
+  ) as { thread_id: string; payload: string } | undefined;
+  if (!row) return null;
+  try {
+    return { threadId: row.thread_id, payload: JSON.parse(row.payload) as unknown };
+  } catch {
+    // Intentionally ignored: a payload that will not parse is not a message event.
+    return null;
   }
-  }
-  return null;
 };
-
-export const MESSAGE_EVENT_TYPES = {
-  INPUT_ACCEPTED: 'input_accepted',
-  MODEL_OUTPUT_COMMITTED: 'model_output_committed',
-  MESSAGES_TRUNCATED: 'messages_truncated',
-} as const;
-
-export const SESSION_EVENT_VERSION = 1;

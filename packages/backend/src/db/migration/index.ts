@@ -7,8 +7,15 @@ import {
 } from './runner';
 import { migration as baseline } from './001_baseline';
 import { migration as dropLegacyTables } from './002_drop_legacy_tables';
+import { migration as dropAppClients } from './003_drop_app_clients';
+import { migration as oneShapePerExecutionFact } from './004_one_shape_per_execution_fact';
 
-export const registeredMigrations: Migration[] = [baseline, dropLegacyTables];
+export const registeredMigrations: Migration[] = [
+  baseline,
+  dropLegacyTables,
+  dropAppClients,
+  oneShapePerExecutionFact,
+];
 
 // Tables database.ts creates before migrations run. Anything else means the
 // database predates the squashed baseline.

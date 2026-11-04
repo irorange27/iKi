@@ -4,7 +4,7 @@ import { loadAgentConfig, validateAgentConfig } from '../agent/config';
 import type { PartialAgentConfig } from '@iki/backend/agent/types';
 import { generateChatWithModelMessages, getModelGenerationSettings } from '../provider/llm/factory';
 
-export type PromptTextGeneratorConfig = PartialAgentConfig & {
+type PromptTextGeneratorConfig = PartialAgentConfig & {
   threadId?: string;
 };
 

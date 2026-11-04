@@ -5,7 +5,7 @@ import { parseProviderModelOptionsMap } from '@iki/backend/utils/provider_models
 
 export type ModelBooleanOverride = 'default' | 'true' | 'false';
 
-export type ModelOptionValidationErrorCode = 'invalidJson' | 'objectRequired';
+type ModelOptionValidationErrorCode = 'invalidJson' | 'objectRequired';
 
 export type ModelOptionsEditorState = {
   providerId: string;
@@ -22,33 +22,19 @@ export type ModelOptionsEditorState = {
   errorCode?: ModelOptionValidationErrorCode;
 };
 
-export const toBooleanOverride = (value?: boolean | null): ModelBooleanOverride => {
+const toBooleanOverride = (value?: boolean | null): ModelBooleanOverride => {
   if (value === true) return 'true';
   if (value === false) return 'false';
   return 'default';
 };
 
-export const fromBooleanOverride = (value: ModelBooleanOverride): boolean | undefined => {
+const fromBooleanOverride = (value: ModelBooleanOverride): boolean | undefined => {
   if (value === 'true') return true;
   if (value === 'false') return false;
   return undefined;
 };
 
-export const formatCompactTokenCount = (value: number): string => {
-  if (value >= 1000000) {
-    const rounded = Math.round((value / 1000000) * 10) / 10;
-    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded}M`;
-  }
-
-  if (value >= 1000) {
-    const rounded = Math.round((value / 1000) * 10) / 10;
-    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded}K`;
-  }
-
-  return String(value);
-};
-
-export const parseOptionalPositiveIntegerInput = (
+const parseOptionalPositiveIntegerInput = (
   value: string | number | null | undefined
 ): number | undefined => {
   const trimmed = String(value ?? '').trim();
@@ -62,7 +48,21 @@ export const parseOptionalPositiveIntegerInput = (
   return Math.trunc(parsed);
 };
 
-export const formatProviderOptionsJson = (value?: Record<string, JSONValue> | null): string =>
+const formatCompactTokenCount = (value: number): string => {
+  if (value >= 1000000) {
+    const rounded = Math.round((value / 1000000) * 10) / 10;
+    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded}M`;
+  }
+
+  if (value >= 1000) {
+    const rounded = Math.round((value / 1000) * 10) / 10;
+    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded}K`;
+  }
+
+  return String(value);
+};
+
+const formatProviderOptionsJson = (value?: Record<string, JSONValue> | null): string =>
   value && Object.keys(value).length > 0 ? JSON.stringify(value, null, 2) : '';
 
 export const createModelOptionsEditorState = (

@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { RawSourceMap } from 'source-map-js';
 import sourceMapJs from 'source-map-js';
 
-export type SourceMapInput = {
+type SourceMapInput = {
   
   scriptUrl: string;
   
@@ -14,7 +14,7 @@ export type SourceMapInput = {
   column: number;
 };
 
-export type OriginalPosition = {
+type OriginalPosition = {
   source: string;
   line: number;
   column: number;

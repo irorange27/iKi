@@ -33,25 +33,25 @@
         <div class="usage-metric-card">
           <div class="usage-metric-label">{{ t('settings.usage.inputTokens') }}</div>
           <div class="usage-metric-value">
-            {{ formatUsageTokens(usageSummary.totals.inputTokens) }}
+            {{ formatCompactNumber(usageSummary.totals.inputTokens) }}
           </div>
         </div>
         <div class="usage-metric-card">
           <div class="usage-metric-label">{{ t('settings.usage.outputTokens') }}</div>
           <div class="usage-metric-value">
-            {{ formatUsageTokens(usageSummary.totals.outputTokens) }}
+            {{ formatCompactNumber(usageSummary.totals.outputTokens) }}
           </div>
         </div>
         <div class="usage-metric-card">
           <div class="usage-metric-label">{{ t('settings.usage.cacheRead') }}</div>
           <div class="usage-metric-value">
-            {{ formatUsageTokens(usageSummary.totals.cacheReadTokens) }}
+            {{ formatCompactNumber(usageSummary.totals.cacheReadTokens) }}
           </div>
         </div>
         <div class="usage-metric-card">
           <div class="usage-metric-label">{{ t('settings.usage.cacheWrite') }}</div>
           <div class="usage-metric-value">
-            {{ formatUsageTokens(usageSummary.totals.cacheWriteTokens) }}
+            {{ formatCompactNumber(usageSummary.totals.cacheWriteTokens) }}
           </div>
         </div>
       </div>
@@ -98,7 +98,7 @@
         </div>
         <div class="usage-heatmap-footer">
           <span>
-            {{ t('settings.usage.heatmapFooter', { tokens: formatUsageTokens(usagePastYearTokens) }) }}
+            {{ t('settings.usage.heatmapFooter', { tokens: formatCompactNumber(usagePastYearTokens) }) }}
           </span>
           <span class="usage-heatmap-legend">{{ t('settings.usage.heatmapLegend') }}</span>
         </div>
@@ -129,6 +129,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatCompactNumber } from '../../utils/formatters';
 import { computed, ref, watch } from 'vue';
 
 import SettingsSelect from './SettingsSelect.vue';
@@ -206,13 +207,6 @@ const usageMaxMonthlyCost = computed(() => {
 const usagePastYearTokens = computed(() =>
   usageHeatmapCells.value.reduce((sum, cell) => sum + cell.totalTokens, 0)
 );
-
-const formatUsageTokens = (value: number): string => {
-  if (!Number.isFinite(value) || value <= 0) return '0';
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return `${Math.round(value)}`;
-};
 
 const formatUsageCost = (value: number): string => {
   if (!Number.isFinite(value) || value <= 0) return '$0.000';

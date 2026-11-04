@@ -48,7 +48,6 @@ createSidebar();
 useTheme();
 useAppLocale();
 const { t } = useI18n();
-const electronAPI = window.electronAPI;
 
 const focusLandmark = (id: string) => {
   const target = document.getElementById(id);
@@ -75,8 +74,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('hashchange', updateHash);
-  unsubscribeFocusThread?.();
-  unsubscribeFocusThread = null;
   document.documentElement.classList.remove('companion-shell-mode');
   document.body.classList.remove('companion-shell-mode');
 });
@@ -90,17 +87,6 @@ const shellKind = computed(() =>
 const closeSettings = () => {
   window.location.hash = '';
 };
-
-let unsubscribeFocusThread: (() => void) | null = null;
-watch(isSettings, enabled => {
-  unsubscribeFocusThread?.();
-  unsubscribeFocusThread = null;
-  if (!enabled) return;
-  unsubscribeFocusThread =
-    electronAPI?.onFocusThread?.(() => {
-      window.location.hash = '';
-    }) ?? null;
-});
 
 watch(
   isCompanion,

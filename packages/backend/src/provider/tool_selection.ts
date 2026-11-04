@@ -7,9 +7,9 @@ import {
 } from './catalog_selection';
 import { getToolModel } from './tool_model';
 
-export type ToolSelectionMessage = SelectionMessage;
+type ToolSelectionMessage = SelectionMessage;
 
-export type ToolCatalogItem = {
+type ToolCatalogItem = {
   name: string;
   displayName?: string;
   description?: string;

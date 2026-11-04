@@ -42,7 +42,7 @@ export const createChatContextAssembler = (deps: {
       });
     }
 
-    const recentHistory = selectRecentHistory(params.messages, params.modelCapability);
+    const recentHistory = selectRecentHistory(params.messages);
     blocks.push(recentHistory.block);
 
     const workspaceSystemMessage =

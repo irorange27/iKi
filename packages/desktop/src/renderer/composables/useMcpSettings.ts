@@ -13,6 +13,7 @@ import type {
   McpTransport,
 } from '@iki/backend/types/mcp';
 import { getErrorMessage } from '@iki/backend/utils/errors';
+import { formatTimestamp } from '../utils/formatters';
 
 type ServerForm = {
   name: string;
@@ -414,12 +415,6 @@ export const useMcpSettings = (onConfigChange: () => void) => {
   const canRefresh = (server: McpServerSummary): boolean => {
     if (!server.enabled) return false;
     return server.status?.state === 'connected' && !actionLoading.value;
-  };
-
-  const formatTimestamp = (value: string): string => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleString();
   };
 
   const formatTransport = (transport: McpTransport): string =>

@@ -77,19 +77,19 @@ const TURN_OUTCOMES: Record<TurnDriverResult['outcome'], TurnOutcomeSpec> = {
   },
 };
 
-export type TurnFailureSpec = {
+type TurnFailureSpec = {
   status: 'failed';
   errorText: string;
   code?: string;
   retryable?: boolean;
 };
 
-export type TerminalRunTracker = Pick<
+type TerminalRunTracker = Pick<
   AgentRunTracker,
   'id' | 'getRun' | 'markCompleted' | 'markBlocked' | 'markFailed' | 'markCancelled'
 >;
 
-export type FinalizeTurnParams = {
+type FinalizeTurnParams = {
   tracker: TerminalRunTracker;
   outcome: TurnDriverResult['outcome'];
 

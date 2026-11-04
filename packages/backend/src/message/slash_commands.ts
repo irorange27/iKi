@@ -10,7 +10,7 @@ export type PromptAppSlashCommand = {
   promptTemplate: string;
 };
 
-export type SkillSlashCommand = {
+type SkillSlashCommand = {
   id: `skill:${string}`;
   name: string;
   description: string;
@@ -19,7 +19,7 @@ export type SkillSlashCommand = {
   skillId: string;
 };
 
-export type ParsedSlashCommandDraft = {
+type ParsedSlashCommandDraft = {
   leadingWhitespace: string;
   rawToken: string;
   query: string;

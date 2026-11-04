@@ -1,27 +1,38 @@
+import { appendSessionFacts, findMessageEvent } from '@iki/backend/db/session_events';
 import {
-  MESSAGE_EVENT_TYPES,
+  INPUT_ACCEPTED,
+  MODEL_OUTPUT_COMMITTED,
   SESSION_EVENT_VERSION,
-  appendSessionFacts,
-  findMessageEvent,
-  getSessionEvents,
-} from '@iki/backend/db/session_events';
+} from '@iki/backend/types/session_events';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import * as awaitersDb from '@iki/backend/db/awaiters';
 import { getDb } from '@iki/backend/db/database';
 import { createLogger } from '@iki/backend/logger';
-import type { ChatMessage, ChatThread } from '@iki/backend/types/chat';
+import type { ChatThread } from '@iki/backend/types/chat';
+import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import { normalizeUiMessage } from '@iki/backend/message/ui_message_codec';
 import { isObjectRecord } from '@iki/backend/utils/guards';
 import { normalizeOptionalString } from '@iki/backend/utils/text';
 import { createPrefixedId } from '@iki/backend/utils/id';
 import { ensureThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
-import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/git_worktree';
-import { sanitizeUiMessageJsonForStorage } from '@iki/backend/message/ui_message_codec';
+import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/worktree_ids';
 
 const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
 
 const normalizeFlag = (value: unknown): number => {
   if (typeof value === 'number') return value ? 1 : 0;
   return value ? 1 : 0;
+};
+
+export type ChatPersistenceDeps = {
+  /**
+   * The session log is the one rebuild of a thread's conversation (ADR-008).
+   * Both readers — this display list and a resumed turn's replay input — take
+   * their messages from that owner; turn_prep may not slice history itself and
+   * may not import thread_session (arch rule `turn-prep-below-session`), so the
+   * rebuild arrives as an injected port wired by the composition root.
+   */
+  rebuildMessages: (threadId: string) => ChatUiMessage[];
 };
 
 const normalizeThreadInput = (
@@ -78,7 +89,31 @@ const normalizeThreadInput = (
   };
 };
 
-export const createChatPersistence = () => {
+/**
+ * Take the message a caller hands in and land it as the structured ChatUiMessage
+ * the session log stores. A JSON string is parsed (the renderer's edit path still
+ * crosses the IPC with one); a plain non-JSON string becomes a user text message,
+ * exactly the shape the input fact has always carried. Nothing is ever
+ * re-stringified into a row-shaped `message` column — that fake row was the
+ * second copy of every message and it is gone.
+ */
+const structuredUiMessage = (message: unknown, fallbackId: string): ChatUiMessage => {
+  let source: unknown = message;
+  if (typeof source === 'string') {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      source = { content: source };
+    }
+  }
+  const ui = normalizeUiMessage(source, { fallbackId });
+  if (!ui) {
+    throw new Error(`Message ${fallbackId} has no structured ChatUiMessage to persist`);
+  }
+  return ui;
+};
+
+export const createChatPersistence = (deps: ChatPersistenceDeps) => {
   const listThreads = () => chatThreadDb.getChatThreads();
   const getThread = (id: string) => {
     ensureThreadWorkspaceSelection(id);
@@ -148,59 +183,17 @@ export const createChatPersistence = () => {
   };
   const deleteThread = (id: string) => chatThreadDb.deleteChatThread(id);
 
-  const projectRow = (threadId: string, event: { type: string; payload: unknown }): ChatMessage | null => {
-    const payload = event.payload as { message?: unknown; messageId?: unknown };
-    const message = payload?.message;
-    if (!message || typeof message !== 'object') return null;
-    const id = (message as { id?: unknown }).id;
-    if (typeof id !== 'string' || !id) return null;
-    return {
-      id,
-      thread_id: threadId,
-      parent_id: null,
-      slot_id: null,
-      depth: 0,
-      message: JSON.stringify(message),
-      timestamp:
-        typeof (payload as { timestamp?: unknown }).timestamp === 'string'
-          ? (payload as { timestamp: string }).timestamp
-          : new Date(0).toISOString(),
-      metadata: '{}',
-      created_at: new Date(0).toISOString(),
-      updated_at: new Date(0).toISOString(),
-    } as unknown as ChatMessage;
-  };
+  const listMessages = (threadId: string): ChatUiMessage[] => deps.rebuildMessages(threadId);
 
-  const listMessages = (threadId: string): ChatMessage[] => {
-    const rows = getSessionEvents(threadId, [
-      MESSAGE_EVENT_TYPES.INPUT_ACCEPTED,
-      MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED,
-      MESSAGE_EVENT_TYPES.MESSAGES_TRUNCATED,
-    ]);
-    const byId = new Map<string, ChatMessage>();
-    for (const event of rows) {
-      if (event.type === MESSAGE_EVENT_TYPES.MESSAGES_TRUNCATED) {
-        const deleted = (event.payload as { deletedMessageIds?: unknown }).deletedMessageIds;
-        if (Array.isArray(deleted)) {
-          for (const id of deleted) {
-            if (typeof id === 'string') byId.delete(id);
-          }
-        }
-        continue;
-      }
-      const row = projectRow(threadId, event);
-      if (row) byId.set(row.id, row);
-    }
-    return [...byId.values()];
-  };
-
-  const getMessage = (id: string): ChatMessage | null => {
+  const getMessage = (id: string): ChatUiMessage | null => {
     const found = findMessageEvent(id);
     if (!found) return null;
-    return projectRow(found.threadId, { type: '', payload: found.payload });
+    const payload = isObjectRecord(found.payload) ? found.payload : {};
+    return normalizeUiMessage(payload.message, { fallbackId: id });
   };
+
   const createMessage = (input: unknown) => {
-    const message = isObjectRecord(input) ? (input as Partial<ChatMessage>) : {};
+    const message = isObjectRecord(input) ? input : {};
     const messageId =
       typeof message.id === 'string' && message.id.trim()
         ? message.id.trim()
@@ -208,74 +201,72 @@ export const createChatPersistence = () => {
     const threadId = typeof message.thread_id === 'string' ? message.thread_id : '';
     if (!threadId) throw new Error('createMessage requires a thread_id');
 
-    const parsedMessage: unknown =
-      typeof message.message === 'string'
-        ? (() => {
-            try {
-              return JSON.parse(message.message);
-            } catch {
-              return { id: messageId, role: 'user', parts: [{ type: 'text', text: message.message }] };
-            }
-          })()
-        : (message.message ?? {});
+    const structured = structuredUiMessage(message.message ?? {}, messageId);
 
     appendSessionFacts(threadId, [
       {
-        type: MESSAGE_EVENT_TYPES.INPUT_ACCEPTED,
+        type: INPUT_ACCEPTED,
         version: SESSION_EVENT_VERSION,
         payload: {
           messageId,
-          message: parsedMessage,
+          message: structured,
           transport: 'send',
         },
       },
     ]);
     chatThreadDb.touchChatThread(threadId);
 
-    return getMessage(messageId);
+    return structured;
   };
 
+  /**
+   * Latest fact wins: the session log is append-only and the rebuild upserts by
+   * message id, so an update is just the next fact for the same id. The channel
+   * stays MODEL_OUTPUT_COMMITTED for every role because that is where the replay
+   * already reads edited messages — the event vocabulary itself is the session
+   * log's owner's decision, not this writer's.
+   */
   const updateMessage = (id: string, input: unknown) => {
-    const sanitizedUpdate: Partial<ChatMessage> = isObjectRecord(input)
-      ? {
-          ...(input as Partial<ChatMessage>),
-          ...(typeof (input as { message?: unknown }).message === 'string'
-            ? {
-                message: sanitizeUiMessageJsonForStorage((input as { message: string }).message),
-              }
-            : {}),
-        }
-      : {};
-
-    const existing = getMessage(id);
-    const threadId = sanitizedUpdate.thread_id || existing?.thread_id;
+    const patch = isObjectRecord(input) ? input : {};
+    const existing = findMessageEvent(id);
+    const threadId =
+      typeof patch.thread_id === 'string' && patch.thread_id
+        ? patch.thread_id
+        : existing?.threadId;
     if (!threadId) return { changes: 0 };
 
-    const rawMessage = sanitizedUpdate.message ?? existing?.message ?? '{}';
-    let parsed: unknown = {};
-    try {
-      parsed = JSON.parse(rawMessage);
-    } catch {
-      parsed = { id, role: 'user', parts: [{ type: 'text', text: rawMessage }] };
+    const existingPayload = isObjectRecord(existing?.payload) ? existing.payload : {};
+    const rawMessage = patch.message ?? existingPayload.message ?? {};
+    const structured = structuredUiMessage(rawMessage, id);
+
+    const runId = typeof patch.runId === 'string' && patch.runId.trim() ? patch.runId.trim() : '';
+    if (structured.role === 'assistant' && !runId) {
+      // An unstamped MODEL_OUTPUT_COMMITTED can never be excluded with its dead
+      // run: the replay's excludeRunIds matches commits by runId, so an empty
+      // stamp lets the abandoned copy back into the retry request beside the
+      // journaled tool exchange — the duplicate toolCallId that providers reject
+      // with a 400. The old code guessed it out of the message body and always
+      // wrote ''. Now the run that commits must say so, or the write is refused.
+      throw new Error(
+        `updateMessage: an assistant commit must carry the runId of the run that wrote it (message ${id})`
+      );
     }
+
     appendSessionFacts(threadId, [
       {
-        type: MESSAGE_EVENT_TYPES.MODEL_OUTPUT_COMMITTED,
+        type: MODEL_OUTPUT_COMMITTED,
         version: SESSION_EVENT_VERSION,
         payload: {
-          runId: (parsed as { runId?: string }).runId ?? '',
+          ...(runId ? { runId } : {}),
           messageId: id,
-          message: parsed,
-          transport: 'stream',
+          message: structured,
+          transport: typeof patch.transport === 'string' ? patch.transport : 'stream',
         },
       },
     ]);
     chatThreadDb.touchChatThread(threadId);
     return { changes: 1 };
   };
-
-  const deleteMessage = (_id: string) => ({ changes: 0 });
-
   return {
 
     listThreads,
@@ -289,30 +280,17 @@ export const createChatPersistence = () => {
     getMessage,
     createMessage,
     updateMessage,
-    deleteMessage,
 
     upsertTurnMessage: (input: unknown) => {
-      const id =
-        isObjectRecord(input) && typeof (input as { id?: unknown }).id === 'string'
-          ? (input as { id: string }).id.trim()
-          : '';
+      const patch = isObjectRecord(input) ? input : {};
+      const id = typeof patch.id === 'string' ? patch.id.trim() : '';
       if (!id) return null;
-      const existing = getMessage(id);
-      if (existing) {
-        const rawMessage = isObjectRecord(input)
-          ? (input as { message?: unknown }).message
-          : undefined;
-        const payload =
-          rawMessage !== undefined && typeof rawMessage !== 'string'
-            ? { ...(input as Record<string, unknown>), message: JSON.stringify(rawMessage) }
-            : input;
-        return updateMessage(id, payload);
-      }
-      const threadId = isObjectRecord(input) && typeof (input as { thread_id?: unknown }).thread_id === 'string'
-        ? (input as { thread_id: string }).thread_id
-        : '';
+      const threadId =
+        typeof patch.thread_id === 'string' && patch.thread_id
+          ? patch.thread_id
+          : findMessageEvent(id)?.threadId;
       if (!threadId) return null;
-      return updateMessage(id, input);
+      return updateMessage(id, patch);
     },
   };
 };

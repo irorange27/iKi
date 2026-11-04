@@ -11,7 +11,7 @@ const MAX_REDIRECTS = 8;
 type ElectronModule = typeof import('electron');
 
 let electronModulePromise: Promise<ElectronModule | null> | null = null;
-let appliedProxySignature: string | null | undefined;
+let lastAppliedProxyRules: string | null | undefined;
 
 const isRedirectStatus = (status: number): boolean =>
   status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
@@ -102,9 +102,9 @@ const syncSessionProxy = async (
   network: AppConfig['network']
 ): Promise<{ username: string; password: string } | null> => {
   const proxyRules = buildProxyUrl(network, { includeAuth: false });
-  const signature = proxyRules ?? '__direct__';
+  const desiredProxyRules = proxyRules ?? '__direct__';
 
-  if (appliedProxySignature !== signature) {
+  if (lastAppliedProxyRules !== desiredProxyRules) {
     if (proxyRules) {
       await ses.setProxy({
         mode: 'fixed_servers',
@@ -115,7 +115,7 @@ const syncSessionProxy = async (
     }
 
     await ses.forceReloadProxyConfig();
-    appliedProxySignature = signature;
+    lastAppliedProxyRules = desiredProxyRules;
   }
 
   return getProxyCredentials(network);

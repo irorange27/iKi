@@ -22,7 +22,6 @@ import { resolveThreadWorkspaceSelectionSnapshot } from '../workspaces/thread_wo
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import {
   persistAssistantTurnMessage,
-  persistUserTurnMessage,
   pickIdLessSendInput,
   pickUserTurnMessage,
 } from './turn_persistence';
@@ -121,8 +120,6 @@ export const createChatStreaming = (deps: {
         };
       }
     }
-
-    const userTurnMessageId = persistUserTurnMessage(deps.conversation, options);
 
     coordinator.supersedeActiveStream(senderId);
     if (options.threadId) {
@@ -242,15 +239,16 @@ export const createChatStreaming = (deps: {
         userTurnInput === undefined && !plan.adoptRunId
           ? pickIdLessSendInput(options, runTracker.id)
           : undefined;
+      const userTurnMessage = userTurnInput ? asChatUiMessage(userTurnInput.message) : null;
       const acceptedInput =
-        userTurnInput && asChatUiMessage(userTurnInput.message)
-          ? { messageId: userTurnInput.messageId, message: asChatUiMessage(userTurnInput.message)! }
+        userTurnInput && userTurnMessage
+          ? { messageId: userTurnInput.messageId, message: userTurnMessage }
           : idLessInput;
       recordSessionEvents(
         options.threadId ?? '',
         turnFactsToEvents({
           ...(acceptedInput ? { input: acceptedInput } : {}),
-          started: { runId: runTracker.id, kind: plan.kind, plan },
+          started: { runId: runTracker.id, kind: plan.kind },
         })
       );
 
@@ -288,7 +286,10 @@ export const createChatStreaming = (deps: {
               options.threadId as string,
               persisted,
               'stream-progress',
-              userTurnMessageId
+              // The live tracker, not the entry tracker: a handoff re-keys the
+              // run, and the progress copy must carry the id of the segment
+              // writing it so the dead-chain exclusion drops it with the run.
+              { runId: activeDriver.getRunTracker().id }
             );
           });
         }, 300);
@@ -381,7 +382,7 @@ export const createChatStreaming = (deps: {
           options.threadId,
           settledMessage,
           'stream',
-          userTurnMessageId
+          { runId: finalRunTracker.id }
         );
       }
       if (streamResult.outcome !== 'awaiting-approval') {
@@ -418,7 +419,7 @@ export const createChatStreaming = (deps: {
           | { id: string; role: 'assistant'; parts: [] }
           | Awaited<ReturnType<typeof uiChunkEmitter.buildPersistedMessage>>
           | undefined;
-        if (options.threadId) {
+        if (options.threadId && cancelledTracker) {
           turnPersistFinalized = true;
           const persistedAbort = (await uiChunkEmitter.buildPersistedMessage()) ?? {
             id: uiChunkEmitter.messageId,
@@ -431,7 +432,7 @@ export const createChatStreaming = (deps: {
             options.threadId,
             persistedAbort,
             'stream-abort',
-            userTurnMessageId
+            { runId: cancelledTracker.id }
           );
         }
         if (cancelledTracker) {
@@ -518,6 +519,5 @@ export const createChatStreaming = (deps: {
     isProviderConfigured: streamingModels.isProviderConfigured,
     stream,
     stopStream: coordinator.stopStream,
-    steerStream: coordinator.steerStream,
   };
 };

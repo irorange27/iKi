@@ -88,7 +88,7 @@ export type TurnDriverDeps = {
   };
 };
 
-export type TurnDriverSetup = Pick<
+type TurnDriverSetup = Pick<
   TurnDriverState,
   'harness' | 'runTracker' | 'approvalContext' | 'streamHistory' | 'streamPrompt' | 'workspaceSelectionBox'
 >;

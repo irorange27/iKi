@@ -45,7 +45,7 @@ export type ProviderModelDiscoveryOverride = Partial<
   Pick<Provider, 'id' | 'type' | 'api_key' | 'base_url' | 'models' | 'model_options' | 'is_response_api'>
 >;
 
-export type ProviderUpdatedAction = 'added' | 'updated' | 'deleted';
+type ProviderUpdatedAction = 'added' | 'updated' | 'deleted';
 
 export interface ProviderUpdatedEvent {
   action: ProviderUpdatedAction;

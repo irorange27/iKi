@@ -189,7 +189,7 @@ beforeAll(async () => {
       },
     })
   );
-  conversation = createChatPersistence({
+  conversation = createChatPersistence({ rebuildMessages: (threadId: string) => rebuildThreadViewFromEvents(threadId).messages,
     memory: {} as never,
   });
   conversation.createThread({ id: 'thread_pi_tool_stream' });

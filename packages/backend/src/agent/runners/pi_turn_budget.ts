@@ -58,7 +58,7 @@ export const preparePiTurnHistory = async (params: {
       { slot: 'persona', text: params.personaPrompt },
       { slot: 'planPrompt', text: params.planPrompt },
       { slot: 'transcriptSystem', text: params.transcriptSystemText },
-    ]).prompt
+    ])
   );
   if (!params.maxInputTokens) return { requestHistory: history };
 
@@ -99,7 +99,7 @@ export const preparePiTurnHistory = async (params: {
   return { requestHistory, ...(turnStartSummaryMessage ? { summaryMessage: turnStartSummaryMessage } : {}) };
 };
 
-export type CompactPiRequestStepResult =
+type CompactPiRequestStepResult =
   | {
       compacted: true;
 

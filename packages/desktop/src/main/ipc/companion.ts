@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 
 import { getAppConfig, setAppConfig } from '@iki/backend/config';
 import { companionService } from '../services/companion/companion_service';
-import { getAllBrowserWindows } from '../utils/browser_windows';
+import { broadcastToRenderers } from '../utils/ipc_helpers';
 import { syncCompanionWindowToConfig } from '../windows/companion_window';
 import { showMainWindow } from '../windows/main_window';
 
@@ -41,9 +41,7 @@ export const registerCompanionIpc = (): void => {
     setAppConfig(nextConfig);
     companionService.refreshAvailability();
 
-    for (const win of getAllBrowserWindows()) {
-      win.webContents.send('config:updated', nextConfig);
-    }
+    broadcastToRenderers('config:updated', nextConfig);
 
     syncCompanionWindowToConfig(nextConfig);
     return { success: true };

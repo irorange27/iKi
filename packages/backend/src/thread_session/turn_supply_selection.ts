@@ -6,7 +6,7 @@ import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
 import { resolvePiTurnSupply } from '../provider/llm/factory';
 import { planToHarnessConfig, type ExecutionPlan } from './execution_plan';
 
-export type TurnHarnessOverride = (plan: ExecutionPlan) => TurnDriverHarness | null;
+type TurnHarnessOverride = (plan: ExecutionPlan) => TurnDriverHarness | null;
 
 export const piTurnHarness: TurnHarnessOverride = plan =>
   plan.enableTools
@@ -61,20 +61,6 @@ export class PiSupplyRefusedError extends Error {
   }
 }
 
-export const piDomainResumeHistory = (history: ModelMessage[]): ModelMessage[] => {
-  let changed = false;
-  const projected = history.map(message => {
-    if (message.role !== 'assistant' || !Array.isArray(message.content)) return message;
-    const parts = message.content.filter(
-      part => (part as { type?: string }).type !== 'tool-approval-request'
-    );
-    if (parts.length === message.content.length) return message;
-    changed = true;
-    return { ...message, content: parts };
-  });
-  return changed ? projected : history;
-};
-
 export const pausedPlanRunsOnPiToolSupply = (
   plan: ExecutionPlan,
   history: ModelMessage[]
@@ -84,6 +70,6 @@ export const pausedPlanRunsOnPiToolSupply = (
     providerType: plan.providerType,
     ...(plan.providerId ? { providerId: plan.providerId } : {}),
     modelId: plan.model,
-    history: piDomainResumeHistory(history),
+    history,
   }).admitted;
 };

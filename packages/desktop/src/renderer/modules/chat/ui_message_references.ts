@@ -24,7 +24,7 @@ import {
   normalizeToolNameKey,
 } from './ui_message_tool_calls';
 
-export type ToolReferenceSummary = {
+type ToolReferenceSummary = {
   callCount: number;
   kindCount: number;
   names: string[];
@@ -34,7 +34,7 @@ export type ToolReferenceSummary = {
   }>;
 };
 
-export type SkillReferenceItem = {
+type SkillReferenceItem = {
   id: string;
   name: string;
   description: string;
@@ -42,7 +42,7 @@ export type SkillReferenceItem = {
   sourceLabel: string;
 };
 
-export type SkillReferenceSummary = {
+type SkillReferenceSummary = {
   mode: 'manual' | 'auto';
   items: SkillReferenceItem[];
   selectedItems: SkillReferenceItem[];
@@ -75,7 +75,7 @@ export type TokenUsageSummary = {
   contextComposition: ContextCompositionSummary | null;
 };
 
-export type ContextCompositionRow = {
+type ContextCompositionRow = {
   key: ContextCompositionCategory;
   tokens: number;
   percent: number;
@@ -102,7 +102,7 @@ export const buildContextCompositionRows = (
   return rows.sort((a, b) => b.tokens - a.tokens);
 };
 
-export type ContextUsageIndicator = {
+type ContextUsageIndicator = {
   usedTokens: number;
   budgetTokens: number | null;
   percent: number | null;

@@ -205,7 +205,7 @@ import SettingsSelect from './SettingsSelect.vue';
 import { useI18n } from '../../i18n';
 import { useConfigStore } from '../../store/config';
 import { configService } from '../../services/config_service';
-import { clonePlainData } from '@iki/backend/utils/clone';
+import { toPlainData as clonePlainData } from '@iki/backend/utils/plain_clone';
 import type {
   AppConfig,
   NetworkDiagnosticProbeResult,

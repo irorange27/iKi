@@ -24,11 +24,11 @@ export type ToolPayloadKind =
 
 export type ToolPayloadRecord = Record<string, unknown>;
 
-export type ParsedToolPayload =
+type ParsedToolPayload =
   | { kind: ToolPayloadKind; payload: ToolPayloadRecord }
   | { kind: 'unknown'; payload: unknown };
 
-export type ToolPayloadValidator = (kind: ToolPayloadKind, normalizedValue: unknown) => unknown;
+type ToolPayloadValidator = (kind: ToolPayloadKind, normalizedValue: unknown) => unknown;
 
 const TOOL_PAYLOAD_KINDS = {
   web: true,

@@ -73,7 +73,7 @@ export type PreparedChatTurn = {
   enableTools: boolean;
 };
 
-export type ChatTurnRuntimeConfig = {
+type ChatTurnRuntimeConfig = {
   autoApproveToolRequests: boolean;
   contextBudget: AppConfig['context'] | null;
 };

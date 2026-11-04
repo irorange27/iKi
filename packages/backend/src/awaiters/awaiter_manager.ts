@@ -20,12 +20,12 @@ import {
   validateAwaiterTriggerSpec,
 } from './awaiter_schedule';
 
-export type AwaiterReference = {
+type AwaiterReference = {
   id?: string | null;
   title?: string | null;
 };
 
-export type AwaiterCreateInput = Omit<Partial<Awaiter>, 'trigger_spec_json'> &
+type AwaiterCreateInput = Omit<Partial<Awaiter>, 'trigger_spec_json'> &
   Pick<Awaiter, 'title' | 'instruction' | 'thread_id' | 'provider_type' | 'model'> & {
     trigger: AwaiterTriggerSpec | Record<string, unknown>;
   };
@@ -34,7 +34,7 @@ export type AwaiterUpdateInput = Omit<Partial<Awaiter>, 'trigger_spec_json'> & {
   trigger?: AwaiterTriggerSpec | Record<string, unknown>;
 };
 
-export type AwaiterRecord = Omit<Awaiter, 'trigger_spec_json' | 'resume_context_json'> & {
+type AwaiterRecord = Omit<Awaiter, 'trigger_spec_json' | 'resume_context_json'> & {
   trigger_spec: AwaiterTriggerSpec | null;
   trigger_summary: string;
 };

@@ -8,9 +8,7 @@ import { getDb } from '@iki/backend/db/database';
 import {
   createAgentRun,
   getAgentRunTrace,
-  getAgentRunTree,
   listAgentRunsByParentRunId,
-  listAgentRunsByRootRunId,
   listAgentRunsByStatus,
   listAgentRunSteps,
   updateAgentRun,
@@ -209,7 +207,7 @@ describe('agent_runs db', () => {
 
   });
 
-  it('exposes run traces and root/parent query surfaces for inspection', () => {
+  it('exposes run trace and parent query surfaces for inspection', () => {
     const rootRunsRows = [
       {
         id: 'run_root_1',
@@ -312,10 +310,6 @@ describe('agent_runs db', () => {
 
     getDbMock.mockReturnValue({ prepare: prepareMock } as unknown as ReturnType<typeof getDb>);
 
-    expect(listAgentRunsByRootRunId('run_root_1').map(run => run.id)).toEqual([
-      'run_root_1',
-      'run_child_1',
-    ]);
     expect(listAgentRunsByParentRunId('run_root_1').map(run => run.id)).toEqual(['run_child_1']);
 
     expect(getAgentRunTrace('run_root_1')).toEqual({
@@ -329,22 +323,6 @@ describe('agent_runs db', () => {
         }),
       ],
       children: [expect.objectContaining({ id: 'run_child_1' })],
-    });
-
-    expect(getAgentRunTree('run_root_1')).toEqual({
-      rootRunId: 'run_root_1',
-      traces: [
-        {
-          run: expect.objectContaining({ id: 'run_root_1' }),
-          steps: [expect.objectContaining({ id: 'step_root_1', type: 'child-run' })],
-          children: [expect.objectContaining({ id: 'run_child_1' })],
-        },
-        {
-          run: expect.objectContaining({ id: 'run_child_1' }),
-          steps: [expect.objectContaining({ id: 'step_child_1', type: 'tool-call' })],
-          children: [],
-        },
-      ],
     });
   });
 });

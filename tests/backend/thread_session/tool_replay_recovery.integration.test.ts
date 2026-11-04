@@ -224,7 +224,7 @@ it('(g) the recorded interruption reaches the wire as a paired error tool result
   await executeApprovedTool(address, port());
 
   const finished = getSessionEvents(THREAD_ID, [TOOL_EXECUTION_FINISHED]);
-  const output = (finished[0]!.payload as { result: { output: unknown } }).result.output as {
+  const output = (finished[0]!.payload as { output: unknown }).output as {
     type: string;
     value: unknown;
   };

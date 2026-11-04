@@ -4,6 +4,7 @@ import { noopPlatformDeps } from '@iki/backend/chat_platform';
 import type { ChatStreamTarget } from './types';
 import { createChatApproval } from './approval';
 import { createChatPersistence } from '../turn_prep/persistence';
+import { rebuildThreadViewFromEvents } from './session_log';
 import { createChatRuns } from './runs';
 import { truncateAfterMessage } from './history_truncation';
 import { createChatEval } from './eval';
@@ -19,10 +20,7 @@ import { deriveResumeStreamOptions, rebuildResumeHistoryFromEvents } from './run
 import type { AgentRun, AgentRunKind } from '@iki/backend/types/agent_run';
 import { getErrorMessage } from '@iki/backend/utils/errors';
 import type { ModelMessage } from '../message/model_history';
-import {
-  buildThreadMarkdown,
-  parseStoredMessageForExport,
-} from '../message/thread_markdown_export';
+import { buildThreadMarkdown } from '../message/thread_markdown_export';
 import { searchThreadContent } from '../message/thread_content_search';
 
 export type { ChatStreamTarget } from './types';
@@ -37,7 +35,12 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     crossProcessThreadRun: (threadId, options) =>
       tryAcquireCrossProcessThreadRun(threadId, { onLeaseLost: options.onLeaseLost }),
   });
-  const persistence = createChatPersistence();
+  const persistence = createChatPersistence({
+    // One owner rebuilds a thread's conversation: the renderer's message list and
+    // a resumed turn's replay read the same session-log view (ADR-008). The port
+    // is wired here because turn_prep may not import thread_session.
+    rebuildMessages: threadId => rebuildThreadViewFromEvents(threadId).messages,
+  });
   const approvals = createChatApproval({
     streams: {
       tryAcquireThreadRun: streamCoordinator.tryAcquireThreadRun,
@@ -102,7 +105,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     run: AgentRun,
     admittedKinds: readonly AgentRunKind[]
   ): Promise<
-    | { history: ModelMessage[]; systemPrompts: string[] }
+    | { history: ModelMessage[] }
     | { refusal: { success: false; error: string } }
   > => {
     if (!run.threadId) return { refusal: { success: false, error: 'Run has no thread ID' } };
@@ -180,7 +183,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
             originalRunId: run.id,
           },
           inputMessages: recovered.history,
-          systemPrompts: recovered.systemPrompts,
         })
       );
       return { success: true, ...(result as Record<string, unknown>) };
@@ -199,7 +201,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
 
         continuePrompt: 'Continue the work that was interrupted.',
         inputMessages: recovered.history,
-        systemPrompts: recovered.systemPrompts,
       })
     );
 
@@ -243,7 +244,6 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
           originalRunId: runId,
         },
         inputMessages: recovered.history,
-        systemPrompts: recovered.systemPrompts,
       })
     );
 
@@ -264,10 +264,9 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     const thread = persistence.getThread(threadId);
     if (!thread) return { success: false, error: 'Thread not found' };
 
-    const rows = persistence.listMessages(threadId);
-    const messages = rows
-      .map(row => parseStoredMessageForExport(row.message))
-      .filter((message): message is NonNullable<typeof message> => message !== null);
+    // listMessages is the session-log rebuild, so the structured { role, parts }
+    // values go straight to the markdown builder.
+    const messages = persistence.listMessages(threadId);
 
     const content = buildThreadMarkdown({
       title: thread.title || threadId,

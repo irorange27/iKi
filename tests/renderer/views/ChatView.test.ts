@@ -386,16 +386,17 @@ describe('ChatView', () => {
 
   it('keeps the composer mounted across trajectory switches and returns to chat when the thread is cleared', async () => {
     const wrapper = await mountChatView();
-    const composer = wrapper.findComponent(ChatInputStub).vm;
+    // @vue/test-utils@2.5 returns a fresh proxy from .vm each call; compare DOM-node identity instead.
+    const composerEl = wrapper.findComponent(ChatInputStub).element;
     await wrapper.get('#trajectory-tab').trigger('click');
     expect(wrapper.find('trajectory-view-stub').exists()).toBe(true);
-    expect(wrapper.findComponent(ChatInputStub).vm).toBe(composer);
+    expect(wrapper.findComponent(ChatInputStub).element).toBe(composerEl);
 
     await wrapper.get('#chat-tab').trigger('click');
     expect((wrapper.find('trajectory-view-stub').element as HTMLElement).style.display).toBe(
       'none'
     );
-    expect(wrapper.findComponent(ChatInputStub).vm).toBe(composer);
+    expect(wrapper.findComponent(ChatInputStub).element).toBe(composerEl);
 
     await wrapper.get('#trajectory-tab').trigger('click');
     useThreadSessionStore().currentThread = null;
@@ -403,7 +404,7 @@ describe('ChatView', () => {
     expect((wrapper.find('trajectory-view-stub').element as HTMLElement).style.display).toBe(
       'none'
     );
-    expect(wrapper.findComponent(ChatInputStub).vm).toBe(composer);
+    expect(wrapper.findComponent(ChatInputStub).element).toBe(composerEl);
     wrapper.unmount();
   });
 

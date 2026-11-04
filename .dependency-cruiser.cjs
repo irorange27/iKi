@@ -20,7 +20,7 @@ module.exports = {
       comment: 'Dependencies point one way only: shells -> backend, never backend -> shells',
       severity: 'error',
       from: { path: '^packages/backend' },
-      to: { path: '^packages/(desktop|daemon)' },
+      to: { path: '^packages/desktop' },
     },
     {
       name: 'provider-is-leaf',
@@ -89,7 +89,7 @@ module.exports = {
       name: 'shells-no-db-migrations',
       comment: 'R6 (narrow): shells never touch migration machinery; broaden the shell whitelist in a later phase',
       severity: 'error',
-      from: { path: '^packages/(desktop|daemon)' },
+      from: { path: '^packages/desktop' },
       to: { path: 'packages/backend/src/db/migration' },
     },
   ],

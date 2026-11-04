@@ -46,16 +46,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
-  `CREATE TABLE IF NOT EXISTS app_clients (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        token_hash TEXT NOT NULL UNIQUE,
-        scopes TEXT NOT NULL DEFAULT '[]',
-        allowed_tools TEXT NOT NULL DEFAULT '[]',
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        last_seen TEXT
-      )`,
   `CREATE TABLE IF NOT EXISTS awaiters (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -176,7 +166,6 @@ const BASELINE_STATEMENTS: readonly string[] = [
         ON agent_runs(status, updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_agent_runs_thread_id
         ON agent_runs(thread_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_app_clients_token_hash ON app_clients(token_hash)`,
   `CREATE INDEX IF NOT EXISTS idx_awaiters_origin_run
         ON awaiters(origin_run_id)`,
   `CREATE INDEX IF NOT EXISTS idx_awaiters_status_next_wake

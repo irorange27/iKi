@@ -69,7 +69,6 @@ export const createReactiveChatState = (
       messagesRef.value.splice(index, 1, { ...message });
       onWrite(message);
     },
-    snapshot: (thing: ChatUiMessage[]): ChatUiMessage[] => thing,
   };
 
   return { state, messagesArray: messagesRef.value };

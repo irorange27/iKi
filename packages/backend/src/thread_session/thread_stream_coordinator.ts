@@ -16,7 +16,7 @@ class ThreadSession {
   }
 }
 
-export type LiveRunExecution = {
+type LiveRunExecution = {
 
   cancel: (reason: string) => void;
 
@@ -278,27 +278,6 @@ export const createThreadStreamCoordinator = (deps?: {
       return Boolean(parent && executionsByRunId.has(parent));
     })();
 
-  const steerStream = (
-    senderId: number,
-    threadId: string | undefined,
-    message: string,
-  ): { success: boolean; error?: string } => {
-    if (threadId && !sessionsByThread.get(threadId)?.senderIds.has(senderId)) {
-      return { success: false, error: 'No active stream for thread' };
-    }
-    const queue = sessionBySender.get(senderId)?.steerQueue;
-    if (!queue) {
-      return { success: false, error: 'No active autonomous stream to steer' };
-    }
-    queue.push(message);
-    const streamState = activeStreams.get(senderId);
-    if (streamState && !streamState.cancelled) {
-      streamState.steered = true;
-      streamState.abortController.abort('steer');
-    }
-    return { success: true };
-  };
-
   const peekStream = (senderId: number): ActiveStreamState | undefined =>
     activeStreams.get(senderId);
 
@@ -324,7 +303,6 @@ export const createThreadStreamCoordinator = (deps?: {
     unregisterStream,
     takeSteerMessages,
     stopStream,
-    steerStream,
     abortStreamByRunId,
     registerExecution,
     registerChildRunAlias,

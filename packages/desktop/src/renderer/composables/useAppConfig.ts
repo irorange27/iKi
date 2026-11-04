@@ -44,21 +44,27 @@ export const useAppConfig = () => {
   let saveTimer: NodeJS.Timeout | null = null;
   const SAVE_DELAY = 300; // 防抖延迟（ms）
 
-  
-  const debouncedSave = () => {
+  // Resolves when the debounced save actually finished, so callers can drive
+  // "saved" UI feedback off it. Concurrent calls share one timer.
+  const debouncedSave = (): Promise<void> => {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(async () => {
-      try {
-        await store.saveConfig();
-      } catch (error) {
-        appConfigLogger.event({
-          level: 'error',
-          event: 'config.auto_save',
-          outcome: 'failed',
-          error,
-        });
-      }
-    }, SAVE_DELAY);
+    return new Promise(resolve => {
+      saveTimer = setTimeout(async () => {
+        saveTimer = null;
+        try {
+          await store.saveConfig();
+        } catch (error) {
+          appConfigLogger.event({
+            level: 'error',
+            event: 'config.auto_save',
+            outcome: 'failed',
+            error,
+          });
+        } finally {
+          resolve();
+        }
+      }, SAVE_DELAY);
+    });
   };
 
   

@@ -1,7 +1,10 @@
 import { getSessionEvents } from '../db/session_events';
 import { getChatThreads } from '../db/chat_thread';
 import * as chatThreadDb from '../db/chat_thread';
+import { INPUT_ACCEPTED, MODEL_OUTPUT_COMMITTED } from '@iki/backend/types/session_events';
 import { extractTextFromMessageParts, isObjectRecord } from './message_parts';
+
+const MESSAGE_EVENT_TYPES_FOR_SEARCH = [INPUT_ACCEPTED, MODEL_OUTPUT_COMMITTED];
 
 export type ThreadContentMatch = {
   threadId: string;
@@ -27,59 +30,56 @@ const buildSnippet = (text: string, query: string): string => {
   );
 };
 
-const messageSearchableText = (messageJson: string): { role: string; text: string } | null => {
-  try {
-    const parsed: unknown = JSON.parse(messageJson);
-    if (!isObjectRecord(parsed) || typeof parsed.role !== 'string') return null;
-    const text = extractTextFromMessageParts(parsed.parts).replace(/\s+/g, ' ').trim();
-    if (!text) return null;
-    return { role: parsed.role, text };
-  } catch {
-    return null;
-  }
+const messageSearchableText = (message: unknown): { role: string; text: string } | null => {
+  if (!isObjectRecord(message) || typeof message.role !== 'string') return null;
+  const text = extractTextFromMessageParts(message.parts).replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  return { role: message.role, text };
 };
+
+type SearchRow = { threadId: string; messageId: string; updatedAt: string };
 
 export const searchThreadContent = (rawQuery: string, limit = 12): ThreadContentMatch[] => {
   const query = rawQuery.trim();
   if (!query) return [];
+  const lowered = query.toLowerCase();
 
-  const rows = getChatThreads()
-    .flatMap(thread =>
-      getSessionEvents(thread.id, ['input_accepted', 'model_output_committed'])
-        .filter(event => JSON.stringify(event.payload).includes(query))
-        .map(event => {
-          const message = (event.payload as { message?: { id?: unknown } }).message;
-          return {
-            id: typeof message?.id === 'string' ? message.id : '',
-            thread_id: thread.id,
-            message: JSON.stringify(message ?? {}),
-            updated_at: event.createdAt,
-          };
-        })
-    )
-    .slice(0, limit * 4)
-    .map(row => {
-      const parsed = messageSearchableText(row.message);
-      return parsed ? { row, parsed } : null;
-    })
-    .filter((entry): entry is NonNullable<typeof entry> =>
-      Boolean(entry && entry.parsed.text.toLowerCase().includes(query.toLowerCase()))
-    );
+  // Match the text the user can actually see. Scanning the serialized payload
+  // instead would hit message ids, roles, tool arguments and run ids, and would
+  // re-parse every message event of every thread on every keystroke.
+  const candidates: { row: SearchRow; parsed: { role: string; text: string } }[] = [];
+  for (const thread of getChatThreads()) {
+    for (const event of getSessionEvents(thread.id, MESSAGE_EVENT_TYPES_FOR_SEARCH)) {
+      const payload = event.payload as { message?: { id?: unknown } };
+      const parsed = messageSearchableText(payload.message);
+      if (!parsed || !parsed.text.toLowerCase().includes(lowered)) continue;
+      candidates.push({
+        row: {
+          threadId: thread.id,
+          messageId: typeof payload.message?.id === 'string' ? payload.message.id : '',
+          updatedAt: event.createdAt,
+        },
+        parsed,
+      });
+      if (candidates.length >= limit * 4) break;
+    }
+    if (candidates.length >= limit * 4) break;
+  }
 
   const seen = new Set<string>();
   const matches: ThreadContentMatch[] = [];
-  for (const { row, parsed } of rows) {
-    if (seen.has(row.thread_id)) continue;
-    seen.add(row.thread_id);
+  for (const { row, parsed } of candidates) {
+    if (seen.has(row.threadId)) continue;
+    seen.add(row.threadId);
 
-    const thread = chatThreadDb.getChatThread(row.thread_id);
+    const thread = chatThreadDb.getChatThread(row.threadId);
     matches.push({
-      threadId: row.thread_id,
-      threadTitle: thread?.title || row.thread_id,
-      messageId: row.id,
+      threadId: row.threadId,
+      threadTitle: thread?.title || row.threadId,
+      messageId: row.messageId,
       role: parsed.role,
       snippet: buildSnippet(parsed.text, query),
-      updatedAt: row.updated_at,
+      updatedAt: row.updatedAt,
     });
     if (matches.length >= limit) break;
   }

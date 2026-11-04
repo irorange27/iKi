@@ -1,6 +1,6 @@
 
 
-export type UiJsonValue =
+type UiJsonValue =
   | string
   | number
   | boolean
@@ -8,16 +8,16 @@ export type UiJsonValue =
   | UiJsonValue[]
   | { [key: string]: UiJsonValue };
 
-export type ChatUiRole = 'system' | 'user' | 'assistant';
+type ChatUiRole = 'system' | 'user' | 'assistant';
 
-export type UiTextPart = {
+type UiTextPart = {
   type: 'text';
   text: string;
 
   state?: 'streaming' | 'done';
 };
 
-export type UiReasoningPart = {
+type UiReasoningPart = {
   type: 'reasoning';
   text: string;
   state?: 'streaming' | 'done';

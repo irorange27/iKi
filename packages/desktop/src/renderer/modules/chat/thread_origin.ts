@@ -1,26 +1,12 @@
 import type { ChatThread } from '@iki/backend/types/chat';
-import { isObjectRecord } from '@iki/backend/utils/guards';
+import { parseJsonRecord } from '@iki/backend/message/thread_runtime_hints';
 import { normalizeWhitespace } from '@iki/backend/utils/text';
 
-export type ThreadOriginInfo = {
+type ThreadOriginInfo = {
   isExternal: boolean;
   source: string | null;
   sourceLabel: string | null;
   channelLabel: string | null;
-};
-
-export const parseThreadMetadata = (
-  metadataRaw: string | null | undefined
-): Record<string, unknown> => {
-  const metadata = normalizeWhitespace(metadataRaw);
-  if (!metadata) return {};
-
-  try {
-    const parsed = JSON.parse(metadata);
-    return isObjectRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
 };
 
 const formatSourceLabel = (value: string): string =>
@@ -34,7 +20,7 @@ export const getThreadOriginInfo = (
   thread: Pick<ChatThread, 'id' | 'client_id' | 'metadata'>
 ): ThreadOriginInfo => {
   const clientId = normalizeWhitespace(thread.client_id);
-  const metadata = parseThreadMetadata(thread.metadata);
+  const metadata = parseJsonRecord(thread.metadata);
   const source = normalizeWhitespace(metadata.source).toLowerCase();
 
   if (clientId) {

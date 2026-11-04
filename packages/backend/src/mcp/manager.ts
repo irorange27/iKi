@@ -1,5 +1,4 @@
 import { EventEmitter } from 'node:events';
-import { createHash } from 'node:crypto';
 
 // eslint-disable-next-line import/no-unresolved
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -26,6 +25,7 @@ import {
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { resolveMcpToolResult } from './tool_results';
 import { createPrefixedId } from '@iki/backend/utils/id';
+import { getErrorMessage } from '@iki/backend/utils/errors';
 import type {
   McpApprovalMode,
   McpServer,
@@ -43,9 +43,13 @@ type McpConnection = {
   tools: McpToolCatalogItem[];
 };
 
-type ToolIndexEntry = {
-  serverId: string;
-  toolName: string;
+type McpToolCandidate = {
+  server: McpServer;
+  tool: McpToolCatalogItem;
+};
+
+type McpToolRegistration = McpToolCandidate & {
+  internalName: string;
 };
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
@@ -53,21 +57,57 @@ const MAX_SCHEMA_BYTES = 20000;
 const mcpManagerLogger = createLogger({ module: 'mcp_manager' });
 
 const TOOL_NAME_MAX_LENGTH = 64;
+const TOOL_NAME_PREFIX = 'mcp_';
 const TOOL_NAME_SANITIZE = /[^a-zA-Z0-9_-]+/g;
+const MAX_SERVER_LABEL_LENGTH = 24;
+const MAX_TOOL_LABEL_LENGTH = 32;
+// Room kept for the collision ordinal (`_2` … `_1000`) so an assigned name never
+// exceeds TOOL_NAME_MAX_LENGTH, whatever the truncation produced.
+const TOOL_NAME_ORDINAL_RESERVE = 5;
 
 const sanitizeToolName = (value: string): string => {
   const cleaned = value.trim().replace(TOOL_NAME_SANITIZE, '_').replace(/_+/g, '_');
   return cleaned.replace(/^_+|_+$/g, '');
 };
 
-const buildInternalToolName = (serverId: string, toolName: string): string => {
-  const hash = createHash('sha1').update(`${serverId}:${toolName}`).digest('hex').slice(0, 8);
-  const safeTool = sanitizeToolName(toolName).slice(0, 32) || 'tool';
-  const prefix = `mcp_${hash}_`;
-  const candidate = `${prefix}${safeTool}`;
-  if (candidate.length <= TOOL_NAME_MAX_LENGTH) return candidate;
-  const remaining = Math.max(1, TOOL_NAME_MAX_LENGTH - prefix.length);
-  return `${prefix}${safeTool.slice(0, remaining)}`;
+const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+// The server row's human name is what the model should read; the id is the fallback
+// for a name that sanitizes away (empty, or only unsupported characters).
+const serverToolLabel = (server: McpServer): string =>
+  sanitizeToolName(server.name) || sanitizeToolName(server.id) || 'server';
+
+const fitToolName = (serverLabel: string, toolLabel: string): string => {
+  const server = sanitizeToolName(serverLabel).slice(0, MAX_SERVER_LABEL_LENGTH) || 'server';
+  const budget = Math.max(
+    1,
+    TOOL_NAME_MAX_LENGTH -
+      TOOL_NAME_PREFIX.length -
+      server.length -
+      1 -
+      TOOL_NAME_ORDINAL_RESERVE
+  );
+  const tool = sanitizeToolName(toolLabel).slice(0, Math.min(MAX_TOOL_LABEL_LENGTH, budget)) || 'tool';
+  return `${TOOL_NAME_PREFIX}${server}_${tool}`;
+};
+
+// The model-visible name is the tool's identity, so duplicates get the next stable
+// ordinal — never a digest. The order comes from McpManager.toolCandidates(), which is
+// sorted by server id then tool name, so the same set of connected servers always
+// yields the same names, across reconnects and restarts.
+const assignToolNames = (candidates: readonly McpToolCandidate[]): McpToolRegistration[] => {
+  const taken = new Set<string>();
+  return candidates.map(candidate => {
+    const base = fitToolName(serverToolLabel(candidate.server), candidate.tool.name);
+    let internalName = base;
+    let ordinal = 1;
+    while (taken.has(internalName)) {
+      ordinal += 1;
+      internalName = `${base}_${ordinal}`;
+    }
+    taken.add(internalName);
+    return { ...candidate, internalName };
+  });
 };
 
 const isLocalUrl = (url: URL): boolean => LOCAL_HOSTS.has(url.hostname);
@@ -203,7 +243,6 @@ class Semaphore {
 
 export class McpManager extends EventEmitter {
   private connections = new Map<string, McpConnection>();
-  private toolIndex = new Map<string, ToolIndexEntry>();
   private semaphore: Semaphore;
   private semaphoreLimit: number;
 
@@ -247,24 +286,32 @@ export class McpManager extends EventEmitter {
     this.emit('status-changed', serverId, status);
   }
 
-  private resetServerTools(serverId: string) {
-    defaultToolRegistry.removeBySource(source => source?.kind === 'mcp' && source.id === serverId);
-    for (const [name, entry] of this.toolIndex.entries()) {
-      if (entry.serverId === serverId) {
-        this.toolIndex.delete(name);
+  // Tool names are the model-visible identity of a tool, so the whole MCP tool set is
+  // planned from the connected servers in one stable order (server id, then tool name).
+  // Registering one server can therefore rename another server's tool: whenever the
+  // catalog changes, the MCP slice of the registry is rebuilt from this plan instead of
+  // patched per server.
+  private toolCandidates(): McpToolCandidate[] {
+    const candidates: McpToolCandidate[] = [];
+    const connections = [...this.connections.values()].sort((a, b) =>
+      compareStrings(a.server.id, b.server.id)
+    );
+    for (const connection of connections) {
+      const allowlist = normalizeToolAllowlist(connection.server.tool_allowlist);
+      for (const tool of [...connection.tools].sort((a, b) => compareStrings(a.name, b.name))) {
+        if (allowlist && !allowlist.has(tool.name)) continue;
+        candidates.push({ server: connection.server, tool });
       }
     }
+    return candidates;
   }
 
-  private registerServerTools(server: McpServer, tools: McpToolCatalogItem[]) {
-    this.resetServerTools(server.id);
-    const allowlist = normalizeToolAllowlist(server.tool_allowlist);
+  private syncRegisteredTools() {
+    defaultToolRegistry.removeBySource(source => source?.kind === 'mcp');
     const config = getAppConfig().mcp;
-    const approvalMode = resolveApprovalMode(server, config.defaultApprovalMode);
 
-    for (const tool of tools) {
-      if (allowlist && !allowlist.has(tool.name)) continue;
-      const internalName = buildInternalToolName(server.id, tool.name);
+    for (const { server, tool, internalName } of assignToolNames(this.toolCandidates())) {
+      const approvalMode = resolveApprovalMode(server, config.defaultApprovalMode);
       const displayName = tool.title || tool.annotations?.title || tool.name;
       const needsApproval =
         approvalMode === 'always' ? true : approvalMode === 'never' ? false : !isToolSafe(tool);
@@ -286,9 +333,16 @@ export class McpManager extends EventEmitter {
       });
 
       defaultToolRegistry.register(agentTool);
-      this.toolIndex.set(internalName, { serverId: server.id, toolName: tool.name });
     }
+  }
 
+  private registerServerTools(server: McpServer, tools: McpToolCatalogItem[]) {
+    const connection = this.connections.get(server.id);
+    if (connection) {
+      connection.server = server;
+      connection.tools = tools;
+    }
+    this.syncRegisteredTools();
     this.emit('tools-changed', server.id, tools.length);
   }
 
@@ -533,7 +587,7 @@ export class McpManager extends EventEmitter {
       this.updateStatus(id, connection.status);
       return connection.status;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       updateMcpServer(id, { last_error: message });
       this.updateStatus(id, { state: 'error', toolCount: 0, lastError: message });
       throw error;
@@ -543,7 +597,7 @@ export class McpManager extends EventEmitter {
   async disconnectServer(id: string): Promise<void> {
     const existing = this.connections.get(id);
     if (!existing) {
-      this.resetServerTools(id);
+      this.syncRegisteredTools();
       return;
     }
 
@@ -570,7 +624,7 @@ export class McpManager extends EventEmitter {
   }
 
     this.connections.delete(id);
-    this.resetServerTools(id);
+    this.syncRegisteredTools();
     this.updateStatus(id, { state: 'disconnected', toolCount: 0 });
   }
 
@@ -595,8 +649,9 @@ export class McpManager extends EventEmitter {
   }
 
   refreshToolPolicies(): void {
+    this.syncRegisteredTools();
     for (const connection of this.connections.values()) {
-      this.registerServerTools(connection.server, connection.tools);
+      this.emit('tools-changed', connection.server.id, connection.tools.length);
     }
   }
 
@@ -639,13 +694,5 @@ export class McpManager extends EventEmitter {
     } finally {
       release();
     }
-  }
-
-  async callToolByInternalName(internalName: string, args: Record<string, unknown>) {
-    const entry = this.toolIndex.get(internalName);
-    if (!entry) {
-      throw new Error(`MCP tool not found: ${internalName}`);
-    }
-    return this.callTool(entry.serverId, entry.toolName, args);
   }
 }

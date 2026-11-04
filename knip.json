@@ -1,14 +1,17 @@
 {
-  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "$schema": "https://unpkg.com/knip@6/schema.json",
   "tags": ["-lintignore"],
-  "ignoreBinaries": ["ffmpeg", "pgrep"],
+  "ignoreBinaries": ["ffmpeg", "pgrep", "electron-forge"],
   "ignoreDependencies": [
     "tailwindcss",
     "tw-animate-css",
     "reka-ui",
     "vue-markdown-render",
     "highlight.js",
-    "katex"
+    "katex",
+    "@iki/backend",
+    "@iki/theme",
+    "@tailwindcss/vite"
   ],
   "workspaces": {
     ".": {
@@ -22,7 +25,17 @@
       "project": ["src/**/*.ts"]
     },
     "packages/desktop": {
-      "project": ["src/main/**/*.ts", "src/preload/**/*.ts"]
+      "entry": [
+        "src/main.ts",
+        "src/preload/index.ts",
+        "src/renderer/index.ts",
+        "forge.config.ts",
+        "vite.main.config.ts",
+        "vite.preload.config.ts",
+        "vite.renderer.config.mjs"
+      ],
+      "project": ["src/**/*.{ts,vue}"]
     }
-  }
+  },
+  "ignore": ["packages/desktop/.vite/**", "packages/desktop/out/**", "packages/desktop/dist/**"]
 }

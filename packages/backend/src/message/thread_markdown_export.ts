@@ -1,12 +1,12 @@
 import { extractTextFromMessageParts, isObjectRecord } from './message_parts';
 
-export type ThreadMarkdownExportMessage = {
+type ThreadMarkdownExportMessage = {
   role: string;
   parts: unknown;
   createdAt?: string;
 };
 
-export type ThreadMarkdownExportInput = {
+type ThreadMarkdownExportInput = {
   title: string;
   model?: string;
   exportedAt: string;
@@ -43,19 +43,4 @@ export const buildThreadMarkdown = (input: ThreadMarkdownExportInput): string =>
   }
 
   return lines.join('\n');
-};
-
-export const parseStoredMessageForExport = (messageJson: unknown): ThreadMarkdownExportMessage | null => {
-  if (typeof messageJson !== 'string' || !messageJson.trim()) return null;
-  try {
-    const parsed: unknown = JSON.parse(messageJson);
-    if (!isObjectRecord(parsed) || typeof parsed.role !== 'string') return null;
-    return {
-      role: parsed.role,
-      parts: parsed.parts,
-      createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : undefined,
-    };
-  } catch {
-    return null;
-  }
 };

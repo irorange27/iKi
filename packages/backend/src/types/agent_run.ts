@@ -12,18 +12,6 @@ export type AgentRunStatus =
   | 'failed'
   | 'cancelled';
 
-export type ReviewQueueItem = {
-  runId: string;
-  kind: AgentRunKind;
-  status: AgentRunStatus;
-  threadId?: string | null;
-  threadTitle?: string;
-  startedAt: string;
-  updatedAt: string;
-  summary: string;
-  error?: string;
-};
-
 /**
  * `finalize` and `approval-response` are retained for rows written before those
  * transitions stopped appending a step. Nothing writes either any more.
@@ -111,11 +99,6 @@ export interface AgentRunTrace {
   run: AgentRun;
   steps: AgentRunStep[];
   children: AgentRun[];
-}
-
-export interface AgentRunTree {
-  rootRunId: string;
-  traces: AgentRunTrace[];
 }
 
 export type AgentEvalLabelType = 'correct' | 'incorrect' | 'partial' | 'note';

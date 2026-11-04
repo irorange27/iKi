@@ -101,13 +101,3 @@ export const updateWorkspace = (id: string, workspace: Partial<Workspace>) => {
 
   return stmt.run(params);
 };
-
-export const deleteWorkspace = (id: string) => {
-  return getDb().prepare('DELETE FROM workspaces WHERE id = ?').run(id);
-};
-
-export const toggleWorkspaceVisibility = (id: string) => {
-  const workspace = getWorkspace(id);
-  if (!workspace) return null;
-  return updateWorkspace(id, { show_in_list: workspace.show_in_list === 1 ? 0 : 1 });
-};

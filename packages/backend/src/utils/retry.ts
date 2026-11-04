@@ -1,5 +1,5 @@
 import { createLogger } from '../logger';
-import { isRetryableError } from '@iki/backend/utils/errors';
+import { getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
 import type { ToolRetryConfig } from '@iki/backend/agent/types';
 
 export type { ToolRetryConfig };
@@ -39,7 +39,7 @@ export function withRetry<P extends unknown[], R>(
               data: {
                 attempts: attempt + 1,
                 maxRetries,
-                errorMessage: error instanceof Error ? error.message : String(error),
+                errorMessage: getErrorMessage(error),
               },
             });
             return (await config.fallback(error)) as R;
@@ -57,7 +57,7 @@ export function withRetry<P extends unknown[], R>(
             attempt: attempt + 1,
             maxRetries,
             delayMs,
-            errorMessage: error instanceof Error ? error.message : String(error),
+            errorMessage: getErrorMessage(error),
           },
         });
 

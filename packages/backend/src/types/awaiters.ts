@@ -1,4 +1,6 @@
-export type AwaiterStatus =
+import { isObjectRecord } from '@iki/backend/utils/guards';
+
+type AwaiterStatus =
   | 'armed'
   | 'waking'
   | 'completed'
@@ -6,16 +8,16 @@ export type AwaiterStatus =
   | 'failed'
   | 'expired';
 
-export type AwaiterTriggerKind = 'time_at' | 'time_after';
+type AwaiterTriggerKind = 'time_at' | 'time_after';
 
-export type AwaiterDeliveryMode = 'thread';
+type AwaiterDeliveryMode = 'thread';
 
-export type AwaiterTimeAtTriggerSpec = {
+type AwaiterTimeAtTriggerSpec = {
   kind: 'time_at';
   at: string;
 };
 
-export type AwaiterTimeAfterTriggerSpec = {
+type AwaiterTimeAfterTriggerSpec = {
   kind: 'time_after';
   delay_minutes: number;
 };
@@ -25,8 +27,7 @@ export type AwaiterTriggerSpec = AwaiterTimeAtTriggerSpec | AwaiterTimeAfterTrig
 export const DEFAULT_AWAITER_LIST_LIMIT = 20;
 export const MAX_AWAITER_LIST_LIMIT = 100;
 
-const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
 
 export const parseAwaiterTriggerSpec = (
   raw: unknown,

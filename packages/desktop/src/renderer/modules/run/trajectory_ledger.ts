@@ -6,8 +6,8 @@ import type {
   AgentRunTrace,
 } from '@iki/backend/types/agent_run';
 
-export type LedgerKind = AgentRunStepType | 'system' | 'user';
-export type LedgerLane = 0 | 1 | 2;
+type LedgerKind = AgentRunStepType | 'system' | 'user';
+type LedgerLane = 0 | 1 | 2;
 export type LedgerEntry = {
   id: string;
   step: AgentRunStep | null;
@@ -34,7 +34,7 @@ export type TurnLedger = {
   finishedMs: number;
   durationMs: number;
 };
-export type TimingSpan = { startedMs: number; finishedMs: number; durationMs: number };
+type TimingSpan = { startedMs: number; finishedMs: number; durationMs: number };
 export type TimelineMode = 'sequence' | 'time';
 export type TimelineRange = { start: number; end: number };
 export type TimelineItem = { entry: LedgerEntry; start: number; end: number };
@@ -63,10 +63,10 @@ const toMs = (value: string | null | undefined): number | null => {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
 };
-export const laneFor = (type: LedgerKind): LedgerLane =>
+const laneFor = (type: LedgerKind): LedgerLane =>
   type === 'tool-call' || type === 'tool-result' ? 2 : type === 'model' ? 1 : 0;
 
-export type LedgerContext = {
+type LedgerContext = {
   /**
    * The system prompt the previous turn already showed. A turn whose prompt is
    * unchanged shows no system entry at all — the same rule DSH uses: a request
@@ -75,7 +75,7 @@ export type LedgerContext = {
   previousSystemPrompt?: string;
 };
 
-export const buildTurnLedger = (
+const buildTurnLedger = (
   trace: AgentRunTrace,
   turn: number,
   context: LedgerContext = {}

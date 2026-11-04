@@ -1,26 +1,9 @@
 import { isObjectRecord, type ObjectRecord } from '@iki/backend/utils/guards';
 
-export type ThreadLlmSelectionState = {
+type ThreadLlmSelectionState = {
   providerType?: string;
   providerId?: string;
   model?: string;
-};
-
-export const normalizeStringArray = (input: unknown): string[] => {
-  if (!Array.isArray(input)) return [];
-
-  const resolved: string[] = [];
-  const seen = new Set<string>();
-
-  for (const item of input) {
-    if (typeof item !== 'string') continue;
-    const trimmed = item.trim();
-    if (!trimmed || seen.has(trimmed)) continue;
-    seen.add(trimmed);
-    resolved.push(trimmed);
-  }
-
-  return resolved;
 };
 
 export const parseJsonRecord = (raw: unknown): ObjectRecord => {

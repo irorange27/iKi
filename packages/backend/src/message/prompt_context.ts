@@ -53,7 +53,7 @@ export const buildPromptContext = (
   }
 
   return {
-    systemPrompt: assembleRequestSystemPrompt(systemParts).prompt,
+    systemPrompt: assembleRequestSystemPrompt(systemParts),
     messages: sanitized,
   };
 };

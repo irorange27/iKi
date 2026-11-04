@@ -2,10 +2,6 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   AppConfig,
   ConfigRuntimeInfo,
-  DaemonControlAction,
-  DaemonControlResult,
-  DaemonLogsInfo,
-  DaemonStatusInfo,
   NetworkDiagnosticResult,
 } from '@iki/backend/types/config';
 import type { AppUpdateStatus } from '@iki/backend/types/update';
@@ -17,9 +13,8 @@ import type {
 } from '@iki/backend/types/provider';
 import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/backend/types/chat_usage';
 import type { McpServerInput, McpServerSummary } from '@iki/backend/types/mcp';
-import type { AgentRun, AgentRunTrace, AgentRunTree } from '@iki/backend/types/agent_run';
-import type { DevToolsResolveRequest, DevToolsSourceResult } from '@iki/backend/types/devtools';
-import type { DevRuntimeStatus } from '@iki/backend/types/devtools';
+import type { AgentRun, AgentRunTrace } from '@iki/backend/types/agent_run';
+import type { DevToolsResolveRequest, DevToolsSourceResult , DevRuntimeStatus } from '@iki/backend/types/devtools';
 import type {
   SpeechStatus,
   SpeechTranscriptionInput,
@@ -31,9 +26,7 @@ import type {
 import type {
   ChatInvocationOptions,
   ElectronApi,
-  PromptAppInput,
   ProviderInput,
-  WorkspaceInput,
   ChatThreadInput,
   ChatMessageInput,
 } from '@iki/backend/types/electron_api';
@@ -52,12 +45,6 @@ const electronApi: ElectronApi = {
   config: {
     get: () => ipcRenderer.invoke('config:get'),
     getRuntimeInfo: (): Promise<ConfigRuntimeInfo> => ipcRenderer.invoke('config:get-runtime-info'),
-    getDaemonStatus: (): Promise<DaemonStatusInfo> =>
-      ipcRenderer.invoke('config:get-daemon-status'),
-    getDaemonLogs: (limit?: number): Promise<DaemonLogsInfo> =>
-      ipcRenderer.invoke('config:get-daemon-logs', limit),
-    controlDaemon: (action: DaemonControlAction): Promise<DaemonControlResult> =>
-      ipcRenderer.invoke('config:control-daemon', action),
     testNetwork: (network: AppConfig['network']): Promise<NetworkDiagnosticResult> =>
       ipcRenderer.invoke('config:test-network', network),
     set: (config: AppConfig) => ipcRenderer.invoke('config:set', config),
@@ -90,8 +77,6 @@ const electronApi: ElectronApi = {
       ipcRenderer.invoke('chat:isProviderConfigured', providerType, providerId),
     stream: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:stream', options),
     stopStream: () => ipcRenderer.invoke('chat:stop-stream'),
-    steerStream: (threadId: string | undefined, message: string) =>
-      ipcRenderer.invoke('chat:steer-stream', threadId, message),
     onUiChunk: (callback: (chunk: unknown) => void) => subscribe('chat:ui-chunk', callback),
     approveTool: (approvalId: string, approved: boolean) => {
       return ipcRenderer.invoke('chat:approve-tool', approvalId, approved);
@@ -115,7 +100,6 @@ const electronApi: ElectronApi = {
     },
     messages: {
       list: (threadId: string) => ipcRenderer.invoke('chat:messages:list', threadId),
-      get: (id: string) => ipcRenderer.invoke('chat:messages:get', id),
       update: (id: string, message: ChatMessageInput) =>
         ipcRenderer.invoke('chat:messages:update', id, message),
       truncateAfter: (threadId: string, messageId: string) =>
@@ -126,13 +110,9 @@ const electronApi: ElectronApi = {
         ipcRenderer.invoke('chat:runs:list', threadId),
       getTrace: (runId: string): Promise<AgentRunTrace | null> =>
         ipcRenderer.invoke('chat:runs:trace:get', runId),
-      getTree: (rootRunId: string): Promise<AgentRunTree> =>
-        ipcRenderer.invoke('chat:runs:tree:get', rootRunId),
-      trajectory: (runId: string) => ipcRenderer.invoke('chat:runs:trajectory:get', runId),
       cancel: (runId: string) => ipcRenderer.invoke('chat:runs:cancel', runId),
       retryAndExecute: (runId: string) => ipcRenderer.invoke('chat:runs:retry-and-execute', runId),
       resume: (runId: string) => ipcRenderer.invoke('chat:runs:resume', runId),
-      reviewQueue: (limit?: number) => ipcRenderer.invoke('chat:runs:review-queue', limit),
       eval: {
         exportTrace: (runId: string) => ipcRenderer.invoke('chat:eval:export-trace', runId),
         addLabel: input => ipcRenderer.invoke('chat:eval:add-label', input),
@@ -147,34 +127,13 @@ const electronApi: ElectronApi = {
   },
   workspaces: {
     list: () => ipcRenderer.invoke('workspaces:list'),
-    get: (id: string) => ipcRenderer.invoke('workspaces:get', id),
-    getByPath: (path: string) => ipcRenderer.invoke('workspaces:getByPath', path),
     getVisible: () => ipcRenderer.invoke('workspaces:getVisible'),
     pickDirectory: () => ipcRenderer.invoke('workspaces:pickDirectory'),
-    create: (workspace: WorkspaceInput) => ipcRenderer.invoke('workspaces:create', workspace),
-    update: (id: string, workspace: WorkspaceInput) =>
-      ipcRenderer.invoke('workspaces:update', id, workspace),
-    delete: (id: string) => ipcRenderer.invoke('workspaces:delete', id),
-    toggleVisibility: (id: string) => ipcRenderer.invoke('workspaces:toggleVisibility', id),
     initAgentInstructions: (threadId: string) =>
       ipcRenderer.invoke('workspaces:init-agent-instructions', threadId),
-    createThreadWorktree: (threadId: string, repoWorkspaceId?: string | null) =>
-      ipcRenderer.invoke('workspaces:create-thread-worktree', threadId, repoWorkspaceId ?? null),
-    removeThreadWorktree: (threadId: string, options?: { force?: boolean }) =>
-      ipcRenderer.invoke('workspaces:remove-thread-worktree', threadId, options ?? {}),
-    mergeThreadWorktree: (threadId: string) =>
-      ipcRenderer.invoke('workspaces:merge-thread-worktree', threadId),
   },
   promptApps: {
-    list: () => ipcRenderer.invoke('promptApps:list'),
-    get: (id: string) => ipcRenderer.invoke('promptApps:get', id),
     getEnabled: () => ipcRenderer.invoke('promptApps:getEnabled'),
-    create: (app: PromptAppInput) => ipcRenderer.invoke('promptApps:create', app),
-    update: (id: string, app: PromptAppInput) => ipcRenderer.invoke('promptApps:update', id, app),
-    delete: (id: string) => ipcRenderer.invoke('promptApps:delete', id),
-    toggleEnabled: (id: string) => ipcRenderer.invoke('promptApps:toggleEnabled', id),
-    updateSortOrder: (id: string, sortOrder: number) =>
-      ipcRenderer.invoke('promptApps:updateSortOrder', id, sortOrder),
   },
   toolModel: {
     get: () => ipcRenderer.invoke('toolModel:get'),
@@ -238,9 +197,6 @@ const electronApi: ElectronApi = {
       ipcRenderer.invoke('devtools:resolve-element', request),
   },
   openSettings: (section?: string) => ipcRenderer.send('open-settings', section),
-  focusThread: (threadId: string) => ipcRenderer.send('chat:focus-thread', threadId),
-  onFocusThread: (callback: (threadId: string) => void) =>
-    subscribe('chat:thread-activate', callback),
   closeWindow: () => ipcRenderer.send('close-window'),
   setWindowShadow: (enabled: boolean) => ipcRenderer.send('window:set-shadow', enabled),
   ...(process.platform === 'darwin'

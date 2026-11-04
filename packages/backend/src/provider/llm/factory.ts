@@ -32,6 +32,7 @@ import {
   buildPiModel,
   callPiChat,
   projectHistoryToPiContext,
+  shouldUseCacheRetention,
   projectUsageToIki,
 } from './pi_adapter';
 
@@ -431,14 +432,14 @@ const generateViaPi = async (
 
   const systemPrompt =
     typeof options.auxSystemInstruction === 'string'
-      ? assembleAuxRequestSystemPrompt({ instruction: options.auxSystemInstruction }).prompt
+      ? assembleAuxRequestSystemPrompt({ instruction: options.auxSystemInstruction })
       : assembleRequestSystemPrompt([
           { slot: 'persona', text: personaPrompt },
           ...(typeof options.extraSystemPrompt === 'string'
             ? [{ slot: 'extraPrompt' as const, text: options.extraSystemPrompt }]
             : []),
           { slot: 'transcriptSystem', text: transcriptSystem },
-        ]).prompt;
+        ]);
 
   try {
     const settle = await (async () => {
@@ -454,6 +455,8 @@ const generateViaPi = async (
               ...(typeof options.temperature === 'number'
                 ? { temperature: options.temperature }
                 : {}),
+              // Pass cache hint if the model charges for prompt-cache writes.
+              ...(shouldUseCacheRetention(model) ? { cacheRetention: 'short' } : {}),
             }
           );
           const resultPromise = eventStream.result();
@@ -475,7 +478,7 @@ const generateViaPi = async (
             throw failure;
           }
 
-          const mapped = projectUsageToIki(final.usage);
+          const mapped = projectUsageToIki(final.usage, final.usage.cost.total);
           return { final, text: settledText, usage: mapped };
     })();
     const { final, text, usage } = settle;

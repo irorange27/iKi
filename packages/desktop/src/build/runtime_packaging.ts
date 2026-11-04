@@ -15,12 +15,12 @@ type InstalledPackageManifest = {
   peerDependencies?: Record<string, string>;
 };
 
-export type RuntimePlacement = {
+type RuntimePlacement = {
   sourcePath: string;
   targetRelative: string;
 };
 
-export type RuntimePackagingPlan = {
+type RuntimePackagingPlan = {
   placements: RuntimePlacement[];
   unpackPaths: string[];
 };

@@ -2,14 +2,14 @@ import { shallowReactive } from 'vue';
 
 import type { ChatUiMessageChunk } from '@iki/backend/message/message_parts';
 
-export type ToolUiState = {
+type ToolUiState = {
   collapsed?: boolean;
   startedAt?: number;
   endedAt?: number;
   durationMs?: number;
 };
 
-export type ToolUiStatePatch = Partial<ToolUiState>;
+type ToolUiStatePatch = Partial<ToolUiState>;
 
 const toolUiStateMap = shallowReactive<Record<string, ToolUiState>>({});
 

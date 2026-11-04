@@ -104,10 +104,7 @@
       <!-- 技能: what the agent can do. -->
       <section v-show="activeSection === 'intelligence'" class="settings-page">
         <h2 class="settings-page-title">{{ t('settings.menu.skills') }}</h2>
-        <SettingsSkillsSection
-          :active="activeSection === 'intelligence'"
-          @config-change="autoSave"
-        />
+        <SettingsSkillsSection :active="activeSection === 'intelligence'" />
       </section>
 
       <!-- Footer operabar -->
@@ -144,12 +141,11 @@ import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.
 import { useI18n } from '../i18n';
 import { createLogger } from '../logger';
 import { getElectronAPI } from '../services/electron_api';
+import { useAppConfig } from '../composables/useAppConfig';
 import { useConfigStore } from '../store/config';
 import { createDefaultAppConfig } from '@iki/backend/config/defaults';
 import type { AppConfig } from '@iki/backend/types/config';
 import type { Provider } from '@iki/backend/types/provider';
-import { parseModelList } from '@iki/backend/utils/provider_models';
-import { getProviderDisplayName } from '../modules/providers/provider_display';
 
 const electronAPI = getElectronAPI();
 const settingsViewLogger = createLogger({ module: 'settings_view' });
@@ -198,13 +194,6 @@ watch(
   }
 );
 
-type AvailableProvider = {
-  id: string;
-  name: string;
-  type: string;
-  models: string[];
-};
-
 const loadProviders = async () => {
   try {
     providers.value = await electronAPI.providers.list();
@@ -217,21 +206,6 @@ const loadProviders = async () => {
     });
   }
 };
-
-const availableProvidersWithModels = computed<AvailableProvider[]>(() => {
-  return providers.value
-    .filter(provider => provider.enabled)
-    .map(provider => {
-      const models = parseModelList(provider.models);
-      return {
-        id: provider.id,
-        name: getProviderDisplayName(provider),
-        type: provider.type,
-        models,
-      };
-    })
-    .filter(provider => provider.models.length > 0);
-});
 
 const menuItems = computed(() => [
   { key: 'general', label: t('settings.menu.general'), icon: Cog },
@@ -291,14 +265,12 @@ const activeSectionMeta = computed(() => {
 const activeSectionLabel = computed(() => activeSectionMeta.value.label);
 const activeSectionIcon = computed(() => activeSectionMeta.value.icon);
 
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
+const { debouncedSave, saveNow } = useAppConfig();
 const autoSave = () => {
   saved.value = false;
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    await configStore.saveConfig();
+  void debouncedSave().then(() => {
     saved.value = true;
-  }, 300);
+  });
 };
 
 const PROVIDER_DRAFT_FLUSH_EVENT = 'iki:providers:flush-draft';
@@ -341,9 +313,8 @@ const resetColorSchemeSection = () => {
 };
 
 const saveAndClose = async () => {
-  clearTimeout(saveTimer);
   await flushProviderDraft();
-  await configStore.saveConfig();
+  await saveNow();
   saved.value = true;
   emit('close');
 };

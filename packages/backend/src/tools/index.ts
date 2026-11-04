@@ -41,7 +41,7 @@ import { PlanTool } from './plan_tools';
 import { WebSearchTool, FetchTool } from './web_tools';
 import { ElementSourceTool, setElementSourceResolver, type ElementSourceResolver } from './element_source_tool';
 
-export type StandardToolRegistrationOptions = {
+type StandardToolRegistrationOptions = {
   delegatedAgentRuntime: DelegatedAgentRuntime;
 
   elementSourceResolver?: ElementSourceResolver;

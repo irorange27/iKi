@@ -1,7 +1,6 @@
 import { BrowserWindow, ipcMain } from 'electron';
 
 import { createSettingsWindow } from '../windows/settings_window';
-import { showMainWindow } from '../windows/main_window';
 
 let windowIpcRegistered = false;
 
@@ -14,17 +13,6 @@ export const registerWindowIpc = (): void => {
       createSettingsWindow({
         section: typeof section === 'string' ? section : undefined,
       });
-    } catch {
-      /* empty: error is not actionable here */
-    }
-  });
-
-  ipcMain.on('chat:focus-thread', (_event, threadId?: string) => {
-    try {
-      const mainWindow = showMainWindow();
-      if (typeof threadId === 'string' && threadId.trim()) {
-        mainWindow.webContents.send('chat:thread-activate', threadId.trim());
-      }
     } catch {
       /* empty: error is not actionable here */
     }

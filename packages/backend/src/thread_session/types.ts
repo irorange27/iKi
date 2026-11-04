@@ -60,7 +60,7 @@ export type RunStatusEvent = {
   timestamp: string;
 };
 
-export type PersistedTurnMessage = {
+type PersistedTurnMessage = {
   id: string;
   role: 'assistant';
   parts: unknown[];

@@ -7,12 +7,12 @@ import {
 } from './compaction_prompt';
 import { generateChatWithModelMessages, getModelGenerationSettings } from '../provider/llm/factory';
 
-export type ThreadSummaryMessage = {
+type ThreadSummaryMessage = {
   role: 'user' | 'assistant';
   content: string;
 };
 
-export type ThreadSummaryResult = {
+type ThreadSummaryResult = {
   summary: string;
   model: ToolModelConfig;
 };

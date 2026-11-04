@@ -181,4 +181,51 @@ describe('agent run tracker', () => {
     expect(after.error).toBeNull();
   });
 
+
+  it('overwrites the parked supply columns when a queued run is adopted', () => {
+    // A retry parks a queued row that copies the PREVIOUS attempt's prompt, tools
+    // and skills. The turn that adopts it recomposes all three, so the row has to
+    // carry what this run actually used — otherwise the run trace shows a prompt
+    // that was never sent.
+    const { parentId, threadId, chainRootId } = seedParent();
+    const queuedId = `run_queued_${runCounter}`;
+    createAgentRun({
+      id: queuedId,
+      kind: 'chat-turn',
+      status: 'queued',
+      threadId,
+      rootRunId: chainRootId,
+      parentRunId: parentId,
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      systemPrompt: 'prompt of the dead attempt',
+      enabledTools: ['stale_tool'],
+      availableSkillIds: ['stale_skill'],
+      input: { prompt: 'retry me' },
+      working: { accumulatedText: '', pendingApprovalIds: [], lastStepIndex: 0 },
+    } as never);
+
+    const tracker = createAgentRunTracker({
+      kind: 'chat-turn',
+      threadId,
+      parentRunId: parentId,
+      rootRunId: chainRootId,
+      adoptExistingRunId: queuedId,
+      providerType: 'openai',
+      model: 'gpt-4o-mini',
+      systemPrompt: 'prompt composed for this turn',
+      enabledTools: ['read_file'],
+      availableSkillIds: ['skill_live'],
+      input: { prompt: 'retry me' },
+      working: { accumulatedText: '', pendingApprovalIds: [], lastStepIndex: 0 },
+    } as never);
+
+    expect(tracker.id).toBe(queuedId);
+    expect(getAgentRun(queuedId)).toMatchObject({
+      status: 'running',
+      systemPrompt: 'prompt composed for this turn',
+      enabledTools: ['read_file'],
+      availableSkillIds: ['skill_live'],
+    });
+  });
 });

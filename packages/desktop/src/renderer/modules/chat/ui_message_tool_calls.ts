@@ -41,7 +41,7 @@ export {
 } from '@iki/backend/message/tool_parts';
 export { getParsedToolInput, getParsedToolOutput } from './tool_payloads';
 
-export type WebSearchCitation = {
+type WebSearchCitation = {
   title: string;
   url: string;
   domain: string;
@@ -135,23 +135,9 @@ export const getToolDurationMs = (part: unknown): number | null => {
   return null;
 };
 
-export const formatDurationMs = (ms: number): string => {
-  if (!Number.isFinite(ms) || ms < 0) return '';
-  const secondsTotal = ms / 1000;
+import { formatDuration as formatDurationMs } from '../../utils/formatters';
 
-  const formatSeconds = (seconds: number) => {
-    const fixed = seconds.toFixed(1);
-    return fixed.endsWith('.0') ? fixed.slice(0, -2) : fixed;
-  };
-
-  if (secondsTotal < 60) {
-    return `${formatSeconds(secondsTotal)} s`;
-  }
-
-  const minutes = Math.floor(secondsTotal / 60);
-  const seconds = Math.round(secondsTotal % 60);
-  return `${minutes}m ${seconds}s`;
-};
+export { formatDurationMs };
 
 export const getToolDurationLabel = (part: unknown): string => {
   const ms = getToolDurationMs(part);
@@ -466,7 +452,7 @@ export const getWebSearchCitations = (part: unknown): WebSearchCitation[] => {
 export const hasWebSearchCitations = (part: unknown): boolean =>
   getWebSearchCitations(part).length > 0;
 
-export type ToolDiffLine = {
+type ToolDiffLine = {
   kind: 'meta' | 'hunk' | 'add' | 'del' | 'context';
   text: string;
 };
@@ -510,7 +496,7 @@ export const getToolDiffLines = (part: unknown): ToolDiffLine[] => {
   return lines;
 };
 
-export type ToolDiffStat = { additions: number; deletions: number };
+type ToolDiffStat = { additions: number; deletions: number };
 
 const diffStatCache = new WeakMap<object, ToolDiffStat>();
 
@@ -546,7 +532,7 @@ export const getToolOutputForDisplay = (part: unknown): unknown => {
   return undefined;
 };
 
-export type ToolTerminalView = {
+type ToolTerminalView = {
   command: string;
   stdout: string;
   stderr: string;

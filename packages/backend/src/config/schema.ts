@@ -183,13 +183,6 @@ const McpSchema = z
   })
   .catch(DEFAULT_APP_CONFIG.mcp);
 
-const DaemonSchema = z
-  .object({
-    host: stringField(DEFAULT_APP_CONFIG.daemon.host),
-    port: z.number().int().min(1).max(65535).catch(DEFAULT_APP_CONFIG.daemon.port),
-  })
-  .catch(DEFAULT_APP_CONFIG.daemon);
-
 export const AppConfigSchema = z
   .object({
     general: GeneralSchema,
@@ -204,7 +197,6 @@ export const AppConfigSchema = z
     toolModel: ToolModelSchema,
     toolExecution: ToolExecutionSchema,
     mcp: McpSchema,
-    daemon: DaemonSchema,
   })
   .passthrough()
   .catch(toCatchRecord(DEFAULT_APP_CONFIG));

@@ -1,6 +1,6 @@
 export type TranslationParams = Record<string, string | number | boolean | null | undefined>;
 export type TranslationEntry = string | ((params: TranslationParams) => string);
-export type MessageCatalog = Record<string, TranslationEntry>;
+type MessageCatalog = Record<string, TranslationEntry>;
 export type LocaleCatalog<TBase extends MessageCatalog> = {
   [K in keyof TBase]: TranslationEntry;
 };

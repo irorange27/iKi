@@ -18,19 +18,12 @@
 import { computed } from 'vue';
 import { useI18n } from '../../i18n';
 import { formatDurationMs } from '../../modules/chat/ui_message_tool_calls';
+import { formatCompactNumber } from '../../utils/formatters';
 import type { SessionPerfStats } from '../../modules/chat/ui_message_references';
 
 const props = defineProps<{ stats: SessionPerfStats | null }>();
 
 const { t } = useI18n();
-
-const formatCompactTokens = (tokens: number): string => {
-  const value = Math.max(0, Math.round(tokens));
-  const trim = (text: string) => text.replace(/\.0$/, '');
-  if (value >= 1_000_000) return `${trim((value / 1_000_000).toFixed(1))}M`;
-  if (value >= 1_000) return `${trim((value / 1_000).toFixed(1))}K`;
-  return String(value);
-};
 
 const roundsLabel = computed(() => {
   const stats = props.stats;
@@ -86,7 +79,7 @@ const cacheTitle = computed(() => {
   const stats = props.stats;
   if (!stats || stats.cacheWriteTokens <= 0) return '';
   return t('chat.sessionStats.tooltip.cacheWriteTokens', {
-    tokens: formatCompactTokens(stats.cacheWriteTokens),
+    tokens: formatCompactNumber(stats.cacheWriteTokens),
   });
 });
 
@@ -95,11 +88,11 @@ const tokensLabel = computed(() => {
   if (!stats) return '';
   const parts: string[] = [];
   if (stats.inputTokens > 0) {
-    parts.push(t('chat.sessionStats.inputTokens', { tokens: formatCompactTokens(stats.inputTokens) }));
+    parts.push(t('chat.sessionStats.inputTokens', { tokens: formatCompactNumber(stats.inputTokens) }));
   }
   if (stats.outputTokens > 0) {
     parts.push(
-      t('chat.sessionStats.outputTokens', { tokens: formatCompactTokens(stats.outputTokens) })
+      t('chat.sessionStats.outputTokens', { tokens: formatCompactNumber(stats.outputTokens) })
     );
   }
   return parts.join(' · ');
@@ -112,7 +105,7 @@ const tokensTitle = computed(() => {
   if (stats.reasoningTokens > 0) {
     lines.push(
       t('chat.sessionStats.tooltip.reasoningTokens', {
-        tokens: formatCompactTokens(stats.reasoningTokens),
+        tokens: formatCompactNumber(stats.reasoningTokens),
       })
     );
   }

@@ -1,39 +1,27 @@
 import { randomUUID } from 'node:crypto';
-import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-ai';
+import type { Message as PiMessage } from '@earendil-works/pi-ai';
 
 import { createLogger } from '@iki/backend/logger';
-import {
-  RefusalError,
-  getErrorMessage,
-  isContextOverflowError,
-  isRetryableError,
-} from '@iki/backend/utils/errors';
-import type { ToolApprovalRequest } from '../types';
+import { RefusalError } from '@iki/backend/utils/errors';
+import type { ToolApprovalRequest , AgentTool, AgentTurnPerf, AgentUsage } from '../types';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
-import { withRetry } from '@iki/backend/utils/retry';
 import {
   appendUserPromptToHistory,
   cloneModelMessages,
+  toolResultText,
   type ModelMessage,
   type ModelToolResultOutput,
 } from '@iki/backend/message/model_history';
+import { resolvePersonaPrompt } from '../../provider/llm/factory';
 import {
-  resolvePersonaPrompt,
-  getProviderConfig,
-  resolvePiModelCapability,
-  resolveProviderApi,
-} from '../../provider/llm/factory';
-import {
-  buildPiModel,
-  callPiChat,
   projectHistoryToPiContext,
   projectToolsToPiTools,
+  projectUsageToIki,
 } from '../../provider/llm/pi_adapter';
 import {
   runPiAgentLoop,
   toolResultIsError as toolExecutionIsError,
   toolResultText as toolExecutionText,
-  type PiLoopDelta,
   type PiLoopEvent,
   type PiLoopTool,
   type PiUsageBuckets,
@@ -49,12 +37,12 @@ import {
   estimateTextTokens,
   estimateToolSchemaTokens,
 } from '../context_budget';
-import { getToolRuntimeContext, runWithToolRuntimeContext } from '../../utils/runtime_context';
+import { getToolRuntimeContext } from '../../utils/runtime_context';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../../workspaces/thread_workspace';
-import type { AgentTool, AgentTurnPerf, AgentUsage } from '../types';
 import type {
   HarnessConfig,
   InlineExecutionRecord,
+  ToolExecutionOutcome,
   TurnEvent,
   TurnInput,
   TurnOutput,
@@ -63,274 +51,14 @@ import { unwrapCheckpoint } from '../../runtimes/compaction_prompt';
 
 const logger = createLogger({ module: 'pi_tool_turn_harness' });
 
-export type PiToolModelCall = (
-  config: HarnessConfig,
-  request: {
-    systemPrompt: string;
+import { defaultPiToolModelCall, type PiToolModelCall, withPiRetry } from './pi_tool_model_call';
+import { createRawToolRunner, defaultPiToolExecutor } from './pi_tool_executor';
 
-    messages: PiMessage[];
-    tools?: ReturnType<typeof projectToolsToPiTools>;
-    signal?: AbortSignal;
-    maxTokens?: number;
-
-    onRecoveryNote?: (noteText: string) => void;
-
-    onContextOverflow?: () => Promise<void>;
-  }
-) => { events: AsyncIterable<PiLoopDelta>; final: Promise<AssistantMessage> };
-
-const RETRY_MAX_ATTEMPTS = 3;
-const RETRY_BASE_DELAY_MS = 1000;
-const RETRY_MAX_DELAY_MS = 30000;
-
-const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
-
-const CONTENT_FILTER_PATTERN = /content_filter/i;
+export { withPiRetry, defaultPiToolModelCall };
+export type { PiToolModelCall };
+export { createRawToolRunner, defaultPiToolExecutor };
 
 const PER_REQUEST_COMPACT_PLACEHOLDER = '__iki_compaction_slot__';
-
-const recoveryNoteFor = (failure: Error): string =>
-  (failure instanceof RefusalError
-    ? 'Your last response was blocked by content policies. Please rephrase your approach to comply with content policies while still being helpful, or find an alternative way to assist.'
-    : `Your last attempt encountered an error: ${getErrorMessage(failure)}. Please try a different approach or simplify your response to avoid this issue.`) +
-  '\n\n---\nContinue with the original task.';
-
-export const withPiRetry = (
-  attempt: () => { stream: AsyncIterable<PiStreamEvent>; final: Promise<AssistantMessage> },
-  request: { messages: PiMessage[]; signal?: AbortSignal },
-  onRecoveryNote?: (noteText: string) => void,
-
-  onContextOverflow?: () => Promise<void>
-): { events: AsyncIterable<PiLoopDelta>; final: Promise<AssistantMessage> } => {
-  const queue: PiLoopDelta[] = [];
-  let notify: (() => void) | undefined;
-  let done = false;
-  let overflowRetried = false;
-  const pushDelta = (delta: PiLoopDelta) => {
-    queue.push(delta);
-    notify?.();
-  };
-  const waitDelta = () =>
-    new Promise<void>(resolve => {
-      notify = resolve;
-    });
-
-  const finalPromise = (async () => {
-    try {
-      let attemptIndex = 0;
-      for (;;) {
-        const one = attempt();
-        let streamed = false;
-        for await (const event of one.stream) {
-          if (event.type === 'text_delta' && event.delta) {
-            streamed = true;
-            pushDelta({ type: 'text_delta', delta: event.delta });
-          } else if (event.type === 'thinking_delta' && event.delta) {
-            streamed = true;
-            pushDelta({ type: 'thinking_delta', delta: event.delta });
-          }
-        }
-        const final = await one.final;
-        if (final.stopReason === 'error') {
-          const failure = CONTENT_FILTER_PATTERN.test(final.errorMessage ?? '')
-            ? new RefusalError(
-                'Model response was blocked by content filter',
-                'content-filter',
-                undefined
-              )
-            : new Error(final.errorMessage || 'Provider returned an error stop reason');
-
-          if (
-            isContextOverflowError(final.errorMessage) &&
-            onContextOverflow &&
-            !overflowRetried &&
-            !streamed &&
-            !request.signal?.aborted
-          ) {
-            overflowRetried = true;
-            attemptIndex = 0;
-            logger.event({
-              level: 'warn',
-              event: 'llm.turn.retry',
-              outcome: 'started',
-              message:
-                'Provider rejected the request for context length; compacted and retrying once.',
-              data: {},
-            });
-            await onContextOverflow();
-            continue;
-          }
-          if (
-            attemptIndex < RETRY_MAX_ATTEMPTS &&
-            !streamed &&
-            !request.signal?.aborted &&
-            isRetryableError(failure)
-          ) {
-            attemptIndex += 1;
-            await sleep(
-              Math.min(RETRY_BASE_DELAY_MS * 2 ** (attemptIndex - 1), RETRY_MAX_DELAY_MS)
-            );
-            const note = recoveryNoteFor(failure);
-
-            request.messages.push({ role: 'user', content: note, timestamp: Date.now() });
-            onRecoveryNote?.(note);
-            logger.event({
-              level: 'warn',
-              event: 'llm.turn.retry',
-              outcome: 'started',
-              message: `Pi tool turn step failed, retrying (attempt ${attemptIndex}/${RETRY_MAX_ATTEMPTS})`,
-              data: { errorMessage: getErrorMessage(failure) },
-            });
-            continue;
-          }
-
-          if (request.signal?.aborted) {
-            throw new DOMException(final.errorMessage || 'Run cancelled', 'AbortError');
-          }
-          if (failure instanceof RefusalError) throw failure;
-          logger.event({
-            level: 'error',
-            event: 'llm.turn.failed',
-            outcome: 'failed',
-            message: 'Pi tool turn step failed terminally.',
-            data: { errorMessage: getErrorMessage(failure) },
-          });
-        }
-        return final;
-      }
-    } finally {
-      done = true;
-      notify?.();
-    }
-  })();
-
-  const events = (async function* () {
-    let index = 0;
-    for (;;) {
-      while (index < queue.length) {
-        yield queue[index];
-        index += 1;
-      }
-      if (done) return;
-      await waitDelta();
-    }
-  })();
-
-  return { events, final: finalPromise };
-};
-
-export type PiStreamEvent = { type: 'text_delta' | 'thinking_delta'; delta: string };
-
-const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
-  const provider = getProviderConfig(config.providerType, config.providerId);
-  const capability = resolvePiModelCapability({
-    providerType: config.providerType,
-    ...(config.providerId ? { providerId: config.providerId } : {}),
-    modelId: config.model,
-  });
-  const model = buildPiModel({
-    id: config.model,
-    providerType: config.providerType,
-    baseUrl: provider.baseURL,
-
-    api: resolveProviderApi(config.providerType, provider),
-    contextWindow: capability?.contextWindow ?? 128000,
-    maxTokens: config.maxOutputTokens ?? capability?.maxTokens ?? 4096,
-    ...(capability?.input ? { input: capability.input } : {}),
-    ...(capability?.cost ? { cost: capability.cost } : {}),
-  });
-  return withPiRetry(
-    () => {
-      const stream = callPiChat(
-        model,
-        { systemPrompt: request.systemPrompt, messages: request.messages, tools: request.tools },
-        {
-          apiKey: provider.apiKey,
-          ...(request.signal ? { signal: request.signal } : {}),
-          ...(typeof request.maxTokens === 'number' ? { maxTokens: request.maxTokens } : {}),
-        }
-      );
-      return {
-        stream: stream as unknown as AsyncIterable<PiStreamEvent>,
-        final: stream.result(),
-      };
-    },
-    request,
-    request.onRecoveryNote,
-    request.onContextOverflow
-  );
-};
-
-const createRawToolRunner = (
-  tools: AgentTool[],
-  config: HarnessConfig,
-  inheritedBox?: { selection: unknown }
-) => {
-  const byName = new Map(tools.map(tool => [tool.name, tool]));
-
-  const workspaceSelectionBox = inheritedBox ??
-    getToolRuntimeContext().workspaceSelectionBox ?? {
-      selection: config.threadId ? resolveThreadWorkspaceSelectionSnapshot(config.threadId) : null,
-    };
-  return async (
-    toolName: string,
-    args: Record<string, unknown>,
-    signal?: AbortSignal
-  ): Promise<unknown> => {
-    const tool = byName.get(toolName);
-    if (!tool) {
-      throw new Error(`Unknown tool "${toolName}".`);
-    }
-    return runWithToolRuntimeContext(
-      {
-        ...getToolRuntimeContext(),
-        ...(config.threadId ? { threadId: config.threadId } : {}),
-        abortSignal: signal,
-        availableTools: tools,
-        availableSkillIds: config.availableSkillIds,
-        workspaceSelectionBox,
-      },
-      async () => {
-        const invoke = () => tool.handler(structuredClone(args));
-        return tool.retry ? withRetry(invoke, tool.retry)() : invoke();
-      }
-    );
-  };
-};
-
-const defaultPiToolExecutor = (
-  tools: AgentTool[],
-  config: HarnessConfig,
-  inheritedBox?: { selection: unknown }
-) => {
-  const runRaw = createRawToolRunner(tools, config, inheritedBox);
-  return async (
-    call: { name: string; arguments: Record<string, unknown> },
-    signal?: AbortSignal
-  ): Promise<ToolResultOutput> => {
-    try {
-      const value = await runRaw(call.name, call.arguments, signal);
-      return typeof value === 'string'
-        ? { type: 'text', value }
-        : { type: 'json', value: JSON.parse(JSON.stringify(value ?? null)) };
-    } catch (error) {
-      return { type: 'error-text', value: getErrorMessage(error) };
-    }
-  };
-};
-
-export type ToolExecutionOutcome =
-  | { kind: 'pending' | 'unknown' | 'busy' }
-  | {
-      kind: 'completed';
-      reused: boolean;
-      result: { type: 'tool-result'; toolCallId: string; toolName: string; output: unknown };
-    };
-
-type ToolResultOutput =
-  | { type: 'text'; value: string }
-  | { type: 'json'; value: unknown }
-  | { type: 'error-text'; value: string };
 
 export class PiToolTurnHarness {
   private readonly config: HarnessConfig;
@@ -497,7 +225,7 @@ export class PiToolTurnHarness {
       this.config.model,
       this.config.providerType
     );
-    const { prompt: systemPrompt } = assembleRequestSystemPrompt([
+    const systemPrompt = assembleRequestSystemPrompt([
       { slot: 'persona', text: personaPrompt },
       { slot: 'planPrompt', text: this.config.systemPrompt },
       { slot: 'transcriptSystem', text: projected.systemPrompt },
@@ -646,7 +374,7 @@ export class PiToolTurnHarness {
         { slot: 'persona', text: personaPrompt },
         { slot: 'planPrompt', text: this.config.systemPrompt },
         { slot: 'transcriptSystem', text: transcriptSystemText },
-      ]).prompt;
+      ]);
       logger.event({
         level: 'info',
         outcome: 'succeeded',
@@ -940,25 +668,12 @@ export class PiToolTurnHarness {
   }
 }
 
-const mapBuckets = (buckets: PiUsageBuckets): AgentUsage => ({
+const mapBuckets = (buckets: PiUsageBuckets): AgentUsage =>
+  projectUsageToIki(buckets, buckets.costUsd);
 
-  inputTokens: buckets.input + buckets.cacheRead + buckets.cacheWrite,
-  outputTokens: buckets.output,
-  cacheReadTokens: buckets.cacheRead,
-  cacheWriteTokens: buckets.cacheWrite,
-  reasoningTokens: buckets.reasoning,
-  totalTokens: buckets.totalTokens,
-  estimatedCostUsd: buckets.costUsd,
-});
-
-const toolOutputText = (output: unknown): string => {
-  if (output !== null && typeof output === 'object' && 'type' in output) {
-    const o = output as { type: string; value?: unknown; reason?: unknown };
-    if (o.type === 'execution-denied') {
-      return typeof o.reason === 'string' ? o.reason : 'Tool execution was denied';
-    }
-  }
-  return output !== null && typeof output === 'object' && 'value' in output
-    ? String((output as { value: unknown }).value)
-    : 'Tool execution failed';
-};
+// Lenient wire projection (model_history): String()'ing object values used to
+// render "[object Object]" on this display path.
+const toolOutputText = (output: unknown): string =>
+  output === null || typeof output !== 'object' || !('type' in output)
+    ? 'Tool execution failed'
+    : toolResultText(output);

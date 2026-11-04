@@ -106,7 +106,7 @@ describe('streamed text commit gate', () => {
     dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'iki-text-commit-'));
     initializeDatabase({ dbPath: path.join(dataDir, 'commit.db') });
     seedTurnProvider({ providerId: 'provider_primary', model: 'test-model' });
-    conversation = createChatPersistence({
+    conversation = createChatPersistence({ rebuildMessages: (threadId: string) => rebuildThreadViewFromEvents(threadId).messages,
       memory: memory as never,
     });
     conversation.createThread({ id: 'thread_commit' });

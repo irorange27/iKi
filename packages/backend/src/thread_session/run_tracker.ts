@@ -4,8 +4,7 @@ import {
   createAgentRun,
   getAgentRun,
   updateAgentRun,
-} from '@iki/backend/db/agent_runs';
-import { claimQueuedAgentRun } from '@iki/backend/db/agent_runs';
+ claimQueuedAgentRun } from '@iki/backend/db/agent_runs';
 import type {
   AgentRun,
   AgentRunError,
@@ -403,7 +402,16 @@ export const createAgentRunTracker = (
         'Queued run "' + params.adoptExistingRunId + '" was already claimed or is not claimable.'
       );
     }
-    return createAgentRunTrackerForRun(adopted);
+    // The queued row was written by whoever parked it — a retry or a blocked
+    // approval — so its supply columns describe that earlier attempt. This turn
+    // recomposes the system prompt, tools and skills; leaving the parked copy would
+    // make the run trace claim a prompt that was never sent.
+    const current = updateAgentRun(adopted.id, {
+      systemPrompt: params.systemPrompt,
+      enabledTools: params.enabledTools,
+      availableSkillIds: params.availableSkillIds,
+    });
+    return createAgentRunTrackerForRun(current ?? adopted);
   }
   const runId = createPrefixedId('run');
   const normalizedParentRunId = normalizeWhitespace(params.parentRunId) || null;

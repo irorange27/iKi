@@ -18,18 +18,13 @@ export interface ChatThread {
   skill_ids?: string;
 }
 
-export interface ChatMessage {
-  id: string;
-  thread_id: string;
-  parent_id?: string;
-  slot_id?: string;
-  depth: number;
-  message: string;
-  timestamp: string;
-  metadata: string;
-  created_at: string;
-  updated_at: string;
-}
+// There is no `ChatMessage` row type any more (task-1 / ADR-008). The session log
+// (`thread_session/session_log.ts: rebuildThreadViewFromEvents`) is the one rebuild
+// of a thread's conversation, and both readers — the renderer's message list and a
+// resumed turn's replay input — take the same `ChatUiMessage` value from it. The old
+// row shape (parent_id / slot_id / depth / metadata / message-as-JSON-string) only
+// existed so one projection could hand a fake SQL row to the renderer, which
+// re-parsed the string back into the object it already had.
 
 export interface Workspace {
   id: string;

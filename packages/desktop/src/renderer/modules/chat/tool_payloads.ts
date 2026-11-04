@@ -11,11 +11,11 @@ import {
   type ToolPayloadRecord,
 } from '@iki/backend/message/tool_payload_contracts';
 
-export type UiToolInputPayload =
+type UiToolInputPayload =
   | { kind: ToolPayloadKind; input: ToolPayloadRecord }
   | { kind: 'unknown'; input: unknown };
 
-export type UiToolOutputPayload =
+type UiToolOutputPayload =
   | { kind: ToolPayloadKind; output: ToolPayloadRecord }
   | { kind: 'unknown'; output: unknown };
 

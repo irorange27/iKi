@@ -1,14 +1,14 @@
 import type { ChatInvocationOptions } from '@iki/backend/types/electron_api';
-import { clonePlainData } from '@iki/backend/utils/clone';
+import { toPlainData as clonePlainData } from '@iki/backend/utils/plain_clone';
 import type { ModelCapabilitySnapshot, Provider } from '@iki/backend/types/provider';
 
-export type ComposerReadyProvider = {
+type ComposerReadyProvider = {
   provider: Provider;
   model: string;
   modelCapability?: ModelCapabilitySnapshot | null;
 };
 
-export type ChatComposerInvocationBody = Omit<ChatInvocationOptions, 'messages'>;
+type ChatComposerInvocationBody = Omit<ChatInvocationOptions, 'messages'>;
 
 export const createChatComposerStreamPayload = (params: {
   providerReady: ComposerReadyProvider;

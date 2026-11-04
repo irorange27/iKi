@@ -1,6 +1,6 @@
 
 
-export type PersonalityId = 'default' | 'concise' | 'friendly';
+type PersonalityId = 'default' | 'concise' | 'friendly';
 
 export const PERSONALITY_IDS: readonly PersonalityId[] = ['default', 'concise', 'friendly'];
 

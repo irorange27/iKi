@@ -22,7 +22,6 @@ export const registerChatIpc = (): void => {
   ipcMain.handle('chat:threads:delete', (_, id) => chatService.deleteThread(id));
 
   ipcMain.handle('chat:messages:list', (_, threadId) => chatService.listMessages(threadId));
-  ipcMain.handle('chat:messages:get', (_, id) => chatService.getMessage(id));
   ipcMain.handle('chat:messages:update', (_, id, message) =>
     chatService.updateMessage(id, message)
   );
@@ -34,15 +33,6 @@ export const registerChatIpc = (): void => {
   );
   ipcMain.handle('chat:runs:trace:get', (_, runId: string) =>
     toPlainData(chatService.getRunTrace(runId))
-  );
-  ipcMain.handle('chat:runs:trajectory:get', (_, runId: string) =>
-    toPlainData(chatService.getRunTrajectory(runId))
-  );
-  ipcMain.handle('chat:runs:tree:get', (_, rootRunId: string) =>
-    toPlainData(chatService.getRunTree(rootRunId))
-  );
-  ipcMain.handle('chat:runs:review-queue', (_, limit?: number) =>
-    toPlainData(chatService.listReviewQueue(limit))
   );
   ipcMain.handle('chat:runs:cancel', (_, runId: string) =>
     chatService.cancelRun(runId)
@@ -74,10 +64,6 @@ export const registerChatIpc = (): void => {
 
   ipcMain.handle('chat:stop-stream', event => {
     return chatService.stopStream(event.sender.id);
-  });
-
-  ipcMain.handle('chat:steer-stream', (event, threadId: string | undefined, message: string) => {
-    return chatService.steerStream(event.sender.id, threadId, message);
   });
 
   ipcMain.handle('chat:stream', async (event, options) => {

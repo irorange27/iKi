@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { BaseTool } from '@iki/backend/tools/base';
 import { fetchWithTimeout, getNetworkRetryAttempts, getNetworkTimeoutMs } from '@iki/backend/network/http';
-import { RetryableError } from '@iki/backend/utils/errors';
+import { RetryableError, getErrorMessage } from '@iki/backend/utils/errors';
 import { getAppConfig } from '../config';
 import type { WebSearchEngine } from '../types/config';
 import { normalizeWhitespace } from '@iki/backend/utils/text';
@@ -551,7 +551,7 @@ export class WebSearchTool extends BaseTool {
         source = provider.name;
         break;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         warnings.push(`${provider.name}: ${message}`);
       }
     }

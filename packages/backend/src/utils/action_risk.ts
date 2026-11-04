@@ -1,4 +1,4 @@
-export type ToolApprovalDecision = 'allow' | 'ask';
+type ToolApprovalDecision = 'allow' | 'ask';
 
 export type ApprovalPolicy = 'never' | 'trustWorkspace' | 'askRisky' | 'always';
 
@@ -23,7 +23,7 @@ export type ToolApprovalDeclaration = {
   approvalMode?: 'configurable' | 'always';
 };
 
-export type ToolApprovalInput = {
+type ToolApprovalInput = {
 
   policy?: ApprovalPolicy;
 

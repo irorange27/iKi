@@ -6,16 +6,16 @@ import {
   type SelectionMessage,
 } from './catalog_selection';
 
-export type SkillSelectionMessage = SelectionMessage;
+type SkillSelectionMessage = SelectionMessage;
 
-export type SkillCatalogItem = {
+type SkillCatalogItem = {
   id: string;
   name: string;
   description: string;
   source?: string;
 };
 
-export type SkillCatalogFormatter = (parts: {
+type SkillCatalogFormatter = (parts: {
   id: string;
   name: string;
   description: string;

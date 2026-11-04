@@ -1,13 +1,12 @@
 import type { ModelMessage } from '@iki/backend/message/model_history';
-import { cloneModelMessages, type TurnDriverHarness } from '../agent/harness';
+import type { TurnDriverHarness } from '../agent/harness';
 import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
-import { planToHarnessConfig } from './execution_plan';
+import { planToHarnessConfig , planToRunTrackerParams } from './execution_plan';
 import { createPrefixedId } from '../utils/id';
 import { getErrorMessage } from '@iki/backend/utils/errors';
-import { piDomainResumeHistory, PiSupplyRefusedError } from './turn_supply_selection';
+import { PiSupplyRefusedError } from './turn_supply_selection';
 import { reidentifyPlan } from './approval_types';
 import { createAgentRunTracker, rehydrateAgentRunTracker } from './run_tracker';
-import { planToRunTrackerParams } from './execution_plan';
 import { recordSessionEvents, turnFactsToEvents } from './session_log';
 import { createTurnDriver } from './turn_driver';
 import {
@@ -24,7 +23,7 @@ import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_
 import type { PendingApprovalSession } from './approval_session';
 import type { PiResumeAdmission } from './pi_resume_admission';
 
-export type ResumeExecutionDeps = {
+type ResumeExecutionDeps = {
   streams: {
     peek: (senderId: number) => ActiveStreamState | undefined;
     attach: (senderId: number, streamState: ActiveStreamState) => void;
@@ -61,14 +60,14 @@ export type ResumeExecutionDeps = {
   forgetSession: (session: PendingApprovalSession) => void;
 };
 
-export type ResumeExecutionParams = {
+type ResumeExecutionParams = {
   session: PendingApprovalSession;
   approvalId: string;
   piResumeAdmission: PiResumeAdmission | undefined;
   executionAbort?: { current: (() => void) | null; lost: boolean };
 };
 
-export type ResumeExecutionResult =
+type ResumeExecutionResult =
   | { success: true; awaitingApproval?: boolean; waitingForApprovals?: string[] }
   | { success: false; error: string };
 
@@ -149,7 +148,7 @@ export const executeApprovalResume = async (
                   },
                 }
               : {}),
-            started: { runId: resumeRunTracker.id, kind: resumePlan.kind, plan: resumePlan },
+            started: { runId: resumeRunTracker.id, kind: resumePlan.kind },
           })
         );
       } catch (error) {
@@ -241,7 +240,8 @@ export const executeApprovalResume = async (
         }
       );
 
-      const streamHistory = piDomainResumeHistory(cloneModelMessages(session.history ?? []));
+      // Nothing strips anymore after layer 2 deletion — history is already clean.
+      const streamHistory = session.history ?? [];
 
       const persistResumeProgress = () => {
         const threadId = baseApprovalContext?.plan.threadId;
@@ -254,7 +254,10 @@ export const executeApprovalResume = async (
                   deps.conversation,
                   threadId,
                   persisted,
-                  'stream-progress'
+                  'stream-progress',
+                  // The live tracker: a chained resume re-keys the run, and the
+                  // progress copy must carry the writing segment's id.
+                  { runId: driver.getRunTracker().id }
                 )
               : undefined
           );
@@ -332,7 +335,8 @@ export const executeApprovalResume = async (
             deps.conversation,
             baseApprovalContext.plan.threadId,
             persistedContinuation,
-            'approval-resume'
+            'approval-resume',
+            { runId: driver.getRunTracker().id }
           );
         }
       }

@@ -410,7 +410,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   AlarmClock,
   ArrowLeftRight,
@@ -445,16 +445,20 @@ import {
   PopoverTrigger,
 } from 'reka-ui';
 import { storeToRefs } from 'pinia';
-import { resolveThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
-import type { ThreadContentMatch } from '@iki/backend/message/thread_content_search';
 import { useThreadSessionStore } from '../store/thread_session';
 import { useSidebar } from '../composables/useSidebar';
+import { useSidebarData, type SidebarChatThread } from '../composables/useSidebarData';
+import { useSidebarSearch } from '../composables/useSidebarSearch';
+import { useSidebarThreadSections } from '../composables/useSidebarThreadSections';
 import { confirmAction } from '../composables/useConfirm';
 import { getThreadOriginInfo, isExternalThread } from '../modules/chat/thread_origin';
+import { formatRelativeTime as formatRelativeTimeIso } from '../utils/formatters';
 import {
   getElectronApiSlice,
   getElectronApiSliceMethod,
 } from '../services/electron_api';
+
+type ChatThread = SidebarChatThread;
 
 const sidebar = useSidebar();
 const threadSession = useThreadSessionStore();
@@ -489,54 +493,39 @@ onBeforeUnmount(() => {
 
 const isResizing = ref(false);
 
-interface ChatThread {
-  id: string;
-  title: string;
-  model?: string;
-  updated_at: string;
-  client_id?: string;
-  workspace_id?: string;
-  is_generating?: number | boolean;
-  metadata: string;
-}
-
-interface WorkspaceInfo {
-  id: string;
-  name: string;
-  path: string;
-  is_temporary?: number;
-  show_in_list?: number;
-}
-
 const chatApi = getElectronApiSlice('chat');
 const workspacesApi = getElectronApiSlice('workspaces');
 const pickWorkspaceDirectory = getElectronApiSliceMethod('workspaces', 'pickDirectory');
 
-const chatThreads = ref<ChatThread[]>([]);
-const workspaces = ref<WorkspaceInfo[]>([]);
+const { chatThreads, workspaces, loadChatThreads } = useSidebarData({ chatApi, workspacesApi });
+const {
+  isSearchOpen,
+  searchQuery,
+  searchInputRef,
+  contentMatches,
+  toggleSearch,
+  clearSearch,
+  closeSearch,
+  matchesSearch,
+} = useSidebarSearch({ searchContent: chatApi?.threads?.searchContent });
+const {
+  groupMode,
+  setGroupMode,
+  collapsedGroups,
+  expandedSections,
+  threadSections,
+  visibleThreadLimitFor,
+  visibleThreadsFor,
+  toggleSectionExpanded,
+  toggleGroupCollapsed,
+} = useSidebarThreadSections({
+  chatThreads: () => chatThreads.value,
+  workspaces: () => workspaces.value,
+  matchesSearch,
+});
+
 const currentThreadId = computed(() => threadSession.currentThread?.id ?? null);
 const deletingThreadIds = ref<Record<string, boolean>>({});
-const collapsedGroups = ref<Record<string, boolean>>({});
-const expandedSections = ref<Set<string>>(new Set());
-
-const GROUP_MODE_STORAGE_KEY = 'iki-sidebar-group-mode';
-const groupMode = ref<'time' | 'projects'>(
-  localStorage.getItem(GROUP_MODE_STORAGE_KEY) === 'projects' ? 'projects' : 'time'
-);
-const setGroupMode = (mode: 'time' | 'projects') => {
-  groupMode.value = mode;
-  localStorage.setItem(GROUP_MODE_STORAGE_KEY, mode);
-};
-const isSearchOpen = ref(false);
-const searchQuery = ref('');
-const searchInputRef = ref<HTMLInputElement | null>(null);
-const contentMatches = ref<ThreadContentMatch[]>([]);
-let contentSearchTimer: ReturnType<typeof setTimeout> | null = null;
-const menuPosition = ref({
-  left: 0,
-  bottom: 0,
-});
-let menuCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
 const props = defineProps<{
   workspaceLocked?: boolean;
@@ -551,72 +540,8 @@ const emit = defineEmits<{
   'thread-deleted': [threadId: string];
 }>();
 
-let threadLoadGeneration = 0;
-const loadChatThreads = async () => {
-  const generation = ++threadLoadGeneration;
-  if (workspacesApi?.list) {
-    try {
-      const list = await workspacesApi.list();
-      if (generation !== threadLoadGeneration) return;
-      workspaces.value = Array.isArray(list) ? (list as WorkspaceInfo[]) : [];
-    } catch (error) {
-      sidebarLogger.event({
-        level: 'warn',
-        event: 'chat.workspaces.load',
-        outcome: 'failed',
-        error,
-      });
-    }
-  }
-  if (!chatApi?.threads?.list) return;
-  try {
-    const threads = await chatApi.threads.list();
-    if (generation !== threadLoadGeneration) return;
-    chatThreads.value = Array.isArray(threads) ? (threads as ChatThread[]) : [];
-  } catch (error) {
-    sidebarLogger.event({
-      level: 'error',
-      event: 'chat.threads.load',
-      outcome: 'failed',
-      error,
-    });
-  }
-};
-
 const selectThread = (threadId: string) => {
   emit('thread-selected', threadId);
-};
-
-const toggleSearch = () => {
-  if (isSearchOpen.value) {
-    closeSearch();
-    return;
-  }
-  isSearchOpen.value = true;
-  nextTick(() => searchInputRef.value?.focus());
-};
-
-const clearSearch = () => {
-  searchQuery.value = '';
-  contentMatches.value = [];
-  searchInputRef.value?.focus();
-};
-
-watch(searchQuery, query => {
-  if (contentSearchTimer) clearTimeout(contentSearchTimer);
-  if (!query.trim()) {
-    contentMatches.value = [];
-    return;
-  }
-  contentSearchTimer = setTimeout(() => {
-    contentSearchTimer = null;
-    void runContentSearch(query);
-  }, 280);
-});
-
-const closeSearch = () => {
-  isSearchOpen.value = false;
-  searchQuery.value = '';
 };
 
 const handleNewChat = () => {
@@ -749,161 +674,12 @@ const handleDeleteThread = async (thread: ChatThread, event: MouseEvent) => {
   }
 };
 
-const runContentSearch = async (query: string) => {
-  const searchContent = chatApi?.threads?.searchContent;
-  if (typeof searchContent !== 'function' || !query.trim()) {
-    contentMatches.value = [];
-    return;
-  }
-  try {
-    const matches = (await searchContent(query.trim())) as ThreadContentMatch[];
-    contentMatches.value = Array.isArray(matches)
-      ? matches.filter(match => !isExternalThread(match as never))
-      : [];
-  } catch (error) {
-    sidebarLogger.event({
-      level: 'warn',
-      event: 'chat.search.content',
-      outcome: 'failed',
-      error,
-    });
-    contentMatches.value = [];
-  }
-};
-
-const matchesSearch = (thread: ChatThread) => {
-  const query = searchQuery.value.trim().toLowerCase();
-  if (!query) return true;
-  return thread.title.toLowerCase().includes(query);
-};
-
-const getThreadWorkspaceId = (thread: ChatThread): string =>
-  typeof thread.workspace_id === 'string' ? thread.workspace_id : '';
-
-const workspaceNameById = computed(() => {
-  const names = new Map<string, string>();
-  for (const workspace of workspaces.value) {
-    const name =
-      typeof workspace.name === 'string' && workspace.name.trim()
-        ? workspace.name.trim()
-        : (workspace.path.split(/[\\/]/).filter(Boolean).pop() ?? workspace.id);
-    names.set(workspace.id, name);
-  }
-  return names;
-});
-
-const getWorkspaceDisplayName = (workspaceId: string): string =>
-  workspaceNameById.value.get(workspaceId) ?? workspaceId;
-
-const isUserWorkspace = (workspaceId: string): boolean => {
-  const workspace = workspaces.value.find(candidate => candidate.id === workspaceId);
-  return Boolean(workspace) && workspace!.is_temporary !== 1;
-};
-
-const isWorkThread = (thread: ChatThread): boolean =>
-  resolveThreadWorkMode(thread) === 'work';
-
-type SidebarThreadSection = {
-  key: string;
-  
-  name: string | null;
-  threads: ChatThread[];
-};
-
-const threadSections = computed<SidebarThreadSection[]>(() => {
-  const visibleDesktopThreads = chatThreads.value.filter(
-    thread => !isExternalThread(thread) && matchesSearch(thread)
-  );
-  const sections: SidebarThreadSection[] = [];
-
-  if (groupMode.value === 'time') {
-    sections.push({ key: 'chats', name: null, threads: visibleDesktopThreads });
-    return sections;
-  }
-
-  const isolatedWork = visibleDesktopThreads.filter(thread => {
-    if (!isWorkThread(thread)) return false;
-    const workspaceId = getThreadWorkspaceId(thread);
-    return !workspaceId || !isUserWorkspace(workspaceId);
-  });
-  sections.push({ key: 'chats', name: null, threads: isolatedWork });
-
-  const byWorkspace = new Map<string, ChatThread[]>();
-  for (const thread of visibleDesktopThreads) {
-    const workspaceId = getThreadWorkspaceId(thread);
-    if (!workspaceId || !isUserWorkspace(workspaceId) || !isWorkThread(thread)) continue;
-    const group = byWorkspace.get(workspaceId);
-    if (group) {
-      group.push(thread);
-    } else {
-      byWorkspace.set(workspaceId, [thread]);
-    }
-  }
-
-  const workspaceIds = [...byWorkspace.keys()].sort((a, b) =>
-    getWorkspaceDisplayName(a).localeCompare(getWorkspaceDisplayName(b))
-  );
-  for (const workspaceId of workspaceIds) {
-    sections.push({
-      key: `workspace:${workspaceId}`,
-      name: getWorkspaceDisplayName(workspaceId),
-      threads: byWorkspace.get(workspaceId)!,
-    });
-  }
-
-  return sections;
-});
-
-const VISIBLE_DEFAULT_THREADS = 10;
-const VISIBLE_PROJECT_THREADS = 5;
-
-const visibleThreadLimitFor = (section: { key: string; name: string | null }): number =>
-  section.name === null ? VISIBLE_DEFAULT_THREADS : VISIBLE_PROJECT_THREADS;
-
-const visibleThreadsFor = (section: {
-  key: string;
-  name: string | null;
-  threads: ChatThread[];
-}): ChatThread[] => {
-  const limit = visibleThreadLimitFor(section);
-  if (expandedSections.value.has(section.key)) return section.threads;
-  return section.threads.slice(0, limit);
-};
-
-const toggleSectionExpanded = (key: string) => {
-  const next = new Set(expandedSections.value);
-  if (next.has(key)) {
-    next.delete(key);
-  } else {
-    next.add(key);
-  }
-  expandedSections.value = next;
-};
-
-const formatRelativeTime = (iso: string): string => {
-  const time = Date.parse(iso);
-  if (Number.isNaN(time)) return '';
-  const diff = Date.now() - time;
-  const MINUTE = 60_000;
-  const HOUR = 60 * MINUTE;
-  const DAY = 24 * HOUR;
-  if (diff < MINUTE) return translate('time.justNow');
-  if (diff < HOUR) return translate('time.minutes', { count: Math.floor(diff / MINUTE) });
-  if (diff < DAY) return translate('time.hours', { count: Math.floor(diff / HOUR) });
-  if (diff < 7 * DAY) return translate('time.days', { count: Math.floor(diff / DAY) });
-  return new Date(time).toLocaleDateString();
-};
+const formatRelativeTime = (iso: string): string => formatRelativeTimeIso(iso, translate);
 
 const openAutomations = () => {
   window.location.hash = 'settings/tasks';
 };
 
-const toggleGroupCollapsed = (key: string) => {
-  collapsedGroups.value = {
-    ...collapsedGroups.value,
-    [key]: !collapsedGroups.value[key],
-  };
-};
 const externalThreads = computed(() =>
   chatThreads.value.filter(thread => isExternalThread(thread) && matchesSearch(thread))
 );

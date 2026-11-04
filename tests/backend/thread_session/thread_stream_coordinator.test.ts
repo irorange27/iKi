@@ -35,36 +35,7 @@ describe('createThreadStreamCoordinator', () => {
     coordinator.unregisterStream(7, old);
     coordinator.cancelThreadStreams('a');
     expect(current.cancelled).toBe(false);
-    expect(coordinator.steerStream(7, 'b', 'hello')).toEqual({ success: true });
-  });
-
-  it('steer requires the thread to belong to the sender', () => {
-    const coordinator = createThreadStreamCoordinator();
-
-    const streamState = makeStreamState();
-    coordinator.registerStream(42, streamState);
-    coordinator.trackThreadStream('thread-a', 42);
-
-    expect(coordinator.steerStream(42, 'thread-b', 'go left')).toEqual({
-      success: false,
-      error: 'No active stream for thread',
-    });
-
-    const result = coordinator.steerStream(42, 'thread-a', 'go left');
-    expect(result).toEqual({ success: true });
-    expect(streamState.steered).toBe(true);
-  });
-
-  it('steer without a thread targets the sender active stream', () => {
-    const coordinator = createThreadStreamCoordinator();
-
-    const streamState = makeStreamState();
-    coordinator.registerStream(42, streamState);
-
-    expect(coordinator.steerStream(42, undefined, 'go left')).toEqual({ success: true });
-    expect(coordinator.takeSteerMessages(42)).toEqual(['go left']);
-    expect(coordinator.takeSteerMessages(42)).toEqual([]);
-    expect(streamState.steered).toBe(true);
+    expect(coordinator.stopStream(7)).toEqual({ success: true });
   });
 
   it('stop cancels the stream and closes its steer queue', () => {
@@ -76,10 +47,7 @@ describe('createThreadStreamCoordinator', () => {
     expect(coordinator.stopStream(42)).toEqual({ success: true });
     expect(streamState.cancelled).toBe(true);
     expect(streamState.stoppedByUser).toBe(true);
-    expect(coordinator.steerStream(42, undefined, 'late')).toEqual({
-      success: false,
-      error: 'No active autonomous stream to steer',
-    });
+    expect(coordinator.takeSteerMessages(42)).toEqual([]);
     coordinator.unregisterStream(42, streamState);
     expect(coordinator.peekStream(42)).toBeUndefined();
   });
@@ -110,8 +78,6 @@ describe('createThreadStreamCoordinator', () => {
 
     coordinator.unregisterStream(42, stale);
     expect(coordinator.peekStream(42)).toBe(current);
-    expect(coordinator.steerStream(42, undefined, "still active")).toEqual({ success: true });
-    expect(coordinator.takeSteerMessages(42)).toEqual(["still active"]);
 
     coordinator.unregisterStream(42, current);
     expect(coordinator.peekStream(42)).toBeUndefined();
@@ -147,16 +113,12 @@ describe('createThreadStreamCoordinator', () => {
     expect(resumed.cancelled).toBe(true);
   });
 
-  it('a stream attached without a session cannot be steered but can be stopped', () => {
+  it('a stream attached without a session can still be stopped', () => {
     const coordinator = createThreadStreamCoordinator();
 
     const resumed = makeStreamState();
     coordinator.attachStream(7, resumed);
 
-    expect(coordinator.steerStream(7, undefined, 'x')).toEqual({
-      success: false,
-      error: 'No active autonomous stream to steer',
-    });
     expect(coordinator.stopStream(7)).toEqual({ success: true });
     expect(resumed.cancelled).toBe(true);
   });

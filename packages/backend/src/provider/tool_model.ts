@@ -11,7 +11,7 @@ export interface ToolModelConfig {
   model: string;
 }
 
-export interface ToolModelLatencyResult extends ToolModelConfig {
+interface ToolModelLatencyResult extends ToolModelConfig {
   responseTimeMs: number;
 }
 

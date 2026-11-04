@@ -10,37 +10,28 @@ type ToolMetadata = ReturnType<typeof defaultToolRegistry.getToolMetadata>[numbe
 const toolGuardLogger = createLogger({ module: 'tool_guard' });
 const AGENT_TOOL_NAME = 'agent';
 
-const normalizeExplicitTools = (tools: unknown[]): string[] => {
+// Shared shape: trim, dedupe, drop empties; `allow` applies the caller's
+// existence check (registry membership for tools, none for server ids).
+const normalizeStringSet = (values: unknown[], allow?: (value: string) => boolean): string[] => {
   const resolved: string[] = [];
   const seen = new Set<string>();
 
-  for (const toolName of tools) {
-    if (typeof toolName !== 'string') continue;
-    const trimmed = toolName.trim();
-    if (!trimmed) continue;
-    if (seen.has(trimmed)) continue;
-    if (!defaultToolRegistry.get(trimmed)) continue;
-    seen.add(trimmed);
-    resolved.push(trimmed);
-  }
-
-  return resolved;
-};
-
-const normalizeMcpServerIds = (serverIds: unknown[]): string[] => {
-  const resolved: string[] = [];
-  const seen = new Set<string>();
-
-  for (const serverId of serverIds) {
-    if (typeof serverId !== 'string') continue;
-    const trimmed = serverId.trim();
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
     if (!trimmed || seen.has(trimmed)) continue;
+    if (allow && !allow(trimmed)) continue;
     seen.add(trimmed);
     resolved.push(trimmed);
   }
 
   return resolved;
 };
+
+const normalizeExplicitTools = (tools: unknown[]): string[] =>
+  normalizeStringSet(tools, toolName => Boolean(defaultToolRegistry.get(toolName)));
+
+const normalizeMcpServerIds = (serverIds: unknown[]): string[] => normalizeStringSet(serverIds);
 
 const isMcpToolFromAllowedServer = (
   tool: Pick<ToolMetadata, 'source'>,

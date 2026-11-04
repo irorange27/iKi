@@ -2,7 +2,7 @@
 
 export type DevToolsProbeTarget = 'selected' | 'hovered' | 'selector' | 'point';
 
-export type DevToolsElementLocator = {
+type DevToolsElementLocator = {
 
   selector: string;
   tag: string;

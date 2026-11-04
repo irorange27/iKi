@@ -13,15 +13,12 @@
     "resolveJsonModule": true,
     "sourceMap": true,
     "paths": {
-      "@iki/backend/*": ["../backend/src/*"],
-      "@iki/daemon": ["../daemon/src/index.ts"],
-      "@iki/daemon/*": ["../daemon/src/*"]
+      "@iki/backend/*": ["../backend/src/*"]
     },
     "declaration": true,
     "declarationMap": true,
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts"],
-  "references": [{ "path": "../daemon" }]
+  "include": ["src/**/*.ts"]
 }

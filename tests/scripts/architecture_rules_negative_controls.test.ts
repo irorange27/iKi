@@ -81,7 +81,7 @@ const CONTROLS: Control[] = [
   },
   {
     rule: 'shells-no-db-migrations',
-    from: 'packages/daemon/src/probe.ts',
+    from: 'packages/desktop/src/probe.ts',
     to: 'packages/backend/src/db/migration/probe.ts',
   },
 ];
@@ -99,7 +99,6 @@ const writeFixture = async (root: string, control: Control): Promise<void> => {
             '@iki/backend': ['./packages/backend/src/index.ts'],
             '@iki/backend/*': ['./packages/backend/src/*'],
             '@iki/desktop/*': ['./packages/desktop/src/*'],
-            '@iki/daemon/*': ['./packages/daemon/src/*'],
           },
         },
         include: ['packages/**/*.ts'],

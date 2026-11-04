@@ -15,7 +15,7 @@ export type ResolvedWorkspacePath = {
   display: string;
 };
 
-export type WorkspaceRoot = {
+type WorkspaceRoot = {
   resolvedPath: string;
   realPath: string;
 };

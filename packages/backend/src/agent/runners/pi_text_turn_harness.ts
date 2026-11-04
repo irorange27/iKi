@@ -1,7 +1,7 @@
 import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-ai';
 
 import { createLogger } from '@iki/backend/logger';
-import { RefusalError, getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
+import { getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import {
   appendUserPromptToHistory,
@@ -17,6 +17,7 @@ import {
 import {
   buildPiModel,
   callPiChat,
+  shouldUseCacheRetention,
   projectHistoryToPiContext,
   projectUsageToIki,
 } from '../../provider/llm/pi_adapter';
@@ -62,6 +63,7 @@ const defaultPiTextModelCall: PiTextModelCall = (config, request) => {
       apiKey: provider.apiKey,
       ...(request.signal ? { signal: request.signal } : {}),
       ...(typeof request.maxTokens === 'number' ? { maxTokens: request.maxTokens } : {}),
+      ...(shouldUseCacheRetention(model) ? { cacheRetention: 'short' } : {}),
     }
   );
 };
@@ -76,13 +78,16 @@ const ZERO_USAGE: AgentUsage = {
   estimatedCostUsd: 0,
 };
 
-const RETRY_MAX_ATTEMPTS = 3;
-const RETRY_BASE_DELAY_MS = 1000;
-const RETRY_MAX_DELAY_MS = 30000;
-
-const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
-
-const CONTENT_FILTER_PATTERN = /content_filter/i;
+import {
+  CONTENT_FILTER_PATTERN,
+  PI_RETRY_MAX_ATTEMPTS,
+  contentFilterRefusal,
+  emptyResponseRefusal,
+  piRetryDelayMs,
+  providerErrorStop,
+  recoveryNoteFor,
+  sleep,
+} from './pi_retry';
 
 export class PiTextTurnHarness {
   private readonly config: HarnessConfig;
@@ -122,7 +127,7 @@ export class PiTextTurnHarness {
 
     const projected = projectHistoryToPiContext(requestHistory, this.config.model, this.config.providerType);
 
-    const { prompt: systemPrompt } = assembleRequestSystemPrompt([
+    const systemPrompt = assembleRequestSystemPrompt([
       { slot: 'persona', text: personaPrompt },
       { slot: 'planPrompt', text: this.config.systemPrompt },
       { slot: 'transcriptSystem', text: projected.systemPrompt },
@@ -136,7 +141,7 @@ export class PiTextTurnHarness {
     const storedTrack = this.history;
     const recoveryNotes: ModelMessage[] = [];
 
-    for (let attempt = 0; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 0; attempt <= PI_RETRY_MAX_ATTEMPTS; attempt++) {
       signal?.throwIfAborted();
       const attemptStartedAt = Date.now();
       const attemptHistory = [...requestHistory, ...recoveryNotes];
@@ -195,19 +200,11 @@ export class PiTextTurnHarness {
       let failure: Error | undefined;
       if (final.stopReason === 'error') {
         failure = CONTENT_FILTER_PATTERN.test(final.errorMessage ?? '')
-          ? new RefusalError(
-              'Model response was blocked by content filter',
-              'content-filter',
-              streamedText || undefined
-            )
-          : new Error(final.errorMessage || 'Provider returned an error stop reason');
+          ? contentFilterRefusal(streamedText || undefined)
+          : providerErrorStop(final.errorMessage);
       } else if (!finalText.trim()) {
 
-        failure = new RefusalError(
-          'Model returned an empty response with no tool calls',
-          final.stopReason,
-          undefined
-        );
+        failure = emptyResponseRefusal(final.stopReason);
       }
 
       if (!failure) {
@@ -224,7 +221,7 @@ export class PiTextTurnHarness {
       }
 
       const canRetry =
-        attempt < RETRY_MAX_ATTEMPTS && !signal?.aborted && !streamedText && isRetryableError(failure);
+        attempt < PI_RETRY_MAX_ATTEMPTS && !signal?.aborted && !streamedText && isRetryableError(failure);
       if (!canRetry) {
         logger.event({
           level: 'error',
@@ -242,23 +239,20 @@ export class PiTextTurnHarness {
         throw failure;
       }
 
-      const delay = Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt), RETRY_MAX_DELAY_MS);
+      const delay = piRetryDelayMs(attempt);
       logger.event({
         level: 'warn',
         event: 'llm.turn.retry',
         outcome: 'started',
-        message: `Pi text turn failed, retrying (attempt ${attempt + 1}/${RETRY_MAX_ATTEMPTS}) after ${delay}ms`,
+        message: `Pi text turn failed, retrying (attempt ${attempt + 1}/${PI_RETRY_MAX_ATTEMPTS}) after ${delay}ms`,
         data: { providerType: this.config.providerType, model: this.config.model, errorMessage: getErrorMessage(failure) },
       });
       await sleep(delay);
-      const recoveryNote =
-        failure instanceof RefusalError
-          ? 'Your last response was blocked by content policies. Please rephrase your approach to comply with content policies while still being helpful, or find an alternative way to assist.'
-          : `Your last attempt encountered an error: ${getErrorMessage(failure)}. Please try a different approach or simplify your response to avoid this issue.`;
+      const recoveryNote = recoveryNoteFor(failure);
       recoveryNotes.push(
         appendUserPromptToHistory(
           [],
-          `${recoveryNote}\n\n---\nContinue with the original task.`
+          recoveryNote
         )[0]
       );
     }
@@ -290,11 +284,7 @@ export class PiTextTurnHarness {
     timing: { llmMs: number; firstDeltaMs: number | null; turnStartedAt: number }
   ): Generator<TurnEvent, void> {
     const mappedUsage: AgentUsage = final.usage
-      ? {
-          ...projectUsageToIki(final.usage),
-
-          estimatedCostUsd: final.usage.cost.total,
-        }
+      ? projectUsageToIki(final.usage, final.usage.cost.total)
       : ZERO_USAGE;
     const perf: AgentTurnPerf = {
       llmMs: timing.llmMs,

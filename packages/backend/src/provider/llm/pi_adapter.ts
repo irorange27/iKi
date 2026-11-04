@@ -11,9 +11,9 @@ import type {
   Tool as PiTool,
   ToolCall,
   ToolResultMessage,
-  Usage as PiUsage,
 } from '@earendil-works/pi-ai';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
+import { toolResultToWire } from '@iki/backend/message/model_history';
 
 const ANTHROPIC_PROVIDER_TYPE = 'anthropic';
 
@@ -24,9 +24,9 @@ class PiProjectionError extends Error {
   }
 }
 
-export type PiApiKind = 'openai-completions' | 'openai-responses' | 'anthropic-messages';
+type PiApiKind = 'openai-completions' | 'openai-responses' | 'anthropic-messages';
 
-export type PiModelCompat =
+type PiModelCompat =
   | {
       supportsDeveloperRole: false;
       supportsReasoningEffort: false;
@@ -42,7 +42,7 @@ export type PiModelCompat =
       supportsEagerToolInputStreaming: boolean;
     };
 
-export type PiModelConfig = {
+type PiModelConfig = {
   id: string;
 
   api?: PiApiKind;
@@ -57,7 +57,7 @@ export type PiModelConfig = {
   cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 };
 
-export type PiModel = {
+type PiModel = {
   id: string;
   name: string;
 
@@ -125,6 +125,19 @@ export const buildPiModel = (config: PiModelConfig): PiModel => {
   } as PiModel;
 };
 
+/**
+ * Whether the Pi-ai request pipeline should ask for prompt-cache retention.
+ * A model is a cache candidate when the catalog records a non-zero cache-write
+ * price, which is what Anthropic and compatible providers advertise for models with
+ * prompt caching. We use "short", the library default: it enables breakpoint
+ * placement without locking a 1h TTL onto a desktop app whose turns are minutes
+ * apart. Callers can pass a stricter value to force long.
+ */
+export const shouldUseCacheRetention = (model: PiModel): boolean => {
+  const cost = model.cost as { cacheWrite?: number } | undefined;
+  return (cost?.cacheWrite ?? 0) > 0;
+};
+
 export const projectToolsToPiTools = (
   tools: Array<{ name: string; description: string; parameters: Record<string, unknown> }>
 ): PiTool[] =>
@@ -134,7 +147,20 @@ export const projectToolsToPiTools = (
     parameters: tool.parameters as PiTool['parameters'],
   }));
 
-export const projectUsageToIki = (usage: PiUsage) => ({
+// Single home for the wire's total-prompt convention
+// (inputTokens = input + cacheRead + cacheWrite). Every projection of Pi
+// usage into AgentUsage must go through here so the statistic can't split.
+export const projectUsageToIki = (
+  usage: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    reasoning?: number;
+    totalTokens: number;
+  },
+  estimatedCostUsd: number
+) => ({
   inputTokens: usage.input + usage.cacheRead + usage.cacheWrite,
   outputTokens: usage.output,
   cacheReadTokens: usage.cacheRead,
@@ -142,6 +168,7 @@ export const projectUsageToIki = (usage: PiUsage) => ({
 
   reasoningTokens: usage.reasoning ?? 0,
   totalTokens: usage.totalTokens,
+  estimatedCostUsd,
 });
 
 const synthesizedEnvelope = (modelId: string, providerType?: string) => ({
@@ -160,44 +187,8 @@ const synthesizedEnvelope = (modelId: string, providerType?: string) => ({
   timestamp: Date.now(),
 });
 
-const projectToolOutput = (output: unknown): { text: string; isError: boolean } => {
-  if (output === null || typeof output !== 'object' || !('type' in output)) {
-    throw new PiProjectionError('tool-result output must be a typed AI SDK output');
-  }
-  const o = output as { type: string; value?: unknown; reason?: unknown };
-  switch (o.type) {
-    case 'text':
-      return { text: typeof o.value === 'string' ? o.value : JSON.stringify(o.value ?? null), isError: false };
-    case 'error-text':
-      return { text: typeof o.value === 'string' ? o.value : JSON.stringify(o.value ?? null), isError: true };
-    case 'json':
-      return { text: JSON.stringify(o.value ?? null), isError: false };
-    case 'error-json':
-      return { text: JSON.stringify(o.value ?? null), isError: true };
-    case 'execution-denied':
-      return {
-        text: typeof o.reason === 'string' ? o.reason : 'Tool call execution denied.',
-        isError: true,
-      };
-    case 'content': {
-      if (!Array.isArray(o.value)) {
-        throw new PiProjectionError('content tool-result output must be a part array');
-      }
-      const texts: string[] = [];
-      for (const part of o.value) {
-        const p = part as { type?: unknown; text?: unknown };
-        if (p.type === 'text' && typeof p.text === 'string') {
-          texts.push(p.text);
-          continue;
-        }
-        throw new PiProjectionError(`unsupported tool-result content part: ${String(p.type ?? typeof part)}`);
-      }
-      return { text: texts.join(''), isError: false };
-    }
-    default:
-      throw new PiProjectionError(`unsupported tool-result output type: ${String(o.type)}`);
-  }
-};
+const projectToolOutput = (output: unknown): { text: string; isError: boolean } =>
+  toolResultToWire(output, 'strict');
 
 const imageDataForPi = (part: {
   mediaType?: unknown;
@@ -389,7 +380,7 @@ export const projectHistoryToPiContext = (
   return { systemPrompt, messages: piMessages };
 };
 
-export type PiChatCallContext = {
+type PiChatCallContext = {
   messages: PiMessage[];
   tools?: PiTool[];
 };
@@ -397,7 +388,7 @@ export type PiChatCallContext = {
 export const callPiChat = (
   model: PiModel,
   context: PiChatCallContext & { systemPrompt: string },
-  options: { apiKey?: string; signal?: AbortSignal; maxTokens?: number; temperature?: number } = {}
+  options: { apiKey?: string; signal?: AbortSignal; maxTokens?: number; temperature?: number; cacheRetention?: 'none' | 'short' | 'long' } = {}
 ): ReturnType<typeof openaiCompletionsStream> => {
   const piContext = normalizeContext({
     systemPrompt: context.systemPrompt,
@@ -409,6 +400,7 @@ export const callPiChat = (
     signal: options.signal,
     ...(typeof options.maxTokens === 'number' ? { maxTokens: options.maxTokens } : {}),
     ...(typeof options.temperature === 'number' ? { temperature: options.temperature } : {}),
+    ...(options.cacheRetention !== undefined ? { cacheRetention: options.cacheRetention } : {}),
   };
 
   if (model.api === 'anthropic-messages') {

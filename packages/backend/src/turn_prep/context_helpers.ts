@@ -1,9 +1,5 @@
 import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
-import {
-  clipTextToTokenBudget,
-  estimateMessageTokens,
-  estimateTextTokens,
-} from '../agent/context_budget';
+import { clipTextToTokenBudget, estimateTextTokens } from '../agent/context_budget';
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { AppConfig } from '@iki/backend/types/config';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
@@ -23,9 +19,6 @@ export const getContextConfig = (configured?: AppConfig['context'] | null): Cont
   ...DEFAULT_APP_CONFIG.context,
   ...(configured ?? {}),
 });
-
-export const countMessageTokens = (message: ChatInputMessage, _modelCapability?: unknown): number =>
-  estimateMessageTokens(message);
 
 export const buildMessagePreview = (message: ChatInputMessage): string => {
   if (typeof message.content === 'string') return message.content;

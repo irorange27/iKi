@@ -4,11 +4,6 @@ import { dialog, ipcMain } from 'electron';
 
 import * as workspaceDb from '@iki/backend/db/workspaces';
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
-import {
-  createThreadWorktree,
-  mergeThreadWorktree,
-  removeThreadWorktree,
-} from '@iki/backend/workspaces/git_worktree';
 import { createPrefixedId } from '@iki/backend/utils/id';
 
 const AGENT_INSTRUCTIONS_FILE = 'IKI.md';
@@ -69,8 +64,6 @@ export const registerWorkspacesIpc = (): void => {
   };
 
   ipcMain.handle('workspaces:list', () => workspaceDb.getWorkspaces());
-  ipcMain.handle('workspaces:get', (_event, id) => workspaceDb.getWorkspace(id));
-  ipcMain.handle('workspaces:getByPath', (_event, path) => workspaceDb.getWorkspaceByPath(path));
   ipcMain.handle('workspaces:getVisible', () => workspaceDb.getVisibleWorkspaces());
   ipcMain.handle('workspaces:pickDirectory', async () => {
     const result = await dialog.showOpenDialog({
@@ -85,24 +78,6 @@ export const registerWorkspacesIpc = (): void => {
 
     return await createWorkspaceFromPath(result.filePaths[0]);
   });
-  ipcMain.handle('workspaces:create', (_event, workspace) => {
-    const workspaceId = workspace.id || createWorkspaceId();
-    workspaceDb.addWorkspace({
-      id: workspaceId,
-      path: workspace.path,
-      name: workspace.name,
-      is_temporary: workspace.is_temporary || 0,
-      show_in_list: workspace.show_in_list !== undefined ? workspace.show_in_list : 1,
-    });
-    return workspaceDb.getWorkspace(workspaceId);
-  });
-  ipcMain.handle('workspaces:update', (_event, id, workspace) =>
-    workspaceDb.updateWorkspace(id, workspace)
-  );
-  ipcMain.handle('workspaces:delete', (_event, id) => workspaceDb.deleteWorkspace(id));
-  ipcMain.handle('workspaces:toggleVisibility', (_event, id) =>
-    workspaceDb.toggleWorkspaceVisibility(id)
-  );
 
   ipcMain.handle('workspaces:init-agent-instructions', async (_event, threadId: string) => {
     try {
@@ -130,20 +105,4 @@ export const registerWorkspacesIpc = (): void => {
       };
     }
   });
-
-  ipcMain.handle(
-    'workspaces:create-thread-worktree',
-    async (_event, threadId: string, repoWorkspaceId?: string | null) =>
-      await createThreadWorktree(threadId, repoWorkspaceId ?? null)
-  );
-
-  ipcMain.handle('workspaces:merge-thread-worktree', async (_event, threadId: string) =>
-    await mergeThreadWorktree(threadId)
-  );
-
-  ipcMain.handle(
-    'workspaces:remove-thread-worktree',
-    async (_event, threadId: string, options?: { force?: boolean }) =>
-      await removeThreadWorktree(threadId, options ?? {})
-  );
 };
