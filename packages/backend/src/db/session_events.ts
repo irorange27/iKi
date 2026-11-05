@@ -19,32 +19,47 @@ type SessionEventRow = {
   created_at: string;
 };
 
+/** Read a `$.a.b` path out of an event payload (the only shape callers use). */
+const payloadValueAt = (payload: unknown, path: string): unknown => {
+  let current: unknown = payload;
+  for (const key of path.replace(/^\$\.?/, '').split('.')) {
+    if (typeof current !== 'object' || current === null) return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+};
+
+/**
+ * One read shape: the whole event stream for one thread, in revision order.
+ * Every caller scopes by thread_id and folds the result in memory; there are no
+ * cross-thread queries, joins or content indexes over this table. Filters are
+ * therefore applied in JS, which keeps the storage layer an append-only log
+ * rather than a query engine. Any backend that can append a line and read a
+ * file back can serve it.
+ */
 export const getSessionEvents = (
   threadId: string,
   types?: readonly string[],
-  match?: {
-    path: string;
-    value: string;
-  }
+  match?: { path: string; value: string }
 ): StoredSessionEvent[] => {
-  const typeFilter = types?.length ? ` AND type IN (${types.map(() => '?').join(', ')})` : '';
-  const payloadFilter = match ? ' AND json_extract(payload, ?) = ?' : '';
+  const typeSet = types?.length ? new Set(types) : null;
   const rows = getDb()
     .prepare(
-      `SELECT revision, type, version, payload, created_at FROM session_events WHERE thread_id = ?${typeFilter}${payloadFilter} ORDER BY revision ASC`
+      'SELECT revision, type, version, payload, created_at FROM session_events WHERE thread_id = ? ORDER BY revision ASC'
     )
-    .all(
-      threadId,
-      ...(types ?? []),
-      ...(match ? [match.path, match.value] : [])
-    ) as SessionEventRow[];
-  return rows.map(row => ({
-    revision: row.revision,
-    type: row.type,
-    version: row.version,
-    payload: JSON.parse(row.payload) as unknown,
-    createdAt: row.created_at,
-  }));
+    .all(threadId) as SessionEventRow[];
+  return rows.flatMap(row => {
+    if (typeSet && !typeSet.has(row.type)) return [];
+    const payload = JSON.parse(row.payload) as unknown;
+    if (match && payloadValueAt(payload, match.path) !== match.value) return [];
+    return [{
+      revision: row.revision,
+      type: row.type,
+      version: row.version,
+      payload,
+      createdAt: row.created_at,
+    }];
+  });
 };
 
 export const deleteSessionEvents = (threadId: string): void => {
