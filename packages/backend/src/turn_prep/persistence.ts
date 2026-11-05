@@ -6,7 +6,6 @@ import {
 } from '@iki/backend/types/session_events';
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
 import * as awaitersDb from '@iki/backend/db/awaiters';
-import { getDb } from '@iki/backend/db/database';
 import { createLogger } from '@iki/backend/logger';
 import type { ChatThread } from '@iki/backend/types/chat';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
@@ -130,12 +129,12 @@ export const createChatPersistence = (deps: ChatPersistenceDeps) => {
     if (!existingThread) return null;
 
     const normalizedThread = normalizeThreadInput(input, { id });
-    const clear = getDb().transaction(() => {
+    const clear = () => {
       awaitersDb.deleteAwaitersByThread(id);
       chatThreadDb.deleteChatThread(id);
       chatThreadDb.addChatThread(normalizedThread);
       return chatThreadDb.getChatThread(id);
-    });
+    };
 
     const clearedThread = clear();
     ensureThreadWorkspaceSelection(id);

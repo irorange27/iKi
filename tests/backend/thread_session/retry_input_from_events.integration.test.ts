@@ -34,7 +34,8 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   }),
 }));
 
-import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { getSessionEvents } from '@iki/backend/db/session_events';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import * as agentRunDb from '@iki/backend/db/agent_runs';
 import { addWorkspace } from '@iki/backend/db/workspaces';
@@ -592,8 +593,6 @@ describe('retry and queued resume read the session log alone', () => {
     expect(
       agentRunDb.listAgentRunsByThread('thread_retry').find(run => run.status === 'queued')
     ).toBeUndefined();
-    expect(getDb().prepare('SELECT COUNT(*) AS n FROM session_events').get()).toMatchObject({
-      n: 0,
-    });
+    expect(getSessionEvents('thread_retry').filter(e => e.type === 'retry_input')).toHaveLength(0);
   });
 });

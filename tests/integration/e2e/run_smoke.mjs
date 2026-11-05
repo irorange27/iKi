@@ -20,9 +20,58 @@ process.env.CDP_PORT = String(CDP_PORT);
 const FAUX_PORT = Number(process.env.IKI_E2E_FAUX_PORT || 18730);
 const VITE_PORT = Number(process.env.IKI_VITE_PORT || 5173);
 const require = createRequire(import.meta.url);
-const { DatabaseSync } = require('node:sqlite');
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// The prototype store is plain files: one JSON file per collection plus one JSONL
+// per conversation under <userData>/iki-store. The e2e asserts state by reading
+// those files, the same way the old assertions read SQLite.
+const storeDir = () => path.join(workDir, 'userdata/iki-store');
+const collectionPath = name => path.join(storeDir(), `${name}.json`);
+const readCollection = name => {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(collectionPath(name), 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+const writeCollection = (name, rows) => {
+  fs.mkdirSync(storeDir(), { recursive: true });
+  fs.writeFileSync(collectionPath(name), JSON.stringify(rows));
+};
+const readSessionEvents = threadId => {
+  const file = path.join(storeDir(), 'sessions', `${encodeURIComponent(threadId)}.jsonl`);
+  let text = '';
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
+  return text
+    .split('\n')
+    .filter(Boolean)
+    .flatMap(line => {
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed.kind !== 'batch') return [];
+        return parsed.events.map((event, index) => ({ ...event, revision: parsed.firstRevision + index }));
+      } catch {
+        return [];
+      }
+    });
+};
+const allSessionEvents = () => {
+  const dir = path.join(storeDir(), 'sessions');
+  let names = [];
+  try {
+    names = fs.readdirSync(dir).filter(name => name.endsWith('.jsonl'));
+  } catch {
+    return [];
+  }
+  return names.flatMap(name => readSessionEvents(decodeURIComponent(name.slice(0, -'.jsonl'.length))));
+};
+
 const log = (...args) => console.log('[e2e]', ...args);
 const fail = message => {
   console.error('[e2e] FAIL:', message);
@@ -245,9 +294,14 @@ const typeAndSend = async (cdp, text) => {
     const ta = document.querySelector('textarea');
     if (!ta) return 'NO_TEXTAREA';
     const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(ta), 'value').set;
-    ta.focus(); setter.call(ta, ${JSON.stringify(text)});
+    ta.focus();
+    // Clear any restored draft first; otherwise the sent text is the draft plus
+    // what we type, and the scripted provider sees a different prompt.
+    setter.call(ta, '');
     ta.dispatchEvent(new Event('input', {bubbles: true}));
-    return 'OK';
+    setter.call(ta, ${JSON.stringify(text)});
+    ta.dispatchEvent(new Event('input', {bubbles: true}));
+    return ta.value === ${JSON.stringify(text)} ? 'OK' : 'STALE:' + ta.value;
   })()`);
   if (typed !== 'OK') throw new Error('composer textarea not found');
   await sleep(300);
@@ -440,39 +494,49 @@ const assertPiSupplyServed = () => {
   log('every turn ran on the Pi supply (no silent AI SDK fallback)');
 };
 
-const assertAppDatabaseReady = () => {
-  const dbPath = path.join(workDir, 'userdata/iKi_v0.db');
-  if (!fs.existsSync(dbPath)) {
-    throw new Error(`app did not create its database under the isolated user data dir (${dbPath}); --user-data-dir isolation failed`);
+const assertAppStoreReady = () => {
+  const dir = storeDir();
+  if (!fs.existsSync(dir)) {
+    throw new Error(`app did not create its store under the isolated user data dir (${dir}); --user-data-dir isolation failed`);
   }
-  const db = new DatabaseSync(dbPath);
-  const hasProviders = db
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='providers'")
-    .get();
-  db.close();
-  if (!hasProviders) throw new Error('app database has no providers table');
 };
 
 const seedProviderAndWorkspace = () => {
-  const db = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'));
   const now = new Date().toISOString();
-  db.prepare(
-    `INSERT OR REPLACE INTO providers (id, name, type, api_key, models, model_options, base_url, enabled, created_at, updated_at, available_models, api_version, is_response_api)
-     VALUES (?, ?, 'openai-compatible', 'sk-e2e', ?, '{}', ?, 1, ?, ?, '[]', NULL, 0)`
-  ).run('provider-faux-e2e', 'Faux E2E', JSON.stringify(['faux-e2e-model']), `http://127.0.0.1:${FAUX_PORT}/v1`, now, now);
-  db.prepare(
-    `INSERT OR REPLACE INTO workspaces (id, path, name, is_temporary, show_in_list, created_at, updated_at)
-     VALUES ('ws-e2e', ?, 'E2E WS', 0, 1, ?, ?)`
-  ).run(path.join(workDir, 'ws'), now, now);
-  for (const row of db.prepare('SELECT id FROM chat_threads').all()) {
-    db.prepare('UPDATE chat_threads SET workspace_id = ? WHERE id = ?').run('ws-e2e', row.id);
-  }
-  const enabledProviders = db.prepare('SELECT COUNT(*) c FROM providers WHERE enabled = 1').get();
-  db.close();
-  if (!enabledProviders || enabledProviders.c < 1) {
-    throw new Error('seed self-check failed: enabled provider row not readable after insert');
-  }
-  log('seeded provider + workspace, threads bound');
+  const providers = readCollection('providers').filter(row => row.id !== 'provider-faux-e2e');
+  providers.push({
+    id: 'provider-faux-e2e',
+    name: 'Faux E2E',
+    type: 'openai-compatible',
+    api_key: 'sk-e2e',
+    models: JSON.stringify(['faux-e2e-model']),
+    model_options: '{}',
+    base_url: `http://127.0.0.1:${FAUX_PORT}/v1`,
+    enabled: 1,
+    created_at: now,
+    updated_at: now,
+    available_models: '[]',
+    api_version: null,
+    is_response_api: 0,
+  });
+  writeCollection('providers', providers);
+
+  const workspaces = readCollection('workspaces').filter(row => row.id !== 'ws-e2e');
+  workspaces.push({
+    id: 'ws-e2e',
+    path: path.join(workDir, 'ws'),
+    name: 'E2E WS',
+    is_temporary: 0,
+    show_in_list: 1,
+    created_at: now,
+    updated_at: now,
+  });
+  writeCollection('workspaces', workspaces);
+
+  writeCollection(
+    'chat_threads',
+    readCollection('chat_threads').map(row => ({ ...row, workspace_id: 'ws-e2e' }))
+  );
 };
 
 const main = async () => {
@@ -501,7 +565,7 @@ const main = async () => {
   // Boot once to create the full schema, then quit and seed.
   step('boot 1 (schema creation)');
   let cdp = await launchApp('boot1');
-  assertAppDatabaseReady();
+  assertAppStoreReady();
   cdp.close();
   await sleep(1000);
   killAppByUserDataDir();
@@ -511,16 +575,19 @@ const main = async () => {
 
   step('boot 2 (main loop)');
   cdp = await launchApp('boot2');
-  assertAppDatabaseReady();
-  const seeded = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'))
-    .prepare('SELECT COUNT(*) c FROM providers WHERE enabled = 1')
-    .get();
-  const diagDb = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'));
+  assertAppStoreReady();
+  const seeded = { c: readCollection('providers').filter(row => Number(row.enabled) === 1).length };
   log(
     'providers after boot 2:',
-    JSON.stringify(diagDb.prepare('SELECT id, enabled, models, available_models FROM providers').all())
+    JSON.stringify(
+      readCollection('providers').map(row => ({
+        id: row.id,
+        enabled: row.enabled,
+        models: row.models,
+        available_models: row.available_models,
+      }))
+    )
   );
-  diagDb.close();
   await sleep(4000);
   await ensureModelSelected(cdp);
   await shot(cdp, '01-boot2-welcome');
@@ -576,9 +643,7 @@ const main = async () => {
   if (written !== 'e2e-written-by-agent') throw new Error('file content mismatch: ' + written);
   const second = fs.readFileSync(path.join(workDir, 'ws/e2e/second.txt'), 'utf8');
   if (second !== 'e2e-second-approval') throw new Error('second file content mismatch: ' + second);
-  const blockedAfterApproval = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'))
-    .prepare("SELECT id FROM agent_runs WHERE status = 'blocked'")
-    .all();
+  const blockedAfterApproval = readCollection('agent_runs').filter(row => row.status === 'blocked');
   if (blockedAfterApproval.length !== 0) {
     throw new Error(
       'approved run segments remained blocked after continuation started: ' +
@@ -652,56 +717,39 @@ const main = async () => {
   // A pause is memory-only, so a restart must leave no approval the app can
   // still answer. The zombie-button probe above proves that from the UI side;
   // this proves the tables a pause used to need are gone from the schema.
-  const leftoverTables = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'))
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'tool_call_approval%'")
-    .all();
-  if (leftoverTables.length !== 0) {
-    throw new Error(`approval tables still present after migration: ${JSON.stringify(leftoverTables)}`);
+  const legacyDb = path.join(workDir, 'userdata', 'iki.db');
+  if (fs.existsSync(legacyDb)) {
+    throw new Error(`a SQLite database is still present at ${legacyDb}; the store must be file-only`);
   }
 
   // F4 (ADR 008 flip): the restart recovery must record its facts in the
   // session log — the expired approvals as system-sourced approval_decided
   // events, and a terminal fact for each reclaimed run.
   {
-    const eventDb = new DatabaseSync(path.join(workDir, 'userdata/iKi_v0.db'));
-    try {
-      const decidedRows = eventDb
-        .prepare("SELECT payload FROM session_events WHERE type = 'approval_decided'")
-        .all();
-      const systemDecided = decidedRows.filter(row => {
-        try {
-          return JSON.parse(row.payload).source === 'system';
-        } catch {
-          return false;
-        }
-      });
-      if (systemDecided.length === 0) {
-        throw new Error(
-          'restart recovery recorded no system-sourced approval decisions in the session log'
-        );
-      }
-      // Scoped to the RECLAIMED runs: the recovery terminal carries the
-      // reclamation message — 'Run interrupted by process restart' for
-      // running runs, 'Run blocked at restart — approval session lost' for
-      // blocked ones (round 3 crashes while approval-pending, so blocked).
-      const reclaimedTerminals = eventDb
-        .prepare(
-          "SELECT payload FROM session_events WHERE type = 'turn_failed' AND (json_extract(payload, '$.errorText') LIKE '%process restart%' OR json_extract(payload, '$.errorText') LIKE '%approval session lost%')"
-        )
-        .all();
-      if (reclaimedTerminals.length === 0) {
-        throw new Error(
-          'restart recovery recorded no terminal fact for the reclaimed runs in the session log'
-        );
-      }
-    } finally {
-      eventDb.close();
+    const events = allSessionEvents();
+    const systemDecided = events.filter(
+      event => event.type === 'approval_decided' && event.payload && event.payload.source === 'system'
+    );
+    if (systemDecided.length === 0) {
+      throw new Error(
+        'restart recovery recorded no system-sourced approval decisions in the session log'
+      );
+    }
+    const reclaimedTerminals = events.filter(event => {
+      if (event.type !== 'turn_failed') return false;
+      const errorText = String(event.payload?.errorText ?? '');
+      return errorText.includes('process restart') || errorText.includes('approval session lost');
+    });
+    if (reclaimedTerminals.length === 0) {
+      throw new Error(
+        'restart recovery recorded no terminal fact for the reclaimed runs in the session log'
+      );
     }
   }
 
   step('post-recovery continuation turn');
   await typeAndSend(cdp, 'CHECK_HISTORY2');
-  const report2 = await waitForDom(cdp, t => t.includes('HISTORY_REPORT[CHECK_HISTORY2]'), { label: 'post-recovery history report' });
+  const report2 = await waitForDom(cdp, t => /HISTORY_REPORT\[CHECK_HISTORY2/.test(t), { label: 'post-recovery history report' });
   const { toolMsgs: toolMsgs2, toolCalls: toolCalls2 } = readReportCounts(report2);
   // The interrupted call must appear as a paired error exchange (the model
   // received it and the loop continued), matching every other exchange 1:1.

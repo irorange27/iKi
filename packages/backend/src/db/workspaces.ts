@@ -1,68 +1,41 @@
-import { getDb } from './database';
+import { commitRows, patchRow, readRows } from './collection';
 import { Workspace } from '@iki/backend/types/chat';
-import { buildSetClause } from './utils';
 
 type WorkspaceRow = Workspace & { is_temporary?: number; show_in_list?: number };
 
-export const getWorkspaces = (): Workspace[] => {
-  const rows = getDb()
-    .prepare('SELECT * FROM workspaces ORDER BY updated_at DESC')
-    .all() as WorkspaceRow[];
-  return rows.map(row => ({
-    ...row,
-    is_temporary: row.is_temporary || 0,
-    show_in_list: row.show_in_list !== undefined ? row.show_in_list : 1,
-  }));
-};
+const normalize = (row: WorkspaceRow): Workspace => ({
+  ...row,
+  is_temporary: row.is_temporary || 0,
+  show_in_list: row.show_in_list !== undefined ? row.show_in_list : 1,
+});
+
+const byUpdatedDesc = (a: WorkspaceRow, b: WorkspaceRow): number =>
+  String(b.updated_at).localeCompare(String(a.updated_at));
+
+export const getWorkspaces = (): Workspace[] =>
+  readRows<WorkspaceRow>('workspaces').sort(byUpdatedDesc).map(normalize);
 
 export const getWorkspace = (id: string): Workspace | null => {
-  const row = getDb().prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as
-    | WorkspaceRow
-    | undefined;
-  if (!row) return null;
-  return {
-    ...row,
-    is_temporary: row.is_temporary || 0,
-    show_in_list: row.show_in_list !== undefined ? row.show_in_list : 1,
-  };
+  const row = readRows<WorkspaceRow>('workspaces').find(entry => entry.id === id);
+  return row ? normalize(row) : null;
 };
 
 export const getWorkspaceByPath = (path: string): Workspace | null => {
-  const row = getDb().prepare('SELECT * FROM workspaces WHERE path = ?').get(path) as
-    | WorkspaceRow
-    | undefined;
-  if (!row) return null;
-  return {
-    ...row,
-    is_temporary: row.is_temporary || 0,
-    show_in_list: row.show_in_list !== undefined ? row.show_in_list : 1,
-  };
+  const row = readRows<WorkspaceRow>('workspaces').find(entry => entry.path === path);
+  return row ? normalize(row) : null;
 };
 
-export const getVisibleWorkspaces = (): Workspace[] => {
-  const rows = getDb()
-    .prepare('SELECT * FROM workspaces WHERE show_in_list = 1 ORDER BY updated_at DESC')
-    .all() as WorkspaceRow[];
-  return rows.map(row => ({
-    ...row,
-    is_temporary: row.is_temporary || 0,
-    show_in_list: row.show_in_list || 1,
-  }));
-};
+export const getVisibleWorkspaces = (): Workspace[] =>
+  readRows<WorkspaceRow>('workspaces')
+    .filter(row => Number(row.show_in_list ?? 1) === 1)
+    .sort(byUpdatedDesc)
+    .map(row => ({ ...normalize(row), show_in_list: row.show_in_list || 1 }));
 
 export const addWorkspace = (
   workspace: Partial<Workspace> & { id: string; path: string; name: string }
 ) => {
   const now = new Date().toISOString();
-  const stmt = getDb().prepare(`
-        INSERT INTO workspaces (
-            id, path, name, is_temporary, show_in_list, created_at, updated_at
-        ) VALUES (
-            @id, @path, @name, @is_temporary, @show_in_list, @created_at, @updated_at
-        )
-    `);
-
-  const data = {
+  const row = {
     id: workspace.id,
     path: workspace.path,
     name: workspace.name,
@@ -71,33 +44,19 @@ export const addWorkspace = (
     created_at: now,
     updated_at: now,
   };
-
-  return stmt.run(data);
+  const rows = readRows<WorkspaceRow>('workspaces').filter(entry => entry.id !== workspace.id);
+  rows.push(row as unknown as WorkspaceRow);
+  commitRows('workspaces', rows);
+  return { changes: 1, lastInsertRowid: 0 };
 };
 
-const WORKSPACE_COLUMNS = new Set([
-  'path', 'name', 'is_temporary', 'show_in_list',
-]);
+const WORKSPACE_COLUMNS = new Set(['path', 'name', 'is_temporary', 'show_in_list']);
 
 export const updateWorkspace = (id: string, workspace: Partial<Workspace>) => {
-  const now = new Date().toISOString();
-  const fields = buildSetClause(workspace as Record<string, unknown>, WORKSPACE_COLUMNS);
-
-  if (!fields) return null;
-
-  const stmt = getDb().prepare(`
-        UPDATE workspaces
-        SET ${fields}, updated_at = @updated_at
-        WHERE id = @id
-    `);
-
-  const params: Partial<Workspace> & { id: string; updated_at: string } = {
-    ...workspace,
-    id,
-    updated_at: now,
-  };
-  if (params.is_temporary !== undefined) params.is_temporary = params.is_temporary ? 1 : 0;
-  if (params.show_in_list !== undefined) params.show_in_list = params.show_in_list ? 1 : 0;
-
-  return stmt.run(params);
+  const patch = Object.fromEntries(
+    Object.entries(workspace).filter(([key]) => WORKSPACE_COLUMNS.has(key))
+  );
+  if (Object.keys(patch).length === 0) return null;
+  const changes = patchRow<WorkspaceRow>('workspaces', 'id', id, patch, WORKSPACE_COLUMNS);
+  return { changes, lastInsertRowid: 0 };
 };

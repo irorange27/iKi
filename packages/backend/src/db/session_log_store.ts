@@ -7,12 +7,10 @@
  * of a file, not a query engine. pi (earendil-works/pi) stores its interactive
  * sessions as one JSONL file per session, loaded whole at open
  * (coding-agent/src/core/session-manager.ts), and ships a JsonlStorage backend
- * against the same Storage contract as its SQLite backend.
+ * against the same Storage contract as a SQL backend.
  *
- * This module is the VALIDATION SLICE: production still calls the SQLite-backed
- * functions in session_events.ts. The JSONL implementation below is exercised by
- * tests/backend/db/session_log_store.test.ts against the exact same scenarios as
- * SQLite. Once those agree, switching the default is a one-line injection.
+ * This is the only storage backend for the session log: the SQL implementation and
+ * its migrations were deleted with the rest of the prototype's database layer.
  */
 
 import fs from 'node:fs';
@@ -48,7 +46,7 @@ export const payloadValueAt = (payload: unknown, query: string): unknown => {
  * The whole contract. Five operations, all scoped to a thread except findMessage
  * (which exists for resume-by-id and, like pi's session picker, is a file scan).
  * `append` returns null when the caller's expected revision lost a race — the same
- * optimistic-concurrency rule the SQLite implementation enforces in a transaction.
+ * optimistic-concurrency rule the caller relies on (a stale writer is refused).
  */
 export interface SessionLogStore {
   append(threadId: string, expectedRevision: number | null, events: NewSessionEvent[]): number | null;
@@ -63,8 +61,8 @@ const HEADER_VERSION = 1;
 type HeaderLine = { kind: 'header'; version: number; threadId: string };
 
 /**
- * One line = one append call = one atomic commit. SQLite wraps a batch in a
- * transaction; a file cannot, so the whole batch is a single JSON line. A crash
+ * One line = one append call = one atomic commit. The whole batch is a single JSON
+ * line, so a crash
  * mid-write leaves one torn line that is discarded whole — the batch either landed
  * completely or not at all, never half of it.
  */
@@ -169,6 +167,7 @@ export const createJsonlSessionLogStore = (rootDir: string): SessionLogStore => 
       const current = headRevision(threadId);
       if (expectedRevision !== null && current !== expectedRevision) return null;
 
+      fs.mkdirSync(path.dirname(file), { recursive: true });
       ensureHeader(threadId, file);
       repairTornTail(file);
       const now = new Date().toISOString();

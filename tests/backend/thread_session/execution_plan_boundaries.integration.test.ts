@@ -31,7 +31,8 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   }),
 }));
 
-import { closeDatabase, getDb, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { hasLiveThreadRunLease } from '@iki/backend/db/thread_run_locks';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import {
   piTurnHarness,
@@ -256,7 +257,7 @@ describe('execution plan admission boundaries', () => {
       const recoveredAdmission = coordinator.tryAcquireThreadRun('thread_bound');
       if (recoveredAdmission) recoveredAdmission();
       expect(recoveredAdmission).not.toBeNull();
-      expect(getDb().prepare('SELECT * FROM thread_run_locks').all()).toHaveLength(0);
+      expect(hasLiveThreadRunLease('thread_bound_1')).toBe(false);
     }
   );
 

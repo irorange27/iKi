@@ -7,6 +7,31 @@ import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const callPiChatMock = vi.hoisted(() => vi.fn());
+const rejectedTypes = vi.hoisted(() => ({ types: new Set<string>() }));
+
+vi.mock('@iki/backend/db/session_events', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/backend/db/session_events')>();
+  const guard = (events: { type: string }[]) => {
+    if (events.some(event => rejectedTypes.types.has(event.type))) {
+      throw new Error('facts: write rejected');
+    }
+  };
+  return {
+    ...actual,
+    appendSessionFacts: (threadId: string, events: { type: string }[]) => {
+      guard(events);
+      return actual.appendSessionFacts(threadId, events as never);
+    },
+    appendSessionEvents: (threadId: string, expected: number, events: { type: string }[]) => {
+      guard(events);
+      return actual.appendSessionEvents(threadId, expected, events as never);
+    },
+    insertSessionEventsAtHead: (threadId: string, events: { type: string }[]) => {
+      guard(events);
+      return actual.insertSessionEventsAtHead(threadId, events as never);
+    },
+  };
+});
 
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
@@ -31,7 +56,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   };
 });
 
-import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import { addWorkspace } from '@iki/backend/db/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
@@ -252,9 +277,7 @@ describe('session log approval facts across entries', () => {
       approval => approval.toolCallId === 'call_retry'
     )!.approvalId;
 
-    getDb().exec(`CREATE TRIGGER facts_reject_decided BEFORE INSERT ON session_events
-      WHEN NEW.type = 'approval_decided'
-      BEGIN SELECT RAISE(ABORT, 'facts: decided write rejected'); END`);
+    rejectedTypes.types.add('approval_decided');
     callPiChatMock.mockImplementation(
       createScriptedPiChat([
         [
@@ -268,7 +291,7 @@ describe('session log approval facts across entries', () => {
         approvals.approveTool({ id: 97, send: vi.fn() }, approvalId, true)
       ).rejects.toThrow('Failed to append turn facts to the session log.');
     } finally {
-      getDb().exec('DROP TRIGGER IF EXISTS facts_reject_decided');
+      rejectedTypes.types.clear();
     }
 
     const retryResult = await approvals.approveTool({ id: 98, send: vi.fn() }, approvalId, true);

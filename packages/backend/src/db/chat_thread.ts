@@ -1,7 +1,6 @@
-import { getDb } from './database';
+import { commitRows, patchRow, readRows, removeRow } from './collection';
 import { deleteSessionEvents } from './session_events';
 import { ChatThread } from '@iki/backend/types/chat';
-import { buildSetClause } from './utils';
 
 type ChatThreadRow = ChatThread & {
   is_generating: number | boolean;
@@ -10,50 +9,30 @@ type ChatThreadRow = ChatThread & {
   enable_artifacts?: number;
 };
 
-export const getChatThreads = (): ChatThread[] => {
-  const rows = getDb()
-    .prepare('SELECT * FROM chat_threads ORDER BY updated_at DESC')
-    .all() as ChatThreadRow[];
-  return rows.map(row => ({
-    ...row,
-    is_generating: Boolean(row.is_generating),
-    is_favorited: row.is_favorited || 0,
-    is_incognito: row.is_incognito || 0,
-    enable_artifacts: row.enable_artifacts || 0,
-  }));
-};
+const normalize = (row: ChatThreadRow): ChatThread => ({
+  ...row,
+  is_generating: Boolean(row.is_generating),
+  is_favorited: row.is_favorited || 0,
+  is_incognito: row.is_incognito || 0,
+  enable_artifacts: row.enable_artifacts || 0,
+});
+
+const byUpdatedDesc = (a: ChatThreadRow, b: ChatThreadRow): number =>
+  String(b.updated_at).localeCompare(String(a.updated_at));
+
+export const getChatThreads = (): ChatThread[] =>
+  readRows<ChatThreadRow>('chat_threads').sort(byUpdatedDesc).map(normalize);
 
 export const getChatThread = (id: string): ChatThread | null => {
-  const row = getDb().prepare('SELECT * FROM chat_threads WHERE id = ?').get(id) as
-    | ChatThreadRow
-    | undefined;
-  if (!row) return null;
-  return {
-    ...row,
-    is_generating: Boolean(row.is_generating),
-    is_favorited: row.is_favorited || 0,
-    is_incognito: row.is_incognito || 0,
-    enable_artifacts: row.enable_artifacts || 0,
-  };
+  const row = readRows<ChatThreadRow>('chat_threads').find(entry => entry.id === id);
+  return row ? normalize(row) : null;
 };
 
 export const addChatThread = (
   thread: Partial<ChatThread> & { id: string; title: string; metadata: string }
 ) => {
   const now = new Date().toISOString();
-  const stmt = getDb().prepare(`
-        INSERT INTO chat_threads (
-            id, title, model, is_generating, reasoning_effort, metadata, created_at, updated_at,
-            client_id, prompt_app_id, tools, is_favorited, is_incognito, workspace_id,
-            enable_artifacts, artifact_workspace_id, skill_ids
-        ) VALUES (
-            @id, @title, @model, @is_generating, @reasoning_effort, @metadata, @created_at, @updated_at,
-            @client_id, @prompt_app_id, @tools, @is_favorited, @is_incognito, @workspace_id,
-            @enable_artifacts, @artifact_workspace_id, @skill_ids
-        )
-    `);
-
-  const data = {
+  const row = {
     id: thread.id,
     title: thread.title,
     model: thread.model || null,
@@ -72,8 +51,10 @@ export const addChatThread = (
     artifact_workspace_id: thread.artifact_workspace_id || null,
     skill_ids: thread.skill_ids || null,
   };
-
-  return stmt.run(data);
+  const rows = readRows<ChatThreadRow>('chat_threads').filter(entry => entry.id !== thread.id);
+  rows.push(row as unknown as ChatThreadRow);
+  commitRows('chat_threads', rows);
+  return { changes: 1, lastInsertRowid: 0 };
 };
 
 const CHAT_THREAD_COLUMNS = new Set([
@@ -83,39 +64,20 @@ const CHAT_THREAD_COLUMNS = new Set([
 ]);
 
 export const updateChatThread = (id: string, thread: Partial<ChatThread>) => {
-  const now = new Date().toISOString();
-  const fields = buildSetClause(thread as Record<string, unknown>, CHAT_THREAD_COLUMNS);
-
-  if (!fields) return null;
-
-  const stmt = getDb().prepare(`
-        UPDATE chat_threads
-        SET ${fields}, updated_at = @updated_at
-        WHERE id = @id
-    `);
-
-  const params: Record<string, unknown> & { id: string; updated_at: string } = {
-    ...thread,
-    id,
-    updated_at: now,
-  };
-  if (typeof params.is_generating === 'boolean') params.is_generating = params.is_generating ? 1 : 0;
-  if (typeof params.is_favorited === 'boolean') params.is_favorited = params.is_favorited ? 1 : 0;
-  if (typeof params.is_incognito === 'boolean') params.is_incognito = params.is_incognito ? 1 : 0;
-  if (typeof params.enable_artifacts === 'boolean') {
-    params.enable_artifacts = params.enable_artifacts ? 1 : 0;
-  }
-
-  return stmt.run(params);
+  const patch = Object.fromEntries(
+    Object.entries(thread).filter(([key]) => CHAT_THREAD_COLUMNS.has(key))
+  );
+  if (Object.keys(patch).length === 0) return null;
+  const changes = patchRow<ChatThreadRow>('chat_threads', 'id', id, patch, CHAT_THREAD_COLUMNS);
+  return { changes, lastInsertRowid: 0 };
 };
 
-export const touchChatThread = (id: string) => {
-  const now = new Date().toISOString();
-  return getDb().prepare('UPDATE chat_threads SET updated_at = ? WHERE id = ?').run(now, id);
-};
+export const touchChatThread = (id: string) => ({
+  changes: patchRow<ChatThreadRow>('chat_threads', 'id', id, {}, new Set()),
+  lastInsertRowid: 0,
+});
 
 export const deleteChatThread = (id: string) => {
-
   deleteSessionEvents(id);
-  return getDb().prepare('DELETE FROM chat_threads WHERE id = ?').run(id);
+  return { changes: removeRow<ChatThreadRow>('chat_threads', 'id', id), lastInsertRowid: 0 };
 };

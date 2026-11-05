@@ -45,7 +45,7 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   }),
 }));
 
-import { closeDatabase, getDb, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, getStorePath, initializeDatabase } from '@iki/backend/db/database';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import {
   rebuildThreadViewFromEvents,
@@ -186,13 +186,11 @@ describe('streamed text commit gate', () => {
   });
 
   it('withholds streamed text when the session-log WRITE fails — shown ⊆ committed survives write rejection', async () => {
-    const db = getDb();
-    db.exec(
-      `CREATE TRIGGER reject_text_commit
-       BEFORE INSERT ON session_events
-       WHEN NEW.type = 'model_text_committed'
-       BEGIN SELECT RAISE(ABORT, 'write rejected'); END;`
-    );
+    // Fail the durable append for real: make the session-log directory read-only,
+    // so the next write raises EACCES at the filesystem boundary.
+    const fsSync = await import('node:fs');
+    const sessionsDir = path.join(getStorePath(), 'sessions');
+    fsSync.chmodSync(sessionsDir, 0o555);
     try {
       callPiChatMock.mockImplementation(
         createScriptedPiChat([
@@ -228,7 +226,7 @@ describe('streamed text commit gate', () => {
       expect(published).not.toContain('UNCOMMITTED_REVIEW_TEXT');
       expect(committedTextConcat('thread_commit_writereject')).toBe(published);
     } finally {
-      db.exec('DROP TRIGGER IF EXISTS reject_text_commit');
+      fsSync.chmodSync(sessionsDir, 0o755);
     }
   });
 

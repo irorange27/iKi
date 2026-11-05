@@ -66,7 +66,7 @@
         "packages/backend/src/db"
       ],
       "layer": "domain",
-      "role": "SQLite persistence: schema baseline, migrations, row codecs",
+      "role": "File-backed persistence: collections, append-only session logs, row codecs",
       "tests": [
         "tests/backend/db"
       ],

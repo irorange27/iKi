@@ -1,28 +1,19 @@
-import { getDb } from './database';
+import { commitRows, patchRow, readRows, removeRow } from './collection';
 import { Provider } from '@iki/backend/types/provider';
-import { buildSetClause } from './utils';
 
 type ProviderRow = Provider & { enabled: number | boolean; is_response_api?: number | boolean };
 
-export const getProviders = (): Provider[] => {
-  const rows = getDb().prepare('SELECT * FROM providers').all() as ProviderRow[];
-  return rows.map(row => ({
-    ...row,
-    enabled: Boolean(row.enabled),
-    is_response_api: Boolean(row.is_response_api),
-  }));
-};
+const normalize = (row: ProviderRow): Provider => ({
+  ...row,
+  enabled: Boolean(row.enabled),
+  is_response_api: Boolean(row.is_response_api),
+});
+
+export const getProviders = (): Provider[] => readRows<ProviderRow>('providers').map(normalize);
 
 export const getProvider = (id: string): Provider | null => {
-  const row = getDb()
-    .prepare('SELECT * FROM providers WHERE id = ?')
-    .get(id) as ProviderRow | undefined;
-  if (!row) return null;
-  return {
-    ...row,
-    enabled: Boolean(row.enabled),
-    is_response_api: Boolean(row.is_response_api),
-  };
+  const row = readRows<ProviderRow>('providers').find(entry => entry.id === id);
+  return row ? normalize(row) : null;
 };
 
 export const addProvider = (
@@ -35,17 +26,7 @@ export const addProvider = (
   }
 ) => {
   const now = new Date().toISOString();
-  const stmt = getDb().prepare(`
-    INSERT INTO providers (
-      id, name, type, api_key, models, model_options, base_url, enabled, created_at, updated_at,
-      available_models, api_version, is_response_api
-    ) VALUES (
-      @id, @name, @type, @api_key, @models, @model_options, @base_url, @enabled, @created_at, @updated_at,
-      @available_models, @api_version, @is_response_api
-    )
-  `);
-
-  const data = {
+  const row = {
     id: provider.id,
     name: provider.name,
     type: provider.type,
@@ -60,8 +41,10 @@ export const addProvider = (
     api_version: provider.api_version || null,
     is_response_api: provider.is_response_api ? 1 : 0,
   };
-
-  return stmt.run(data);
+  const rows = readRows<ProviderRow>('providers').filter(entry => entry.id !== provider.id);
+  rows.push(row as unknown as ProviderRow);
+  commitRows('providers', rows);
+  return { changes: 1, lastInsertRowid: 0 };
 };
 
 const PROVIDER_COLUMNS = new Set([
@@ -70,30 +53,15 @@ const PROVIDER_COLUMNS = new Set([
 ]);
 
 export const updateProvider = (id: string, provider: Partial<Provider>) => {
-  const now = new Date().toISOString();
-  const fields = buildSetClause(provider as Record<string, unknown>, PROVIDER_COLUMNS);
-
-  if (!fields) return null;
-
-  const stmt = getDb().prepare(`
-    UPDATE providers
-    SET ${fields}, updated_at = @updated_at
-    WHERE id = @id
-  `);
-
-  const params: Record<string, unknown> & { id: string; updated_at: string } = {
-    ...provider,
-    id,
-    updated_at: now,
-  };
-  if (typeof params.enabled === 'boolean') params.enabled = params.enabled ? 1 : 0;
-  if (typeof params.is_response_api === 'boolean') {
-    params.is_response_api = params.is_response_api ? 1 : 0;
-  }
-
-  return stmt.run(params);
+  const patch = Object.fromEntries(
+    Object.entries(provider).filter(([key]) => PROVIDER_COLUMNS.has(key))
+  );
+  if (Object.keys(patch).length === 0) return null;
+  const changes = patchRow<ProviderRow>('providers', 'id', id, patch, PROVIDER_COLUMNS);
+  return { changes, lastInsertRowid: 0 };
 };
 
-export const deleteProvider = (id: string) => {
-  return getDb().prepare('DELETE FROM providers WHERE id = ?').run(id);
-};
+export const deleteProvider = (id: string) => ({
+  changes: removeRow<ProviderRow>('providers', 'id', id),
+  lastInsertRowid: 0,
+});

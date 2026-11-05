@@ -7,6 +7,32 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 
 const external = vi.hoisted(() => ({ userData: vi.fn(() => '') }));
 const callPiChatMock = vi.hoisted(() => vi.fn());
+const rejectedTypes = vi.hoisted(() => ({ types: new Set<string>() }));
+
+// Fail the durable append for a chosen event type at the store boundary.
+vi.mock('@iki/backend/db/session_events', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/backend/db/session_events')>();
+  const guard = (events: { type: string }[]) => {
+    if (events.some(event => rejectedTypes.types.has(event.type))) {
+      throw new Error('discipline: write rejected');
+    }
+  };
+  return {
+    ...actual,
+    appendSessionFacts: (threadId: string, events: { type: string }[]) => {
+      guard(events);
+      return actual.appendSessionFacts(threadId, events as never);
+    },
+    appendSessionEvents: (threadId: string, expected: number, events: { type: string }[]) => {
+      guard(events);
+      return actual.appendSessionEvents(threadId, expected, events as never);
+    },
+    insertSessionEventsAtHead: (threadId: string, events: { type: string }[]) => {
+      guard(events);
+      return actual.insertSessionEventsAtHead(threadId, events as never);
+    },
+  };
+});
 
 vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
@@ -33,7 +59,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     baseURL: 'http://127.0.0.1:9/v1',
   }),
 }));
-import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
 import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import {
@@ -69,14 +95,13 @@ beforeEach(async () => {
   conversation.createThread({ id: 'review_settle', metadata: '{"mode":"chat"}' });
 });
 afterEach(async () => {
+  rejectedTypes.types.clear();
   closeDatabase();
   await fs.rm(root, { recursive: true, force: true });
 });
 
 const rejectEventType = (type: string) => {
-  getDb().exec(`CREATE TRIGGER discipline_reject_${type} BEFORE INSERT ON session_events
-    WHEN NEW.type = '${type}'
-    BEGIN SELECT RAISE(ABORT, 'discipline: ${type} write rejected'); END`);
+  rejectedTypes.types.add(type);
 };
 
 const runStream = async () => {

@@ -1,5 +1,4 @@
 import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import { getDb } from '@iki/backend/db/database';
 import { insertSessionEventsAtHead } from '@iki/backend/db/session_events';
 import {
   MESSAGES_TRUNCATED,
@@ -24,9 +23,7 @@ export const truncateAfterMessage = (
   if (!normalizedMessageId)
     return { success: false, deletedIds: [], error: 'Missing message ID' };
 
-  const db = getDb();
-
-  return db.transaction((): TruncateHistoryResult => {
+  return ((): TruncateHistoryResult => {
     if (!chatThreadDb.getChatThread(normalizedThreadId)) {
       return { success: false, deletedIds: [], error: 'Thread not found' };
     }

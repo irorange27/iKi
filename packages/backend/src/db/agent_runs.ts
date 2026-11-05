@@ -1,4 +1,4 @@
-import { getDb } from './database';
+import { commitRows, readRows } from './collection';
 import type {
   AgentRun,
   AgentRunError,
@@ -156,303 +156,217 @@ const mapAgentRunStepRow = (row: AgentRunStepRow): AgentRunStep => ({
   finishedAt: row.finished_at ?? null,
 });
 
+const RUNS = 'agent_runs';
+const STEPS = 'agent_run_steps';
+
+const runRowOf = (run: AgentRun, now: string): AgentRunRow => ({
+  id: run.id,
+  kind: run.kind,
+  status: run.status,
+  thread_id: normalizeWhitespace(run.threadId) || null,
+  parent_run_id: normalizeWhitespace(run.parentRunId) || null,
+  root_run_id: normalizeWhitespace(run.rootRunId) || run.id,
+  provider_type: run.providerType,
+  provider_id: normalizeWhitespace(run.providerId) || null,
+  model: run.model,
+  system_prompt: run.systemPrompt,
+  enabled_tools: JSON.stringify(run.enabledTools ?? []),
+  available_skill_ids: JSON.stringify(run.availableSkillIds ?? []),
+  input_json: JSON.stringify(run.input ?? {}),
+  working_json: JSON.stringify(run.working),
+  output_json: run.output ? JSON.stringify(run.output) : null,
+  error_json: run.error ? JSON.stringify(run.error) : null,
+  created_at: now,
+  updated_at: now,
+});
+
 export const createAgentRun = (
   input: Omit<AgentRun, 'createdAt' | 'updatedAt'>
 ): AgentRun => {
   const now = toIsoNow();
-  getDb()
-    .prepare(
-      `
-        INSERT INTO agent_runs (
-          id, kind, status, thread_id, parent_run_id, root_run_id, provider_type, provider_id,
-          model, system_prompt, enabled_tools, available_skill_ids, input_json, working_json,
-          output_json, error_json, created_at, updated_at
-        ) VALUES (
-          @id, @kind, @status, @thread_id, @parent_run_id, @root_run_id, @provider_type, @provider_id,
-          @model, @system_prompt, @enabled_tools, @available_skill_ids, @input_json, @working_json,
-          @output_json, @error_json, @created_at, @updated_at
-        )
-      `
-    )
-    .run({
-      id: input.id,
-      kind: input.kind,
-      status: input.status,
-      thread_id: normalizeWhitespace(input.threadId) || null,
-      parent_run_id: normalizeWhitespace(input.parentRunId) || null,
-      root_run_id: normalizeWhitespace(input.rootRunId) || input.id,
-      provider_type: input.providerType,
-      provider_id: normalizeWhitespace(input.providerId) || null,
-      model: input.model,
-      system_prompt: input.systemPrompt,
-      enabled_tools: JSON.stringify(input.enabledTools ?? []),
-      available_skill_ids: JSON.stringify(input.availableSkillIds ?? []),
-      input_json: JSON.stringify(input.input ?? {}),
-      working_json: JSON.stringify(input.working),
-      output_json: input.output ? JSON.stringify(input.output) : null,
-      error_json: input.error ? JSON.stringify(input.error) : null,
-      created_at: now,
-      updated_at: now,
-    });
-
-  return {
-    ...input,
-    createdAt: now,
-    updatedAt: now,
-  };
+  const run: AgentRun = { ...input, createdAt: now, updatedAt: now };
+  const rows = readRows<AgentRunRow>(RUNS).filter(row => row.id !== input.id);
+  rows.push(runRowOf(run, now));
+  commitRows(RUNS, rows);
+  return run;
 };
 
 export const getAgentRun = (id: string): AgentRun | null => {
-  const row = getDb()
-    .prepare('SELECT * FROM agent_runs WHERE id = ?')
-    .get(id) as AgentRunRow | undefined;
+  const row = readRows<AgentRunRow>(RUNS).find(entry => entry.id === id);
   return row ? mapAgentRunRow(row) : null;
 };
 
 export const listAgentRunsByThread = (threadId: string): AgentRun[] => {
   const normalizedThreadId = normalizeWhitespace(threadId);
   if (!normalizedThreadId) return [];
-
-  const rows = getDb()
-    .prepare('SELECT * FROM agent_runs WHERE thread_id = ? ORDER BY updated_at DESC')
-    .all(normalizedThreadId) as AgentRunRow[];
-  return rows.map(mapAgentRunRow);
+  return readRows<AgentRunRow>(RUNS)
+    .filter(row => row.thread_id === normalizedThreadId)
+    .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))
+    .map(mapAgentRunRow);
 };
 
 export const listAgentRunsByStatus = (
   statuses: AgentRun['status'][],
   opts?: { clientId?: string; limit?: number }
 ): AgentRun[] => {
-  const normalizedStatuses = statuses
-    .map(status => normalizeWhitespace(status))
-    .filter(Boolean);
-  if (normalizedStatuses.length === 0) return [];
+  const wanted = new Set(statuses.map(status => normalizeWhitespace(status)).filter(Boolean));
+  if (wanted.size === 0) return [];
 
-  const conditions: string[] = [];
-  const params: Record<string, unknown> = {};
-
-  const statusPlaceholders = normalizedStatuses.map((status, index) => {
-    params[`status_${index}`] = status;
-    return `@status_${index}`;
-  });
-  conditions.push(`status IN (${statusPlaceholders.join(', ')})`);
-
+  let threadIds: Set<string> | null = null;
   if (opts?.clientId) {
-    conditions.push('thread_id IN (SELECT id FROM chat_threads WHERE client_id = @client_id)');
-    params.client_id = normalizeWhitespace(opts.clientId);
+    const clientId = normalizeWhitespace(opts.clientId);
+    threadIds = new Set(
+      readRows<{ id: string; client_id?: string | null }>('chat_threads')
+        .filter(thread => normalizeWhitespace(thread.client_id) === clientId)
+        .map(thread => thread.id)
+    );
   }
 
-  const limitClause =
-    typeof opts?.limit === 'number' && opts.limit > 0 ? ` LIMIT ${Math.trunc(opts.limit)}` : '';
+  const matches = readRows<AgentRunRow>(RUNS)
+    .filter(row => wanted.has(row.status))
+    .filter(row => !threadIds || (typeof row.thread_id === 'string' && threadIds.has(row.thread_id)))
+    .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
 
-  const rows = getDb()
-    .prepare(
-      `SELECT * FROM agent_runs WHERE ${conditions.join(' AND ')} ORDER BY updated_at DESC${limitClause}`
-    )
-    .all(params) as AgentRunRow[];
-  return rows.map(mapAgentRunRow);
+  const limited =
+    typeof opts?.limit === 'number' && opts.limit > 0 ? matches.slice(0, Math.trunc(opts.limit)) : matches;
+  return limited.map(mapAgentRunRow);
 };
 
 export const listAgentRunsByParentRunId = (parentRunId: string): AgentRun[] => {
   const normalizedParentRunId = normalizeWhitespace(parentRunId);
   if (!normalizedParentRunId) return [];
+  return readRows<AgentRunRow>(RUNS)
+    .filter(row => row.parent_run_id === normalizedParentRunId)
+    .sort(
+      (a, b) =>
+        String(a.created_at).localeCompare(String(b.created_at)) || a.id.localeCompare(b.id)
+    )
+    .map(mapAgentRunRow);
+};
 
-  const rows = getDb()
-    .prepare('SELECT * FROM agent_runs WHERE parent_run_id = ? ORDER BY created_at ASC, id ASC')
-    .all(normalizedParentRunId) as AgentRunRow[];
-  return rows.map(mapAgentRunRow);
+const patchRunRow = (
+  row: AgentRunRow,
+  updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>
+): AgentRunRow => {
+  const next: AgentRunRow = { ...row, updated_at: toIsoNow() };
+  if (updates.kind !== undefined) next.kind = updates.kind;
+  if (updates.status !== undefined) next.status = updates.status;
+  if (updates.threadId !== undefined) next.thread_id = normalizeWhitespace(updates.threadId) || null;
+  if (updates.parentRunId !== undefined)
+    next.parent_run_id = normalizeWhitespace(updates.parentRunId) || null;
+  if (updates.rootRunId !== undefined)
+    next.root_run_id = normalizeWhitespace(updates.rootRunId) || next.id;
+  if (updates.providerType !== undefined) next.provider_type = updates.providerType;
+  if (updates.providerId !== undefined)
+    next.provider_id = normalizeWhitespace(updates.providerId) || null;
+  if (updates.model !== undefined) next.model = updates.model;
+  if (updates.systemPrompt !== undefined) next.system_prompt = updates.systemPrompt;
+  if (updates.enabledTools !== undefined)
+    next.enabled_tools = JSON.stringify(updates.enabledTools ?? []);
+  if (updates.availableSkillIds !== undefined)
+    next.available_skill_ids = JSON.stringify(updates.availableSkillIds ?? []);
+  if (updates.input !== undefined) next.input_json = JSON.stringify(updates.input ?? {});
+  if (updates.working !== undefined) next.working_json = JSON.stringify(updates.working);
+  if (updates.output !== undefined)
+    next.output_json = updates.output ? JSON.stringify(updates.output) : null;
+  if (updates.error !== undefined)
+    next.error_json = updates.error ? JSON.stringify(updates.error) : null;
+  return next;
+};
+
+const writeRun = (row: AgentRunRow): void => {
+  const rows = readRows<AgentRunRow>(RUNS);
+  const index = rows.findIndex(entry => entry.id === row.id);
+  if (index >= 0) rows[index] = row;
+  else rows.push(row);
+  commitRows(RUNS, rows);
 };
 
 export const updateAgentRun = (
   id: string,
   updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>
 ): AgentRun | null => {
-  const fields: string[] = [];
-  const params: Record<string, unknown> = {
-    id,
-    updated_at: toIsoNow(),
-  };
-
-  if (updates.kind !== undefined) {
-    fields.push('kind = @kind');
-    params.kind = updates.kind;
-  }
-  if (updates.status !== undefined) {
-    fields.push('status = @status');
-    params.status = updates.status;
-  }
-  if (updates.threadId !== undefined) {
-    fields.push('thread_id = @thread_id');
-    params.thread_id = normalizeWhitespace(updates.threadId) || null;
-  }
-  if (updates.parentRunId !== undefined) {
-    fields.push('parent_run_id = @parent_run_id');
-    params.parent_run_id = normalizeWhitespace(updates.parentRunId) || null;
-  }
-  if (updates.rootRunId !== undefined) {
-    fields.push('root_run_id = @root_run_id');
-    params.root_run_id = normalizeWhitespace(updates.rootRunId) || id;
-  }
-  if (updates.providerType !== undefined) {
-    fields.push('provider_type = @provider_type');
-    params.provider_type = updates.providerType;
-  }
-  if (updates.providerId !== undefined) {
-    fields.push('provider_id = @provider_id');
-    params.provider_id = normalizeWhitespace(updates.providerId) || null;
-  }
-  if (updates.model !== undefined) {
-    fields.push('model = @model');
-    params.model = updates.model;
-  }
-  if (updates.systemPrompt !== undefined) {
-    fields.push('system_prompt = @system_prompt');
-    params.system_prompt = updates.systemPrompt;
-  }
-  if (updates.enabledTools !== undefined) {
-    fields.push('enabled_tools = @enabled_tools');
-    params.enabled_tools = JSON.stringify(updates.enabledTools ?? []);
-  }
-  if (updates.availableSkillIds !== undefined) {
-    fields.push('available_skill_ids = @available_skill_ids');
-    params.available_skill_ids = JSON.stringify(updates.availableSkillIds ?? []);
-  }
-  if (updates.input !== undefined) {
-    fields.push('input_json = @input_json');
-    params.input_json = JSON.stringify(updates.input ?? {});
-  }
-  if (updates.working !== undefined) {
-    fields.push('working_json = @working_json');
-    params.working_json = JSON.stringify(updates.working);
-  }
-  if (updates.output !== undefined) {
-    fields.push('output_json = @output_json');
-    params.output_json = updates.output ? JSON.stringify(updates.output) : null;
-  }
-  if (updates.error !== undefined) {
-    fields.push('error_json = @error_json');
-    params.error_json = updates.error ? JSON.stringify(updates.error) : null;
-  }
-
-  if (fields.length === 0) {
-    return getAgentRun(id);
-  }
-
-  getDb()
-    .prepare(
-      `
-        UPDATE agent_runs
-        SET ${fields.join(', ')}, updated_at = @updated_at
-        WHERE id = @id
-      `
-    )
-    .run(params);
-
-  return getAgentRun(id);
+  const rows = readRows<AgentRunRow>(RUNS);
+  const index = rows.findIndex(entry => entry.id === id);
+  if (index < 0) return null;
+  if (Object.keys(updates).length === 0) return mapAgentRunRow(rows[index] as AgentRunRow);
+  const next = patchRunRow(rows[index] as AgentRunRow, updates);
+  rows[index] = next;
+  commitRows(RUNS, rows);
+  return mapAgentRunRow(next);
 };
 
-export const appendAgentRunStep = (step: AgentRunStep): AgentRunStep => {
-  getDb()
-    .prepare(
-      `
-        INSERT INTO agent_run_steps (
-          id, run_id, step_index, type, status, summary, input_json, output_json,
-          started_at, finished_at
-        ) VALUES (
-          @id, @run_id, @step_index, @type, @status, @summary, @input_json, @output_json,
-          @started_at, @finished_at
-        )
-      `
-    )
-    .run({
-      id: step.id,
-      run_id: step.runId,
-      step_index: step.stepIndex,
-      type: step.type,
-      status: step.status,
-      summary: step.summary,
-      input_json: step.input ? JSON.stringify(step.input) : null,
-      output_json: step.output ? JSON.stringify(step.output) : null,
-      started_at: step.startedAt,
-      finished_at: step.finishedAt ?? null,
-    });
+const stepRowOf = (step: AgentRunStep): AgentRunStepRow => ({
+  id: step.id,
+  run_id: step.runId,
+  step_index: step.stepIndex,
+  type: step.type,
+  status: step.status,
+  summary: step.summary,
+  input_json: step.input ? JSON.stringify(step.input) : null,
+  output_json: step.output ? JSON.stringify(step.output) : null,
+  started_at: step.startedAt,
+  finished_at: step.finishedAt ?? null,
+});
 
+export const appendAgentRunStep = (step: AgentRunStep): AgentRunStep => {
+  const rows = readRows<AgentRunStepRow>(STEPS).filter(entry => entry.id !== step.id);
+  rows.push(stepRowOf(step));
+  commitRows(STEPS, rows);
   return step;
 };
 
 export const claimQueuedAgentRun = (runId: string): AgentRun | null => {
   const normalized = normalizeWhitespace(runId);
   if (!normalized) return null;
-  const db = getDb();
-  return db.transaction(() => {
-    const claim = db
-      .prepare(
-        `UPDATE agent_runs SET status = 'running', updated_at = ?
-         WHERE id = ? AND status = 'queued'`
-      )
-      .run(toIsoNow(), normalized);
-    if (claim.changes === 0) return null;
-    return getAgentRun(normalized);
-  })();
+  const rows = readRows<AgentRunRow>(RUNS);
+  const index = rows.findIndex(entry => entry.id === normalized && entry.status === 'queued');
+  if (index < 0) return null;
+  const next: AgentRunRow = { ...(rows[index] as AgentRunRow), status: 'running', updated_at: toIsoNow() };
+  rows[index] = next;
+  commitRows(RUNS, rows);
+  return mapAgentRunRow(next);
 };
 
 export const appendAgentRunStepAndUpdateRun = (
   step: AgentRunStep,
   updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>
 ): AgentRun => {
-  const db = getDb();
-  return db.transaction(() => {
-    appendAgentRunStep(step);
-    const updated = updateAgentRun(step.runId, updates);
-    if (!updated) {
-      throw new Error('Cannot update missing agent run "' + step.runId + '"');
-    }
-    return updated;
-  })();
+  appendAgentRunStep(step);
+  const updated = updateAgentRun(step.runId, updates);
+  if (!updated) {
+    throw new Error('Cannot update missing agent run "' + step.runId + '"');
+  }
+  return updated;
 };
 
-/**
- * Claim a run in one of the expected statuses and update it, without appending a
- * step. Terminal transitions record the row alone: the step duplicated fields
- * the row already carries.
- */
 export const updateAgentRunIfStatus = (
   runId: string,
   updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>,
   expectedStatuses: readonly AgentRunStatus[]
 ): AgentRun | null => {
-  const db = getDb();
-  const placeholders = expectedStatuses.map(() => '?').join(', ');
-  return db.transaction(() => {
-    const claim = db
-      .prepare(
-        `UPDATE agent_runs SET updated_at = updated_at
-         WHERE id = ? AND status IN (${placeholders})`
-      )
-      .run(runId, ...expectedStatuses);
-    if (claim.changes === 0) return null;
-    const updated = updateAgentRun(runId, updates);
-    if (!updated) {
-      throw new Error('Cannot update missing agent run "' + runId + '"');
-    }
-    return updated;
-  })();
+  const rows = readRows<AgentRunRow>(RUNS);
+  const index = rows.findIndex(
+    entry => entry.id === runId && expectedStatuses.includes(entry.status)
+  );
+  if (index < 0) return null;
+  const next = patchRunRow(rows[index] as AgentRunRow, updates);
+  rows[index] = next;
+  commitRows(RUNS, rows);
+  return mapAgentRunRow(next);
 };
 
-export const listAgentRunSteps = (runId: string): AgentRunStep[] => {
-  const rows = getDb()
-    .prepare('SELECT * FROM agent_run_steps WHERE run_id = ? ORDER BY step_index ASC')
-    .all(runId) as AgentRunStepRow[];
-  return rows.map(mapAgentRunStepRow);
-};
+export const listAgentRunSteps = (runId: string): AgentRunStep[] =>
+  readRows<AgentRunStepRow>(STEPS)
+    .filter(row => row.run_id === runId)
+    .sort((a, b) => a.step_index - b.step_index)
+    .map(mapAgentRunStepRow);
 
 export const getAgentRunTrace = (runId: string): AgentRunTrace | null => {
   const normalizedRunId = normalizeWhitespace(runId);
   if (!normalizedRunId) return null;
-
   const run = getAgentRun(normalizedRunId);
   if (!run) return null;
-
   return {
     run,
     steps: listAgentRunSteps(normalizedRunId),
@@ -462,31 +376,14 @@ export const getAgentRunTrace = (runId: string): AgentRunTrace | null => {
 
 export const cleanupOldAgentRuns = (maxAgeDays: number): { deletedRuns: number } => {
   const cutoffDate = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
-  const terminalStatuses: AgentRun['status'][] = ['completed', 'failed', 'cancelled'];
-  const statusPlaceholders = terminalStatuses.map(() => '?').join(', ');
-
-  const db = getDb();
-
-  const rows = db
-    .prepare(
-      `SELECT id FROM agent_runs WHERE status IN (${statusPlaceholders}) AND updated_at < ?`
-    )
-    .all(...terminalStatuses, cutoffDate) as { id: string }[];
-
-  if (rows.length === 0) return { deletedRuns: 0 };
-
-  const runIds = rows.map(r => r.id);
-  const idPlaceholders = runIds.map(() => '?').join(', ');
-
-  db.prepare(
-    `DELETE FROM agent_run_steps WHERE run_id IN (${idPlaceholders})`
-  ).run(...runIds);
-
-  const result = db
-    .prepare(
-      `DELETE FROM agent_runs WHERE id IN (${idPlaceholders})`
-    )
-    .run(...runIds);
-
-  return { deletedRuns: result.changes };
+  const terminalStatuses = new Set<AgentRun['status']>(['completed', 'failed', 'cancelled']);
+  const runs = readRows<AgentRunRow>(RUNS);
+  const expired = runs.filter(
+    row => terminalStatuses.has(row.status) && String(row.updated_at) < cutoffDate
+  );
+  if (expired.length === 0) return { deletedRuns: 0 };
+  const expiredIds = new Set(expired.map(row => row.id));
+  commitRows(RUNS, runs.filter(row => !expiredIds.has(row.id)));
+  commitRows(STEPS, readRows<AgentRunStepRow>(STEPS).filter(row => !expiredIds.has(row.run_id)));
+  return { deletedRuns: expired.length };
 };

@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron';
 import path from 'node:path';
 
-import { setConfig, migrateFromJson } from '@iki/backend/db/database';
+import { setConfig, migrateFromJson, getStorePath } from '@iki/backend/db/database';
 import { getAppConfig } from '@iki/backend/config';
 import { applyAppLoggingConfig, createLogger } from '@iki/backend/logger';
 import { getMcpManager } from '@iki/backend/mcp';
@@ -36,7 +36,7 @@ const getRuntimeInfo = (): ConfigRuntimeInfo => {
   const userDataPath = app.getPath('userData');
   return {
     userDataPath,
-    dbPath: path.join(userDataPath, 'iKi_v0.db'),
+    storePath: getStorePath(),
   };
 };
 

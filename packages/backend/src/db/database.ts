@@ -1,231 +1,76 @@
-import { DatabaseSync } from 'node:sqlite';
-import path from 'path';
-import fs from 'fs';
-import { initializeMigrations } from './migration';
-import { createLogger } from '@iki/backend/logger';
+/**
+ * Store bootstrap. There is no database engine: initialization just picks the
+ * directory where collections and the append-only session logs live.
+ *
+ * `initializeDatabase({ dbPath })` keeps its old name and shape because ~35 test
+ * fixtures and the composition root call it; the path is interpreted as a directory
+ * marker (its dirname is the store root). No schema, no migrations, no connection.
+ */
+
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { getUserDataPath } from '../platform';
-import type {
-  SqliteDatabase,
-  SqliteRunResult,
-  SqliteStatement,
-} from './sqlite';
+import { commitRows, readRows, setDefaultStoreRootResolver, setStoreRoot, storeRoot } from './collection';
 
-export type { SqliteDatabase, SqliteRunResult, SqliteStatement };
+let pathOverride: string | null = null;
 
-let db: SqliteDatabase | null = null;
-let initialized = false;
-let initializing = false;
-let dbPathOverride: string | null = null;
-const databaseLogger = createLogger({ module: 'database' });
-
-const resolveDbPath = (): string => {
-  if (dbPathOverride && dbPathOverride.trim()) return dbPathOverride.trim();
-  const envPath = process.env.IKI_DB_PATH;
-  if (typeof envPath === 'string' && envPath.trim()) return envPath.trim();
-  return path.join(getUserDataPath(), 'iKi_v0.db');
+const resolveStoreRoot = (): string => {
+  const fromPath = (): string | null => {
+    if (pathOverride && pathOverride.trim()) return path.dirname(pathOverride.trim());
+    const envPath = process.env.IKI_DB_PATH;
+    if (typeof envPath === 'string' && envPath.trim()) return path.dirname(envPath.trim());
+    return null;
+  };
+  const resolved = fromPath() ?? path.join(getUserDataPath(), 'iki-store');
+  // Never write a relative store next to the process cwd (a test that mocks the
+  // user-data path to '' would otherwise litter the repo). Fall back to tmp.
+  return path.isAbsolute(resolved) ? resolved : path.join(os.tmpdir(), 'iki-store');
 };
 
-const initCoreTables = (database: SqliteDatabase) => {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS config (
-      key TEXT PRIMARY KEY,
-      value TEXT
-    );
+// The desktop app never calls initializeDatabase; the store resolves its directory
+// lazily on first use instead.
+setDefaultStoreRootResolver(resolveStoreRoot);
 
-    CREATE TABLE IF NOT EXISTS "providers"(
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      type TEXT NOT NULL,
-      api_key TEXT NOT NULL,
-      models TEXT NOT NULL,
-      model_options TEXT NOT NULL DEFAULT '{}',
-      base_url TEXT,
-      enabled BOOLEAN NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      available_models TEXT NOT NULL DEFAULT '[]',
-      api_version TEXT,
-      is_response_api INTEGER DEFAULT 0,
-      acp_command TEXT,
-      acp_args TEXT,
-      acp_mcp_server_ids TEXT,
-      acp_auth_method_id TEXT,
-      acp_api_provider_id TEXT,
-      acp_model_mapping TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS session_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      thread_id TEXT NOT NULL,
-      revision INTEGER NOT NULL,
-      type TEXT NOT NULL,
-      version INTEGER NOT NULL,
-      payload TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      UNIQUE(thread_id, revision)
-    );
-    CREATE TABLE IF NOT EXISTS thread_run_locks (
-      thread_id TEXT PRIMARY KEY,
-      token TEXT NOT NULL,
-      expires_at INTEGER NOT NULL
-    );
-  `);
+export const initializeDatabase = (options?: { dbPath?: string }): void => {
+  if (options?.dbPath) pathOverride = options.dbPath;
+  setStoreRoot(resolveStoreRoot());
 };
 
-const NAMED_PARAM_PATTERN = /[@:$][A-Za-z_][A-Za-z0-9_]*/g;
-
-const collectNamedParams = (sql: string): Set<string> | null => {
-  const stripped = sql
-    .replace(/'(?:[^']|'')*'/g, ' ')
-    .replace(/--.*$/gm, ' ')
-    .replace(/\/\*[\s\S]*?\*\//g, ' ');
-  const names = stripped.match(NAMED_PARAM_PATTERN);
-  if (!names || names.length === 0) return null;
-  return new Set(names.map(name => name.slice(1)));
+/** Dropping the in-memory cache is the whole "close" operation. */
+export const closeDatabase = (): void => {
+  setStoreRoot(resolveStoreRoot());
 };
 
-const normalizeBindParams = (sql: string, params: unknown[]): unknown[] => {
-  if (params.length !== 1 || typeof params[0] !== 'object' || params[0] === null) return params;
-  const names = collectNamedParams(sql);
-  if (!names) return params;
-
-  const source = params[0] as Record<string, unknown>;
-  const filtered: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(source)) {
-    if (names.has(key) || names.has(key.replace(/^[@:$]/, ''))) filtered[key] = value;
-  }
-  return [filtered];
-};
-
-const wrapStatement = (
-  sql: string,
-  statement: {
-    run: (...params: unknown[]) => { changes: number | bigint; lastInsertRowid: number | bigint };
-    get: (...params: unknown[]) => unknown;
-    all: (...params: unknown[]) => unknown[];
-  }
-): SqliteStatement => ({
-
-  run: (...params: unknown[]) => statement.run(...normalizeBindParams(sql, params)) as SqliteRunResult,
-  get: (...params: unknown[]) => statement.get(...normalizeBindParams(sql, params)),
-  all: (...params: unknown[]) => statement.all(...normalizeBindParams(sql, params)),
-});
-
-const wrapDatabase = (raw: DatabaseSync): SqliteDatabase => ({
-  exec: sql => raw.exec(sql),
-  prepare: sql => wrapStatement(sql, raw.prepare(sql)),
-  transaction:
-    <TArgs extends unknown[], TResult>(fn: (...args: TArgs) => TResult) =>
-    (...args: TArgs): TResult => {
-
-      raw.exec('BEGIN IMMEDIATE');
-      try {
-        const result = fn(...args);
-        raw.exec('COMMIT');
-        return result;
-      } catch (error) {
-        raw.exec('ROLLBACK');
-        throw error;
-      }
-    },
-  close: () => raw.close(),
-});
-
-export const initializeDatabase = (options?: { dbPath?: string }) => {
-  if (options?.dbPath) {
-
-    if (dbPathOverride !== options.dbPath && db) {
-      closeDatabase();
-    }
-    dbPathOverride = options.dbPath;
-  }
-  if (initialized && db) return db;
-  if (initializing && db) return db;
-
-  initializing = true;
-  const dbPath = resolveDbPath();
-  const raw = new DatabaseSync(dbPath);
-
-  raw.exec('PRAGMA busy_timeout = 5000');
-  db = wrapDatabase(raw);
-  initCoreTables(db);
-  initialized = true;
-  initializeMigrations(db);
-  initializing = false;
-  return db;
-};
-
-export const getDb = (): SqliteDatabase => {
-  if (!initialized || !db) {
-    return initializeDatabase();
-  }
-  return db;
-};
-
-export const closeDatabase = () => {
-  if (!db) return;
-  try {
-    db.close();
-  } catch (error) {
-    databaseLogger.warn('Failed to close database', error);
-  } finally {
-    db = null;
-    initialized = false;
-    initializing = false;
-
-    dbPathOverride = null;
-  }
-};
+export const getStorePath = (): string => storeRoot();
 
 export const getConfig = (key: string): unknown => {
-  const row = getDb().prepare('SELECT value FROM config WHERE key = ?').get(key) as
-    | { value: string }
-    | undefined;
-  if (row) {
-    try {
-      return JSON.parse(row.value);
-    } catch (e) {
-      databaseLogger.error('Failed to parse config value', e);
-      return null;
-    }
+  const rows = readRows<{ key: string; value: string }>('config');
+  const row = rows.find(entry => entry.key === key);
+  if (!row) return null;
+  try {
+    return JSON.parse(row.value) as unknown;
+  } catch {
+    return null;
   }
-  return null;
 };
 
-export const setConfig = (key: string, value: unknown) => {
-  const statement = getDb().prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)');
-  statement.run(key, JSON.stringify(value));
+export const setConfig = (key: string, value: unknown): void => {
+  const rows = readRows<{ key: string; value: string }>('config');
+  const next = rows.filter(entry => entry.key !== key);
+  next.push({ key, value: JSON.stringify(value) });
+  commitRows('config', next);
 };
 
-export const migrateFromJson = (jsonPath: string, key: string) => {
-  if (fs.existsSync(jsonPath)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
-      setConfig(key, data);
-
-      fs.renameSync(jsonPath, jsonPath + '.bak');
-      databaseLogger.event({
-        level: 'info',
-        event: 'config.migrate',
-        outcome: 'succeeded',
-        message: 'Migrated config from JSON to SQLite',
-        data: {
-          json_path: jsonPath,
-          config_key: key,
-        },
-      });
-    } catch (e) {
-      databaseLogger.event({
-        level: 'error',
-        event: 'config.migrate',
-        outcome: 'failed',
-        message: 'Failed to migrate config from JSON to SQLite',
-        data: {
-          json_path: jsonPath,
-          config_key: key,
-        },
-        error: e,
-      });
-    }
+/** Legacy JSON config import. Reads a file, if present, into the config collection. */
+export const migrateFromJson = (jsonPath: string, key: string): void => {
+  if (getConfig(key) !== null) return;
+  try {
+    if (!fs.existsSync(jsonPath)) return;
+    const parsed: unknown = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+    setConfig(key, parsed);
+  } catch {
+    // A malformed legacy file is not worth blocking startup for.
   }
 };

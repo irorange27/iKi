@@ -1,7 +1,6 @@
-import { getDb } from './database';
+import { commitRows, patchRow, readRows, removeRow } from './collection';
 import type { McpServer, McpServerInput, McpServerUpdate } from '@iki/backend/types/mcp';
 import { toIsoNow } from '@iki/backend/utils/text';
-import { buildSetClause } from './utils';
 import { parseJsonStringArray, toStringArray } from '@iki/backend/utils/json';
 
 type McpServerRow = Omit<McpServer, 'enabled' | 'args' | 'tool_allowlist' | 'headers' | 'env'> & {
@@ -40,67 +39,22 @@ const normalizeRow = (row: McpServerRow): McpServer => ({
   env: parseStringMap(row.env) ?? null,
 });
 
-export const listMcpServers = (): McpServer[] => {
-  const rows = getDb()
-    .prepare('SELECT * FROM mcp_servers ORDER BY updated_at DESC')
-    .all() as McpServerRow[];
-  return rows.map(normalizeRow);
-};
+export const listMcpServers = (): McpServer[] =>
+  readRows<McpServerRow>('mcp_servers')
+    .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))
+    .map(normalizeRow);
 
 export const getMcpServer = (id: string): McpServer | null => {
-  const row = getDb()
-    .prepare('SELECT * FROM mcp_servers WHERE id = ?')
-    .get(id) as McpServerRow | undefined;
-  if (!row) return null;
-  return normalizeRow(row);
+  const row = readRows<McpServerRow>('mcp_servers').find(entry => entry.id === id);
+  return row ? normalizeRow(row) : null;
 };
 
 export const addMcpServer = (input: McpServerInput & { id: string }) => {
   const now = toIsoNow();
-  const stmt = getDb().prepare(`
-    INSERT INTO mcp_servers (
-      id,
-      name,
-      transport,
-      command,
-      args,
-      cwd,
-      env,
-      base_url,
-      headers,
-      auth_ref,
-      enabled,
-      tool_allowlist,
-      approval_mode,
-      created_at,
-      updated_at,
-      last_connected_at,
-      last_error
-    ) VALUES (
-      @id,
-      @name,
-      @transport,
-      @command,
-      @args,
-      @cwd,
-      @env,
-      @base_url,
-      @headers,
-      @auth_ref,
-      @enabled,
-      @tool_allowlist,
-      @approval_mode,
-      @created_at,
-      @updated_at,
-      @last_connected_at,
-      @last_error
-    )
-  `);
-
   const args = toStringArray(input.args);
   const allowlist = toStringArray(input.tool_allowlist);
 
-  const data: Record<string, unknown> = {
+  const row = {
     id: input.id,
     name: input.name,
     transport: input.transport,
@@ -116,11 +70,13 @@ export const addMcpServer = (input: McpServerInput & { id: string }) => {
     approval_mode: input.approval_mode ?? null,
     created_at: now,
     updated_at: now,
-    last_connected_at: null,
-    last_error: null,
+    last_connected_at: null as string | null,
+    last_error: null as string | null,
   };
-
-  return stmt.run(data);
+  const rows = readRows<McpServerRow>('mcp_servers').filter(entry => entry.id !== input.id);
+  rows.push(row as unknown as McpServerRow);
+  commitRows('mcp_servers', rows);
+  return { changes: 1, lastInsertRowid: 0 };
 };
 
 const MCP_SERVER_COLUMNS = new Set([
@@ -130,43 +86,25 @@ const MCP_SERVER_COLUMNS = new Set([
 ]);
 
 export const updateMcpServer = (id: string, updates: McpServerUpdate) => {
-  const now = toIsoNow();
-  const fields = buildSetClause(updates as Record<string, unknown>, MCP_SERVER_COLUMNS);
-
-  if (!fields) return null;
-
-  const stmt = getDb().prepare(`
-    UPDATE mcp_servers
-    SET ${fields}, updated_at = @updated_at
-    WHERE id = @id
-  `);
-
-  const params: Record<string, unknown> = {
-    ...updates,
-    id,
-    updated_at: now,
-  };
-
-  if (typeof updates.enabled === 'boolean') {
-    params.enabled = updates.enabled ? 1 : 0;
+  const patch: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(updates)) {
+    if (!MCP_SERVER_COLUMNS.has(key)) continue;
+    if (key === 'args' || key === 'tool_allowlist') {
+      patch[key] = JSON.stringify(toStringArray(value));
+      continue;
+    }
+    if ((key === 'headers' || key === 'env') && value && typeof value === 'object') {
+      patch[key] = JSON.stringify(value);
+      continue;
+    }
+    patch[key] = value;
   }
-  if (Array.isArray(updates.args)) {
-    params.args = JSON.stringify(toStringArray(updates.args));
-  }
-  if (Array.isArray(updates.tool_allowlist)) {
-    const allowlist = toStringArray(updates.tool_allowlist);
-    params.tool_allowlist = allowlist.length > 0 ? JSON.stringify(allowlist) : null;
-  }
-  if (updates.headers && typeof updates.headers === 'object') {
-    params.headers = JSON.stringify(updates.headers);
-  }
-  if (updates.env && typeof updates.env === 'object') {
-    params.env = JSON.stringify(updates.env);
-  }
-
-  return stmt.run(params);
+  if (Object.keys(patch).length === 0) return null;
+  const changes = patchRow<McpServerRow>('mcp_servers', 'id', id, patch, MCP_SERVER_COLUMNS);
+  return { changes, lastInsertRowid: 0 };
 };
 
-export const deleteMcpServer = (id: string) => {
-  return getDb().prepare('DELETE FROM mcp_servers WHERE id = ?').run(id);
-};
+export const deleteMcpServer = (id: string) => ({
+  changes: removeRow<McpServerRow>('mcp_servers', 'id', id),
+  lastInsertRowid: 0,
+});

@@ -1,4 +1,13 @@
-import { getDb } from './database';
+/**
+ * In-process run leases.
+ *
+ * A prototype is one process (pi's contract: "One process owns a storage at a
+ * time; there is no cross-process locking"). Holding a thread while a turn runs is
+ * still useful — it refuses a second concurrent turn on the same thread — so the
+ * lease lives in a module-level map with a TTL and a heartbeat, same public API as
+ * the SQL version it replaced.
+ */
+
 import { createLogger } from '@iki/backend/logger';
 import { createPrefixedId } from '@iki/backend/utils/id';
 
@@ -7,40 +16,24 @@ const lockLogger = createLogger({ module: 'thread_run_locks' });
 const LEASE_TTL_MS = 120_000;
 const LEASE_REFRESH_INTERVAL_MS = 30_000;
 
-const withImmediateTransaction = <T>(run: () => T): T => {
-  getDb().exec('BEGIN IMMEDIATE');
-  try {
-    const result = run();
-    getDb().exec('COMMIT');
-    return result;
-  } catch (error) {
-    try {
-      getDb().exec('ROLLBACK');
-    } catch {
-    // Intentionally ignored: the caller cannot act on it.
-  }
-    throw error;
+type Lease = { token: string; expiresAt: number };
+
+const leases = new Map<string, Lease>();
+
+const pruneExpired = (now: number): void => {
+  for (const [threadId, lease] of leases) {
+    if (lease.expiresAt <= now) leases.delete(threadId);
   }
 };
 
 export const hasLiveThreadRunLease = (threadId: string): boolean => {
-  try {
-    const row = getDb()
-      .prepare('SELECT 1 FROM thread_run_locks WHERE thread_id = ? AND expires_at > ? LIMIT 1')
-      .get(threadId, Date.now());
-    return row !== undefined;
-  } catch (error) {
-    lockLogger.event({
-      level: 'warn',
-      event: 'thread_run_lock.lease_probe',
-      outcome: 'degraded',
-      error,
-      entity: { thread_id: threadId },
-      message: 'Live-lease probe failed; treating the thread as live.',
-    });
-
-    return true;
+  const lease = leases.get(threadId);
+  if (!lease) return false;
+  if (lease.expiresAt <= Date.now()) {
+    leases.delete(threadId);
+    return false;
   }
+  return true;
 };
 
 export const tryAcquireCrossProcessThreadRun = (
@@ -51,72 +44,30 @@ export const tryAcquireCrossProcessThreadRun = (
   }
 ): (() => void) | null => {
   const token = createPrefixedId('runlease');
+  const now = Date.now();
+  pruneExpired(now);
+  if (leases.has(threadId)) return null;
 
-  const attemptAcquire = (): boolean => {
-    const now = Date.now();
-    return withImmediateTransaction(() => {
-      getDb()
-        .prepare('DELETE FROM thread_run_locks WHERE expires_at <= ?')
-        .run(now);
-      const inserted = getDb()
-        .prepare(
-          'INSERT OR IGNORE INTO thread_run_locks (thread_id, token, expires_at) VALUES (?, ?, ?)'
-        )
-        .run(threadId, token, now + LEASE_TTL_MS);
-      return inserted.changes > 0;
-    });
-  };
-
-  let acquired = false;
-  try {
-    acquired = attemptAcquire();
-  } catch (error) {
-
-    lockLogger.event({
-      level: 'warn',
-      event: 'thread_run_lock.acquire',
-      outcome: 'degraded',
-      error,
-      entity: { thread_id: threadId },
-      message: 'Cross-process lease acquire failed; treating thread as busy.',
-    });
-    return null;
-  }
-  if (!acquired) return null;
+  leases.set(threadId, { token, expiresAt: now + LEASE_TTL_MS });
 
   let leaseLost = false;
   const heartbeat = setInterval(() => {
     if (leaseLost) return;
-    try {
-      const refreshed = getDb()
-        .prepare(
-          'UPDATE thread_run_locks SET expires_at = ? WHERE thread_id = ? AND token = ?'
-        )
-        .run(Date.now() + LEASE_TTL_MS, threadId, token);
-      if (Number(refreshed.changes) === 0) {
-
-        leaseLost = true;
-        clearInterval(heartbeat);
-        lockLogger.event({
-          level: 'warn',
-          event: 'thread_run_lock.heartbeat',
-          outcome: 'failed',
-          entity: { thread_id: threadId },
-          message: 'Thread run lease was reclaimed by another process; aborting holder.',
-        });
-        options?.onLeaseLost?.();
-        return;
-      }
-    } catch (error) {
-
+    const lease = leases.get(threadId);
+    if (!lease || lease.token !== token) {
+      leaseLost = true;
+      clearInterval(heartbeat);
       lockLogger.event({
         level: 'warn',
         event: 'thread_run_lock.heartbeat',
-        outcome: 'degraded',
-        error,
+        outcome: 'failed',
         entity: { thread_id: threadId },
+        message: 'Thread run lease was reclaimed; aborting holder.',
       });
+      options?.onLeaseLost?.();
+      return;
     }
+    lease.expiresAt = Date.now() + LEASE_TTL_MS;
   }, options?.refreshIntervalMs ?? LEASE_REFRESH_INTERVAL_MS);
   heartbeat.unref?.();
 
@@ -125,18 +76,12 @@ export const tryAcquireCrossProcessThreadRun = (
     if (released) return;
     released = true;
     clearInterval(heartbeat);
-    try {
-      getDb()
-        .prepare('DELETE FROM thread_run_locks WHERE thread_id = ? AND token = ?')
-        .run(threadId, token);
-    } catch (error) {
-      lockLogger.event({
-        level: 'warn',
-        event: 'thread_run_lock.release',
-        outcome: 'degraded',
-        error,
-        entity: { thread_id: threadId },
-      });
-    }
+    const lease = leases.get(threadId);
+    if (lease && lease.token === token) leases.delete(threadId);
   };
+};
+
+/** Test hook: drop all leases. */
+export const resetThreadRunLocksForTests = (): void => {
+  leases.clear();
 };

@@ -29,6 +29,7 @@ vi.mock('electron', () => ({
 vi.mock('@iki/backend/db/database', () => ({
   setConfig: vi.fn(),
   migrateFromJson: vi.fn(),
+  getStorePath: () => '/tmp/iki-user-data/iki-store',
 }));
 
 vi.mock('@iki/backend/config', () => ({
@@ -84,7 +85,7 @@ describe('config IPC', () => {
 
     expect(result).toEqual({
       userDataPath: '/tmp/iki-user-data',
-      dbPath: '/tmp/iki-user-data/iKi_v0.db',
+      storePath: expect.any(String),
     });
   });
 

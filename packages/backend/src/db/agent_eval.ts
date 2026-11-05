@@ -1,4 +1,4 @@
-import { getDb } from './database';
+import { commitRows, patchRow, readRows, removeRow } from './collection';
 import type { AgentEvalLabel, AgentEvalLabelType } from '@iki/backend/types/agent_run';
 import { normalizeWhitespace, toIsoNow } from '@iki/backend/utils/text';
 import { createPrefixedId } from '@iki/backend/utils/id';
@@ -12,6 +12,8 @@ type AgentEvalLabelRow = {
   created_at: string;
   updated_at: string;
 };
+
+const COLLECTION = 'agent_run_eval_labels';
 
 const mapEvalLabelRow = (row: AgentEvalLabelRow): AgentEvalLabel => ({
   id: row.id,
@@ -31,27 +33,17 @@ export const createEvalLabel = (input: {
 }): AgentEvalLabel => {
   const now = toIsoNow();
   const id = createPrefixedId('eval_');
-
-  getDb()
-    .prepare(
-      `
-        INSERT INTO agent_run_eval_labels (
-          id, run_id, step_id, label, note, created_at, updated_at
-        ) VALUES (
-          @id, @run_id, @step_id, @label, @note, @created_at, @updated_at
-        )
-      `
-    )
-    .run({
-      id,
-      run_id: input.runId,
-      step_id: input.stepId ?? null,
-      label: input.label,
-      note: input.note ?? null,
-      created_at: now,
-      updated_at: now,
-    });
-
+  const rows = readRows<AgentEvalLabelRow>(COLLECTION);
+  rows.push({
+    id,
+    run_id: input.runId,
+    step_id: input.stepId ?? null,
+    label: input.label,
+    note: input.note ?? null,
+    created_at: now,
+    updated_at: now,
+  });
+  commitRows(COLLECTION, rows);
   return {
     id,
     runId: input.runId,
@@ -66,113 +58,60 @@ export const createEvalLabel = (input: {
 export const getEvalLabel = (id: string): AgentEvalLabel | null => {
   const normalizedId = normalizeWhitespace(id);
   if (!normalizedId) return null;
-
-  const row = getDb()
-    .prepare('SELECT * FROM agent_run_eval_labels WHERE id = ?')
-    .get(normalizedId) as AgentEvalLabelRow | undefined;
+  const row = readRows<AgentEvalLabelRow>(COLLECTION).find(entry => entry.id === normalizedId);
   return row ? mapEvalLabelRow(row) : null;
 };
 
 export const listEvalLabelsByRun = (runId: string): AgentEvalLabel[] => {
   const normalizedRunId = normalizeWhitespace(runId);
   if (!normalizedRunId) return [];
-
-  const rows = getDb()
-    .prepare(
-      'SELECT * FROM agent_run_eval_labels WHERE run_id = ? ORDER BY created_at ASC'
-    )
-    .all(normalizedRunId) as AgentEvalLabelRow[];
-  return rows.map(mapEvalLabelRow);
+  return readRows<AgentEvalLabelRow>(COLLECTION)
+    .filter(row => row.run_id === normalizedRunId)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .map(mapEvalLabelRow);
 };
 
 export const listEvalLabelsByStep = (stepId: string): AgentEvalLabel[] => {
   const normalizedStepId = normalizeWhitespace(stepId);
   if (!normalizedStepId) return [];
-
-  const rows = getDb()
-    .prepare(
-      'SELECT * FROM agent_run_eval_labels WHERE step_id = ? ORDER BY created_at ASC'
-    )
-    .all(normalizedStepId) as AgentEvalLabelRow[];
-  return rows.map(mapEvalLabelRow);
+  return readRows<AgentEvalLabelRow>(COLLECTION)
+    .filter(row => row.step_id === normalizedStepId)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .map(mapEvalLabelRow);
 };
+
+const EVAL_LABEL_COLUMNS = new Set(['label', 'note']);
 
 export const updateEvalLabel = (
   id: string,
   updates: { label?: AgentEvalLabelType; note?: string | null }
 ): AgentEvalLabel | null => {
-  const fields: string[] = [];
-  const params: Record<string, unknown> = {
-    id,
-    updated_at: toIsoNow(),
-  };
-
-  if (updates.label !== undefined) {
-    fields.push('label = @label');
-    params.label = updates.label;
-  }
-  if (updates.note !== undefined) {
-    fields.push('note = @note');
-    params.note = updates.note;
-  }
-
-  if (fields.length === 0) {
-    return getEvalLabel(id);
-  }
-
-  getDb()
-    .prepare(
-      `
-        UPDATE agent_run_eval_labels
-        SET ${fields.join(', ')}, updated_at = @updated_at
-        WHERE id = @id
-      `
-    )
-    .run(params);
-
+  const patch: Record<string, unknown> = {};
+  if (updates.label !== undefined) patch.label = updates.label;
+  if (updates.note !== undefined) patch.note = updates.note;
+  if (Object.keys(patch).length === 0) return getEvalLabel(id);
+  patchRow<AgentEvalLabelRow>(COLLECTION, 'id', id, patch, EVAL_LABEL_COLUMNS);
   return getEvalLabel(id);
 };
 
 export const deleteEvalLabel = (id: string): { success: boolean } => {
   const normalizedId = normalizeWhitespace(id);
   if (!normalizedId) return { success: false };
-
-  const result = getDb()
-    .prepare('DELETE FROM agent_run_eval_labels WHERE id = ?')
-    .run(normalizedId);
-
-  return { success: result.changes > 0 };
+  return { success: removeRow<AgentEvalLabelRow>(COLLECTION, 'id', normalizedId) > 0 };
 };
 
 export const listEvalLabelsByRunIds = (runIds: string[]): Map<string, AgentEvalLabel[]> => {
-  const normalized = runIds
-    .map(id => normalizeWhitespace(id))
-    .filter(Boolean);
-
-  if (normalized.length === 0) return new Map();
-
-  const placeholders = normalized.map(() => '?').join(', ');
-
-  const rows = getDb()
-    .prepare(
-      `
-        SELECT * FROM agent_run_eval_labels
-        WHERE run_id IN (${placeholders})
-        ORDER BY run_id ASC, created_at ASC
-      `
-    )
-    .all(...normalized) as AgentEvalLabelRow[];
-
+  const wanted = new Set(runIds.map(id => normalizeWhitespace(id)).filter(Boolean));
   const labelsByRunId = new Map<string, AgentEvalLabel[]>();
+  if (wanted.size === 0) return labelsByRunId;
+  const rows = readRows<AgentEvalLabelRow>(COLLECTION)
+    .filter(row => wanted.has(row.run_id))
+    .sort((a, b) => a.run_id.localeCompare(b.run_id) || a.created_at.localeCompare(b.created_at));
   for (const row of rows) {
     const label = mapEvalLabelRow(row);
-    const labels = labelsByRunId.get(label.runId);
-    if (labels) {
-      labels.push(label);
-    } else {
-      labelsByRunId.set(label.runId, [label]);
-    }
+    const existing = labelsByRunId.get(label.runId);
+    if (existing) existing.push(label);
+    else labelsByRunId.set(label.runId, [label]);
   }
-
   return labelsByRunId;
 };

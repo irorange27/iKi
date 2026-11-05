@@ -1,164 +1,61 @@
-import { getDb } from './database';
-import { INPUT_ACCEPTED, MODEL_OUTPUT_COMMITTED } from '@iki/backend/types/session_events';
-
-const MESSAGE_EVENT_TYPES_SQL = `type IN ('${INPUT_ACCEPTED}','${MODEL_OUTPUT_COMMITTED}')`;
-
-export type StoredSessionEvent = {
-  revision: number;
-  type: string;
-  version: number;
-  payload: unknown;
-  createdAt: string;
-};
-
-type SessionEventRow = {
-  revision: number;
-  type: string;
-  version: number;
-  payload: string;
-  created_at: string;
-};
-
-/** Read a `$.a.b` path out of an event payload (the only shape callers use). */
-const payloadValueAt = (payload: unknown, path: string): unknown => {
-  let current: unknown = payload;
-  for (const key of path.replace(/^\$\.?/, '').split('.')) {
-    if (typeof current !== 'object' || current === null) return undefined;
-    current = (current as Record<string, unknown>)[key];
-  }
-  return current;
-};
-
 /**
- * One read shape: the whole event stream for one thread, in revision order.
- * Every caller scopes by thread_id and folds the result in memory; there are no
- * cross-thread queries, joins or content indexes over this table. Filters are
- * therefore applied in JS, which keeps the storage layer an append-only log
- * rather than a query engine. Any backend that can append a line and read a
- * file back can serve it.
+ * The session log, backed by the append-only JSONL store.
+ *
+ * All exported names and signatures are unchanged, so the 13 call sites and the
+ * IPC surface stay as they were. The SQL implementation and its migration history
+ * are gone: a conversation is a file, opened whole and folded in memory — the same
+ * shape pi uses for its interactive sessions.
  */
+
+import path from 'node:path';
+import { storeRoot } from './collection';
+import {
+  createJsonlSessionLogStore,
+  type NewSessionEvent,
+  type SessionEventMatch,
+  type SessionLogStore,
+  type StoredSessionEvent,
+} from './session_log_store';
+
+export type { NewSessionEvent, StoredSessionEvent };
+
+let cachedRoot = '';
+let cachedStore: SessionLogStore | null = null;
+
+const store = (): SessionLogStore => {
+  const root = storeRoot();
+  if (!cachedStore || cachedRoot !== root) {
+    cachedRoot = root;
+    cachedStore = createJsonlSessionLogStore(path.join(root, 'sessions'));
+  }
+  return cachedStore;
+};
+
 export const getSessionEvents = (
   threadId: string,
   types?: readonly string[],
-  match?: { path: string; value: string }
-): StoredSessionEvent[] => {
-  const typeSet = types?.length ? new Set(types) : null;
-  const rows = getDb()
-    .prepare(
-      'SELECT revision, type, version, payload, created_at FROM session_events WHERE thread_id = ? ORDER BY revision ASC'
-    )
-    .all(threadId) as SessionEventRow[];
-  return rows.flatMap(row => {
-    if (typeSet && !typeSet.has(row.type)) return [];
-    const payload = JSON.parse(row.payload) as unknown;
-    if (match && payloadValueAt(payload, match.path) !== match.value) return [];
-    return [{
-      revision: row.revision,
-      type: row.type,
-      version: row.version,
-      payload,
-      createdAt: row.created_at,
-    }];
-  });
-};
+  match?: SessionEventMatch
+): StoredSessionEvent[] => store().readThread(threadId, types, match);
 
-export const deleteSessionEvents = (threadId: string): void => {
-  getDb().prepare('DELETE FROM session_events WHERE thread_id = ?').run(threadId);
-};
+export const deleteSessionEvents = (threadId: string): void => store().deleteThread(threadId);
 
-export const getSessionEventRevision = (threadId: string): number => {
-  const row = getDb()
-    .prepare('SELECT MAX(revision) AS revision FROM session_events WHERE thread_id = ?')
-    .get(threadId) as { revision: number | null };
-  return row.revision ?? 0;
-};
-
-export type NewSessionEvent = {
-  type: string;
-  version: number;
-  payload: unknown;
-};
+export const getSessionEventRevision = (threadId: string): number => store().headRevision(threadId);
 
 export const insertSessionEventsAtHead = (
   threadId: string,
   events: NewSessionEvent[]
-): number => {
-  if (events.length === 0) return getSessionEventRevision(threadId);
-
-  const db = getDb();
-  const now = new Date().toISOString();
-  const insert = db.prepare(
-    'INSERT INTO session_events (thread_id, revision, type, version, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-  );
-
-  let revision = getSessionEventRevision(threadId);
-  for (const event of events) {
-    revision += 1;
-    insert.run(threadId, revision, event.type, event.version, JSON.stringify(event.payload), now);
-  }
-  return revision;
-};
-
-const append = (
-  threadId: string,
-  expectedRevision: number | null,
-  events: NewSessionEvent[]
-): number | null => {
-  if (events.length === 0) return getSessionEventRevision(threadId);
-
-  const transaction = getDb().transaction((): number | null => {
-    const current = getSessionEventRevision(threadId);
-    if (expectedRevision !== null && current !== expectedRevision) return null;
-    return insertSessionEventsAtHead(threadId, events);
-  });
-
-  return transaction();
-};
+): number => store().append(threadId, null, events) ?? store().headRevision(threadId);
 
 export const appendSessionEvents = (
   threadId: string,
   expectedRevision: number,
   events: NewSessionEvent[]
-) => append(threadId, expectedRevision, events);
+): number | null => store().append(threadId, expectedRevision, events);
 
-/**
- * Append observed facts at the current head. Unlike `appendSessionEvents` there is
- * no expected revision to lose against: an observed fact is recorded whatever else
- * happened to land first, so ordering is the only invariant and it holds.
- */
 export const appendSessionFacts = (threadId: string, events: NewSessionEvent[]): number =>
-  append(threadId, null, events) ?? getSessionEventRevision(threadId);
+  store().append(threadId, null, events) ?? store().headRevision(threadId);
 
 export const findMessageEvent = (
   messageId: string,
   threadId?: string
-): { threadId: string; payload: unknown } | null => {
-  const needle = messageId.trim();
-  if (!needle) return null;
-  // Ask SQLite for the payload's message id field. Matching the serialized blob
-  // with LIKE would also hit ids that merely appear inside message text or tool
-  // arguments, and a row limit could then drop the event that really carries it.
-  // `$.messageId` is what writers stamp; `$.message.id` covers events recorded
-  // before that field existed, so an old database still resolves.
-  const matchId =
-    "COALESCE(json_extract(payload, '$.messageId'), json_extract(payload, '$.message.id')) = ?";
-  const sql = threadId
-    ? `SELECT thread_id, payload FROM session_events
-        WHERE thread_id = ? AND ${MESSAGE_EVENT_TYPES_SQL}
-          AND ${matchId}
-        ORDER BY revision DESC LIMIT 1`
-    : `SELECT thread_id, payload FROM session_events
-        WHERE ${MESSAGE_EVENT_TYPES_SQL}
-          AND ${matchId}
-        ORDER BY revision DESC LIMIT 1`;
-  const row = (
-    threadId ? getDb().prepare(sql).get(threadId, needle) : getDb().prepare(sql).get(needle)
-  ) as { thread_id: string; payload: string } | undefined;
-  if (!row) return null;
-  try {
-    return { threadId: row.thread_id, payload: JSON.parse(row.payload) as unknown };
-  } catch {
-    // Intentionally ignored: a payload that will not parse is not a message event.
-    return null;
-  }
-};
+): { threadId: string; payload: unknown } | null => store().findMessage(messageId, threadId);

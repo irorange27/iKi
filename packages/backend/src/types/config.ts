@@ -3,7 +3,7 @@ import type { SupportedLocale } from '../i18n/locale';
 
 export interface ConfigRuntimeInfo {
   userDataPath: string;
-  dbPath: string;
+  storePath: string;
 }
 
 export type NetworkDiagnosticTargetKey = 'internet' | 'searchEngine';
