@@ -94,7 +94,7 @@ export const patchRow = <T extends object>(
   const next: Record<string, unknown> = { ...current };
   for (const [field, value] of Object.entries(patch)) {
     if (!allowed.has(field)) continue;
-    next[field] = typeof value === 'boolean' ? (value ? 1 : 0) : value;
+    next[field] = value;
   }
   if (touchUpdatedAt) next.updated_at = new Date().toISOString();
   rows[index] = next as T;

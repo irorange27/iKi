@@ -55,7 +55,7 @@ export const useSidebarThreadSections = (deps: {
 
   const isUserWorkspace = (workspaceId: string): boolean => {
     const workspace = deps.workspaces().find(candidate => candidate.id === workspaceId);
-    return Boolean(workspace) && workspace!.is_temporary !== 1;
+    return Boolean(workspace) && !workspace!.is_temporary;
   };
 
   const isWorkThread = (thread: SidebarChatThread): boolean =>

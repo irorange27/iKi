@@ -188,7 +188,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
         model: model || null,
         reasoning_effort: draftEffort || null,
         metadata: JSON.stringify(metadata),
-        is_incognito: isIncognito.value ? 1 : 0,
+        is_incognito: isIncognito.value,
         workspace_id:
           options?.workspaceId ??
           (() => {
@@ -440,7 +440,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
 
     isIncognito.value = normalizedValue;
     if (activeThread) {
-      currentThread.value = { ...activeThread, is_incognito: normalizedValue ? 1 : 0 };
+      currentThread.value = { ...activeThread, is_incognito: normalizedValue };
     }
 
     if (!activeThread) return;
@@ -448,7 +448,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
 
     try {
       await electronAPI.chat.threads.update(activeThread.id, {
-        is_incognito: normalizedValue ? 1 : 0,
+        is_incognito: normalizedValue,
       });
     } catch (error) {
       threadSessionLogger.event({
@@ -462,7 +462,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       });
       isIncognito.value = previousValue;
       if (currentThread.value?.id === activeThread.id) {
-        currentThread.value = { ...currentThread.value, is_incognito: previousValue ? 1 : 0 };
+        currentThread.value = { ...currentThread.value, is_incognito: previousValue };
       }
     }
   };

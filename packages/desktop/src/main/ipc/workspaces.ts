@@ -44,8 +44,8 @@ export const registerWorkspacesIpc = (): void => {
     const normalizedPath = await normalizeDirectoryPath(rawPath);
     const existing = workspaceDb.getWorkspaceByPath(normalizedPath);
     if (existing) {
-      if (existing.show_in_list !== 1) {
-        workspaceDb.updateWorkspace(existing.id, { show_in_list: 1 });
+      if (!existing.show_in_list) {
+        workspaceDb.updateWorkspace(existing.id, { show_in_list: true });
         return workspaceDb.getWorkspace(existing.id);
       }
       return existing;
@@ -57,8 +57,8 @@ export const registerWorkspacesIpc = (): void => {
       id: workspaceId,
       path: normalizedPath,
       name: workspaceName,
-      is_temporary: 0,
-      show_in_list: 1,
+      is_temporary: false,
+      show_in_list: true,
     });
     return workspaceDb.getWorkspace(workspaceId);
   };

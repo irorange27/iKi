@@ -72,8 +72,8 @@ const ensureThreadWorkspaceRecord = (threadId: string): Workspace | null => {
   if (existingByPath) {
     workspaceDb.updateWorkspace(existingByPath.id, {
       name: getThreadWorkspaceName(threadId, thread?.title),
-      is_temporary: 1,
-      show_in_list: 0,
+      is_temporary: true,
+      show_in_list: false,
     });
     if (thread && configuredWorkspaceId !== existingByPath.id) {
       chatThreadDb.updateChatThread(threadId, { workspace_id: existingByPath.id });
@@ -86,8 +86,8 @@ const ensureThreadWorkspaceRecord = (threadId: string): Workspace | null => {
     id: workspaceId,
     path: workspacePath,
     name: getThreadWorkspaceName(threadId, thread?.title),
-    is_temporary: 1,
-    show_in_list: 0,
+    is_temporary: true,
+    show_in_list: false,
   });
   if (thread) {
     chatThreadDb.updateChatThread(threadId, { workspace_id: workspaceId });

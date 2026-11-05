@@ -10,10 +10,10 @@ export interface ChatThread {
   client_id?: string;
   prompt_app_id?: string;
   tools?: string;
-  is_favorited: number;
-  is_incognito: number;
+  is_favorited: boolean;
+  is_incognito: boolean;
   workspace_id?: string;
-  enable_artifacts: number;
+  enable_artifacts: boolean;
   artifact_workspace_id?: string;
   skill_ids?: string;
 }
@@ -30,8 +30,8 @@ export interface Workspace {
   id: string;
   path: string;
   name: string;
-  is_temporary: number;
-  show_in_list: number;
+  is_temporary: boolean;
+  show_in_list: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -44,14 +44,14 @@ export interface PromptApp {
   prompt_template: string;
   placeholders: string;
   model?: string;
-  enabled: number;
+  enabled: boolean;
   sort_order: number;
   created_at: string;
   updated_at: string;
   tools?: string;
   reasoning_effort?: string;
-  expects_image_result: number;
-  is_incognito: number;
+  expects_image_result: boolean;
+  is_incognito: boolean;
   shortcut?: string;
   window_width?: number;
   window_height?: number;

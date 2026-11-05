@@ -7,8 +7,8 @@ export type WorkspaceInfo = {
   id: string;
   name: string;
   path: string;
-  is_temporary?: number;
-  show_in_list?: number;
+  is_temporary?: boolean;
+  show_in_list?: boolean;
 };
 
 export type SidebarChatThread = {

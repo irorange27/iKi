@@ -74,7 +74,7 @@ const loadWorkspaces = async () => {
   try {
     const listed = await electronAPI?.workspaces?.getVisible?.();
     workspaces.value = (Array.isArray(listed) ? listed : []).filter(
-      workspace => workspace.is_temporary !== 1
+      workspace => !workspace.is_temporary
     );
   } catch {
     workspaces.value = [];

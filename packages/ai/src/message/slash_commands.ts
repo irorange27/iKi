@@ -59,7 +59,7 @@ export const extractPromptAppSlashCommands = (
   const seenShortcuts = new Set<string>();
 
   for (const promptApp of promptApps) {
-    if (!promptApp || promptApp.enabled === 0) continue;
+    if (!promptApp || !promptApp.enabled) continue;
 
     const shortcut = normalizeSlashCommandShortcut(promptApp.shortcut);
     if (!shortcut || seenShortcuts.has(shortcut)) continue;

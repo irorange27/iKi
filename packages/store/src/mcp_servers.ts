@@ -65,7 +65,7 @@ export const addMcpServer = (input: McpServerInput & { id: string }) => {
     base_url: input.base_url ?? null,
     headers: input.headers ? JSON.stringify(input.headers) : null,
     auth_ref: input.auth_ref ?? null,
-    enabled: input.enabled ? 1 : 0,
+    enabled: input.enabled !== false,
     tool_allowlist: allowlist.length > 0 ? JSON.stringify(allowlist) : null,
     approval_mode: input.approval_mode ?? null,
     created_at: now,

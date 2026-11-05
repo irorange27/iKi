@@ -18,10 +18,7 @@ import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/worktree_id
 
 const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
 
-const normalizeFlag = (value: unknown): number => {
-  if (typeof value === 'number') return value ? 1 : 0;
-  return value ? 1 : 0;
-};
+const normalizeFlag = (value: unknown): boolean => value === true;
 
 export type ChatPersistenceDeps = {
   /**

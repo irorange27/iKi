@@ -1,35 +1,33 @@
 import { commitRows, patchRow, readRows } from './collection';
 import { Workspace } from '@iki/core/types/chat';
 
-type WorkspaceRow = Workspace & { is_temporary?: number; show_in_list?: number };
-
-const normalize = (row: WorkspaceRow): Workspace => ({
+const normalize = (row: Workspace): Workspace => ({
   ...row,
-  is_temporary: row.is_temporary || 0,
-  show_in_list: row.show_in_list !== undefined ? row.show_in_list : 1,
+  is_temporary: row.is_temporary === true,
+  show_in_list: row.show_in_list !== false,
 });
 
-const byUpdatedDesc = (a: WorkspaceRow, b: WorkspaceRow): number =>
+const byUpdatedDesc = (a: Workspace, b: Workspace): number =>
   String(b.updated_at).localeCompare(String(a.updated_at));
 
 export const getWorkspaces = (): Workspace[] =>
-  readRows<WorkspaceRow>('workspaces').sort(byUpdatedDesc).map(normalize);
+  readRows<Workspace>('workspaces').sort(byUpdatedDesc).map(normalize);
 
 export const getWorkspace = (id: string): Workspace | null => {
-  const row = readRows<WorkspaceRow>('workspaces').find(entry => entry.id === id);
+  const row = readRows<Workspace>('workspaces').find(entry => entry.id === id);
   return row ? normalize(row) : null;
 };
 
 export const getWorkspaceByPath = (path: string): Workspace | null => {
-  const row = readRows<WorkspaceRow>('workspaces').find(entry => entry.path === path);
+  const row = readRows<Workspace>('workspaces').find(entry => entry.path === path);
   return row ? normalize(row) : null;
 };
 
 export const getVisibleWorkspaces = (): Workspace[] =>
-  readRows<WorkspaceRow>('workspaces')
-    .filter(row => Number(row.show_in_list ?? 1) === 1)
+  readRows<Workspace>('workspaces')
+    .filter(row => row.show_in_list !== false)
     .sort(byUpdatedDesc)
-    .map(row => ({ ...normalize(row), show_in_list: row.show_in_list || 1 }));
+    .map(normalize);
 
 export const addWorkspace = (
   workspace: Partial<Workspace> & { id: string; path: string; name: string }
@@ -39,13 +37,13 @@ export const addWorkspace = (
     id: workspace.id,
     path: workspace.path,
     name: workspace.name,
-    is_temporary: workspace.is_temporary || 0,
-    show_in_list: workspace.show_in_list !== undefined ? workspace.show_in_list : 1,
+    is_temporary: workspace.is_temporary === true,
+    show_in_list: workspace.show_in_list !== false,
     created_at: now,
     updated_at: now,
   };
-  const rows = readRows<WorkspaceRow>('workspaces').filter(entry => entry.id !== workspace.id);
-  rows.push(row as unknown as WorkspaceRow);
+  const rows = readRows<Workspace>('workspaces').filter(entry => entry.id !== workspace.id);
+  rows.push(row as unknown as Workspace);
   commitRows('workspaces', rows);
   return { changes: 1, lastInsertRowid: 0 };
 };
@@ -57,6 +55,6 @@ export const updateWorkspace = (id: string, workspace: Partial<Workspace>) => {
     Object.entries(workspace).filter(([key]) => WORKSPACE_COLUMNS.has(key))
   );
   if (Object.keys(patch).length === 0) return null;
-  const changes = patchRow<WorkspaceRow>('workspaces', 'id', id, patch, WORKSPACE_COLUMNS);
+  const changes = patchRow<Workspace>('workspaces', 'id', id, patch, WORKSPACE_COLUMNS);
   return { changes, lastInsertRowid: 0 };
 };

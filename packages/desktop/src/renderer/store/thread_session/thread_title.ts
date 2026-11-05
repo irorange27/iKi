@@ -45,10 +45,10 @@ export const createThreadTitleActions = (ctx: ThreadTitleContext) => {
       typeof thread.client_id === 'string' && thread.client_id.trim()
         ? thread.client_id
         : undefined,
-    is_favorited: thread.is_favorited ? 1 : 0,
-    is_incognito: thread.is_incognito ? 1 : 0,
+    is_favorited: thread.is_favorited === true,
+    is_incognito: thread.is_incognito === true,
     workspace_id: normalizeWorkspaceId(thread.workspace_id) ?? undefined,
-    enable_artifacts: thread.enable_artifacts ? 1 : 0,
+    enable_artifacts: thread.enable_artifacts === true,
     artifact_workspace_id:
       typeof thread.artifact_workspace_id === 'string' && thread.artifact_workspace_id.trim()
         ? thread.artifact_workspace_id

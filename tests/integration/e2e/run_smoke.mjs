@@ -544,8 +544,8 @@ const seedProviderAndWorkspace = () => {
     id: 'ws-e2e',
     path: path.join(workDir, 'ws'),
     name: 'E2E WS',
-    is_temporary: 0,
-    show_in_list: 1,
+    is_temporary: false,
+    show_in_list: true,
     created_at: now,
     updated_at: now,
   });

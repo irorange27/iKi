@@ -2,16 +2,12 @@ import { readRows } from './collection';
 import { PromptApp } from '@iki/core/types/chat';
 
 type PromptAppRow = PromptApp & {
-  enabled?: number;
-  sort_order?: number;
-  expects_image_result?: number;
-  is_incognito?: number;
   placeholders?: string;
 };
 
 export const getEnabledPromptApps = (): PromptApp[] => {
   return readRows<PromptAppRow>('prompt_apps')
-    .filter(row => Number(row.enabled) === 1)
+    .filter(row => row.enabled === true)
     .sort((a, b) => {
       const byOrder = (a.sort_order || 0) - (b.sort_order || 0);
       if (byOrder !== 0) return byOrder;
@@ -19,10 +15,10 @@ export const getEnabledPromptApps = (): PromptApp[] => {
     })
     .map(row => ({
       ...row,
-      enabled: 1,
+      enabled: true,
       sort_order: row.sort_order || 0,
-      expects_image_result: row.expects_image_result || 0,
-      is_incognito: row.is_incognito || 0,
+      expects_image_result: row.expects_image_result === true,
+      is_incognito: row.is_incognito === true,
       placeholders: row.placeholders || '[]',
     }));
 };

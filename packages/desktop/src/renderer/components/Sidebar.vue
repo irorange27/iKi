@@ -569,7 +569,7 @@ const isPickingProjectDirectory = ref(false);
 
 const switchableWorkspaces = computed(() =>
   workspaces.value.filter(
-    workspace => workspace.is_temporary !== 1 && workspace.show_in_list !== 0
+    workspace => !workspace.is_temporary && workspace.show_in_list
   )
 );
 
