@@ -3,7 +3,7 @@ import { Workspace } from '@iki/core/types/chat';
 
 const normalize = (row: Workspace): Workspace => ({
   ...row,
-  is_temporary: row.is_temporary === true,
+  is_temporary: Boolean(row.is_temporary),
   show_in_list: row.show_in_list !== false,
 });
 
@@ -31,9 +31,9 @@ export const getVisibleWorkspaces = (): Workspace[] =>
 
 export const addWorkspace = (
   workspace: Partial<Workspace> & { id: string; path: string; name: string }
-) => {
+): void => {
   const now = new Date().toISOString();
-  const row = {
+  const row: Workspace = {
     id: workspace.id,
     path: workspace.path,
     name: workspace.name,
@@ -43,18 +43,15 @@ export const addWorkspace = (
     updated_at: now,
   };
   const rows = readRows<Workspace>('workspaces').filter(entry => entry.id !== workspace.id);
-  rows.push(row as unknown as Workspace);
+  rows.push(row);
   commitRows('workspaces', rows);
-  return { changes: 1, lastInsertRowid: 0 };
 };
 
-const WORKSPACE_COLUMNS = new Set(['path', 'name', 'is_temporary', 'show_in_list']);
-
-export const updateWorkspace = (id: string, workspace: Partial<Workspace>) => {
-  const patch = Object.fromEntries(
-    Object.entries(workspace).filter(([key]) => WORKSPACE_COLUMNS.has(key))
-  );
-  if (Object.keys(patch).length === 0) return null;
-  const changes = patchRow<Workspace>('workspaces', 'id', id, patch, WORKSPACE_COLUMNS);
-  return { changes, lastInsertRowid: 0 };
+/** Apply a partial update. `null` when nothing was given or the workspace is gone. */
+export const updateWorkspace = (id: string, workspace: Partial<Workspace>): Workspace | null => {
+  const { id: _immutable, ...changes } = workspace;
+  void _immutable;
+  if (Object.keys(changes).length === 0) return null;
+  if (!patchRow<Workspace>('workspaces', 'id', id, changes)) return null;
+  return getWorkspace(id);
 };

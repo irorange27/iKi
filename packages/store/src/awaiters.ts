@@ -2,30 +2,27 @@ import { commitRows, patchRow, readRows, removeRow } from './collection';
 import type { Awaiter } from '@iki/core/types/awaiters';
 import { toIsoNow } from '@iki/core/utils/text';
 
-type AwaiterRow = Omit<Awaiter, 'notify'> & {
-  notify: number | boolean;
-};
-
 const COLLECTION = 'awaiters';
 
-const normalizeAwaiterRow = (row: AwaiterRow): Awaiter => ({
+// Legacy rows hold `notify` as 0/1; `!== false` maps both eras onto boolean.
+const normalize = (row: Awaiter): Awaiter => ({
   ...row,
-  notify: Boolean(row.notify),
+  notify: row.notify !== false,
 });
 
-const byUpdatedDesc = (a: AwaiterRow, b: AwaiterRow): number =>
+const byUpdatedDesc = (a: Awaiter, b: Awaiter): number =>
   String(b.updated_at).localeCompare(String(a.updated_at));
 
 export const getAwaiters = (): Awaiter[] =>
-  readRows<AwaiterRow>(COLLECTION).sort(byUpdatedDesc).map(normalizeAwaiterRow);
+  readRows<Awaiter>(COLLECTION).sort(byUpdatedDesc).map(normalize);
 
 export const getAwaiter = (id: string): Awaiter | null => {
-  const row = readRows<AwaiterRow>(COLLECTION).find(entry => entry.id === id);
-  return row ? normalizeAwaiterRow(row) : null;
+  const row = readRows<Awaiter>(COLLECTION).find(entry => entry.id === id);
+  return row ? normalize(row) : null;
 };
 
 export const listDueAwaiters = (now: string): Awaiter[] =>
-  readRows<AwaiterRow>(COLLECTION)
+  readRows<Awaiter>(COLLECTION)
     .filter(
       row =>
         (row.status === 'armed' || row.status === 'waking') &&
@@ -37,7 +34,7 @@ export const listDueAwaiters = (now: string): Awaiter[] =>
         String(a.next_wake_at).localeCompare(String(b.next_wake_at)) ||
         String(b.updated_at).localeCompare(String(a.updated_at))
     )
-    .map(normalizeAwaiterRow);
+    .map(normalize);
 
 export const addAwaiter = (
   awaiter: Partial<Awaiter> & {
@@ -50,9 +47,9 @@ export const addAwaiter = (
     trigger_kind: Awaiter['trigger_kind'];
     trigger_spec_json: string;
   }
-) => {
+): void => {
   const now = toIsoNow();
-  const row = {
+  const row: Awaiter = {
     id: awaiter.id,
     title: awaiter.title,
     instruction: awaiter.instruction,
@@ -63,7 +60,7 @@ export const addAwaiter = (
     trigger_kind: awaiter.trigger_kind,
     trigger_spec_json: awaiter.trigger_spec_json,
     delivery_mode: awaiter.delivery_mode ?? 'thread',
-    notify: awaiter.notify === false ? 0 : 1,
+    notify: awaiter.notify !== false,
     provider_type: awaiter.provider_type,
     provider_id: awaiter.provider_id ?? null,
     model: awaiter.model,
@@ -75,32 +72,24 @@ export const addAwaiter = (
     created_at: now,
     updated_at: now,
   };
-  const rows = readRows<AwaiterRow>(COLLECTION).filter(entry => entry.id !== awaiter.id);
-  rows.push(row as unknown as AwaiterRow);
+  const rows = readRows<Awaiter>(COLLECTION).filter(entry => entry.id !== awaiter.id);
+  rows.push(row);
   commitRows(COLLECTION, rows);
-  return { changes: 1, lastInsertRowid: 0 };
 };
 
-const AWAITER_COLUMNS = new Set([
-  'title', 'instruction', 'status', 'thread_id', 'origin_run_id',
-  'origin_checkpoint_id', 'trigger_kind', 'trigger_spec_json', 'delivery_mode',
-  'notify', 'provider_type', 'provider_id', 'model', 'resume_context_json',
-  'next_wake_at', 'last_wake_at', 'last_error', 'expires_at',
-]);
-
-const pickColumns = (updates: Partial<Awaiter>): Record<string, unknown> =>
-  Object.fromEntries(Object.entries(updates).filter(([key]) => AWAITER_COLUMNS.has(key)));
-
-export const updateAwaiter = (id: string, updates: Partial<Awaiter>) => {
-  const patch = pickColumns(updates);
-  if (Object.keys(patch).length === 0) return null;
-  const changes = patchRow<AwaiterRow>(COLLECTION, 'id', id, patch, AWAITER_COLUMNS);
-  return { changes, lastInsertRowid: 0 };
+/** Apply a partial update. `null` when nothing was given or the awaiter is gone. */
+export const updateAwaiter = (id: string, updates: Partial<Awaiter>): Awaiter | null => {
+  const { id: _immutable, ...changes } = updates;
+  void _immutable;
+  if (Object.keys(changes).length === 0) return null;
+  if (!patchRow<Awaiter>(COLLECTION, 'id', id, changes)) return null;
+  return getAwaiter(id);
 };
 
+/** Re-arm awaiters whose wake holder went silent. Returns how many were reclaimed. */
 export const reclaimStaleWakingAwaiters = (staleBefore: string): number => {
   const now = toIsoNow();
-  const rows = readRows<AwaiterRow>(COLLECTION);
+  const rows = readRows<Awaiter>(COLLECTION);
   let changed = 0;
   for (const row of rows) {
     if (row.status !== 'waking') continue;
@@ -114,33 +103,33 @@ export const reclaimStaleWakingAwaiters = (staleBefore: string): number => {
   return changed;
 };
 
+/**
+ * Compare-and-set: apply the update only while the awaiter still has the
+ * expected status. `true` means this caller won the claim.
+ */
 export const updateAwaiterIfStatus = (
   id: string,
   expectedStatus: Awaiter['status'],
   updates: Partial<Awaiter>
-) => {
-  const rows = readRows<AwaiterRow>(COLLECTION);
+): boolean => {
+  const rows = readRows<Awaiter>(COLLECTION);
   const index = rows.findIndex(row => row.id === id && row.status === expectedStatus);
-  if (index < 0) return { changes: 0, lastInsertRowid: 0 };
-  const patch = pickColumns(updates);
-  Object.assign(rows[index] as Record<string, unknown>, patch, {
-    updated_at: toIsoNow(),
-  });
-  if (typeof updates.notify === 'boolean') {
-    (rows[index] as unknown as AwaiterRow).notify = updates.notify ? 1 : 0;
-  }
+  if (index < 0) return false;
+  const { id: _immutable, ...changes } = updates;
+  void _immutable;
+  Object.assign(rows[index] as unknown as Record<string, unknown>, changes, { updated_at: toIsoNow() });
   commitRows(COLLECTION, rows);
-  return { changes: 1, lastInsertRowid: 0 };
+  return true;
 };
 
-export const deleteAwaiter = (id: string) => ({
-  changes: removeRow<AwaiterRow>(COLLECTION, 'id', id),
-  lastInsertRowid: 0,
-});
+export const deleteAwaiter = (id: string): void => {
+  removeRow<Awaiter>(COLLECTION, 'id', id);
+};
 
-export const deleteAwaitersByThread = (threadId: string) => {
-  const rows = readRows<AwaiterRow>(COLLECTION);
+/** Remove every awaiter of a thread. Returns how many were dropped. */
+export const deleteAwaitersByThread = (threadId: string): number => {
+  const rows = readRows<Awaiter>(COLLECTION);
   const kept = rows.filter(row => row.thread_id !== threadId);
   commitRows(COLLECTION, kept);
-  return { changes: rows.length - kept.length, lastInsertRowid: 0 };
+  return rows.length - kept.length;
 };

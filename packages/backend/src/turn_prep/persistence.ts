@@ -18,7 +18,7 @@ import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/worktree_id
 
 const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
 
-const normalizeFlag = (value: unknown): boolean => value === true;
+const normalizeFlag = (value: unknown): boolean => Boolean(value);
 
 export type ChatPersistenceDeps = {
   /**
@@ -169,7 +169,7 @@ export const createChatPersistence = (deps: ChatPersistenceDeps) => {
         const nextThread = { ...thread };
         delete nextThread.workspace_id;
         if (Object.keys(nextThread).length === 0) {
-          return { changes: 0 };
+          return null;
         }
         return chatThreadDb.updateChatThread(id, nextThread);
       }
@@ -229,7 +229,7 @@ export const createChatPersistence = (deps: ChatPersistenceDeps) => {
       typeof patch.thread_id === 'string' && patch.thread_id
         ? patch.thread_id
         : existing?.threadId;
-    if (!threadId) return { changes: 0 };
+    if (!threadId) return false;
 
     const existingPayload = isObjectRecord(existing?.payload) ? existing.payload : {};
     const rawMessage = patch.message ?? existingPayload.message ?? {};
@@ -261,7 +261,7 @@ export const createChatPersistence = (deps: ChatPersistenceDeps) => {
       },
     ]);
     chatThreadDb.touchChatThread(threadId);
-    return { changes: 1 };
+    return true;
   };
   return {
 

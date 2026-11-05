@@ -135,8 +135,7 @@ const transitionAwaiterIfStillWaking = (
   awaiterId: string,
   updates: Partial<Awaiter>
 ): AwaiterPostWakeDisposition => {
-  const updateResult = awaitersDb.updateAwaiterIfStatus(awaiterId, 'waking', updates);
-  if ((updateResult?.changes ?? 0) > 0) {
+  if (awaitersDb.updateAwaiterIfStatus(awaiterId, 'waking', updates)) {
     return 'settle';
   }
   return getAwaiterPostWakeDisposition(awaiterId);
@@ -176,7 +175,7 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
     last_error: null,
     next_wake_at: null,
   });
-  if ((claim?.changes ?? 0) === 0) {
+  if (!claim) {
     awaiterInFlight.delete(awaiterId);
     return { success: false, error: 'Awaiter wake already claimed' };
   }

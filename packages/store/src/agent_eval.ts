@@ -80,8 +80,6 @@ export const listEvalLabelsByStep = (stepId: string): AgentEvalLabel[] => {
     .map(mapEvalLabelRow);
 };
 
-const EVAL_LABEL_COLUMNS = new Set(['label', 'note']);
-
 export const updateEvalLabel = (
   id: string,
   updates: { label?: AgentEvalLabelType; note?: string | null }
@@ -90,7 +88,7 @@ export const updateEvalLabel = (
   if (updates.label !== undefined) patch.label = updates.label;
   if (updates.note !== undefined) patch.note = updates.note;
   if (Object.keys(patch).length === 0) return getEvalLabel(id);
-  patchRow<AgentEvalLabelRow>(COLLECTION, 'id', id, patch, EVAL_LABEL_COLUMNS);
+  patchRow<AgentEvalLabelRow>(COLLECTION, 'id', id, patch);
   return getEvalLabel(id);
 };
 

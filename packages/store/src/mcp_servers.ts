@@ -49,7 +49,7 @@ export const getMcpServer = (id: string): McpServer | null => {
   return row ? normalizeRow(row) : null;
 };
 
-export const addMcpServer = (input: McpServerInput & { id: string }) => {
+export const addMcpServer = (input: McpServerInput & { id: string }): void => {
   const now = toIsoNow();
   const args = toStringArray(input.args);
   const allowlist = toStringArray(input.tool_allowlist);
@@ -76,19 +76,13 @@ export const addMcpServer = (input: McpServerInput & { id: string }) => {
   const rows = readRows<McpServerRow>('mcp_servers').filter(entry => entry.id !== input.id);
   rows.push(row as unknown as McpServerRow);
   commitRows('mcp_servers', rows);
-  return { changes: 1, lastInsertRowid: 0 };
 };
 
-const MCP_SERVER_COLUMNS = new Set([
-  'name', 'transport', 'command', 'args', 'cwd', 'env', 'base_url',
-  'headers', 'auth_ref', 'enabled', 'tool_allowlist', 'approval_mode',
-  'last_connected_at', 'last_error',
-]);
-
-export const updateMcpServer = (id: string, updates: McpServerUpdate) => {
+/** Apply a partial update, encoding list/map fields for the row file. */
+export const updateMcpServer = (id: string, updates: McpServerUpdate): McpServer | null => {
   const patch: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(updates)) {
-    if (!MCP_SERVER_COLUMNS.has(key)) continue;
+    if (key === 'id') continue;
     if (key === 'args' || key === 'tool_allowlist') {
       patch[key] = JSON.stringify(toStringArray(value));
       continue;
@@ -100,11 +94,10 @@ export const updateMcpServer = (id: string, updates: McpServerUpdate) => {
     patch[key] = value;
   }
   if (Object.keys(patch).length === 0) return null;
-  const changes = patchRow<McpServerRow>('mcp_servers', 'id', id, patch, MCP_SERVER_COLUMNS);
-  return { changes, lastInsertRowid: 0 };
+  if (!patchRow<McpServerRow>('mcp_servers', 'id', id, patch)) return null;
+  return getMcpServer(id);
 };
 
-export const deleteMcpServer = (id: string) => ({
-  changes: removeRow<McpServerRow>('mcp_servers', 'id', id),
-  lastInsertRowid: 0,
-});
+export const deleteMcpServer = (id: string): void => {
+  removeRow<McpServerRow>('mcp_servers', 'id', id);
+};

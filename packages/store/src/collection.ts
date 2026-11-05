@@ -78,28 +78,29 @@ export const upsertRow = <T>(
   return rows;
 };
 
-/** Apply a partial patch to one row by key. Returns the number of rows changed. */
+/**
+ * Merge a partial patch into one row by key. Returns whether a row matched.
+ * The key field itself is pinned — the only runtime guard left; which fields
+ * may change is the compiler's job (`Partial<T>`), not a hand-kept column list.
+ */
 export const patchRow = <T extends object>(
   name: string,
   keyField: string,
   keyValue: unknown,
-  patch: Record<string, unknown>,
-  allowed: ReadonlySet<string>,
-  touchUpdatedAt = true
-): number => {
+  patch: Record<string, unknown>
+): boolean => {
   const rows = readRows<T>(name);
   const index = rows.findIndex(row => (row as Record<string, unknown>)[keyField] === keyValue);
-  if (index < 0) return 0;
-  const current = rows[index] as Record<string, unknown>;
-  const next: Record<string, unknown> = { ...current };
-  for (const [field, value] of Object.entries(patch)) {
-    if (!allowed.has(field)) continue;
-    next[field] = value;
-  }
-  if (touchUpdatedAt) next.updated_at = new Date().toISOString();
+  if (index < 0) return false;
+  const next: Record<string, unknown> = {
+    ...(rows[index] as Record<string, unknown>),
+    ...patch,
+    [keyField]: keyValue,
+    updated_at: new Date().toISOString(),
+  };
   rows[index] = next as T;
   commitRows(name, rows);
-  return 1;
+  return true;
 };
 
 /** Delete rows matching a key. Returns the number removed. */
