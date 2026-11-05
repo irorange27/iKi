@@ -36,7 +36,7 @@ export const useProviderModelOptionsEditor = (params: {
     }
 
     const nextModelOptions = {
-      ...params.selectedProviderDraft.value.model_options,
+      ...params.selectedProviderDraft.value.modelOptions,
     };
 
     if (payload.options) {
@@ -45,7 +45,7 @@ export const useProviderModelOptionsEditor = (params: {
       delete nextModelOptions[payload.modelId];
     }
 
-    params.selectedProviderDraft.value.model_options = nextModelOptions;
+    params.selectedProviderDraft.value.modelOptions = nextModelOptions;
     closeModelOptionsEditor();
   };
 

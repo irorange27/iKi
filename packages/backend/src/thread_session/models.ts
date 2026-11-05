@@ -60,8 +60,8 @@ export const createChatStreamingModels = () => {
   ): Promise<ProviderModelDescriptor[]> => {
     try {
 
-      const overrideBaseUrl = providerOverride?.base_url?.trim();
-      const overrideApiKey = providerOverride?.api_key?.trim();
+      const overrideBaseUrl = providerOverride?.baseUrl?.trim();
+      const overrideApiKey = providerOverride?.apiKey?.trim();
       const shouldUseRecord =
         Boolean(providerId) || Boolean(overrideBaseUrl) || Boolean(overrideApiKey);
 
@@ -69,8 +69,8 @@ export const createChatStreamingModels = () => {
         ? await getProviderModelsForRecord({
             providerId: providerId ?? providerOverride?.id ?? providerType,
             providerType,
-            ...(overrideBaseUrl || providerOverride?.base_url
-              ? { baseUrl: overrideBaseUrl || providerOverride?.base_url || '' }
+            ...(overrideBaseUrl || providerOverride?.baseUrl
+              ? { baseUrl: overrideBaseUrl || providerOverride?.baseUrl || '' }
               : {}),
             ...(overrideApiKey ? { apiKey: overrideApiKey } : {}),
           })

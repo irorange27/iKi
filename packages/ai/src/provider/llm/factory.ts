@@ -115,7 +115,7 @@ const readBootstrapAuthConfig = (providerType: string): ProviderConfig | null =>
     const filePath = path.join(os.homedir(), '.iki', 'agent', 'auth.json');
     const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     const entry = raw?.[providerType];
-    if (!entry || entry.type !== 'api_key' || !entry.key) return null;
+    if (!entry || entry.type !== 'apiKey' || !entry.key) return null;
 
     return {
       id: `_bootstrap_${providerType}`,
@@ -165,11 +165,11 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
   return {
     id: provider.id,
     type: provider.type,
-    apiKey: provider.api_key,
-    baseURL: provider.base_url,
+    apiKey: provider.apiKey,
+    baseURL: provider.baseUrl,
     models,
-    modelOptions: provider.model_options,
-    isResponseApi: provider.is_response_api === true,
+    modelOptions: provider.modelOptions,
+    isResponseApi: provider.isResponseApi === true,
   };
 };
 

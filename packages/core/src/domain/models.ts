@@ -61,13 +61,13 @@ export type ModelOverride = z.infer<typeof ModelOverrideSchema>;
 export const ProviderConfigSchema = z.object({
   name: z.string(),
   type: z.string(),
-  api_key: z.string(),
-  base_url: z.string(),
+  apiKey: z.string(),
+  baseUrl: z.string(),
   enabled: z.boolean(),
   models: z.array(z.string()),
-  available_models: z.array(z.string()),
-  model_options: ProviderModelOptionsMapSchema,
-  is_response_api: z.boolean().optional(),
+  availableModels: z.array(z.string()),
+  modelOptions: ProviderModelOptionsMapSchema,
+  isResponseApi: z.boolean().optional(),
 });
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 

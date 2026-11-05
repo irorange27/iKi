@@ -74,7 +74,7 @@
       v-if="modelOptionsEditor && selectedProviderDraft"
       :provider-id="modelOptionsEditor.providerId"
       :model-id="modelOptionsEditor.modelId"
-      :model-options="selectedProviderDraft.model_options[modelOptionsEditor.modelId] || null"
+      :model-options="selectedProviderDraft.modelOptions[modelOptionsEditor.modelId] || null"
       @cancel="closeModelOptionsEditor"
       @save="saveModelOptions"
     />

@@ -112,10 +112,10 @@ export const useProvidersSettings = () => {
       const config = selectedProviderConfig.value;
       const providerLookupKey = config?.type || selectedProviderId.value;
 
-      const baseUrl = draft?.base_url.trim() || selectedProviderInfo.value?.defaultBaseUrl || '';
-      const apiKey = draft?.api_key.trim() || '';
+      const baseUrl = draft?.baseUrl.trim() || selectedProviderInfo.value?.defaultBaseUrl || '';
+      const apiKey = draft?.apiKey.trim() || '';
       const providerOverride =
-        baseUrl || apiKey ? { base_url: baseUrl, ...(apiKey ? { api_key: apiKey } : {}) } : null;
+        baseUrl || apiKey ? { baseUrl: baseUrl, ...(apiKey ? { apiKey: apiKey } : {}) } : null;
 
       const fetched = await electronAPI.chat.getModels(
         providerLookupKey,
@@ -127,7 +127,7 @@ export const useProvidersSettings = () => {
         setFetchedModels(modelIds);
         if (config) {
           await electronAPI.providers.update(config.id, {
-            available_models: modelIds,
+            availableModels: modelIds,
           });
         }
       }
@@ -153,7 +153,7 @@ export const useProvidersSettings = () => {
     if (dynamic && dynamic.length > 0) return dynamic;
 
     const config = selectedProviderConfig.value;
-    if (config?.available_models?.length) return config.available_models;
+    if (config?.availableModels?.length) return config.availableModels;
     if (config?.models?.length) return config.models;
 
     const builtIn = BUILTIN_PROVIDERS.find(provider => provider.id === selectedProviderId.value);
@@ -174,10 +174,10 @@ export const useProvidersSettings = () => {
     const displayName = payload.displayName.trim();
     if (!displayName || !selectedProviderDraft.value) return;
 
-    selectedProviderDraft.value.model_options = {
-      ...selectedProviderDraft.value.model_options,
+    selectedProviderDraft.value.modelOptions = {
+      ...selectedProviderDraft.value.modelOptions,
       [modelId]: {
-        ...selectedProviderDraft.value.model_options[modelId],
+        ...selectedProviderDraft.value.modelOptions[modelId],
         displayName,
       },
     };
@@ -222,12 +222,12 @@ export const useProvidersSettings = () => {
     if (!draft || !snapshot) return false;
 
     return (
-      draft.api_key !== snapshot.api_key ||
-      draft.base_url.trim() !== snapshot.base_url ||
+      draft.apiKey !== snapshot.apiKey ||
+      draft.baseUrl.trim() !== snapshot.baseUrl ||
       draft.enabled !== snapshot.enabled ||
       !arrayEquals(selectedModelsList.value, snapshot.models) ||
       !arrayEquals(selectedDraftAvailableModels.value, snapshot.availableModels) ||
-      JSON.stringify(pruneProviderModelOptionsMap(draft.model_options)) !==
+      JSON.stringify(pruneProviderModelOptionsMap(draft.modelOptions)) !==
         JSON.stringify(pruneProviderModelOptionsMap(snapshot.modelOptions))
     );
   });
@@ -238,7 +238,7 @@ export const useProvidersSettings = () => {
       return false;
     }
 
-    if (draft.enabled && selectedProviderRequiresApiKey.value && draft.api_key.trim().length === 0) {
+    if (draft.enabled && selectedProviderRequiresApiKey.value && draft.apiKey.trim().length === 0) {
       return false;
     }
 
@@ -286,11 +286,11 @@ export const useProvidersSettings = () => {
     const availableToSave = dynamicModels.value[activeProviderId] || [];
     const modelOptionModelIds = Array.from(new Set([...modelsToSave, ...availableToSave]));
     const modelOptionsToSave = pruneProviderModelOptionsMap(
-      draft.model_options,
+      draft.modelOptions,
       modelOptionModelIds
     );
     const normalizedBaseUrl =
-      draft.base_url.trim() || selectedProviderInfo.value.defaultBaseUrl || '';
+      draft.baseUrl.trim() || selectedProviderInfo.value.defaultBaseUrl || '';
 
     try {
       if (existingConfig) {
@@ -303,19 +303,19 @@ export const useProvidersSettings = () => {
             ...(selectedProviderId.value === existingConfig.id && existingConfig.type === 'anthropic'
               ? { type: 'anthropic-compatible' }
               : {}),
-            api_key: draft.api_key.trim(),
-            base_url: normalizedBaseUrl,
+            apiKey: draft.apiKey.trim(),
+            baseUrl: normalizedBaseUrl,
             enabled: draft.enabled,
             models: modelsToSave,
-            model_options: modelOptionsToSave,
-            available_models: availableToSave,
+            modelOptions: modelOptionsToSave,
+            availableModels: availableToSave,
           })
         );
       } else {
         const builtIn = selectedProviderInfo.value;
         const hasMeaningfulDraft =
-          draft.api_key.trim().length > 0 ||
-          draft.base_url.trim().length > 0 ||
+          draft.apiKey.trim().length > 0 ||
+          draft.baseUrl.trim().length > 0 ||
           modelsToSave.length > 0 ||
           availableToSave.length > 0 ||
           draft.enabled;
@@ -328,12 +328,12 @@ export const useProvidersSettings = () => {
           id: `${builtIn.id}_${Date.now()}`,
           name: builtIn.name,
           type: builtIn.id,
-          api_key: draft.api_key.trim(),
-          base_url: normalizedBaseUrl,
+          apiKey: draft.apiKey.trim(),
+          baseUrl: normalizedBaseUrl,
           models: modelsToSave,
-          model_options: modelOptionsToSave,
+          modelOptions: modelOptionsToSave,
           enabled: draft.enabled,
-          available_models: availableToSave,
+          availableModels: availableToSave,
         };
         await electronAPI.providers.add(toPlainData(newProvider));
       }

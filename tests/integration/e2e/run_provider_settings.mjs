@@ -432,9 +432,9 @@ const main = async () => {
   const [providerId, provider] = providers;
   const modelsField = Array.isArray(provider.models) ? provider.models : [];
   if (!modelsField.includes(MODEL)) throw new Error(`models.toml provider ${providerId} has models=${JSON.stringify(provider.models)}`);
-  if (provider.base_url !== FAUX_BASE_URL) throw new Error(`base_url mismatch: ${provider.base_url}`);
-  if (provider.api_key !== 'sk-e2e') throw new Error('api_key mismatch');
-  log('saved provider declaration OK:', providerId, JSON.stringify({ type: provider.type, models: modelsField, base_url: provider.base_url }));
+  if (provider.baseUrl !== FAUX_BASE_URL) throw new Error(`baseUrl mismatch: ${provider.baseUrl}`);
+  if (provider.apiKey !== 'sk-e2e') throw new Error('apiKey mismatch');
+  log('saved provider declaration OK:', providerId, JSON.stringify({ type: provider.type, models: modelsField, baseUrl: provider.baseUrl }));
 
   step('close the settings window; the main model selector must offer the saved provider live');
   try {

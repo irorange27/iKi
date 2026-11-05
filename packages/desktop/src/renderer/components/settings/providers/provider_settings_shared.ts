@@ -2,7 +2,7 @@ import type { ProviderRecord } from '../../../composables/useProviderDrafts';
 
 export type EditableProvider = Pick<
   ProviderRecord,
-  'id' | 'name' | 'type' | 'api_key' | 'base_url' | 'enabled' | 'icon' | 'is_response_api'
+  'id' | 'name' | 'type' | 'apiKey' | 'baseUrl' | 'enabled' | 'icon' | 'isResponseApi'
 > & {
   /** Comma-separated free text in the editor input; split into ids on save. */
   models: string;

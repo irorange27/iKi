@@ -111,7 +111,7 @@ export const useChatProviderSelection = (deps: {
     const trimmedModelId = modelId.trim();
     if (!trimmedModelId) return null;
 
-    const options = getProviderModelOptions(provider.model_options, trimmedModelId);
+    const options = getProviderModelOptions(provider.modelOptions, trimmedModelId);
     if (!options) return null;
 
     return {

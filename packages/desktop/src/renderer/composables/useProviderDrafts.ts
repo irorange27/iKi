@@ -21,16 +21,16 @@ export type ProviderRecord = Provider & {
 };
 
 export type ProviderDraft = {
-  api_key: string;
-  base_url: string;
+  apiKey: string;
+  baseUrl: string;
   enabled: boolean;
   showApiKey: boolean;
-  model_options: ProviderModelOptionsMap;
+  modelOptions: ProviderModelOptionsMap;
 };
 
 type PersistedProviderSnapshot = {
-  api_key: string;
-  base_url: string;
+  apiKey: string;
+  baseUrl: string;
   enabled: boolean;
   models: string[];
   availableModels: string[];
@@ -85,12 +85,12 @@ export const useProviderDrafts = (params: {
     const record = getProviderRecord(providerId);
 
     return {
-      api_key: record?.api_key ?? '',
-      base_url: normalizeBaseUrlForDraft(providerId, record?.base_url),
+      apiKey: record?.apiKey ?? '',
+      baseUrl: normalizeBaseUrlForDraft(providerId, record?.baseUrl),
       enabled: record?.enabled === true,
       models: record?.models ?? [],
-      availableModels: record?.available_models ?? [],
-      modelOptions: record?.model_options ?? {},
+      availableModels: record?.availableModels ?? [],
+      modelOptions: record?.modelOptions ?? {},
     };
   };
 
@@ -102,11 +102,11 @@ export const useProviderDrafts = (params: {
     const snapshot = getPersistedProviderSnapshot(providerId);
 
     providerDrafts.value[providerId] = {
-      api_key: snapshot.api_key,
-      base_url: snapshot.base_url,
+      apiKey: snapshot.apiKey,
+      baseUrl: snapshot.baseUrl,
       enabled: snapshot.enabled,
       showApiKey: false,
-      model_options: safeClone(snapshot.modelOptions, {}),
+      modelOptions: safeClone(snapshot.modelOptions, {}),
     };
     selectedModels.value[providerId] = [...snapshot.models];
 

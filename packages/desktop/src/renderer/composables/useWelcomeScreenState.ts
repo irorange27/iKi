@@ -41,7 +41,7 @@ export const useWelcomeScreenState = (params: {
           }
           return {
             id: provider.id,
-            configured: typeof provider.api_key === 'string' && provider.api_key.trim().length > 0,
+            configured: typeof provider.apiKey === 'string' && provider.apiKey.trim().length > 0,
           };
         })
       );

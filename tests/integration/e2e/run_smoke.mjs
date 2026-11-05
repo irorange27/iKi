@@ -530,12 +530,12 @@ const seedProviderAndWorkspace = () => {
   providers['provider-faux-e2e'] = {
     name: 'Faux E2E',
     type: 'openai-compatible',
-    api_key: 'sk-e2e',
-    base_url: `http://127.0.0.1:${FAUX_PORT}/v1`,
+    apiKey: 'sk-e2e',
+    baseUrl: `http://127.0.0.1:${FAUX_PORT}/v1`,
     enabled: true,
     models: ['faux-e2e-model'],
-    available_models: [],
-    model_options: {},
+    availableModels: [],
+    modelOptions: {},
   };
   writeModelsConfig(providers);
 
@@ -604,10 +604,10 @@ const main = async () => {
     faux.enabled !== true ||
     !Array.isArray(faux.models) ||
     !faux.models.includes('faux-e2e-model') ||
-    !Array.isArray(faux.available_models) ||
-    !faux.model_options ||
-    typeof faux.model_options !== 'object' ||
-    Array.isArray(faux.model_options)
+    !Array.isArray(faux.availableModels) ||
+    !faux.modelOptions ||
+    typeof faux.modelOptions !== 'object' ||
+    Array.isArray(faux.modelOptions)
   ) {
     throw new Error('models.toml is missing the seeded faux provider or it is in the legacy shape');
   }
@@ -618,7 +618,7 @@ const main = async () => {
         id,
         enabled: row.enabled,
         models: row.models,
-        available_models: row.available_models,
+        availableModels: row.availableModels,
       }))
     )
   );

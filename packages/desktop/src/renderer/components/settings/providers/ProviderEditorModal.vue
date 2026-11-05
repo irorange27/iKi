@@ -73,7 +73,7 @@
               >{{ t('settings.providers.apiKey') }}
               <input
                 type="password"
-                v-model="editingProvider.api_key"
+                v-model="editingProvider.apiKey"
                 :placeholder="t('settings.providers.modal.apiKeyPlaceholder')"
               />
             </label>
@@ -82,7 +82,7 @@
               >{{ t('settings.providers.modal.baseUrl') }}
               <input
                 type="text"
-                v-model="editingProvider.base_url"
+                v-model="editingProvider.baseUrl"
                 :placeholder="t('settings.providers.modal.baseUrlPlaceholder')"
               />
             </label>

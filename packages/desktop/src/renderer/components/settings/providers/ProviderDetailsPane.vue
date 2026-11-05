@@ -48,7 +48,7 @@
                 <div class="provider-secret-input">
                   <input
                     :type="selectedProviderDraft.showApiKey ? 'text' : 'password'"
-                    v-model="selectedProviderDraft.api_key"
+                    v-model="selectedProviderDraft.apiKey"
                     :placeholder="t('settings.providers.apiKeyPlaceholder')"
                   />
                   <button
@@ -92,7 +92,7 @@
                 }}</span>
                 <input
                   type="text"
-                  v-model="selectedProviderDraft.base_url"
+                  v-model="selectedProviderDraft.baseUrl"
                   :placeholder="selectedProviderInfo.defaultBaseUrl || 'https://api.example.com/v1'"
                 />
               </label>
@@ -107,7 +107,7 @@
               :available-models="availableModelsList"
               :selected-models="selectedModelsList"
               :fallback-models="selectedProviderInfo.models"
-              :model-options="selectedProviderDraft.model_options"
+              :model-options="selectedProviderDraft.modelOptions"
               :has-dynamic-models="hasDynamicModels"
               @toggle-open="emit('toggle-models-panel')"
               @fetch-models="emit('fetch-models')"

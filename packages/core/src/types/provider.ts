@@ -31,7 +31,7 @@ export type ModelCapabilitySnapshot = Pick<
 export type ProviderModelDiscoveryOverride = Partial<
   Pick<
     Provider,
-    'id' | 'type' | 'api_key' | 'base_url' | 'models' | 'model_options' | 'is_response_api'
+    'id' | 'type' | 'apiKey' | 'baseUrl' | 'models' | 'modelOptions' | 'isResponseApi'
   >
 >;
 

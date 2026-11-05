@@ -52,7 +52,7 @@ export const useProvidersSettingsEditor = (params: {
       };
     }
 
-    const isResponseApi = editingProvider.value?.is_response_api === true;
+    const isResponseApi = editingProvider.value?.isResponseApi === true;
     const usesOpenAICompatibleType = providerType === 'openai-compatible';
     const value = isResponseApi ? 'responses' : 'chat-completions';
     const options = [
@@ -96,11 +96,11 @@ export const useProvidersSettingsEditor = (params: {
       id: `custom_${Date.now()}`,
       name: '',
       type: 'custom',
-      api_key: '',
+      apiKey: '',
       models: '',
-      base_url: '',
+      baseUrl: '',
       enabled: true,
-      is_response_api: true,
+      isResponseApi: true,
     };
     showProviderEditor.value = true;
   };
@@ -109,13 +109,13 @@ export const useProvidersSettingsEditor = (params: {
     if (!editingProvider.value) return;
     editingProvider.value.type = value;
     if (value === 'anthropic-compatible') {
-      editingProvider.value.is_response_api = false;
+      editingProvider.value.isResponseApi = false;
     }
   };
 
   const updateEditingProviderApiFormatSelection = (value: string) => {
     if (!editingProvider.value) return;
-    editingProvider.value.is_response_api = value === 'responses';
+    editingProvider.value.isResponseApi = value === 'responses';
   };
 
   const saveProvider = async () => {
@@ -129,11 +129,11 @@ export const useProvidersSettingsEditor = (params: {
     const providerData = {
       ...editingProvider.value,
       models: modelsArray,
-      available_models: modelsArray,
-      is_response_api:
+      availableModels: modelsArray,
+      isResponseApi:
         editingProvider.value.type === 'anthropic-compatible'
           ? false
-          : editingProvider.value.is_response_api === true,
+          : editingProvider.value.isResponseApi === true,
     };
 
     try {

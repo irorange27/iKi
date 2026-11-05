@@ -98,7 +98,7 @@ export const buildSelectedProviderInfo = (params: {
       name: getProviderDisplayName(custom),
       description: params.t('settings.providers.customDescription'),
       models: selected,
-      defaultBaseUrl: custom.base_url,
+      defaultBaseUrl: custom.baseUrl,
     };
   }
 

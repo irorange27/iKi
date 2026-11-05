@@ -24,8 +24,8 @@ import { storeRoot } from './collection';
 
 const CONFIG_FILE = 'models.toml';
 
-export type ProviderDeclaration = Pick<ProviderConfig, 'name' | 'type' | 'api_key'> &
-  Partial<Omit<ProviderConfig, 'name' | 'type' | 'api_key'>> & { id: string };
+export type ProviderDeclaration = Pick<ProviderConfig, 'name' | 'type' | 'apiKey'> &
+  Partial<Omit<ProviderConfig, 'name' | 'type' | 'apiKey'>> & { id: string };
 
 const configPath = (): string => path.join(storeRoot(), CONFIG_FILE);
 
@@ -68,13 +68,13 @@ export const addProvider = (provider: ProviderDeclaration): Provider => {
   const declaration: ProviderConfig = {
     name: provider.name,
     type: provider.type,
-    api_key: provider.api_key,
-    base_url: provider.base_url ?? '',
+    apiKey: provider.apiKey,
+    baseUrl: provider.baseUrl ?? '',
     enabled: provider.enabled ?? false,
     models: provider.models ?? [],
-    available_models: provider.available_models ?? [],
-    model_options: provider.model_options ?? {},
-    ...(provider.is_response_api === true ? { is_response_api: true } : {}),
+    availableModels: provider.availableModels ?? [],
+    modelOptions: provider.modelOptions ?? {},
+    ...(provider.isResponseApi === true ? { isResponseApi: true } : {}),
   };
   writeConfig({ providers: { ...config.providers, [provider.id]: declaration } });
   return getProvider(provider.id)!;

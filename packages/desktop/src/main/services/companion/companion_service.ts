@@ -106,7 +106,7 @@ const createSnapshot = (
 const isEnabledProvider = (provider: Provider): boolean => provider.enabled === true;
 
 const hasAnyConfiguredModel = (provider: Provider): boolean =>
-  provider.models.length > 0 || provider.available_models.length > 0;
+  provider.models.length > 0 || provider.availableModels.length > 0;
 
 const resolveDormantReason = (providers: Provider[]): CompanionDormantReason | null => {
   const enabledProviders = providers.filter(isEnabledProvider);

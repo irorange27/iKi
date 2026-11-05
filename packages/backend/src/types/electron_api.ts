@@ -36,7 +36,7 @@ export type { ChatInvocationOptions, ChatInvocationResult };
 export type { RunStatusEvent };
 
 export type ProviderInput = Partial<Provider> &
-  Pick<Provider, 'id' | 'name' | 'type' | 'api_key' | 'models'>;
+  Pick<Provider, 'id' | 'name' | 'type' | 'apiKey' | 'models'>;
 
 export type ChatThreadInput = Partial<ChatThread>;
 /**
