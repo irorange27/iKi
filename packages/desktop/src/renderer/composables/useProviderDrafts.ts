@@ -2,7 +2,6 @@ import { computed, ref, type Ref } from 'vue';
 
 import type { Provider, ProviderModelOptionsMap } from '@iki/core/types/provider';
 import type { BuiltInProvider } from '@iki/core/types/settings';
-import { parseModelList, parseProviderModelOptionsMap } from '@iki/core/utils/provider_models';
 import { isCanonicalBuiltInProvider } from '../modules/providers/provider_icons';
 
 const safeClone = <T>(value: T, fallback?: T): T => {
@@ -89,9 +88,9 @@ export const useProviderDrafts = (params: {
       api_key: record?.api_key ?? '',
       base_url: normalizeBaseUrlForDraft(providerId, record?.base_url),
       enabled: record?.enabled === true,
-      models: parseModelList(record?.models),
-      availableModels: parseModelList(record?.available_models),
-      modelOptions: parseProviderModelOptionsMap(record?.model_options),
+      models: record?.models ?? [],
+      availableModels: record?.available_models ?? [],
+      modelOptions: record?.model_options ?? {},
     };
   };
 

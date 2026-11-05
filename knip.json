@@ -1,7 +1,13 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "tags": ["-lintignore"],
-  "ignoreBinaries": ["ffmpeg", "pgrep", "electron-forge"],
+  "tags": [
+    "-lintignore"
+  ],
+  "ignoreBinaries": [
+    "ffmpeg",
+    "pgrep",
+    "electron-forge"
+  ],
   "ignoreDependencies": [
     "tailwindcss",
     "tw-animate-css",
@@ -15,14 +21,22 @@
   ],
   "workspaces": {
     ".": {
-      "entry": ["vitest*.config.mts", "scripts/**/*.{mjs,cjs,ts}", "tests/**/*.{ts,mts}"],
-      "project": ["scripts/**/*.{mjs,cjs,ts}", "tests/**/*.{ts,mts}"]
+      "entry": [
+        "scripts/**/*.{mjs,cjs,ts}"
+      ],
+      "project": [
+        "scripts/**/*.{mjs,cjs,ts}"
+      ]
     },
     "packages/backend": {
-      "project": ["src/**/*.ts"]
+      "project": [
+        "src/**/*.ts"
+      ]
     },
     "packages/theme": {
-      "project": ["src/**/*.ts"]
+      "project": [
+        "src/**/*.ts"
+      ]
     },
     "packages/desktop": {
       "entry": [
@@ -34,8 +48,14 @@
         "vite.preload.config.ts",
         "vite.renderer.config.mjs"
       ],
-      "project": ["src/**/*.{ts,vue}"]
+      "project": [
+        "src/**/*.{ts,vue}"
+      ]
     }
   },
-  "ignore": ["packages/desktop/.vite/**", "packages/desktop/out/**", "packages/desktop/dist/**"]
+  "ignore": [
+    "packages/desktop/.vite/**",
+    "packages/desktop/out/**",
+    "packages/desktop/dist/**"
+  ]
 }

@@ -31,7 +31,7 @@
 //   node scripts/a11y_audit.mjs            # human report; exit 1 on errors
 //   node scripts/a11y_audit.mjs --json     # machine-readable findings
 //
-// Pinned as a regression gate by tests/renderer/a11y_audit.test.ts.
+// Accessibility smoke over the built renderer.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';

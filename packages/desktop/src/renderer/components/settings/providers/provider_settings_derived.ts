@@ -1,7 +1,6 @@
 import type { BuiltInProvider } from '@iki/core/types/settings';
 import type { SidebarProvider, ProviderSupportLink } from './provider_settings_shared';
 import type { ProviderRecord } from '../../../composables/useProviderDrafts';
-import { parseModelList } from '@iki/core/utils/provider_models';
 import { getProviderDisplayName } from '../../../modules/providers/provider_display';
 
 type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
@@ -93,7 +92,7 @@ export const buildSelectedProviderInfo = (params: {
 
   const custom = params.providers.find(provider => provider.id === params.providerId);
   if (custom) {
-    const selected = params.selectedModels[custom.id] || parseModelList(custom.models);
+    const selected = params.selectedModels[custom.id] || custom.models;
     return {
       id: custom.id,
       name: getProviderDisplayName(custom),

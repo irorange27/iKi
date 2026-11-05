@@ -210,7 +210,6 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import type { Provider } from '@iki/core/types/provider';
-import { parseModelList } from '@iki/core/utils/provider_models';
 import { useI18n } from '../i18n';
 import {
   getProviderDisplayName,
@@ -298,7 +297,7 @@ const providerModelGroups = computed<ProviderModelGroup[]>(() =>
         name,
         typeLabel,
         iconProps: getProviderIconProps(provider),
-        models: parseModelList(provider.models),
+        models: provider.models,
         providerSearchText: `${name} ${typeLabel}`.toLowerCase(),
       };
     })

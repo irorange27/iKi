@@ -1,5 +1,5 @@
 {
-  "$comment": "Module registry for scripts/module_context.mjs. roots own all files under them (longest prefix wins); tests list the directories/files that pin the module's contracts; layer follows contract < domain < app < adapters < ui vocabulary.",
+  "$comment": "Module registry for scripts/module_context.mjs. roots own all files under them (longest prefix wins); layer follows contract < domain < app < adapters < ui vocabulary.",
   "modules": [
     {
       "id": "backend/thread_session",
@@ -8,9 +8,6 @@
       ],
       "layer": "orchestration",
       "role": "Turn orchestration: session loop, streaming, approval persistence, recovery, run tracker, session-log authority",
-      "tests": [
-        "tests/backend/thread_session"
-      ],
       "notes": "The durable-execution core. Approval/recovery/replay invariants here are pinned by the ownership map in packages/backend/README.md and protected by HARNESS_REVIEW.md."
     },
     {
@@ -20,9 +17,6 @@
       ],
       "layer": "orchestration",
       "role": "Agent loop and harness: Pi turn harnesses, step budget, compaction, tool resolution",
-      "tests": [
-        "tests/backend/agent"
-      ],
       "notes": "No abstraction layer between AgentHarness and AgentRunner (AGENTS.md non-negotiable)."
     },
     {
@@ -31,10 +25,7 @@
         "packages/backend/src/tools"
       ],
       "layer": "domain",
-      "role": "Concrete tools: registry, schemas, file/shell/web/skill/awaiter/agent tools",
-      "tests": [
-        "tests/backend/tools"
-      ]
+      "role": "Concrete tools: registry, schemas, file/shell/web/skill/awaiter/agent tools"
     },
     {
       "id": "backend/turn_prep",
@@ -43,9 +34,6 @@
       ],
       "layer": "app",
       "role": "Pre-turn assembly: context blocks, tool guard, prompt inputs",
-      "tests": [
-        "tests/backend/turn_prep"
-      ],
       "notes": "thread_session reaches turn_prep only via injected ports (depcruiser R5)."
     },
     {
@@ -55,9 +43,6 @@
       ],
       "layer": "domain",
       "role": "Model supply: LLM factory, pi adapter, model discovery, tool model",
-      "tests": [
-        "tests/backend/provider"
-      ],
       "notes": "Leaf module — must not reach up into tools/session/orchestration (depcruiser R1)."
     },
     {
@@ -67,9 +52,6 @@
       ],
       "layer": "domain",
       "role": "File-backed persistence: collections, append-only session logs, row codecs",
-      "tests": [
-        "tests/backend/db"
-      ],
       "notes": "File store only: one JSON file per collection plus append-only JSONL session logs. The depcruise rules core-is-a-leaf and store-depends-only-on-core keep this package from reaching upward."
     },
     {
@@ -78,11 +60,7 @@
         "packages/ai/src/message"
       ],
       "layer": "domain",
-      "role": "Message codecs, ui/model conversions, system prompt assembly, markdown export",
-      "tests": [
-        "tests/backend/message",
-        "tests/backend/context"
-      ]
+      "role": "Message codecs, ui/model conversions, system prompt assembly, markdown export"
     },
     {
       "id": "backend/mcp",
@@ -90,10 +68,7 @@
         "packages/backend/src/mcp"
       ],
       "layer": "app",
-      "role": "MCP server lifecycle, transports, remote tool registration",
-      "tests": [
-        "tests/backend/mcp"
-      ]
+      "role": "MCP server lifecycle, transports, remote tool registration"
     },
     {
       "id": "backend/awaiters",
@@ -101,11 +76,7 @@
         "packages/backend/src/awaiters"
       ],
       "layer": "app",
-      "role": "Continue-later wakes: awaiter manager, schedule, wake runs",
-      "tests": [
-        "tests/backend/awaiters",
-        "tests/main/services/awaiters"
-      ]
+      "role": "Continue-later wakes: awaiter manager, schedule, wake runs"
     },
     {
       "id": "backend/workspaces",
@@ -113,10 +84,7 @@
         "packages/backend/src/workspaces"
       ],
       "layer": "domain",
-      "role": "Workspace and thread modes: scratch workspaces, worktrees, approval-policy parse",
-      "tests": [
-        "tests/backend/workspaces"
-      ]
+      "role": "Workspace and thread modes: scratch workspaces, worktrees, approval-policy parse"
     },
     {
       "id": "backend/foundation",
@@ -131,13 +99,7 @@
         "packages/backend/src/runtimes"
       ],
       "layer": "foundation",
-      "role": "Shared foundation: guards, errors, config, types, logging, locale, http, aux-model runtimes",
-      "tests": [
-        "tests/backend/utils",
-        "tests/backend/network",
-        "tests/backend/runtimes",
-        "tests/shared"
-      ]
+      "role": "Shared foundation: guards, errors, config, types, logging, locale, http, aux-model runtimes"
     },
     {
       "id": "backend/standalone",
@@ -146,10 +108,6 @@
       ],
       "layer": "foundation",
       "role": "Top-level backend files (chat_platform, persona, logger) — catch-all below the named modules",
-      "tests": [
-        "tests/backend/persona.test.ts",
-        "tests/backend/logger.test.ts"
-      ],
       "notes": "Any file here that grows a real job should be promoted into a named module."
     },
     {
@@ -160,11 +118,7 @@
         "packages/desktop/src/preload"
       ],
       "layer": "shell",
-      "role": "Electron shell: IPC translate layer, windows, platform services. No business logic allowed.",
-      "tests": [
-        "tests/main",
-        "tests/preload"
-      ]
+      "role": "Electron shell: IPC translate layer, windows, platform services. No business logic allowed."
     },
     {
       "id": "desktop/renderer",
@@ -173,9 +127,6 @@
       ],
       "layer": "ui",
       "role": "Vue 3 SPA: components, composables, stores, chat module. electronAPI is the only backend door.",
-      "tests": [
-        "tests/renderer"
-      ],
       "notes": "Imports only pure backend types/utils (depcruiser renderer-backend-whitelist). knip does not parse .vue — renderer surface is guarded by vue-tsc + eslint instead."
     },
     {
@@ -184,10 +135,7 @@
         "packages/theme/src"
       ],
       "layer": "foundation",
-      "role": "Theme tokens, base46 compilation, theme editor logic",
-      "tests": [
-        "tests/shared/theme_registry.test.ts"
-      ]
+      "role": "Theme tokens, base46 compilation, theme editor logic"
     }
   ]
 }

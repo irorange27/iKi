@@ -13,8 +13,6 @@ import {
   listModelsDevProviderModels,
   lookupModelsDevModelCapability,
   mergeModelCapability,
-  parseModelList,
-  parseProviderModelOptionsMap,
   type ModelCapability,
   type ModelsDevCatalog,
 } from '@iki/core/utils/provider_models';
@@ -162,15 +160,15 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
     );
   }
 
-  const models = parseModelList(provider.models);
+  const models = provider.models;
 
   return {
     id: provider.id,
     type: provider.type,
     apiKey: provider.api_key,
-    baseURL: provider.base_url || '',
+    baseURL: provider.base_url,
     models,
-    modelOptions: parseProviderModelOptionsMap(provider.model_options),
+    modelOptions: provider.model_options,
     isResponseApi: provider.is_response_api === true,
   };
 };

@@ -1,7 +1,6 @@
 import * as providerDb from '@iki/store/providers';
 import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/core/logger';
-import { parseModelList } from '@iki/core/utils/provider_models';
 import type {
   CompanionDormantReason,
   CompanionPhase,
@@ -107,8 +106,7 @@ const createSnapshot = (
 const isEnabledProvider = (provider: Provider): boolean => provider.enabled === true;
 
 const hasAnyConfiguredModel = (provider: Provider): boolean =>
-  parseModelList(provider.models).length > 0 ||
-  parseModelList(provider.available_models).length > 0;
+  provider.models.length > 0 || provider.available_models.length > 0;
 
 const resolveDormantReason = (providers: Provider[]): CompanionDormantReason | null => {
   const enabledProviders = providers.filter(isEnabledProvider);

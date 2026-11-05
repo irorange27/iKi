@@ -2,12 +2,6 @@ import type { JsonValue , ProviderModelOptions, ProviderModelOptionsMap } from '
 import { normalizeOptionalString } from './text';
 
 
-const normalizeModelList = (models: unknown[]): string[] =>
-  models
-    .filter((model): model is string => typeof model === 'string')
-    .map(model => model.trim())
-    .filter(Boolean);
-
 const MODELS_DEV_PROVIDER_KEY_MAP: Record<string, string> = {
   kimi: 'moonshotai',
   moonshot: 'moonshotai',
@@ -114,24 +108,6 @@ const PROVIDER_MAX_OUTPUT_TOKEN_CAPS: Partial<Record<string, number>> = {
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-};
-
-// Local tri-state JSON-object probe (null on any failure, passthrough for
-// already-parsed values). Named apart from thread_runtime_hints.parseJsonRecord,
-// whose fallback is {} — the two must never be confused.
-const tryParseJsonObject = (value: unknown): Record<string, unknown> | null => {
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-
-    try {
-      return asRecord(JSON.parse(trimmed));
-    } catch {
-      return null;
-    }
-  }
-
-  return asRecord(value);
 };
 
 const normalizeJsonValue = (value: unknown): JsonValue | undefined => {
@@ -296,29 +272,8 @@ const normalizeProviderModelOptions = (value: unknown): ProviderModelOptions | n
   return Object.keys(normalized).length > 0 ? normalized : null;
 };
 
-export const parseModelList = (value: unknown): string[] => {
-  if (Array.isArray(value)) {
-    return normalizeModelList(value);
-  }
-
-  if (typeof value !== 'string') return [];
-  const trimmed = value.trim();
-  if (!trimmed) return [];
-
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (Array.isArray(parsed)) {
-      return normalizeModelList(parsed);
-    }
-  } catch {
-    return [];
-  }
-
-  return [];
-};
-
 export const parseProviderModelOptionsMap = (value: unknown): ProviderModelOptionsMap => {
-  const record = tryParseJsonObject(value);
+  const record = asRecord(value);
   if (!record) return {};
 
   return Object.keys(record)
@@ -337,23 +292,29 @@ export const parseProviderModelOptionsMap = (value: unknown): ProviderModelOptio
 };
 
 export const getProviderModelOptions = (
-  modelOptions: ProviderModelOptionsMap,
+  modelOptions: ProviderModelOptionsMap | null | undefined,
   modelId: string
 ): ProviderModelOptions | null => {
   const trimmedModelId = modelId.trim();
   if (!trimmedModelId) return null;
 
-  return normalizeProviderModelOptions(modelOptions[trimmedModelId]) ?? null;
+  return normalizeProviderModelOptions(modelOptions?.[trimmedModelId]) ?? null;
 };
 
-const pruneProviderModelOptionsMap = (
-  modelOptions: ProviderModelOptionsMap,
-  modelIds: string[]
+/**
+ * Keep only the overrides for the given model ids, normalized and key-sorted.
+ * Returns a structured map; the caller persists the object itself.
+ */
+export const pruneProviderModelOptionsMap = (
+  value: unknown,
+  modelIds?: string[]
 ): ProviderModelOptionsMap => {
-  const allowedModelIds = new Set(modelIds.map(modelId => modelId.trim()).filter(Boolean));
+  const parsed = parseProviderModelOptionsMap(value);
+  const ids = Array.isArray(modelIds) && modelIds.length > 0 ? modelIds : Object.keys(parsed);
+  const allowedModelIds = new Set(ids.map(modelId => modelId.trim()).filter(Boolean));
   if (allowedModelIds.size === 0) return {};
 
-  return Object.keys(modelOptions)
+  return Object.keys(parsed)
     .sort()
     .reduce<ProviderModelOptionsMap>((trimmedOptions, modelId) => {
       const trimmedModelId = modelId.trim();
@@ -361,26 +322,13 @@ const pruneProviderModelOptionsMap = (
         return trimmedOptions;
       }
 
-      const normalized = normalizeProviderModelOptions(modelOptions[modelId]);
+      const normalized = normalizeProviderModelOptions(parsed[modelId]);
       if (normalized) {
         trimmedOptions[trimmedModelId] = normalized;
       }
 
       return trimmedOptions;
     }, {});
-};
-
-export const serializeProviderModelOptionsMap = (
-  value: unknown,
-  modelIds?: string[]
-): string => {
-  const parsed = parseProviderModelOptionsMap(value);
-  const normalized =
-    Array.isArray(modelIds) && modelIds.length > 0
-      ? pruneProviderModelOptionsMap(parsed, modelIds)
-      : pruneProviderModelOptionsMap(parsed, Object.keys(parsed));
-
-  return JSON.stringify(normalized);
 };
 
 export const getModelsDevProviderKey = (providerType: string): string => {

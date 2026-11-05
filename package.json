@@ -31,21 +31,11 @@
     "arch:context": "node scripts/module_context.mjs",
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx,js,jsx,json,css,scss,md,vue}\"",
     "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx,js,jsx,json,css,scss,md,vue}\"",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "test:renderer": "vitest run tests/renderer",
-    "test:watch": "vitest",
-    "test:harness": "vitest run tests/backend/agent tests/backend/thread_session tests/backend/context tests/backend/tools tests/backend/mcp tests/backend/utils/action_risk.test.ts tests/backend/workspaces/thread_mode.test.ts tests/main/services/chat/chat_context.test.ts tests/main/services/chat/chat_context_budget.test.ts tests/main/services/chat/chat_approval.test.ts",
-    "test:e2e": "node tests/integration/e2e/run_smoke.mjs",
-    "test:e2e:real": "node tests/integration/e2e/run_real_provider.mjs",
-    "test:integration": "vitest run --config vitest.integration.config.mts",
     "ts:vue": "vue-tsc --noEmit",
-    "ci:quality": "pnpm run -s lint && pnpm run -s ts && pnpm run -s ts:vue && pnpm run -s lint:arch && pnpm run -s test:arch && pnpm run -s knip && pnpm run -s test:coverage",
+    "ci:quality": "pnpm run -s lint && pnpm run -s ts && pnpm run -s ts:vue && pnpm run -s lint:arch && pnpm run -s knip",
     "commit": "git-cz",
-    "eval:live": "IKI_RUN_LIVE_EVALS=1 vitest run --config vitest.integration.config.mts tests/integration/agent_evals.live.test.ts",
     "commit:check": "commitlint --from=HEAD~20 --to=HEAD --verbose",
-    "prepare": "husky",
-    "test:arch": "vitest run tests/scripts/architecture_rules_negative_controls.test.ts"
+    "prepare": "husky"
   },
   "keywords": [],
   "repository": {

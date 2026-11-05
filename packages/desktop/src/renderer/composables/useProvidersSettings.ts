@@ -4,10 +4,7 @@ import { useI18n } from '../i18n';
 import type { BuiltInProvider } from '@iki/core/types/settings';
 import { BUILTIN_PROVIDERS } from '@iki/backend/constants/ProvidersSettings';
 import { getErrorMessage } from '@iki/core/utils/errors';
-import {
-  parseModelList,
-  serializeProviderModelOptionsMap,
-} from '@iki/core/utils/provider_models';
+import { pruneProviderModelOptionsMap } from '@iki/core/utils/provider_models';
 import { createLogger } from '../logger';
 import { useProviderDrafts, type ProviderRecord } from './useProviderDrafts';
 import { useProvidersSettingsEditor } from './useProvidersSettingsEditor';
@@ -129,7 +126,7 @@ export const useProvidersSettings = () => {
         setFetchedModels(modelIds);
         if (config) {
           await electronAPI.providers.update(config.id, {
-            available_models: JSON.stringify(modelIds),
+            available_models: modelIds,
           });
         }
       }
@@ -155,15 +152,8 @@ export const useProvidersSettings = () => {
     if (dynamic && dynamic.length > 0) return dynamic;
 
     const config = selectedProviderConfig.value;
-    if (config?.available_models) {
-      const available = parseModelList(config.available_models);
-      if (available.length > 0) return available;
-    }
-
-    if (config?.models) {
-      const models = parseModelList(config.models);
-      if (models.length > 0) return models;
-    }
+    if (config?.available_models?.length) return config.available_models;
+    if (config?.models?.length) return config.models;
 
     const builtIn = BUILTIN_PROVIDERS.find(provider => provider.id === selectedProviderId.value);
     return builtIn?.models || [];
@@ -236,8 +226,8 @@ export const useProvidersSettings = () => {
       draft.enabled !== snapshot.enabled ||
       !arrayEquals(selectedModelsList.value, snapshot.models) ||
       !arrayEquals(selectedDraftAvailableModels.value, snapshot.availableModels) ||
-      serializeProviderModelOptionsMap(draft.model_options) !==
-        serializeProviderModelOptionsMap(snapshot.modelOptions)
+      JSON.stringify(pruneProviderModelOptionsMap(draft.model_options)) !==
+        JSON.stringify(pruneProviderModelOptionsMap(snapshot.modelOptions))
     );
   });
 
@@ -294,7 +284,7 @@ export const useProvidersSettings = () => {
     const modelsToSave = selectedModels.value[activeProviderId] || [];
     const availableToSave = dynamicModels.value[activeProviderId] || [];
     const modelOptionModelIds = Array.from(new Set([...modelsToSave, ...availableToSave]));
-    const modelOptionsToSave = serializeProviderModelOptionsMap(
+    const modelOptionsToSave = pruneProviderModelOptionsMap(
       draft.model_options,
       modelOptionModelIds
     );
@@ -310,9 +300,9 @@ export const useProvidersSettings = () => {
           api_key: draft.api_key.trim(),
           base_url: normalizedBaseUrl,
           enabled: draft.enabled,
-          models: JSON.stringify(modelsToSave),
+          models: modelsToSave,
           model_options: modelOptionsToSave,
-          available_models: JSON.stringify(availableToSave),
+          available_models: availableToSave,
         });
       } else {
         const builtIn = selectedProviderInfo.value;
@@ -333,10 +323,10 @@ export const useProvidersSettings = () => {
           type: builtIn.id,
           api_key: draft.api_key.trim(),
           base_url: normalizedBaseUrl,
-          models: JSON.stringify(modelsToSave),
+          models: modelsToSave,
           model_options: modelOptionsToSave,
           enabled: draft.enabled,
-          available_models: JSON.stringify(availableToSave),
+          available_models: availableToSave,
         };
         await electronAPI.providers.add(newProvider);
       }

@@ -1,67 +1,92 @@
-import { commitRows, patchRow, readRows, removeRow } from './collection';
-import { Provider } from '@iki/core/types/provider';
+/**
+ * Provider configuration is a declaration, not a table.
+ *
+ * One `models.json`, providers keyed by id, structured values. The document is
+ * validated and frozen by the domain contract (`@iki/core/domain/models`) on
+ * every read — the file is the source of truth, so an edit made by another
+ * process or by hand is visible on the next request without a cache to
+ * invalidate.
+ */
+import fs from 'node:fs';
+import path from 'node:path';
 
-type ProviderRow = Provider & { enabled: number | boolean; is_response_api?: number | boolean };
+import {
+  loadModelsConfig,
+  toProvider,
+  type ModelsConfig,
+  type Provider,
+  type ProviderConfig,
+} from '@iki/core/domain/models';
+import { storeRoot } from './collection';
 
-const normalize = (row: ProviderRow): Provider => ({
-  ...row,
-  enabled: Boolean(row.enabled),
-  is_response_api: Boolean(row.is_response_api),
-});
+const CONFIG_FILE = 'models.json';
 
-export const getProviders = (): Provider[] => readRows<ProviderRow>('providers').map(normalize);
+export type ProviderDeclaration = Pick<ProviderConfig, 'name' | 'type' | 'api_key'> &
+  Partial<Omit<ProviderConfig, 'name' | 'type' | 'api_key'>> & { id: string };
 
-export const getProvider = (id: string): Provider | null => {
-  const row = readRows<ProviderRow>('providers').find(entry => entry.id === id);
-  return row ? normalize(row) : null;
+const configPath = (): string => path.join(storeRoot(), CONFIG_FILE);
+
+const readConfig = (): ModelsConfig => {
+  try {
+    return loadModelsConfig(JSON.parse(fs.readFileSync(configPath(), 'utf8')));
+  } catch (error) {
+    // A missing or torn file is an empty configuration; the next write repairs it.
+    if (error instanceof SyntaxError) return loadModelsConfig(undefined);
+    throw error;
+  }
 };
 
-export const addProvider = (
-  provider: Partial<Provider> & {
-    id: string;
-    name: string;
-    type: string;
-    api_key: string;
-    models: string;
-  }
-) => {
-  const now = new Date().toISOString();
-  const row = {
-    id: provider.id,
+const writeConfig = (config: ModelsConfig): void => {
+  const file = configPath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(config, null, 2));
+};
+
+export const getProviders = (): Provider[] =>
+  Object.entries(readConfig().providers).map(([id, stored]) => toProvider(id, stored));
+
+export const getProvider = (id: string): Provider | null => {
+  const stored = readConfig().providers[id];
+  return stored ? toProvider(id, stored) : null;
+};
+
+export const addProvider = (provider: ProviderDeclaration): Provider => {
+  const config = readConfig();
+  const declaration: ProviderConfig = {
     name: provider.name,
     type: provider.type,
     api_key: provider.api_key,
-    models: provider.models,
-    model_options: provider.model_options || '{}',
-    base_url: provider.base_url || '',
-    enabled: provider.enabled ? 1 : 0,
-    created_at: now,
-    updated_at: now,
-    available_models: provider.available_models || '[]',
-    api_version: provider.api_version || null,
-    is_response_api: provider.is_response_api ? 1 : 0,
+    base_url: provider.base_url ?? '',
+    enabled: provider.enabled ?? false,
+    models: provider.models ?? [],
+    available_models: provider.available_models ?? [],
+    model_options: provider.model_options ?? {},
+    ...(provider.is_response_api === true ? { is_response_api: true } : {}),
   };
-  const rows = readRows<ProviderRow>('providers').filter(entry => entry.id !== provider.id);
-  rows.push(row as unknown as ProviderRow);
-  commitRows('providers', rows);
-  return { changes: 1, lastInsertRowid: 0 };
+  writeConfig({ providers: { ...config.providers, [provider.id]: declaration } });
+  return getProvider(provider.id)!;
 };
 
-const PROVIDER_COLUMNS = new Set([
-  'name', 'type', 'api_key', 'models', 'model_options', 'base_url', 'enabled',
-  'available_models', 'api_version', 'is_response_api',
-]);
+/** Merge a partial update into one declaration; `id` is immutable. */
+export const updateProvider = (id: string, patch: Partial<Provider>): Provider | null => {
+  const { id: _ignored, ...changes } = patch;
+  void _ignored;
+  if (Object.keys(changes).length === 0) return null;
 
-export const updateProvider = (id: string, provider: Partial<Provider>) => {
-  const patch = Object.fromEntries(
-    Object.entries(provider).filter(([key]) => PROVIDER_COLUMNS.has(key))
-  );
-  if (Object.keys(patch).length === 0) return null;
-  const changes = patchRow<ProviderRow>('providers', 'id', id, patch, PROVIDER_COLUMNS);
-  return { changes, lastInsertRowid: 0 };
+  const config = readConfig();
+  const current = config.providers[id];
+  if (!current) return null;
+
+  writeConfig({
+    providers: { ...config.providers, [id]: { ...current, ...changes } },
+  });
+  return getProvider(id)!;
 };
 
-export const deleteProvider = (id: string) => ({
-  changes: removeRow<ProviderRow>('providers', 'id', id),
-  lastInsertRowid: 0,
-});
+export const deleteProvider = (id: string): void => {
+  const config = readConfig();
+  if (!(id in config.providers)) return;
+  const { [id]: _removed, ...providers } = config.providers;
+  void _removed;
+  writeConfig({ providers });
+};

@@ -100,7 +100,6 @@ export const useProvidersSettingsEditor = (params: {
       base_url: '',
       enabled: true,
       is_response_api: true,
-      available_models: '[]',
     };
     showProviderEditor.value = true;
   };
@@ -121,21 +120,15 @@ export const useProvidersSettingsEditor = (params: {
   const saveProvider = async () => {
     if (!editingProvider.value) return;
 
-    const modelsInput = editingProvider.value.models;
-    const modelsArray =
-      typeof modelsInput === 'string' && modelsInput.includes(',')
-        ? modelsInput
-            .split(',')
-            .map((model: string) => model.trim())
-            .filter(Boolean)
-        : modelsInput
-          ? [modelsInput]
-          : [];
+    const modelsArray = editingProvider.value.models
+      .split(',')
+      .map(model => model.trim())
+      .filter(Boolean);
 
     const providerData = {
       ...editingProvider.value,
-      models: JSON.stringify(modelsArray),
-      available_models: JSON.stringify(modelsArray),
+      models: modelsArray,
+      available_models: modelsArray,
       is_response_api:
         editingProvider.value.type === 'anthropic-compatible'
           ? false

@@ -10,7 +10,6 @@ import type { AppConfig } from '@iki/core/types/config';
 import type { Provider } from '@iki/core/types/provider';
 import type { AppUpdateStatus } from '@iki/core/types/update';
 import { getErrorMessage } from '@iki/core/utils/errors';
-import { parseModelList } from '@iki/core/utils/provider_models';
 import { getProviderDisplayName } from '../modules/providers/provider_display';
 import { formatLabel } from '../components/settings/settings_formatters';
 
@@ -92,7 +91,7 @@ export const useSettingsGeneralSection = (params: {
         id: provider.id,
         name: getProviderDisplayName(provider),
         type: provider.type,
-        models: parseModelList(provider.models),
+        models: provider.models,
       }))
       .filter(provider => provider.models.length > 0);
   });

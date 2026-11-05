@@ -10,8 +10,6 @@ import { createLogger } from '../logger';
 import {
   getProviderModelOptions,
   normalizeModelCapabilityLimits,
-  parseModelList,
-  parseProviderModelOptionsMap,
 } from '@iki/core/utils/provider_models';
 import { translate } from '../i18n';
 import { getProviderDisplayName } from '../modules/providers/provider_display';
@@ -50,25 +48,25 @@ export const resolveProviderSelection = (params: {
     preferredProviderId.length > 0
       ? availableProviders.find(provider => provider.id === preferredProviderId) || null
       : null;
-  const previousProviderModels = previousProvider ? parseModelList(previousProvider.models) : [];
+  const previousProviderModels = previousProvider ? previousProvider.models : [];
   const findProviderForModel = (model: string): Provider | null => {
     if (!model) return null;
     return (
-      availableProviders.find(provider => parseModelList(provider.models).includes(model)) || null
+      availableProviders.find(provider => provider.models.includes(model)) || null
     );
   };
   const selectedProvider =
-    (preferredProvider && parseModelList(preferredProvider.models).length > 0
+    (preferredProvider && preferredProvider.models.length > 0
       ? preferredProvider
       : null) ||
     (preferredModel && previousProviderModels.includes(preferredModel) ? previousProvider : null) ||
     findProviderForModel(preferredModel) ||
     (previousProvider && previousProviderModels.length > 0 ? previousProvider : null) ||
-    availableProviders.find(provider => parseModelList(provider.models).length > 0) ||
+    availableProviders.find(provider => provider.models.length > 0) ||
     previousProvider ||
     availableProviders[0] ||
     null;
-  const availableModels = selectedProvider ? parseModelList(selectedProvider.models) : [];
+  const availableModels = selectedProvider ? selectedProvider.models : [];
   const selectedModel =
     (preferredModel && availableModels.includes(preferredModel) ? preferredModel : '') ||
     (currentModel && availableModels.includes(currentModel) ? currentModel : '') ||
@@ -113,10 +111,7 @@ export const useChatProviderSelection = (deps: {
     const trimmedModelId = modelId.trim();
     if (!trimmedModelId) return null;
 
-    const options = getProviderModelOptions(
-      parseProviderModelOptionsMap(provider.model_options),
-      trimmedModelId
-    );
+    const options = getProviderModelOptions(provider.model_options, trimmedModelId);
     if (!options) return null;
 
     return {

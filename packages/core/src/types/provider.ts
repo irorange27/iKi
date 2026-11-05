@@ -1,20 +1,23 @@
-export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+/**
+ * Provider types are a thin projection of the domain contract.
+ *
+ * The schema and the derived types live in `../domain/models` (pi-style:
+ * schema is the single source of truth, types are its static projection).
+ * This module keeps the historical export names so consumers do not reach
+ * into the domain layer, and adds the few view-shaped types that are not
+ * persisted declarations.
+ */
+import type {
+  JsonValue,
+  Provider,
+  ProviderModelOptions,
+  ProviderModelOptionsMap,
+} from '../domain/models';
 
-export interface ProviderModelOptions {
-  displayName?: string;
-  contextWindow?: number | null;
-  maxInputTokens?: number | null;
-  maxOutputTokens?: number | null;
-  supportsToolCalls?: boolean | null;
-  supportsReasoning?: boolean | null;
-  supportsVision?: boolean | null;
-  supportsEmbeddings?: boolean | null;
-  supportsStructuredOutputs?: boolean | null;
-  providerOptions?: Record<string, JsonValue> | null;
-}
+export type { JsonValue, Provider, ProviderModelOptions, ProviderModelOptionsMap };
+export type { ModelDefinition, ModelOverride, ModelsConfig, ProviderConfig } from '../domain/models';
 
-export type ProviderModelOptionsMap = Record<string, ProviderModelOptions>;
-
+/** A model with its capability snapshot, as the model picker sees it. */
 export interface ProviderModelDescriptor extends ProviderModelOptions {
   id: string;
   source?: 'models.dev' | 'provider';
@@ -25,24 +28,11 @@ export type ModelCapabilitySnapshot = Pick<
   'contextWindow' | 'maxInputTokens' | 'maxOutputTokens' | 'supportsVision'
 >;
 
-export interface Provider {
-  id: string;
-  name: string;
-  type: string;
-  api_key: string;
-  models: string;
-  model_options?: string;
-  base_url?: string;
-  enabled: boolean;
-  created_at: string;
-  updated_at: string;
-  available_models: string;
-  api_version?: string;
-  is_response_api?: boolean;
-}
-
 export type ProviderModelDiscoveryOverride = Partial<
-  Pick<Provider, 'id' | 'type' | 'api_key' | 'base_url' | 'models' | 'model_options' | 'is_response_api'>
+  Pick<
+    Provider,
+    'id' | 'type' | 'api_key' | 'base_url' | 'models' | 'model_options' | 'is_response_api'
+  >
 >;
 
 type ProviderUpdatedAction = 'added' | 'updated' | 'deleted';

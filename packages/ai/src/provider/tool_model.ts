@@ -3,7 +3,6 @@ import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/core/logger';
 import { generateConversationTitle } from '@iki/ai/provider/title_runtime';
 import { generateChatWithModelMessages } from '../provider/llm/factory';
-import { parseModelList } from '@iki/core/utils/provider_models';
 
 export interface ToolModelConfig {
   providerType: string;
@@ -25,13 +24,7 @@ type ToolModelSelectionInput = {
 
 type StoredProvider = ReturnType<typeof getProviders>[number];
 
-const resolveProviderModels = (provider: StoredProvider): string[] | null => {
-  try {
-    return parseModelList(provider.models);
-  } catch {
-    return null;
-  }
-};
+const resolveProviderModels = (provider: StoredProvider): string[] => provider.models;
 
 const resolveExplicitToolModel = (
   enabledProviders: StoredProvider[],

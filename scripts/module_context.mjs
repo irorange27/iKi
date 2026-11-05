@@ -167,7 +167,7 @@ const render = ({ mod, files, entrypoints, dependsOn, dependedOnBy, loc }) => {
 
   lines.push('## Pinned by');
   lines.push('');
-  for (const test of mod.tests) lines.push(`- \`${test}\``);
+  for (const test of mod.tests ?? []) lines.push(`- \`${test}\``);
   lines.push('');
   lines.push('---');
   lines.push('');

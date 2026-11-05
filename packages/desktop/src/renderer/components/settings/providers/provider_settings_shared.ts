@@ -4,8 +4,8 @@ export type EditableProvider = Pick<
   ProviderRecord,
   'id' | 'name' | 'type' | 'api_key' | 'base_url' | 'enabled' | 'icon' | 'is_response_api'
 > & {
+  /** Comma-separated free text in the editor input; split into ids on save. */
   models: string;
-  available_models: string;
 };
 
 export type ProviderSelectOption = {
