@@ -7,6 +7,9 @@ import fs from 'node:fs';
 const PORT = Number(process.env.FAUX_PORT || 18730);
 const LOG = process.env.FAUX_LOG || '/tmp/iki-e2e/faux_requests.log';
 const MODEL = 'faux-e2e-model';
+// The model name in responses is not consumed by the client; exposing a
+// second id lets the e2e exercise model switching through the real picker.
+const MODEL_ALT = 'faux-e2e-model-b';
 
 const log = entry => fs.appendFileSync(LOG, JSON.stringify(entry) + '\n');
 
@@ -68,7 +71,7 @@ const server = http.createServer((req, res) => {
   fs.appendFileSync(LOG + '.urls', `${req.method} ${req.url}\n`);
   if (req.method === 'GET' && req.url.endsWith('/models')) {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ object: 'list', data: [{ id: MODEL }] }));
+    res.end(JSON.stringify({ object: 'list', data: [{ id: MODEL }, { id: MODEL_ALT }] }));
     return;
   }
   if (req.method !== 'POST' || !req.url.includes('/chat/completions')) {

@@ -31,6 +31,7 @@ const VITE_PORT = Number(process.env.IKI_VITE_PORT || 5178);
 const FAUX_PORT = Number(process.env.IKI_E2E_FAUX_PORT || 18733);
 const FAUX_BASE_URL = `http://127.0.0.1:${FAUX_PORT}/v1`;
 const MODEL = 'faux-e2e-model';
+const MODEL_ALT = 'faux-e2e-model-b';
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const log = (...args) => console.log('[settings-e2e]', ...args);
@@ -271,6 +272,62 @@ const typeAndSend = async (cdp, text) => {
   if (sent !== 'OK') throw new Error('send failed: ' + sent);
 };
 
+// Open the composer's model selector, drill into the model pane, pick `model`.
+const pickModelInSelector = async (cdp, model) => {
+  const opened = await cdp.eval(`(function(){
+    const trigger = document.querySelector('.model-selector-trigger');
+    if (!trigger) return 'NO_TRIGGER';
+    trigger.click();
+    return 'OK';
+  })()`);
+  if (opened !== 'OK') throw new Error('model selector trigger missing: ' + opened);
+  await waitForEval(cdp, `[...document.querySelectorAll('.model-menu-cell')].length > 0 ? 1 : 0`, 'selector root menu', 10000);
+  await cdp.eval(`(function(){
+    const cell = [...document.querySelectorAll('.model-menu-cell')].find(b => b.querySelector('.model-menu-cell-label'));
+    cell?.click();
+    return 1;
+  })()`);
+  let picked = 0
+  let lastDump = ''
+  for (let attempt = 0; attempt < 30 && !picked; attempt++) {
+    const outcome = await cdp.eval(`(function(){
+      const btn = [...document.querySelectorAll('.model-option')].find(b => (b.querySelector('.model-option-name')?.textContent || b.textContent).trim() === ${JSON.stringify(model)});
+      if (!btn) {
+        return JSON.stringify({
+          found: 0,
+          trigger: document.querySelector('.model-selector-trigger')?.textContent?.trim().slice(0,80),
+          options: [...document.querySelectorAll('.model-option')].map(b => (b.querySelector('.model-option-name')?.textContent || b.textContent).trim()),
+          paneTitle: document.querySelector('.model-pane-title')?.textContent,
+          cells: [...document.querySelectorAll('.model-menu-cell-label')].map(e => e.textContent),
+        })
+      }
+      btn.click();
+      return JSON.stringify({ found: 1 })
+    })()`)
+    const parsed = JSON.parse(outcome || '{}')
+    if (parsed.found) { picked = 1; break }
+    lastDump = outcome
+    await sleep(500)
+  }
+  if (!picked) {
+    throw new Error('model option not found: ' + model + ' — last: ' + lastDump)
+  }
+  let shown = 0
+  let shownDump = ''
+  for (let attempt = 0; attempt < 30 && !shown; attempt++) {
+    const outcome = await cdp.eval(`JSON.stringify({
+      ok: document.querySelector('.model-selector-trigger')?.textContent?.includes(${JSON.stringify(model)}) ? 1 : 0,
+      trigger: document.querySelector('.model-selector-trigger')?.textContent?.trim().slice(0, 100),
+      panelOpen: !!document.querySelector('.model-selector-panel'),
+    })`).catch(() => '{}')
+    const parsed = JSON.parse(outcome || '{}')
+    if (parsed.ok) { shown = 1; break }
+    shownDump = outcome
+    await sleep(500)
+  }
+  if (!shown) throw new Error('trigger never showed ' + model + ' — ' + shownDump);
+};
+
 // The saved provider must show up in the MAIN window's model selector — that
 // is the user-visible contract of "configured in settings, usable on the home
 // page": the dropdown lists the Ollama group with the model option, clicking
@@ -396,16 +453,19 @@ const main = async () => {
   ).catch(() => null);
   if (!fetchErr) throw new Error('fetch-models never surfaced ' + MODEL + ' from the live endpoint');
 
-  // Toggle the model on: click the checkbox inside its row.
-  const toggled = await settingsCdp.eval(`(function(){
-    const row = [...document.querySelectorAll('.provider-model-row')].find(r => (r.textContent||'').includes(${JSON.stringify(MODEL)}));
-    if (!row) return 'NO_ROW';
-    const box = row.querySelector('input[type=checkbox]');
-    if (!box) return 'NO_CHECKBOX';
-    if (!box.checked) box.click();
-    return row.querySelector('.provider-model-row-enabled') || box.checked ? 'ON' : 'STILL_OFF';
-  })()`);
-  if (toggled !== 'ON') throw new Error('model toggle did not enable: ' + toggled);
+  // Toggle both models on — the alternate id drives the in-conversation
+  // switch we assert at the end.
+  for (const model of [MODEL, MODEL_ALT]) {
+    const toggled = await settingsCdp.eval(`(function(){
+      const row = [...document.querySelectorAll('.provider-model-row')].find(r => (r.textContent||'').includes(${JSON.stringify(model)}));
+      if (!row) return 'NO_ROW';
+      const box = row.querySelector('input[type=checkbox]');
+      if (!box) return 'NO_CHECKBOX';
+      if (!box.checked) box.click();
+      return row.classList.contains('provider-model-row-enabled') || box.checked ? 'ON' : 'STILL_OFF';
+    })()`);
+    if (toggled !== 'ON') throw new Error(`model ${model} toggle did not enable: ${toggled}`);
+  }
 
   // Enable the provider (required for canSave), then press Save.
   const enabled = await settingsCdp.eval(`(function(){
@@ -431,7 +491,9 @@ const main = async () => {
   }, 'enabled openai provider written to models.toml');
   const [providerId, provider] = providers;
   const modelsField = Array.isArray(provider.models) ? provider.models : [];
-  if (!modelsField.includes(MODEL)) throw new Error(`models.toml provider ${providerId} has models=${JSON.stringify(provider.models)}`);
+  if (!modelsField.includes(MODEL) || !modelsField.includes(MODEL_ALT)) {
+    throw new Error(`models.toml provider ${providerId} has models=${JSON.stringify(provider.models)}`);
+  }
   if (provider.baseUrl !== FAUX_BASE_URL) throw new Error(`baseUrl mismatch: ${provider.baseUrl}`);
   if (provider.apiKey !== 'sk-e2e') throw new Error('apiKey mismatch');
   log('saved provider declaration OK:', providerId, JSON.stringify({ type: provider.type, models: modelsField, baseUrl: provider.baseUrl }));
@@ -450,13 +512,44 @@ const main = async () => {
   await waitForEval(mainCdp, `document.body.textContent.includes('ack.')`, 'turn 1 reply rendered', 90000);
 
   step('turn 2: CHECK_HISTORY proves the request carried turn 1 at the wire');
-  await typeAndSend(mainCdp, 'CHECK_HISTORY settings-flow-carried-earlier-turn');
+  await typeAndSend(mainCdp, 'CHECK_HISTORY flowA carried earlier turn');
   await waitForEval(
     mainCdp,
-    `/HISTORY_REPORT\\[CHECK_HISTORY settings/.test(document.body.textContent)`,
+    `/HISTORY_REPORT\\[CHECK_HISTORY flowA/.test(document.body.textContent)`,
     'history report from the second turn',
     90000
   );
+
+  step('switch models mid-conversation through the picker');
+  await pickModelInSelector(mainCdp, MODEL_ALT);
+  await typeAndSend(mainCdp, 'CHECK_HISTORY flowB after model switch');
+  await waitForEval(
+    mainCdp,
+    `/HISTORY_REPORT\\[CHECK_HISTORY flowB/.test(document.body.textContent)`,
+    'history survives the model switch',
+    90000
+  );
+
+  step('assert the thread row persisted the new provider/model binding');
+  const threadRows = await waitForFile(() => {
+    const file = path.join(storeDir(), 'chat_threads.json');
+    try {
+      const rows = JSON.parse(fs.readFileSync(file, 'utf8'));
+      return Array.isArray(rows) && rows.length > 0 ? rows : null;
+    } catch {
+      return null;
+    }
+  }, 'chat_threads.json rows', 15000);
+  const bound = threadRows.find(row => row.model === MODEL_ALT);
+  if (!bound) {
+    throw new Error(
+      'no thread row persisted model=' + MODEL_ALT + '; rows=' + JSON.stringify(threadRows.map(r => ({ model: r.model, provider_type: r.provider_type, provider_id: r.provider_id })))
+    );
+  }
+  if (bound.provider_type !== 'ollama' || bound.provider_id !== providerId) {
+    throw new Error('thread binding wrong: ' + JSON.stringify({ p: bound.provider_type, id: bound.provider_id }));
+  }
+  log('model switch persisted on the thread row:', bound.id, bound.provider_type, bound.provider_id);
 
   step('assert the session log recorded both turns');
   const events = await waitForFile(() => (sessionEventCount() >= 2 ? sessionEventCount() : null), 'session events for two turns', 10000);
