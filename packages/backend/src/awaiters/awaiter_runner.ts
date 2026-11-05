@@ -182,7 +182,7 @@ const buildSuppressedAwaiterResult = (runId?: string | null) => ({
   }
 
   try {
-    const messages: import('../message/model_history').ModelMessage[] = [
+    const messages: import('@iki/ai/message/model_history').ModelMessage[] = [
       { role: 'system', content: AWAITER_WAKE_SYSTEM_PROMPT },
     ];
 

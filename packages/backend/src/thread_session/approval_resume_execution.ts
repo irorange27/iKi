@@ -1,4 +1,4 @@
-import type { ModelMessage } from '@iki/backend/message/model_history';
+import type { ModelMessage } from '@iki/ai/message/model_history';
 import type { TurnDriverHarness } from '../agent/harness';
 import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
 import { planToHarnessConfig , planToRunTrackerParams } from './execution_plan';

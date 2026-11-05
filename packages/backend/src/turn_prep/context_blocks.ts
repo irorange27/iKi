@@ -4,7 +4,7 @@ import path from 'node:path';
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import type { ContextConfig, IdentityContext, SkillContext } from './context_types';
 import { buildDroppedBlock, clipTextToTokenBudget, estimateTextTokens } from './context_helpers';
-import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
+import type { ChatInputMessage } from '@iki/ai/message/chat_message_types';
 
 const AGENT_INSTRUCTIONS_FILENAMES = ['AGENTS.md', 'IKI.md'];
 

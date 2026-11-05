@@ -1,11 +1,11 @@
 import { defaultToolRegistry } from '@iki/backend/tools';
-import { reduceChunkLogToMessage } from '@iki/backend/message/ui_chunk_reducer';
+import { reduceChunkLogToMessage } from '@iki/ai/message/ui_chunk_reducer';
 import type {
   ChatUiMessageChunk,
   SkillUsageEntry,
   TokenUsagePartData,
-} from '@iki/backend/message/message_parts';
-import { isObjectRecord } from '@iki/backend/message/tool_parts';
+} from '@iki/ai/message/message_parts';
+import { isObjectRecord } from '@iki/ai/message/tool_parts';
 import { createLogger } from '@iki/core/logger';
 
 import type {

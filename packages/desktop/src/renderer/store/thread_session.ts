@@ -6,7 +6,7 @@ import { parseStoredUiMessage } from '../modules/chat/ui_message_storage';
 import { resetToolUiStateMap } from '../modules/chat/tool_ui_state';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import type { ChatThread as StoredChatThread } from '@iki/core/types/chat';
-import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import type { ChatUiMessage } from '@iki/ai/message/message_parts';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 import { getCurrentLocale, translateWithLocale } from '../i18n';
@@ -14,8 +14,8 @@ import type { ChatMessageStore } from '../modules/chat/chat_message_store';
 import {
   parseJsonRecord,
   parseThreadLlmSelectionState,
-} from '@iki/backend/message/thread_runtime_hints';
-import { normalizePersonality } from '@iki/backend/message/personality';
+} from '@iki/ai/message/thread_runtime_hints';
+import { normalizePersonality } from '@iki/ai/message/personality';
 import {
   parseApprovalPolicy,
   THREAD_APPROVAL_POLICY_KEY,

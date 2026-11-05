@@ -303,7 +303,7 @@ import {
   ShieldBan,
   XCircle,
 } from 'lucide-vue-next';
-import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import type { ChatUiMessage } from '@iki/ai/message/message_parts';
 
 import {
   canToggleToolCollapse,

@@ -34,14 +34,14 @@ vi.mock('@iki/store/session_events', async importOriginal => {
   };
 });
 
-vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+vi.mock('@iki/ai/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/ai/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
 }));
 
 vi.mock('@iki/core/platform', () => ({ getUserDataPath: external.userData }));
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/ai/provider/llm/factory')>()),
   resolvePersonaPrompt: () => 'review',
   getModelGenerationSettings: () => ({}),
   resolveModelCapability: async () => ({

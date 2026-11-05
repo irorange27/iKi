@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildThreadMarkdown } from '@iki/backend/message/thread_markdown_export';
+import { buildThreadMarkdown } from '@iki/ai/message/thread_markdown_export';
 
 describe('thread_markdown_export', () => {
   it('renders a header and only user/assistant text messages', () => {

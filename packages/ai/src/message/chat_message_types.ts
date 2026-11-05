@@ -1,4 +1,4 @@
-import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import type { ChatUiMessage } from '@iki/ai/message/message_parts';
 import type { ModelMessage } from './model_history';
 
 export type ChatInputMessage = ModelMessage;

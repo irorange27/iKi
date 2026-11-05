@@ -16,11 +16,18 @@ module.exports = {
       to: { path: '^packages/(backend|store|desktop)/' },
     },
     {
+      name: 'ai-depends-on-core-and-store',
+      comment: '@iki/ai holds the transcript types and the provider adapters. It may use core and the store, never the orchestration layer or the shell.',
+      severity: 'error',
+      from: { path: '^packages/ai/src' },
+      to: { path: '^packages/(backend/src/(agent|tools|turn_prep|thread_session|mcp|runtimes|awaiters|workspaces)|desktop)/' },
+    },
+    {
       name: 'store-depends-only-on-core',
       comment: '@iki/store is the persistence layer: it may use core types/utilities and nothing above it (no agent, tools, turn_prep, thread_session, or the shell).',
       severity: 'error',
       from: { path: '^packages/store/src' },
-      to: { path: '^packages/(backend/src/(agent|tools|turn_prep|thread_session|provider|message|mcp|runtimes|awaiters|workspaces|network)|desktop)/' },
+      to: { path: '^packages/(backend/src/(agent|tools|turn_prep|thread_session|mcp|runtimes|awaiters|workspaces)|ai/src|desktop)/' },
     },
     {
       name: 'backend-owns-orchestration',
@@ -45,17 +52,17 @@ module.exports = {
     },
     {
       name: 'provider-is-leaf',
-      comment: 'R1: provider/ wires models; it must not reach up into tools/session/orchestration',
+      comment: 'R1: the provider adapters (@iki/ai/provider) wire models; they must not reach up into tools/session/orchestration',
       severity: 'error',
-      from: { path: '^packages/backend/src/provider' },
-      to: { path: '^packages/backend/src/(tools|turn_prep|thread_session)' },
+      from: { path: '^packages/ai/src/provider' },
+      to: { path: '^packages/(backend/src/(tools|turn_prep|thread_session)|desktop)/' },
     },
     {
       name: 'tools-below-session',
       comment: 'R2: concrete tools stay below turn_prep/provider/thread_session (type-only DI contracts are not counted)',
       severity: 'error',
       from: { path: '^packages/backend/src/tools' },
-      to: { path: '^packages/backend/src/(turn_prep|provider|thread_session)' },
+      to: { path: '^packages/(backend/src/(turn_prep|thread_session)|ai/src/provider)/' },
     },
     {
       name: 'agent-below-session-and-orchestration',
@@ -102,7 +109,7 @@ module.exports = {
       severity: 'error',
       from: { path: '^packages/desktop/src/renderer' },
       to: {
-        path: '^packages/backend/src/(tools|provider|thread_session|agent)',
+        path: '^packages/(backend/src/(tools|thread_session|agent)|ai/src/provider)',
         reachable: true,
       },
     },

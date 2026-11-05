@@ -20,7 +20,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Sparkles, Wrench } from 'lucide-vue-next';
-import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import type { ChatUiMessage } from '@iki/ai/message/message_parts';
 import { useI18n } from '../../i18n';
 
 import { getReferenceSummaries } from '../../modules/chat/ui_message_references';

@@ -12,8 +12,8 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from '@earendil-works/pi-ai';
-import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
-import { toolResultToWire } from '@iki/backend/message/model_history';
+import type { ChatInputMessage } from '@iki/ai/message/chat_message_types';
+import { toolResultToWire } from '@iki/ai/message/model_history';
 
 const ANTHROPIC_PROVIDER_TYPE = 'anthropic';
 

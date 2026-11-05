@@ -5,7 +5,7 @@ import {
   getToolModel,
   generateTitle,
   testToolModelLatency,
-} from '@iki/backend/provider/tool_model';
+} from '@iki/ai/provider/tool_model';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import type { ToolModelLatencyTestResult } from '@iki/backend/types/electron_api';
 import { withIpcLogging } from '../utils/ipc_helpers';

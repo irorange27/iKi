@@ -11,7 +11,7 @@ import type {
 } from '@iki/core/types/provider';
 import type { ChatThread, PromptApp, Workspace } from '@iki/core/types/chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/core/types/chat_usage';
-import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import type { ChatUiMessage } from '@iki/ai/message/message_parts';
 import type { DevRuntimeStatus, DevToolsResolveRequest, DevToolsSourceResult } from '@iki/core/types/devtools';
 import type { McpServerInput, McpServerSummary } from '@iki/core/types/mcp';
 import type {
@@ -149,7 +149,7 @@ export interface ElectronApi {
       searchContent: (
         query: string,
         limit?: number
-      ) => Promise<import('../message/thread_content_search').ThreadContentMatch[]>;
+      ) => Promise<import('@iki/ai/message/thread_content_search').ThreadContentMatch[]>;
     };
     messages: {
       /** The session log's rebuilt view — the same ChatUiMessage values a resumed turn replays. */

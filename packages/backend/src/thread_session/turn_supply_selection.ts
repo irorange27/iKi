@@ -1,9 +1,9 @@
-import type { ModelMessage } from '../message/model_history';
+import type { ModelMessage } from '@iki/ai/message/model_history';
 
 import { type TurnDriverHarness } from '../agent/harness';
 import { PiTextTurnHarness } from '../agent/runners/pi_text_turn_harness';
 import { PiToolTurnHarness } from '../agent/runners/pi_tool_turn_harness';
-import { resolvePiTurnSupply } from '../provider/llm/factory';
+import { resolvePiTurnSupply } from '@iki/ai/provider/llm/factory';
 import { planToHarnessConfig, type ExecutionPlan } from './execution_plan';
 
 type TurnHarnessOverride = (plan: ExecutionPlan) => TurnDriverHarness | null;

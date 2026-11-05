@@ -28,7 +28,7 @@ const SCHEMA_HEAVY_BACKEND = [
 describe('renderer tool-payload seam stays out of the schema closure', () => {
   it('decodes through the schemas-free contracts module', () => {
     expect(importSpecifiers(RENDERER_SEAM)).toContain(
-      '@iki/backend/message/tool_payload_contracts'
+      '@iki/ai/message/tool_payload_contracts'
     );
   });
 

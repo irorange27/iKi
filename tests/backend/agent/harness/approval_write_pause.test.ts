@@ -12,8 +12,8 @@ vi.mock('@iki/core/platform', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/core/platform')>()),
   getUserDataPath: userDataMock,
 }));
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/ai/provider/llm/factory')>();
   return {
     ...actual,
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),

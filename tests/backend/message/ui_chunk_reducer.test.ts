@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 import {
   reduceChunkLogToMessage,
   reduceChunkLogToMessages,
-} from '../../../packages/backend/src/message/ui_chunk_reducer';
-import type { ChatUiChunk } from '../../../packages/backend/src/message/ui_protocol';
+} from '@iki/ai/message/ui_chunk_reducer';
+import type { ChatUiChunk } from '@iki/ai/message/ui_protocol';
 
 const mid = 'assistant_1';
 

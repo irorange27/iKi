@@ -41,8 +41,8 @@ vi.mock('@iki/store/chat_thread', () => ({
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
 const callPiChatMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/ai/provider/llm/factory')>()),
   resolvePersonaPrompt: () => 'test persona',
   getProviderConfig: () => ({
     type: 'openai',
@@ -51,8 +51,8 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   }),
 }));
 
-vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+vi.mock('@iki/ai/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/ai/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
 }));
 

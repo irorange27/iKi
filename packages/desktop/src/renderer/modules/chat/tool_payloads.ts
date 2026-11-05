@@ -3,13 +3,13 @@ import {
   getToolName,
   getToolOutput,
   isObjectRecord,
-} from '@iki/backend/message/tool_parts';
+} from '@iki/ai/message/tool_parts';
 import {
   parseToolInputPayload,
   parseToolOutputPayload,
   type ToolPayloadKind,
   type ToolPayloadRecord,
-} from '@iki/backend/message/tool_payload_contracts';
+} from '@iki/ai/message/tool_payload_contracts';
 
 type UiToolInputPayload =
   | { kind: ToolPayloadKind; input: ToolPayloadRecord }

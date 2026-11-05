@@ -4,7 +4,7 @@ import {
   getApprovalId,
   isToolResultPart,
   normalizeDynamicToolPart,
-} from '@iki/backend/message/tool_parts';
+} from '@iki/ai/message/tool_parts';
 
 describe('tool_parts', () => {
   it('extracts approval ids from common fields', () => {

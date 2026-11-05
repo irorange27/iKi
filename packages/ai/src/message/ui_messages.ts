@@ -2,15 +2,15 @@ import { convertUiMessagesToModel } from './ui_to_model';
 
 type FileUIPart = { type: 'file'; url: string; mediaType: string; filename?: string };
 
-import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
+import { extractTextFromModelMessageContent } from '@iki/ai/message/model_messages';
 import type {
   ChatUiMessage,
   DynamicToolPart,
   TextPart,
   UiMessagePart,
-} from '@iki/backend/message/message_parts';
-import { isChatUiMetadataPart } from '@iki/backend/message/message_parts';
-import { isTerminalDynamicToolPart, toInterruptedToolPart , normalizeToolPartForValidation , isObjectRecord } from '@iki/backend/message/tool_parts';
+} from '@iki/ai/message/message_parts';
+import { isChatUiMetadataPart } from '@iki/ai/message/message_parts';
+import { isTerminalDynamicToolPart, toInterruptedToolPart , normalizeToolPartForValidation , isObjectRecord } from '@iki/ai/message/tool_parts';
 import type { ChatInputMessage, ChatTransportMessage, LlmChatMessage } from './chat_message_types';
 import { createPrefixedId } from '@iki/core/utils/id';
 

@@ -1,10 +1,17 @@
-import { appendUserPromptToHistory } from '@iki/backend/message/model_history';
-import { buildPromptContext } from '@iki/backend/message/prompt_context';
-import { loadAgentConfig, validateAgentConfig } from '../agent/config';
-import type { PartialAgentConfig } from '@iki/backend/agent/types';
-import { generateChatWithModelMessages, getModelGenerationSettings } from '../provider/llm/factory';
+import { appendUserPromptToHistory } from '@iki/ai/message/model_history';
+import { buildPromptContext } from '@iki/ai/message/prompt_context';
+import { generateChatWithModelMessages, getModelGenerationSettings } from '@iki/ai/provider/llm/factory';
 
-type PromptTextGeneratorConfig = PartialAgentConfig & {
+type PromptTextGeneratorConfig = {
+  enabled?: boolean;
+  providerType: string;
+  providerId?: string | null;
+  model: string;
+  systemPrompt: string;
+  temperature?: number;
+  maxTokens?: number;
+  maxIterations?: number;
+  enableTools?: boolean;
   threadId?: string;
 };
 
@@ -13,8 +20,10 @@ export const generatePromptText = async (
   prompt: string,
   abortSignal?: AbortSignal
 ): Promise<string> => {
-  const resolved = loadAgentConfig(config);
-  validateAgentConfig(resolved);
+  if (!config) throw new Error('generatePromptText requires a model config');
+  // Same default temperature the old agent-config loader applied, so callers that
+  // omit it keep the previous sampling behaviour.
+  const resolved = { temperature: 0.1, maxTokens: 2000, ...config };
 
   const history = appendUserPromptToHistory([], prompt);
   const { systemPrompt, messages } = buildPromptContext(resolved, history);

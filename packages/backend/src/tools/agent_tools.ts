@@ -13,7 +13,7 @@ import type {
   AgentRunWorkingState,
 } from '@iki/core/types/agent_run';
 import type { TurnOutput } from '../agent/harness/harness_types';
-import type { ToolModelConfig } from '../provider/tool_model';
+import type { ToolModelConfig } from '@iki/ai/provider/tool_model';
 import { BaseTool } from '@iki/backend/tools/base';
 import { zodSchemaToJsonSchema } from '@iki/backend/tools/json_schema';
 import {

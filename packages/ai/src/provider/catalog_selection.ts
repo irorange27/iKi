@@ -6,7 +6,7 @@ import {
   tryParseJson,
   type CatalogSelectionRequest,
   type SelectionMessage,
-} from '../runtimes/catalog_selection_runtime';
+} from '@iki/ai/provider/catalog_selection_runtime';
 import { normalizeWhitespace } from '@iki/core/utils/text';
 import { getToolModel } from './tool_model';
 

@@ -1,9 +1,9 @@
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { decideToolApproval } from '@iki/core/utils/action_risk';
 import { createLogger } from '@iki/core/logger';
-import { selectToolsWithAgent } from '../provider/tool_selection';
-import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
-import { toLlmChatMessages } from '@iki/backend/message/ui_messages';
+import { selectToolsWithAgent } from '@iki/ai/provider/tool_selection';
+import type { ChatInputMessage } from '@iki/ai/message/chat_message_types';
+import { toLlmChatMessages } from '@iki/ai/message/ui_messages';
 
 type ToolResolveMode = 'manual' | 'auto';
 type ToolMetadata = ReturnType<typeof defaultToolRegistry.getToolMetadata>[number];

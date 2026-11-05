@@ -16,7 +16,7 @@ import {
   fetchWithTimeout,
   getNetworkRetryAttempts,
   getNetworkTimeoutMs,
-} from '@iki/backend/network/http';
+} from '@iki/ai/network/http';
 
 const getAppConfigMock = vi.mocked(getAppConfig);
 const ORIGINAL_ENV = { ...process.env };

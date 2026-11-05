@@ -1,5 +1,5 @@
 import type { AssistantMessage, Message as PiMessage, Tool as PiTool, ToolCall } from '@earendil-works/pi-ai';
-import { toolResultIsError, toolResultText } from '@iki/backend/message/model_history';
+import { toolResultIsError, toolResultText } from '@iki/ai/message/model_history';
 
 export { toolResultText, toolResultIsError };
 

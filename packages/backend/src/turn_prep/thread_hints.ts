@@ -1,7 +1,7 @@
 import * as chatThreadDb from '@iki/store/chat_thread';
 import { createLogger } from '@iki/core/logger';
 import type { ChatThread } from '@iki/core/types/chat';
-import { buildThreadRuntimeMetadata } from '@iki/backend/message/thread_runtime_hints';
+import { buildThreadRuntimeMetadata } from '@iki/ai/message/thread_runtime_hints';
 
 const chatThreadHintsLogger = createLogger({ module: 'chat_thread_hints' });
 

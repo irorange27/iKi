@@ -45,7 +45,7 @@ vi.mock('@iki/backend/persona', () => ({
   getPersonaPrompt: getPersonaPromptMock,
 }));
 
-vi.mock('@iki/backend/network/http', () => ({
+vi.mock('@iki/ai/network/http', () => ({
   fetchWithTimeout: fetchWithTimeoutMock,
 }));
 
@@ -69,7 +69,7 @@ import {
   refreshModelsDevCatalog,
   resetModelsDevCatalogCacheForTests,
   resolveModelCapability,
-} from '@iki/backend/provider/llm/factory';
+} from '@iki/ai/provider/llm/factory';
 
 const createAsyncIterable = <T>(values: T[]) =>
   (async function* () {

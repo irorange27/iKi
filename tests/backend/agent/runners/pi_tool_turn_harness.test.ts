@@ -2,11 +2,11 @@
 
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
-import type { ModelMessage } from '@iki/backend/message/model_history';
+import type { ModelMessage } from '@iki/ai/message/model_history';
 import { z } from 'zod';
 
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/ai/provider/llm/factory')>();
   return {
     ...actual,
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),

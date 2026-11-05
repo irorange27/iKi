@@ -1,4 +1,4 @@
-import type { ModelMessage } from '@iki/backend/message/model_history';
+import type { ModelMessage } from '@iki/ai/message/model_history';
 
 export const SUMMARY_OPEN_TAG = '<compacted-summary>';
 const SUMMARY_CLOSE_TAG = '</compacted-summary>';

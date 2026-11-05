@@ -1,5 +1,5 @@
 import { createLogger } from '@iki/core/logger';
-import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import type { ChatUiMessage } from '@iki/ai/message/message_parts';
 import type { AgentRunStatus } from '@iki/core/types/agent_run';
 import {
   appendSessionFacts,

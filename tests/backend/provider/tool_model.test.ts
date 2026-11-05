@@ -23,7 +23,7 @@ vi.mock('ai', () => ({
   generateText: generateTextMock,
 }));
 
-vi.mock('@iki/backend/provider/llm/factory', () => ({
+vi.mock('@iki/ai/provider/llm/factory', () => ({
   generateChatWithModelMessages: generateChatWithModelMessagesMock,
   resolvePersonaPrompt: resolvePersonaPromptMock,
   getModelCallSettings: getModelCallSettingsMock,
@@ -48,7 +48,7 @@ vi.mock('@iki/core/logger', () => ({
   })),
 }));
 
-import { getToolModel, testToolModelLatency } from '@iki/backend/provider/tool_model';
+import { getToolModel, testToolModelLatency } from '@iki/ai/provider/tool_model';
 
 const buildProvider = (
   overrides: Partial<Provider> & Pick<Provider, 'id' | 'name' | 'type' | 'models'>

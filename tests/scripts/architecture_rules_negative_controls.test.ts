@@ -36,7 +36,7 @@ const CONTROLS: Control[] = [
   },
   {
     rule: 'provider-is-leaf',
-    from: 'packages/backend/src/provider/probe.ts',
+    from: 'packages/ai/src/provider/probe.ts',
     to: 'packages/backend/src/tools/probe.ts',
   },
   {
@@ -75,8 +75,8 @@ const CONTROLS: Control[] = [
     to: 'packages/backend/src/message/hop.ts',
     extra: {
       'packages/backend/src/message/hop.ts':
-        "import { deep } from '@iki/backend/provider/deep';\nexport const hop = deep;\n",
-      'packages/backend/src/provider/deep.ts': 'export const deep = 1;\n',
+        "import { deep } from '@iki/ai/provider/deep';\nexport const hop = deep;\n",
+      'packages/ai/src/provider/deep.ts': 'export const deep = 1;\n',
     },
   },
   {
@@ -98,6 +98,9 @@ const writeFixture = async (root: string, control: Control): Promise<void> => {
           paths: {
             '@iki/backend': ['./packages/backend/src/index.ts'],
             '@iki/backend/*': ['./packages/backend/src/*'],
+            '@iki/core/*': ['./packages/core/src/*'],
+            '@iki/store/*': ['./packages/store/src/*'],
+            '@iki/ai/*': ['./packages/ai/src/*'],
             '@iki/desktop/*': ['./packages/desktop/src/*'],
           },
         },

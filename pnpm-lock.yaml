@@ -270,8 +270,20 @@ importers:
         specifier: ^3.3.14
         version: 3.3.14(typescript@5.9.3)
 
+  packages/ai:
+    dependencies:
+      '@iki/core':
+        specifier: workspace:*
+        version: link:../core
+      '@iki/store':
+        specifier: workspace:*
+        version: link:../store
+
   packages/backend:
     dependencies:
+      '@iki/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@iki/core':
         specifier: workspace:*
         version: link:../core

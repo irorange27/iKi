@@ -6,8 +6,8 @@ import path from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/ai/provider/llm/factory')>();
   return {
     ...actual,
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),

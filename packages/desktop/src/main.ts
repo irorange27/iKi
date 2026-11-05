@@ -17,7 +17,7 @@ import {
   finalizeHarnessTurn,
   finalizeTurnFailure,
 } from '@iki/backend/thread_session/turn_finalize';
-import { getToolModel } from '@iki/backend/provider/tool_model';
+import { getToolModel } from '@iki/ai/provider/tool_model';
 import { resolveElement } from './main/services/devtools/element_source';
 import { electronFetchWithTimeout } from './main/services/network/electron_fetch';
 import { registerMainIpc } from './main/ipc';

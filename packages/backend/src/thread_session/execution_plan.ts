@@ -7,7 +7,7 @@ import type { ApprovalPolicy } from '../agent/harness/tool_resolver';
 import type { HarnessConfig } from '../agent/harness/harness_types';
 import type { ThreadWorkspaceSelection } from '../workspaces/thread_workspace';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
-import { getPersonalityStylePrompt } from '../message/personality';
+import { getPersonalityStylePrompt } from '@iki/ai/message/personality';
 import {
   NO_TOOLS_SYSTEM_PROMPT,
   TOOL_AGENT_SYSTEM_PROMPT,

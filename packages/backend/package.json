@@ -16,6 +16,7 @@
   "dependencies": {
     "@iki/theme": "workspace:*",
     "@iki/core": "workspace:*",
-    "@iki/store": "workspace:*"
+    "@iki/store": "workspace:*",
+    "@iki/ai": "workspace:*"
   }
 }

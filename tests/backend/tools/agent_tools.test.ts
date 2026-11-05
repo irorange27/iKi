@@ -18,8 +18,8 @@ const {
   createHarnessTurnMock: vi.fn(),
 }));
 
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/ai/provider/llm/factory')>()),
   resolvePersonaPrompt: () => 'test persona',
   getProviderConfig: () => ({
     type: 'openai',

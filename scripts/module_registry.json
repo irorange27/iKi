@@ -51,7 +51,7 @@
     {
       "id": "backend/provider",
       "roots": [
-        "packages/backend/src/provider"
+        "packages/ai/src/provider"
       ],
       "layer": "domain",
       "role": "Model supply: LLM factory, pi adapter, model discovery, tool model",
@@ -75,7 +75,7 @@
     {
       "id": "backend/message",
       "roots": [
-        "packages/backend/src/message"
+        "packages/ai/src/message"
       ],
       "layer": "domain",
       "role": "Message codecs, ui/model conversions, system prompt assembly, markdown export",
@@ -127,7 +127,7 @@
         "packages/core/src/types",
         "packages/core/src/logging",
         "packages/core/src/i18n",
-        "packages/backend/src/network",
+        "packages/ai/src/network",
         "packages/backend/src/runtimes"
       ],
       "layer": "foundation",

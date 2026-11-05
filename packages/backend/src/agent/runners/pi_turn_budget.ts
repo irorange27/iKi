@@ -1,7 +1,7 @@
-import type { ModelMessage } from '../../message/model_history';
+import type { ModelMessage } from '@iki/ai/message/model_history';
 
 import { generateThreadSummary } from '../../runtimes/thread_summary';
-import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
+import { assembleRequestSystemPrompt } from '@iki/ai/message/system_prompt';
 import {
   AUTO_COMPACT_KEEP_RATIO,
   autoCompactHistory,

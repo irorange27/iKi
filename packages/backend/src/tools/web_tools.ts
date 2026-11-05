@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { BaseTool } from '@iki/backend/tools/base';
-import { fetchWithTimeout, getNetworkRetryAttempts, getNetworkTimeoutMs } from '@iki/backend/network/http';
+import { fetchWithTimeout, getNetworkRetryAttempts, getNetworkTimeoutMs } from '@iki/ai/network/http';
 import { RetryableError, getErrorMessage } from '@iki/core/utils/errors';
 import { getAppConfig } from '../config';
 import type { WebSearchEngine } from '@iki/core/types/config';

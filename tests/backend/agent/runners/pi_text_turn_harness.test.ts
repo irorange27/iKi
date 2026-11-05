@@ -6,14 +6,14 @@ import {
   type AssistantMessage,
   type AssistantMessageEvent,
 } from '@earendil-works/pi-ai';
-import type { ModelMessage } from '@iki/backend/message/model_history';
+import type { ModelMessage } from '@iki/ai/message/model_history';
 
 vi.mock('@iki/backend/runtimes/thread_summary', () => ({
   generateThreadSummary: vi.fn(),
 }));
 
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/ai/provider/llm/factory')>();
   return {
     ...actual,
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),

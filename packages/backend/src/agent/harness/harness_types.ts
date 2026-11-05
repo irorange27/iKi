@@ -1,4 +1,4 @@
-import type { ModelMessage } from '@iki/backend/message/model_history';
+import type { ModelMessage } from '@iki/ai/message/model_history';
 
 import type { AgentStep, ModelInferenceRecord } from '@iki/backend/agent/agent_step';
 import type {

@@ -1,10 +1,10 @@
-import type { SkillUsageEntry, TokenUsagePartData } from '@iki/backend/message/message_parts';
+import type { SkillUsageEntry, TokenUsagePartData } from '@iki/ai/message/message_parts';
 
 export type {
   ChatInputMessage,
   ChatTransportMessage,
   LlmChatMessage,
-} from '@iki/backend/message/chat_message_types';
+} from '@iki/ai/message/chat_message_types';
 
 export type ChatStreamTarget = {
   id: number;

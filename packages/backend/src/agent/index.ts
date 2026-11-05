@@ -33,5 +33,5 @@ export {
   extractTextFromModelMessageContent,
   hasToolPartInModelMessageContent,
   sanitizeModelConversationMessages,
-} from './model_messages';
+} from '@iki/ai/message/model_messages';
 

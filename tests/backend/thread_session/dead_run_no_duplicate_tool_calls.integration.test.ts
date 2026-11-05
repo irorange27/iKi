@@ -30,7 +30,7 @@ import {
   turnFactsToEvents,
 } from '@iki/backend/thread_session/session_log';
 import { rebuildResumeHistoryFromEvents } from '@iki/backend/thread_session/run_rehydrator';
-import type { ModelMessage } from '@iki/backend/message/model_history';
+import type { ModelMessage } from '@iki/ai/message/model_history';
 
 const THREAD_ID = 'thread_dead_run_replay';
 const DEAD_RUN_ID = 'run_dead_1';

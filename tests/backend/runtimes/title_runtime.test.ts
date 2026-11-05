@@ -7,8 +7,8 @@ const { generateChatWithModelMessagesMock, getModelGenerationSettingsMock, resol
     resolvePersonaPromptMock: vi.fn(() => 'persona prompt'),
   }));
 
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/ai/provider/llm/factory')>();
   return {
     ...actual,
     generateChatWithModelMessages: generateChatWithModelMessagesMock,
@@ -20,7 +20,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
 import {
   generateConversationTitle,
   sanitizeGeneratedTitle,
-} from '@iki/backend/runtimes/title_runtime';
+} from '@iki/ai/provider/title_runtime';
 
 const toolModel = { providerType: 'openai', model: 'gpt-4o-mini' };
 

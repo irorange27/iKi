@@ -1,7 +1,7 @@
 import { getProviders } from '@iki/store/providers';
-import { getAppConfig } from '../config';
+import { getAppConfig } from '@iki/backend/config';
 import { createLogger } from '@iki/core/logger';
-import { generateConversationTitle } from '../runtimes/title_runtime';
+import { generateConversationTitle } from '@iki/ai/provider/title_runtime';
 import { generateChatWithModelMessages } from '../provider/llm/factory';
 import { parseModelList } from '@iki/core/utils/provider_models';
 

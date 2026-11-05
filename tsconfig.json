@@ -32,6 +32,9 @@
       ],
       "@iki/store/*": [
         "./packages/store/src/*"
+      ],
+      "@iki/ai/*": [
+        "./packages/ai/src/*"
       ]
     },
     "typeRoots": [
@@ -43,6 +46,7 @@
     "packages/desktop/src/**/*",
     "packages/backend/src/**/*",
     "packages/core/src/**/*",
-    "packages/store/src/**/*"
+    "packages/store/src/**/*",
+    "packages/ai/src/**/*"
   ]
 }

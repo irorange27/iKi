@@ -1,5 +1,5 @@
 import type { ChatThread } from '@iki/core/types/chat';
-import { parseJsonRecord } from '@iki/backend/message/thread_runtime_hints';
+import { parseJsonRecord } from '@iki/ai/message/thread_runtime_hints';
 import { normalizeWhitespace } from '@iki/core/utils/text';
 
 type ThreadOriginInfo = {

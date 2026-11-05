@@ -1,5 +1,5 @@
 import { nextTick, ref, watch } from 'vue';
-import type { ThreadContentMatch } from '@iki/backend/message/thread_content_search';
+import type { ThreadContentMatch } from '@iki/ai/message/thread_content_search';
 import { createLogger } from '../logger';
 import { isExternalThread } from '../modules/chat/thread_origin';
 import type { SidebarChatThread } from './useSidebarData';

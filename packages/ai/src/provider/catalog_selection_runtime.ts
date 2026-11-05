@@ -1,5 +1,5 @@
 import { createLogger } from '@iki/core/logger';
-import type { ToolModelConfig } from '../provider/tool_model';
+import type { ToolModelConfig } from '@iki/ai/provider/tool_model';
 import { generatePromptText } from './prompt_text_generator';
 import { normalizeWhitespace } from '@iki/core/utils/text';
 

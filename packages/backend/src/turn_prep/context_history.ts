@@ -1,5 +1,5 @@
-import { sanitizeModelConversationMessages } from '@iki/backend/agent/model_messages';
-import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
+import { sanitizeModelConversationMessages } from '@iki/ai/message/model_messages';
+import type { ChatInputMessage } from '@iki/ai/message/chat_message_types';
 import { estimateMessageTokens } from '@iki/backend/agent/context_budget';
 import { buildMessagePreview } from './context_helpers';
 import type { RecentHistoryContext } from './context_types';

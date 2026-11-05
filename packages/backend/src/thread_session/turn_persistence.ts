@@ -1,8 +1,8 @@
 import { createLogger } from '@iki/core/logger';
-import { normalizeUiMessage } from '@iki/backend/message/ui_message_codec';
+import { normalizeUiMessage } from '@iki/ai/message/ui_message_codec';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import { findMessageEvent } from '@iki/store/session_events';
-import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import type { ChatUiMessage } from '@iki/ai/message/message_parts';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 
 const logger = createLogger({ module: 'turn_persistence' });

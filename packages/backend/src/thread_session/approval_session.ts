@@ -1,4 +1,4 @@
-import type { ModelMessage, ToolApprovalResponse } from '@iki/backend/message/model_history';
+import type { ModelMessage, ToolApprovalResponse } from '@iki/ai/message/model_history';
 import type { ApprovalRecoveryContext } from './approval_types';
 import type { ChatStreamTarget } from './types';
 

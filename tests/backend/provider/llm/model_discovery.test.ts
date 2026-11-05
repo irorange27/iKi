@@ -16,11 +16,11 @@ vi.mock('@iki/core/logger', () => ({
   }),
 }));
 
-vi.mock('@iki/backend/network/http', () => ({
+vi.mock('@iki/ai/network/http', () => ({
   fetchWithTimeout: fetchWithTimeoutMock,
 }));
 
-vi.mock('../../../../packages/backend/src/provider/llm/factory', () => ({
+vi.mock('../../../../packages/ai/src/provider/llm/factory', () => ({
   fetchModelsFromDev: fetchModelsFromDevMock,
   getProviderConfig: getProviderConfigMock,
 }));
@@ -29,7 +29,7 @@ import {
   fetchLiveProviderModels,
   getProviderModelsForRecord,
   resetModelDiscoveryCacheForTests,
-} from '../../../../packages/backend/src/provider/llm/model_discovery';
+} from '@iki/ai/provider/llm/model_discovery';
 
 const jsonResponse = (payload: unknown, ok = true) => ({
   ok,

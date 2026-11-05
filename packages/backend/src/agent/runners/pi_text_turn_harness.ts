@@ -2,25 +2,25 @@ import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-
 
 import { createLogger } from '@iki/core/logger';
 import { getErrorMessage, isRetryableError } from '@iki/core/utils/errors';
-import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
+import { assembleRequestSystemPrompt } from '@iki/ai/message/system_prompt';
 import {
   appendUserPromptToHistory,
   cloneModelMessages,
   type ModelMessage,
-} from '@iki/backend/message/model_history';
+} from '@iki/ai/message/model_history';
 import {
   resolvePersonaPrompt,
   getProviderConfig,
   resolvePiModelCapability,
   resolveProviderApi,
-} from '../../provider/llm/factory';
+} from '@iki/ai/provider/llm/factory';
 import {
   buildPiModel,
   callPiChat,
   shouldUseCacheRetention,
   projectHistoryToPiContext,
   projectUsageToIki,
-} from '../../provider/llm/pi_adapter';
+} from '@iki/ai/provider/llm/pi_adapter';
 import { preparePiTurnHistory } from './pi_turn_budget';
 import type { AgentTurnPerf, AgentUsage } from '../types';
 import type { HarnessConfig, TurnEvent, TurnInput, TurnOutput } from '../harness/harness_types';

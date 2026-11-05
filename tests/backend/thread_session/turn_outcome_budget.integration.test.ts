@@ -9,8 +9,8 @@ import { z } from 'zod';
 
 const callPiChatMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+vi.mock('@iki/ai/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/ai/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
 }));
 
@@ -19,8 +19,8 @@ vi.mock('@iki/backend/thread_session/turn_supply_selection', async importOrigina
   pausedPlanRunsOnPiToolSupply: () => true,
 }));
 
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/ai/provider/llm/factory')>();
   return {
     ...actual,
     resolvePersonaPrompt: vi.fn(() => 'persona prompt'),

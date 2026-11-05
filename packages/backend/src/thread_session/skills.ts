@@ -6,11 +6,11 @@ import {
   listSkills,
   normalizeSkillIds,
 } from '@iki/backend/tools/skills';
-import { getToolModel } from '../provider/tool_model';
-import { selectSkillsWithAgent } from '../provider/skill_selection';
+import { getToolModel } from '@iki/ai/provider/tool_model';
+import { selectSkillsWithAgent } from '@iki/ai/provider/skill_selection';
 import type { SkillSummary } from '@iki/core/types/skill';
 import type { ChatInputMessage } from './types';
-import { toLlmChatMessages } from '@iki/backend/message/ui_messages';
+import { toLlmChatMessages } from '@iki/ai/message/ui_messages';
 
 const chatSkillsLogger = createLogger({ module: 'chat_skills' });
 

@@ -5,10 +5,10 @@ import {
   getSessionEventRevision,
   getSessionEvents,
 } from '@iki/store/session_events';
-import type { ModelMessage } from '../message/model_history';
-import { normalizeToolOutput } from '../message/model_history';
-import { normalizeUiMessage } from '../message/ui_message_codec';
-import { toModelInputMessages } from '../message/ui_messages';
+import type { ModelMessage } from '@iki/ai/message/model_history';
+import { normalizeToolOutput } from '@iki/ai/message/model_history';
+import { normalizeUiMessage } from '@iki/ai/message/ui_message_codec';
+import { toModelInputMessages } from '@iki/ai/message/ui_messages';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { getToolRuntimeContext, runWithToolRuntimeContext } from '@iki/core/utils/runtime_context';
 import { parseStoredWorkspaceSelection } from '../workspaces/thread_workspace';

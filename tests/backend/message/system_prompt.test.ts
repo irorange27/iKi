@@ -6,7 +6,7 @@ import {
   assembleRequestSystemPrompt,
   REQUEST_SYSTEM_PROMPT_SLOTS,
   type RequestSystemPromptPart,
-} from '@iki/backend/message/system_prompt';
+} from '@iki/ai/message/system_prompt';
 
 const part = (slot: RequestSystemPromptPart['slot'], text: string): RequestSystemPromptPart => ({
   slot,

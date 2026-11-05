@@ -72,7 +72,7 @@ export const createChatStreaming = (deps: {
       approvalId: string,
       session: {
         target: ChatStreamTarget;
-        history?: import('../message/model_history').ModelMessage[];
+        history?: import('@iki/ai/message/model_history').ModelMessage[];
         recoveryContext?: ApprovalRecoveryContext;
       }
     ) => unknown;

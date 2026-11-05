@@ -1,12 +1,12 @@
 
 import type { JSONValue, SharedV3ProviderOptions } from './wire_types';
-import type { ModelMessage } from '@iki/backend/message/model_history';
+import type { ModelMessage } from '@iki/ai/message/model_history';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { getProviders } from '@iki/store/providers';
 import { createLogger } from '@iki/core/logger';
-import { getPersonaPrompt } from '../../persona';
+import { getPersonaPrompt } from '@iki/backend/persona';
 import { fetchWithTimeout } from '../../network/http';
 import {
   getProviderModelOptions,
@@ -27,7 +27,7 @@ import { getErrorMessage } from '@iki/core/utils/errors';
 import {
   assembleAuxRequestSystemPrompt,
   assembleRequestSystemPrompt,
-} from '@iki/backend/message/system_prompt';
+} from '@iki/ai/message/system_prompt';
 import {
   buildPiModel,
   callPiChat,

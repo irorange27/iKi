@@ -144,7 +144,7 @@ import {
   isDataPart,
   isReasoningPart,
   isTextPart,
-} from '@iki/backend/message/message_parts';
+} from '@iki/ai/message/message_parts';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import { markdownCodeBlockPlugin } from '../../utils/markdown_code_block_plugin';
 import { markdownMathPlugin } from '../../utils/markdown_math_plugin';

@@ -1,4 +1,4 @@
-import type { ModelMessage } from '@iki/backend/message/model_history';
+import type { ModelMessage } from '@iki/ai/message/model_history';
 import type { ApprovalBinding } from './approval_session';
 import { pausedPlanRunsOnPiToolSupply } from './turn_supply_selection';
 import { prepareToolExecution } from './tool_execution';

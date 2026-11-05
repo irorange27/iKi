@@ -7,8 +7,8 @@ const { generateChatWithModelMessagesMock, getModelGenerationSettingsMock, resol
     resolvePersonaPromptMock: vi.fn(() => 'persona prompt'),
   }));
 
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/ai/provider/llm/factory')>();
   return {
     ...actual,
     generateChatWithModelMessages: generateChatWithModelMessagesMock,
@@ -23,7 +23,7 @@ import {
   extractJsonCandidate,
   selectCatalog,
   tryParseJson,
-} from '@iki/backend/runtimes/catalog_selection_runtime';
+} from '@iki/ai/provider/catalog_selection_runtime';
 
 const toolModel = { providerType: 'deepseek', model: 'deepseek-flash' };
 

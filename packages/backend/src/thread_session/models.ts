@@ -1,5 +1,5 @@
-import * as llmFactory from '../provider/llm/factory';
-import { getProviderModels, getProviderModelsForRecord } from '../provider/llm/model_discovery';
+import * as llmFactory from '@iki/ai/provider/llm/factory';
+import { getProviderModels, getProviderModelsForRecord } from '@iki/ai/provider/llm/model_discovery';
 import { createLogger } from '@iki/core/logger';
 import type {
   ProviderModelDescriptor,

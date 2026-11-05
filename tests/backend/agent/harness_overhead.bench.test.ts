@@ -6,16 +6,16 @@ import { z } from 'zod';
 import { createTool, defaultToolRegistry, registerStandardTools } from '@iki/backend/tools';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
-import { getToolModel } from '@iki/backend/provider/tool_model';
+import { getToolModel } from '@iki/ai/provider/tool_model';
 import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 
 const callPiChatMock = vi.hoisted(() => vi.fn());
-vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/provider/llm/pi_adapter')>()),
+vi.mock('@iki/ai/provider/llm/pi_adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/ai/provider/llm/pi_adapter')>()),
   callPiChat: callPiChatMock,
 }));
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/ai/provider/llm/factory')>();
   return {
     ...actual,
     resolvePersonaPrompt: vi.fn(() => 'persona'),

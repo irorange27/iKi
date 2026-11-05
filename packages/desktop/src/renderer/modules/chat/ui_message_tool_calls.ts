@@ -20,8 +20,8 @@ import {
   isToolCallPart,
   isToolResultPart,
   normalizeToolNameKey,
-} from '@iki/backend/message/tool_parts';
-import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+} from '@iki/ai/message/tool_parts';
+import type { ChatUiMessage } from '@iki/ai/message/message_parts';
 import { getParsedToolInput, getParsedToolOutput } from './tool_payloads';
 import { translate } from '../../i18n';
 import { getToolUiState, updateToolUiState } from './tool_ui_state';
@@ -38,7 +38,7 @@ export {
   isToolResultPart,
   normalizeToolNameKey,
   parseToolInputFromText,
-} from '@iki/backend/message/tool_parts';
+} from '@iki/ai/message/tool_parts';
 export { getParsedToolInput, getParsedToolOutput } from './tool_payloads';
 
 type WebSearchCitation = {

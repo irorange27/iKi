@@ -2,7 +2,7 @@
 
 import { describe, expect, it, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
-import type { ChatUiMessage as UIMessage } from '@iki/backend/message/message_parts';
+import type { ChatUiMessage as UIMessage } from '@iki/ai/message/message_parts';
 
 import ToolCallPart from '../../../packages/desktop/src/renderer/components/chat/ToolCallPart.vue';
 import {

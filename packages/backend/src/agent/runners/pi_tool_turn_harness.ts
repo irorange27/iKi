@@ -4,20 +4,20 @@ import type { Message as PiMessage } from '@earendil-works/pi-ai';
 import { createLogger } from '@iki/core/logger';
 import { RefusalError } from '@iki/core/utils/errors';
 import type { ToolApprovalRequest , AgentTool, AgentTurnPerf, AgentUsage } from '../types';
-import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
+import { assembleRequestSystemPrompt } from '@iki/ai/message/system_prompt';
 import {
   appendUserPromptToHistory,
   cloneModelMessages,
   toolResultText,
   type ModelMessage,
   type ModelToolResultOutput,
-} from '@iki/backend/message/model_history';
-import { resolvePersonaPrompt } from '../../provider/llm/factory';
+} from '@iki/ai/message/model_history';
+import { resolvePersonaPrompt } from '@iki/ai/provider/llm/factory';
 import {
   projectHistoryToPiContext,
   projectToolsToPiTools,
   projectUsageToIki,
-} from '../../provider/llm/pi_adapter';
+} from '@iki/ai/provider/llm/pi_adapter';
 import {
   runPiAgentLoop,
   toolResultIsError as toolExecutionIsError,

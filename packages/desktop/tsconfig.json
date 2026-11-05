@@ -21,6 +21,9 @@
       ],
       "@iki/store/*": [
         "../store/src/*"
+      ],
+      "@iki/ai/*": [
+        "../ai/src/*"
       ]
     },
     "declaration": true,

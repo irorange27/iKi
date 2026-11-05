@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
 import { ref, watch } from 'vue';
-import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import type { ChatUiMessage } from '@iki/ai/message/message_parts';
 import { createReactiveChatState } from '../../../packages/desktop/src/renderer/modules/chat/chat_instance';
 import { createChatMessageStore } from '../../../packages/desktop/src/renderer/modules/chat/chat_message_store';
 import { useChatUsage } from '../../../packages/desktop/src/renderer/composables/useChatUsage';

@@ -4,7 +4,7 @@ import type {
   ChatUiMessage,
   UiChatStatus,
   UiChatTransport,
-} from '@iki/backend/message/ui_protocol';
+} from '@iki/ai/message/ui_protocol';
 
 import { applyChatUiChunk } from './chat_chunk_apply';
 
@@ -125,7 +125,7 @@ export class IkiChat {
     for (const message of messages) {
       for (const part of message.parts) {
         if (part.type !== 'dynamic-tool') continue;
-        const tool = part as import('@iki/backend/message/ui_protocol').UiDynamicToolPart;
+        const tool = part as import('@iki/ai/message/ui_protocol').UiDynamicToolPart;
         if (tool.approval?.id !== response.id) continue;
         tool.state = 'approval-responded';
         tool.approval = { id: response.id, approved: response.approved };

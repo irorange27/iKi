@@ -5,12 +5,12 @@ const { loggerEventMock, generateMock } = vi.hoisted(() => ({
   generateMock: vi.fn(),
 }));
 
-vi.mock('@iki/backend/provider/tool_model', () => ({
+vi.mock('@iki/ai/provider/tool_model', () => ({
   getToolModel: vi.fn(),
 }));
 
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/ai/provider/llm/factory')>()),
   generateChatWithModelMessages: generateMock,
   getModelGenerationSettings: vi.fn(() => ({})),
 }));
@@ -26,7 +26,7 @@ vi.mock('@iki/core/logger', () => ({
   })),
 }));
 
-import { getToolModel } from '@iki/backend/provider/tool_model';
+import { getToolModel } from '@iki/ai/provider/tool_model';
 import { generateThreadSummary } from '@iki/backend/runtimes/thread_summary';
 import {
   COMPACTION_INSTRUCTION,

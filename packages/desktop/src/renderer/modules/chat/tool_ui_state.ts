@@ -1,6 +1,6 @@
 import { shallowReactive } from 'vue';
 
-import type { ChatUiMessageChunk } from '@iki/backend/message/message_parts';
+import type { ChatUiMessageChunk } from '@iki/ai/message/message_parts';
 
 type ToolUiState = {
   collapsed?: boolean;

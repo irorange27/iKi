@@ -19,9 +19,9 @@ import { setChatServicePlatformDeps } from './platform';
 import { deriveResumeStreamOptions, rebuildResumeHistoryFromEvents } from './run_rehydrator';
 import type { AgentRun, AgentRunKind } from '@iki/core/types/agent_run';
 import { getErrorMessage } from '@iki/core/utils/errors';
-import type { ModelMessage } from '../message/model_history';
-import { buildThreadMarkdown } from '../message/thread_markdown_export';
-import { searchThreadContent } from '../message/thread_content_search';
+import type { ModelMessage } from '@iki/ai/message/model_history';
+import { buildThreadMarkdown } from '@iki/ai/message/thread_markdown_export';
+import { searchThreadContent } from '@iki/ai/message/thread_content_search';
 
 export type { ChatStreamTarget } from './types';
 

@@ -22,6 +22,7 @@ const SOURCE_GLOBS = [
   'packages/backend/src',
   'packages/core/src',
   'packages/store/src',
+  'packages/ai/src',
   'packages/theme/src',
   'packages/desktop/src',
 ];

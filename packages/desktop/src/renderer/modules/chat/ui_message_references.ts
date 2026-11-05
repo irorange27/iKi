@@ -1,4 +1,4 @@
-import type { ChatUiMessage, SkillUsageEntry } from '@iki/backend/message/message_parts';
+import type { ChatUiMessage, SkillUsageEntry } from '@iki/ai/message/message_parts';
 import type {
   ContextCompositionCategory,
   ContextCompositionSummary,
@@ -13,7 +13,7 @@ import {
   isObjectRecord,
   isSkillUsagePart,
   isTokenUsagePart,
-} from '@iki/backend/message/message_parts';
+} from '@iki/ai/message/message_parts';
 import {
   getParsedToolOutput,
   getToolCallIdFromPart,

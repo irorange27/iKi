@@ -6,7 +6,7 @@ import type { SkillSummary } from '@iki/core/types/skill';
 import type {
   ComposerInvocationPartData,
   ComposerInvocationToken,
-} from '@iki/backend/message/message_parts';
+} from '@iki/ai/message/message_parts';
 import {
   extractPromptAppSlashCommands,
   extractSkillSlashCommands,
@@ -17,8 +17,8 @@ import {
   toPromptAppComposerInvocationToken,
   toSkillComposerInvocationToken,
   type PromptAppSlashCommand,
-} from '@iki/backend/message/slash_commands';
-import { normalizePersonality, PERSONALITY_IDS } from '@iki/backend/message/personality';
+} from '@iki/ai/message/slash_commands';
+import { normalizePersonality, PERSONALITY_IDS } from '@iki/ai/message/personality';
 import type { ResolvedComposerSendRequest } from './useChatComposerSend';
 import { createLogger } from '../logger';
 

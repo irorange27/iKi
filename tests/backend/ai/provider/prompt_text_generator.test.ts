@@ -13,8 +13,8 @@ const {
     getAppConfigMock: vi.fn(),
   }));
 
-vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/backend/provider/llm/factory')>();
+vi.mock('@iki/ai/provider/llm/factory', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/ai/provider/llm/factory')>();
   return {
     ...actual,
     generateChatWithModelMessages: generateChatWithModelMessagesMock,
@@ -27,7 +27,7 @@ vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-import { generatePromptText } from '@iki/backend/runtimes/prompt_text_generator';
+import { generatePromptText } from '@iki/ai/provider/prompt_text_generator';
 
 beforeEach(() => {
   vi.clearAllMocks();

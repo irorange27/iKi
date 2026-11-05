@@ -13,6 +13,7 @@ export default defineConfig({
       { find: '@iki/backend/', replacement: path.join(ROOT, 'packages/backend/src/') },
       { find: '@iki/core/', replacement: path.join(ROOT, 'packages/core/src/') },
       { find: '@iki/store/', replacement: path.join(ROOT, 'packages/store/src/') },
+      { find: '@iki/ai/', replacement: path.join(ROOT, 'packages/ai/src/') },
       { find: '@iki/theme/', replacement: path.join(ROOT, 'packages/theme/src/') },
       { find: '@iki/theme', replacement: path.join(ROOT, 'packages/theme/src/index.ts') },
     ],

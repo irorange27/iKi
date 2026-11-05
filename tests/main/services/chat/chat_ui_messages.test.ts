@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { toModelInputMessages } from '@iki/backend/message/ui_messages';
-import { sanitizeModelConversationMessages } from '@iki/backend/agent/model_messages';
+import { toModelInputMessages } from '@iki/ai/message/ui_messages';
+import { sanitizeModelConversationMessages } from '@iki/ai/message/model_messages';
 
 describe('chat_ui message conversion', () => {
   it('strips canonical metadata parts before AI SDK model conversion', async () => {

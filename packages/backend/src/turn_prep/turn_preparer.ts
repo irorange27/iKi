@@ -1,7 +1,7 @@
-import * as llmFactory from '../provider/llm/factory';
+import * as llmFactory from '@iki/ai/provider/llm/factory';
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { buildThreadWorkspaceSystemMessage } from '@iki/backend/workspaces/thread_workspace';
-import type { ChatExperimentalContext } from '@iki/backend/message/chat_context_mode';
+import type { ChatExperimentalContext } from '@iki/ai/message/chat_context_mode';
 import type { AgentRunKind } from '@iki/core/types/agent_run';
 import type { AppConfig } from '@iki/core/types/config';
 import type { SkillSummary } from '@iki/core/types/skill';
@@ -10,10 +10,10 @@ import { createChatContextAssembler, type ContextReport } from './context';
 import type {
   ChatInputMessage,
   ChatTransportMessage,
-} from '@iki/backend/message/chat_message_types';
+} from '@iki/ai/message/chat_message_types';
 import { persistThreadRuntimeHints } from './thread_hints';
 import { resolveToolNames } from './tool_guard';
-import { getPromptFromMessage, toModelInputMessages } from '@iki/backend/message/ui_messages';
+import { getPromptFromMessage, toModelInputMessages } from '@iki/ai/message/ui_messages';
 
 export type ChatTurnOptions = {
   providerType: string;

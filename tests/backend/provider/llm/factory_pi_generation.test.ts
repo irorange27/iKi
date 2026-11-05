@@ -6,9 +6,9 @@ import path from 'node:path';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => {
+vi.mock('@iki/ai/provider/llm/pi_adapter', async importOriginal => {
   const actual = await importOriginal<
-    typeof import('@iki/backend/provider/llm/pi_adapter')
+    typeof import('@iki/ai/provider/llm/pi_adapter')
   >();
   return {
     ...actual,
@@ -18,8 +18,8 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => {
 
 import { closeDatabase, initializeDatabase } from '@iki/store/database';
 import { addProvider } from '@iki/store/providers';
-import { generateChatWithModelMessages } from '@iki/backend/provider/llm/factory';
-import { callPiChat } from '@iki/backend/provider/llm/pi_adapter';
+import { generateChatWithModelMessages } from '@iki/ai/provider/llm/factory';
+import { callPiChat } from '@iki/ai/provider/llm/pi_adapter';
 import { getPersonaPrompt } from '@iki/backend/persona';
 import { createScriptedPiServer, sse, type ScriptedPiServer } from '../../pi_candidate/helpers/scripted_pi_server';
 

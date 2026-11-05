@@ -4,19 +4,19 @@ import type { ModelMessage } from './model_history';
 import {
   extractTextFromModelMessageContent,
   sanitizeModelConversationMessages,
-} from '@iki/backend/agent/model_messages';
-import type { AgentConfig } from '@iki/backend/agent/types';
+} from '@iki/ai/message/model_messages';
+
 import { createLogger } from '@iki/core/logger';
 import {
   assembleRequestSystemPrompt,
   type RequestSystemPromptPart,
-} from '@iki/backend/message/system_prompt';
-import { resolvePersonaPrompt } from '@iki/backend/provider/llm/factory';
+} from '@iki/ai/message/system_prompt';
+import { resolvePersonaPrompt } from '@iki/ai/provider/llm/factory';
 
 const logger = createLogger({ module: 'prompt_context' });
 
 export const buildPromptContext = (
-  config: Pick<AgentConfig, 'providerType' | 'providerId' | 'systemPrompt'>,
+  config: { providerType: string; providerId?: string | null; systemPrompt: string },
   history: ModelMessage[]
 ): { systemPrompt: string; messages: ModelMessage[] } => {
   const conversationMessages = history.filter(message => message.role !== 'system');

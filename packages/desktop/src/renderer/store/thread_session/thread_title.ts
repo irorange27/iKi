@@ -1,6 +1,6 @@
 import { type Ref } from 'vue';
 
-import type { ChatUiMessage } from '@iki/backend/message/message_parts';
+import type { ChatUiMessage } from '@iki/ai/message/message_parts';
 import type { ChatThread } from '@iki/core/types/chat';
 
 import { createLogger } from '../../logger';

@@ -1,8 +1,8 @@
-import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
+import { extractTextFromModelMessageContent } from '@iki/ai/message/model_messages';
 import { clipTextToTokenBudget, estimateTextTokens } from '../agent/context_budget';
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { AppConfig } from '@iki/core/types/config';
-import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
+import type { ChatInputMessage } from '@iki/ai/message/chat_message_types';
 import type {
   AssembleChatContextResult,
   ContextBlockKind,

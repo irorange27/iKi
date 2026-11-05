@@ -2,7 +2,7 @@ import { ref, watch, nextTick, onMounted, onBeforeUnmount, type Ref } from 'vue'
 import {
   extractTextFromMessageParts,
   type ChatUiMessage,
-} from '@iki/backend/message/message_parts';
+} from '@iki/ai/message/message_parts';
 
 export const useTurnRail = (
   chatMessages: Ref<ChatUiMessage[]>,

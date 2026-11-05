@@ -6,7 +6,7 @@ import {
   getToolRuntimeContext,
   runWithToolRuntimeContext,
 } from '@iki/core/utils/runtime_context';
-import { normalizeToolOutput } from '@iki/backend/message/model_history';
+import { normalizeToolOutput } from '@iki/ai/message/model_history';
 import { resolveThreadWorkspaceSelectionSnapshot } from '@iki/backend/workspaces/thread_workspace';
 
 export const createRawToolRunner = (

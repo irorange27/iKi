@@ -4,7 +4,7 @@ import {
   parseToolInputPayload,
   parseToolOutputPayload,
   resolveToolPayloadKind,
-} from '@iki/backend/message/tool_payload_contracts';
+} from '@iki/ai/message/tool_payload_contracts';
 
 describe('resolveToolPayloadKind', () => {
   it('normalizes the tool name and applies aliases', () => {

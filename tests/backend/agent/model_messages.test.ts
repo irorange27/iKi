@@ -4,7 +4,7 @@ import {
   extractTextFromModelMessageContent,
   hasToolPartInModelMessageContent,
   sanitizeModelConversationMessages,
-} from '@iki/backend/agent/model_messages';
+} from '@iki/ai/message/model_messages';
 
 const toolCall = (toolCallId: string, toolName = 'web') => ({
   type: 'tool-call',

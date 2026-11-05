@@ -1,4 +1,4 @@
-import type { ModelMessage } from '../message/model_history';
+import type { ModelMessage } from '@iki/ai/message/model_history';
 
 import { addTurnPerf, type AgentStep, type AgentTurnPerf } from '@iki/backend/agent';
 import type { ConversationPreview } from '@iki/core/types/companion';

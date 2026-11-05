@@ -1,11 +1,11 @@
-import type { ModelMessage } from '@iki/backend/message/model_history';
-import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
+import type { ModelMessage } from '@iki/ai/message/model_history';
+import { getToolModel, type ToolModelConfig } from '@iki/ai/provider/tool_model';
 import { createLogger } from '@iki/core/logger';
 import {
   appendCompactionInstruction,
   COMPACTION_INSTRUCTION,
 } from './compaction_prompt';
-import { generateChatWithModelMessages, getModelGenerationSettings } from '../provider/llm/factory';
+import { generateChatWithModelMessages, getModelGenerationSettings } from '@iki/ai/provider/llm/factory';
 
 type ThreadSummaryMessage = {
   role: 'user' | 'assistant';

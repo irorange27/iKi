@@ -18,13 +18,13 @@ import {
 } from './pi_retry';
 import type { PiLoopDelta } from './pi_agent_loop';
 import type { HarnessConfig } from '../harness/harness_types';
-import { shouldUseCacheRetention } from '../../provider/llm/pi_adapter';
-import { buildPiModel, callPiChat, projectToolsToPiTools } from '../../provider/llm/pi_adapter';
+import { shouldUseCacheRetention } from '@iki/ai/provider/llm/pi_adapter';
+import { buildPiModel, callPiChat, projectToolsToPiTools } from '@iki/ai/provider/llm/pi_adapter';
 import {
   getProviderConfig,
   resolvePiModelCapability,
   resolveProviderApi,
-} from '../../provider/llm/factory';
+} from '@iki/ai/provider/llm/factory';
 
 const logger = createLogger({ module: 'pi_tool_model_call' });
 

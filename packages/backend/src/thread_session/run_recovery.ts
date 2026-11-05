@@ -9,13 +9,13 @@ import {
   SESSION_EVENT_VERSION,
   turnFactsToEvents,
 } from './session_log';
-import type { DynamicToolPart } from '@iki/backend/message/tool_parts';
+import type { DynamicToolPart } from '@iki/ai/message/tool_parts';
 import {
   APPROVAL_PENDING_INTERRUPTED_ERROR_TEXT,
   isObjectRecord,
   isTerminalDynamicToolPart,
   toInterruptedToolPart,
-} from '@iki/backend/message/tool_parts';
+} from '@iki/ai/message/tool_parts';
 import type { AgentRunStatus } from '@iki/core/types/agent_run';
 import { rehydrateAgentRunTracker } from './run_tracker';
 

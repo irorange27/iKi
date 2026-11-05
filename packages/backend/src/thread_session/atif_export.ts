@@ -8,7 +8,7 @@ import type {
   AtifTrajectory,
   AtifTrajectoryExportResult,
 } from '@iki/core/types/atif';
-import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
+import { extractTextFromModelMessageContent } from '@iki/ai/message/model_messages';
 
 const ATIF_SCHEMA_VERSION = 'ATIF-v1.8';
 const MAX_MESSAGE_TEXT_CHARS = 20_000;
