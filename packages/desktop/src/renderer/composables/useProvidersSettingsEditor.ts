@@ -2,6 +2,7 @@ import { computed, ref, type Ref } from 'vue';
 
 import { useI18n } from '../i18n';
 import { createLogger } from '../logger';
+import { toPlainData } from '@iki/core/utils/plain_clone';
 import { getElectronAPI } from '../services/electron_api';
 import type { ProviderRecord } from './useProviderDrafts';
 import type {
@@ -136,10 +137,12 @@ export const useProvidersSettingsEditor = (params: {
     };
 
     try {
+      // Same IPC-clone convention as the built-in provider save: strip the
+      // reactive draft before it reaches the contextBridge boundary.
       if (params.providers.value.some(provider => provider.id === editingProvider.value?.id)) {
-        await electronAPI.providers.update(editingProvider.value.id, providerData);
+        await electronAPI.providers.update(editingProvider.value.id, toPlainData(providerData));
       } else {
-        await electronAPI.providers.add(providerData);
+        await electronAPI.providers.add(toPlainData(providerData));
       }
     } catch (error) {
       providersSettingsEditorLogger.event({

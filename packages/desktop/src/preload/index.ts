@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { toPlainData } from '@iki/core/utils/plain_clone';
 import {
   AppConfig,
   ConfigRuntimeInfo,
@@ -60,9 +61,13 @@ const electronApi: ElectronApi = {
   providers: {
     list: () => ipcRenderer.invoke('providers:list'),
     get: (id: string) => ipcRenderer.invoke('providers:get', id),
-    add: (provider: ProviderInput) => ipcRenderer.invoke('providers:add', provider),
+    // Drafts come from Vue reactive state; structured clone rejects Proxy
+    // objects ("An object could not be cloned"). Strip at this single IPC
+    // exit instead of at every caller.
+    add: (provider: ProviderInput) =>
+      ipcRenderer.invoke('providers:add', toPlainData(provider)),
     update: (id: string, provider: Partial<Provider>) =>
-      ipcRenderer.invoke('providers:update', id, provider),
+      ipcRenderer.invoke('providers:update', id, toPlainData(provider)),
     delete: (id: string) => ipcRenderer.invoke('providers:delete', id),
     onUpdated: (callback: (event: ProviderUpdatedEvent) => void) =>
       subscribe('providers:updated', callback),

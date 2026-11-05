@@ -36,7 +36,8 @@
     "commit": "git-cz",
     "commit:check": "commitlint --from=HEAD~20 --to=HEAD --verbose",
     "prepare": "husky",
-    "test:e2e": "node tests/integration/e2e/run_smoke.mjs"
+    "test:e2e": "node tests/integration/e2e/run_smoke.mjs",
+    "test:e2e:settings": "node tests/integration/e2e/run_provider_settings.mjs"
   },
   "keywords": [],
   "repository": {

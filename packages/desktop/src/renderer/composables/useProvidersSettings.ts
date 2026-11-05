@@ -4,6 +4,7 @@ import { useI18n } from '../i18n';
 import type { BuiltInProvider } from '@iki/core/types/settings';
 import { BUILTIN_PROVIDERS } from '@iki/backend/constants/ProvidersSettings';
 import { getErrorMessage } from '@iki/core/utils/errors';
+import { toPlainData } from '@iki/core/utils/plain_clone';
 import { pruneProviderModelOptionsMap } from '@iki/core/utils/provider_models';
 import { createLogger } from '../logger';
 import { useProviderDrafts, type ProviderRecord } from './useProviderDrafts';
@@ -293,17 +294,23 @@ export const useProvidersSettings = () => {
 
     try {
       if (existingConfig) {
-        await electronAPI.providers.update(existingConfig.id, {
-          ...(selectedProviderId.value === existingConfig.id && existingConfig.type === 'anthropic'
-            ? { type: 'anthropic-compatible' }
-            : {}),
-          api_key: draft.api_key.trim(),
-          base_url: normalizedBaseUrl,
-          enabled: draft.enabled,
-          models: modelsToSave,
-          model_options: modelOptionsToSave,
-          available_models: availableToSave,
-        });
+        // toPlainData: the drafts are Vue reactive proxies and the contextBridge
+        // structured-clones every argument — a Proxy dies at the boundary with
+        // "An object could not be cloned" before the preload ever sees it.
+        await electronAPI.providers.update(
+          existingConfig.id,
+          toPlainData({
+            ...(selectedProviderId.value === existingConfig.id && existingConfig.type === 'anthropic'
+              ? { type: 'anthropic-compatible' }
+              : {}),
+            api_key: draft.api_key.trim(),
+            base_url: normalizedBaseUrl,
+            enabled: draft.enabled,
+            models: modelsToSave,
+            model_options: modelOptionsToSave,
+            available_models: availableToSave,
+          })
+        );
       } else {
         const builtIn = selectedProviderInfo.value;
         const hasMeaningfulDraft =
@@ -328,7 +335,7 @@ export const useProvidersSettings = () => {
           enabled: draft.enabled,
           available_models: availableToSave,
         };
-        await electronAPI.providers.add(newProvider);
+        await electronAPI.providers.add(toPlainData(newProvider));
       }
 
       await loadProviders();
