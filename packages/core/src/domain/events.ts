@@ -207,30 +207,44 @@ export type AgentSessionEvent = z.infer<typeof AgentSessionEventSchema>;
 // ============================================================================
 
 /**
- * The iKi event-name vocabulary, mirrored from
- * `core/types/session_events.ts`. This module is a leaf and may not import that
- * file, so the literals are duplicated here on purpose; keep the two in sync
- * when the vocabulary changes. (The source declares 15 name constants, plus a
- * version number and a message-event tuple — the enum covers the names only.)
+ * The iKi event-name vocabulary, declared exactly once. `core/types/session_events.ts`
+ * re-exports these names for the historical import paths, and the enum below is
+ * derived from the same map — schema and constants cannot drift apart. Adding a
+ * name here means the session log reducer must handle it (ADR-008).
  */
-export const SessionEventTypeSchema = z.enum([
-  'input_accepted',
-  'turn_started',
-  'tool_executed',
-  'steering_input_accepted',
-  'model_text_committed',
-  'model_output_committed',
-  'turn_completed',
-  'turn_failed',
-  'turn_cancelled',
-  'approval_requested',
-  'approval_decided',
-  'messages_truncated',
-  'tool_execution_prepared',
-  'tool_execution_started',
-  'tool_execution_finished',
-]);
+export const SESSION_EVENT_TYPES = {
+  INPUT_ACCEPTED: 'input_accepted',
+  TURN_STARTED: 'turn_started',
+  TOOL_EXECUTED: 'tool_executed',
+  STEERING_INPUT_ACCEPTED: 'steering_input_accepted',
+  MODEL_TEXT_COMMITTED: 'model_text_committed',
+  MODEL_OUTPUT_COMMITTED: 'model_output_committed',
+  TURN_COMPLETED: 'turn_completed',
+  TURN_FAILED: 'turn_failed',
+  TURN_CANCELLED: 'turn_cancelled',
+  APPROVAL_REQUESTED: 'approval_requested',
+  APPROVAL_DECIDED: 'approval_decided',
+  MESSAGES_TRUNCATED: 'messages_truncated',
+  TOOL_EXECUTION_PREPARED: 'tool_execution_prepared',
+  TOOL_EXECUTION_STARTED: 'tool_execution_started',
+  TOOL_EXECUTION_FINISHED: 'tool_execution_finished',
+} as const;
+
+type SessionEventName = (typeof SESSION_EVENT_TYPES)[keyof typeof SESSION_EVENT_TYPES];
+
+export const SessionEventTypeSchema = z.enum(
+  Object.values(SESSION_EVENT_TYPES) as [SessionEventName, ...SessionEventName[]]
+);
 export type SessionEventType = z.infer<typeof SessionEventTypeSchema>;
+
+/** Events appended by this build of the app. */
+export const SESSION_EVENT_VERSION = 1;
+
+/** The events that carry a whole message in the payload's `messageId` field. */
+export const MESSAGE_EVENT_TYPES = [
+  SESSION_EVENT_TYPES.INPUT_ACCEPTED,
+  SESSION_EVENT_TYPES.MODEL_OUTPUT_COMMITTED,
+] as const;
 
 /**
  * One JSONL row as a domain contract. The store also stamps `version` and

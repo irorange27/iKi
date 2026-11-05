@@ -1,6 +1,11 @@
-export type McpTransport = 'stdio' | 'streamable-http' | 'sse';
-
-export type McpApprovalMode = 'always' | 'safe-only' | 'never';
+/**
+ * MCP vocabulary lives in the domain contract (`../domain/tools`); these are
+ * the re-exported projections. The records below (`McpServer`, `McpServerInput`
+ * …) stay here because they are the store's collection rows, not domain
+ * declarations.
+ */
+export type { McpTransport, McpApprovalMode } from '../domain/tools';
+import type { McpTransport, McpApprovalMode } from '../domain/tools';
 
 export type McpServer = {
   id: string;
