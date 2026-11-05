@@ -13,7 +13,13 @@ import type { ChatThread, PromptApp, Workspace } from '@iki/core/types/chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/core/types/chat_usage';
 import type { ChatUiMessage } from '@iki/ai/message/message_parts';
 import type { DevRuntimeStatus, DevToolsResolveRequest, DevToolsSourceResult } from '@iki/core/types/devtools';
-import type { McpServerInput, McpServerSummary } from '@iki/core/types/mcp';
+import type {
+  McpServer,
+  McpServerInput,
+  McpServerStatus,
+  McpServerSummary,
+  McpToolCatalogItem,
+} from '@iki/core/types/mcp';
 import type {
   SpeechStatus,
   SpeechTranscriptionInput,
@@ -107,7 +113,7 @@ export interface ElectronApi {
     get: () => Promise<AppConfig>;
     getRuntimeInfo: () => Promise<ConfigRuntimeInfo>;
     testNetwork: (network: AppConfig['network']) => Promise<NetworkDiagnosticResult>;
-    set: (config: AppConfig) => Promise<unknown>;
+    set: (config: AppConfig) => Promise<void>;
     onUpdated: (callback: (config: AppConfig) => void) => () => void;
   };
   updates: {
@@ -119,9 +125,9 @@ export interface ElectronApi {
   providers: {
     list: () => Promise<Provider[]>;
     get: (id: string) => Promise<Provider | null>;
-    add: (provider: ProviderInput) => Promise<unknown>;
-    update: (id: string, provider: Partial<Provider>) => Promise<unknown>;
-    delete: (id: string) => Promise<unknown>;
+    add: (provider: ProviderInput) => Promise<Provider>;
+    update: (id: string, provider: Partial<Provider>) => Promise<Provider | null>;
+    delete: (id: string) => Promise<void>;
     onUpdated: (callback: (event: ProviderUpdatedEvent) => void) => () => void;
   };
   chat: {
@@ -141,11 +147,11 @@ export interface ElectronApi {
       get: (id: string) => Promise<ChatThread | null>;
       create: (thread: ChatThreadInput) => Promise<ChatThread>;
       clear: (id: string, thread: ChatThreadInput) => Promise<ChatThread | null>;
-      update: (id: string, thread: ChatThreadInput) => Promise<unknown>;
+      update: (id: string, thread: ChatThreadInput) => Promise<ChatThread | null>;
       exportMarkdown: (
         threadId: string
       ) => Promise<{ success: boolean; filePath?: string; error?: string }>;
-      delete: (id: string) => Promise<unknown>;
+      delete: (id: string) => Promise<void>;
       searchContent: (
         query: string,
         limit?: number
@@ -154,7 +160,7 @@ export interface ElectronApi {
     messages: {
       /** The session log's rebuilt view — the same ChatUiMessage values a resumed turn replays. */
       list: (threadId: string) => Promise<ChatUiMessage[]>;
-      update: (id: string, message: ChatMessageInput) => Promise<unknown>;
+      update: (id: string, message: ChatMessageInput) => Promise<boolean>;
 
       truncateAfter: (
         threadId: string,
@@ -227,12 +233,12 @@ export interface ElectronApi {
   };
   mcp: {
     list: () => Promise<McpServerSummary[]>;
-    add: (input: McpServerInput) => Promise<unknown>;
-    update: (id: string, updates: Partial<McpServerInput>) => Promise<unknown>;
+    add: (input: McpServerInput) => Promise<McpServer>;
+    update: (id: string, updates: Partial<McpServerInput>) => Promise<McpServer>;
     delete: (id: string) => Promise<WindowActionResult>;
-    connect: (id: string) => Promise<unknown>;
+    connect: (id: string) => Promise<McpServerStatus>;
     disconnect: (id: string) => Promise<WindowActionResult>;
-    refreshTools: (id: string) => Promise<unknown>;
+    refreshTools: (id: string) => Promise<McpToolCatalogItem[]>;
   };
   companion: {
     getSnapshot: () => Promise<CompanionSnapshot>;
