@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseJsonStringArray, toStringArray } from '@iki/backend/utils/json';
+import { parseJsonStringArray, toStringArray } from '@iki/core/utils/json';
 
 describe('toStringArray', () => {
   it('keeps non-empty trimmed strings from an array', () => {

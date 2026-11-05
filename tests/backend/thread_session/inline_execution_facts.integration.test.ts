@@ -16,8 +16,8 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   callPiChat: callPiChatMock,
 }));
 
-vi.mock('@iki/backend/platform', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/platform')>()),
+vi.mock('@iki/core/platform', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/core/platform')>()),
   getUserDataPath: userDataMock,
 }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
@@ -32,16 +32,16 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   supportsPiTurnSupply: () => false,
 }));
 
-import { closeDatabase, initializeDatabase, getDb } from '@iki/backend/db/database';
-import { addProvider } from '@iki/backend/db/providers';
-import * as agentRunDb from '@iki/backend/db/agent_runs';
-import { addWorkspace } from '@iki/backend/db/workspaces';
+import { closeDatabase, initializeDatabase, getDb } from '@iki/store/database';
+import { addProvider } from '@iki/store/providers';
+import * as agentRunDb from '@iki/store/agent_runs';
+import { addWorkspace } from '@iki/store/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
 import {
   piTurnHarness,
   setTurnHarnessFallback,
 } from '@iki/backend/thread_session/turn_supply_selection';
-import { getSessionEvents } from '@iki/backend/db/session_events';
+import { getSessionEvents } from '@iki/store/session_events';
 import {
   INPUT_ACCEPTED,
   SESSION_EVENT_VERSION,

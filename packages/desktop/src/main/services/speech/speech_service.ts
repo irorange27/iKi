@@ -2,7 +2,7 @@ import type {
   SpeechStatus,
   SpeechTranscriptionInput,
   SpeechTranscriptionResult,
-} from '@iki/backend/types/speech';
+} from '@iki/core/types/speech';
 import { DEFAULT_OPENAI_MODEL, getSpeechConfig, normalizeOpenAiBaseUrl } from './speech_config';
 import { getAudioExtension } from './speech_audio';
 import {

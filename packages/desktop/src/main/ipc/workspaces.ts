@@ -2,9 +2,9 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { dialog, ipcMain } from 'electron';
 
-import * as workspaceDb from '@iki/backend/db/workspaces';
+import * as workspaceDb from '@iki/store/workspaces';
 import { getThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
-import { createPrefixedId } from '@iki/backend/utils/id';
+import { createPrefixedId } from '@iki/core/utils/id';
 
 const AGENT_INSTRUCTIONS_FILE = 'IKI.md';
 

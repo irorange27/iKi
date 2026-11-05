@@ -6,14 +6,14 @@ import type {
   TokenUsagePartData,
 } from '@iki/backend/message/message_parts';
 import { isObjectRecord } from '@iki/backend/message/tool_parts';
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 
 import type {
   ChatStreamTarget,
   ChatStreamEvent,
   UiChunkEmitter,
 } from './types';
-import { createPrefixedId } from '@iki/backend/utils/id';
+import { createPrefixedId } from '@iki/core/utils/id';
 
 const uiStreamLogger = createLogger({ module: 'ui_stream' });
 

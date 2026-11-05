@@ -1,6 +1,6 @@
 import type { ModelMessage } from '../message/model_history';
 
-import type { AgentRun } from '@iki/backend/types/agent_run';
+import type { AgentRun } from '@iki/core/types/agent_run';
 import type { ApprovalPolicy } from '../agent/harness/tool_resolver';
 import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import { toModelInputMessages } from '@iki/backend/message/ui_messages';

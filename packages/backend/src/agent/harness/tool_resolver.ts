@@ -1,11 +1,11 @@
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { LoadSkillTool } from '@iki/backend/tools/skill_tools';
 import {
   decideToolApproval,
   type ApprovalPolicy,
   type ToolApprovalDeclaration,
-} from '@iki/backend/utils/action_risk';
+} from '@iki/core/utils/action_risk';
 import type { AgentTool } from '@iki/backend/agent/types';
 
 const logger = createLogger({ module: 'tool_resolver' });

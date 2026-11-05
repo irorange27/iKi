@@ -1,18 +1,18 @@
-import { appendSessionFacts, findMessageEvent } from '@iki/backend/db/session_events';
+import { appendSessionFacts, findMessageEvent } from '@iki/store/session_events';
 import {
   INPUT_ACCEPTED,
   MODEL_OUTPUT_COMMITTED,
   SESSION_EVENT_VERSION,
-} from '@iki/backend/types/session_events';
-import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import * as awaitersDb from '@iki/backend/db/awaiters';
-import { createLogger } from '@iki/backend/logger';
-import type { ChatThread } from '@iki/backend/types/chat';
+} from '@iki/core/types/session_events';
+import * as chatThreadDb from '@iki/store/chat_thread';
+import * as awaitersDb from '@iki/store/awaiters';
+import { createLogger } from '@iki/core/logger';
+import type { ChatThread } from '@iki/core/types/chat';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
 import { normalizeUiMessage } from '@iki/backend/message/ui_message_codec';
-import { isObjectRecord } from '@iki/backend/utils/guards';
-import { normalizeOptionalString } from '@iki/backend/utils/text';
-import { createPrefixedId } from '@iki/backend/utils/id';
+import { isObjectRecord } from '@iki/core/utils/guards';
+import { normalizeOptionalString } from '@iki/core/utils/text';
+import { createPrefixedId } from '@iki/core/utils/id';
 import { ensureThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
 import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/worktree_ids';
 

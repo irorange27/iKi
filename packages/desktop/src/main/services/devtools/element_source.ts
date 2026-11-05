@@ -2,8 +2,8 @@
 import { BrowserWindow, app, webContents as webContentsRegistry } from 'electron';
 import path from 'node:path';
 
-import { createLogger } from '@iki/backend/logger';
-import type { DevToolsResolveRequest, DevToolsSourceResult } from '@iki/backend/types/devtools';
+import { createLogger } from '@iki/core/logger';
+import type { DevToolsResolveRequest, DevToolsSourceResult } from '@iki/core/types/devtools';
 
 import {
   buildInstallRecorderExpression,

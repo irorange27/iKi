@@ -6,7 +6,7 @@ import {
   resyncViewportIfNeeded,
 } from '../../../packages/desktop/src/main/windows/viewport_resync';
 
-vi.mock('@iki/backend/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: () => ({ event: vi.fn() }),
 }));
 

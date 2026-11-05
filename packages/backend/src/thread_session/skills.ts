@@ -1,5 +1,5 @@
-import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import { createLogger } from '@iki/backend/logger';
+import * as chatThreadDb from '@iki/store/chat_thread';
+import { createLogger } from '@iki/core/logger';
 import {
   buildSkillsMetadataSystemPrompt,
   formatSkillMetadataForPrompt,
@@ -8,7 +8,7 @@ import {
 } from '@iki/backend/tools/skills';
 import { getToolModel } from '../provider/tool_model';
 import { selectSkillsWithAgent } from '../provider/skill_selection';
-import type { SkillSummary } from '@iki/backend/types/skill';
+import type { SkillSummary } from '@iki/core/types/skill';
 import type { ChatInputMessage } from './types';
 import { toLlmChatMessages } from '@iki/backend/message/ui_messages';
 

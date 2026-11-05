@@ -1,6 +1,6 @@
 import { commitRows, patchRow, readRows, removeRow } from './collection';
-import type { Awaiter } from '@iki/backend/types/awaiters';
-import { toIsoNow } from '@iki/backend/utils/text';
+import type { Awaiter } from '@iki/core/types/awaiters';
+import { toIsoNow } from '@iki/core/utils/text';
 
 type AwaiterRow = Omit<Awaiter, 'notify'> & {
   notify: number | boolean;

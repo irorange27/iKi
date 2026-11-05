@@ -4,13 +4,13 @@ import { storeToRefs } from 'pinia';
 import { useI18n } from '../i18n';
 import { getElectronApiSliceMethod } from '../services/electron_api';
 import { useConfigStore } from '../store/config';
-import type { AppConfig } from '@iki/backend/types/config';
+import type { AppConfig } from '@iki/core/types/config';
 import type {
   SpeechStatus,
   WhisperNodeDownloadProgress,
   WhisperNodeModelInfo,
-} from '@iki/backend/types/speech';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+} from '@iki/core/types/speech';
+import { getErrorMessage } from '@iki/core/utils/errors';
 import { formatBytes } from '../utils/formatters';
 
 type WhisperDownloadStage = 'idle' | 'downloading' | 'compiling' | 'done' | 'error';

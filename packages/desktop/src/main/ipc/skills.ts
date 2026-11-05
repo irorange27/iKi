@@ -1,14 +1,14 @@
 import { ipcMain, shell } from 'electron';
 import fs from 'node:fs/promises';
 
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import {
   getSkillFolderPath,
   getSkillRootsForUi,
   listSkills,
   readSkillContent,
 } from '@iki/backend/tools/skills';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+import { getErrorMessage } from '@iki/core/utils/errors';
 import { withIpcLogging } from '../utils/ipc_helpers';
 
 let skillsIpcRegistered = false;

@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { getToolRuntimeContext } from '../utils/runtime_context';
+import { getToolRuntimeContext } from '@iki/core/utils/runtime_context';
 import type { AgentTool, ToolApprovalFunction, ToolApprovalMode, ToolRetryConfig } from '@iki/backend/agent/types';
-import { createLogger } from '../logger';
+import { createLogger } from '@iki/core/logger';
 import { zodSchemaToJsonSchema } from './json_schema';
 
 const toolLogger = createLogger({ module: 'base_tool' });

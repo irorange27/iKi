@@ -4,10 +4,10 @@ import { dialog } from 'electron';
 import { createChatService } from '@iki/backend/thread_session';
 import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
 import { companionService } from '../companion/companion_service';
-import * as agentRunDb from '@iki/backend/db/agent_runs';
-import * as agentEvalDb from '@iki/backend/db/agent_eval';
-import { toIsoNow } from '@iki/backend/utils/text';
-import type { EvalExportPayload } from '@iki/backend/types/agent_run';
+import * as agentRunDb from '@iki/store/agent_runs';
+import * as agentEvalDb from '@iki/store/agent_eval';
+import { toIsoNow } from '@iki/core/utils/text';
+import type { EvalExportPayload } from '@iki/core/types/agent_run';
 
 export type { ChatStreamTarget } from '@iki/backend/thread_session';
 

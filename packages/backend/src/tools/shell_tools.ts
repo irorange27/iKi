@@ -1,4 +1,4 @@
-import { getToolRuntimeContext } from '../utils/runtime_context';
+import { getToolRuntimeContext } from '@iki/core/utils/runtime_context';
 import { spawn } from 'child_process';
 
 import { z } from 'zod';

@@ -1,6 +1,6 @@
 import { commitRows, patchRow, readRows, removeRow } from './collection';
 import { deleteSessionEvents } from './session_events';
-import { ChatThread } from '@iki/backend/types/chat';
+import { ChatThread } from '@iki/core/types/chat';
 
 type ChatThreadRow = ChatThread & {
   is_generating: number | boolean;

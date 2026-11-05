@@ -28,16 +28,16 @@ const {
   listMcpServersMock: vi.fn(() => []),
 }));
 
-vi.mock('@iki/backend/db/providers', () => ({
+vi.mock('@iki/store/providers', () => ({
   getProviders: getProvidersMock,
   getProvider: getProviderMock,
 }));
 
-vi.mock('@iki/backend/db/mcp_servers', () => ({
+vi.mock('@iki/store/mcp_servers', () => ({
   listMcpServers: listMcpServersMock,
 }));
 
-vi.mock('@iki/backend/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: createLoggerMock,
 }));
 
@@ -49,7 +49,7 @@ vi.mock('@iki/backend/network/http', () => ({
   fetchWithTimeout: fetchWithTimeoutMock,
 }));
 
-vi.mock('@iki/backend/platform', () => ({
+vi.mock('@iki/core/platform', () => ({
   getUserDataPath: getUserDataPathMock,
 }));
 
@@ -57,7 +57,7 @@ vi.mock('@iki/backend/workspaces/thread_workspace', () => ({
   ensureThreadWorkspaceSelection: ensureThreadWorkspaceSelectionMock,
 }));
 
-vi.mock('@iki/backend/utils/runtime_context', () => ({
+vi.mock('@iki/core/utils/runtime_context', () => ({
   getToolRuntimeContext: getToolRuntimeContextMock,
 }));
 

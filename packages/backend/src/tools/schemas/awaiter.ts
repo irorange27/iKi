@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DEFAULT_AWAITER_LIST_LIMIT } from '../../types/awaiters';
+import { DEFAULT_AWAITER_LIST_LIMIT } from '@iki/core/types/awaiters';
 
 import { requireEitherField, toolCallDescriptionField } from './shared';
 

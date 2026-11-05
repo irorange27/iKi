@@ -1,6 +1,6 @@
 import type { ModelMessage } from '@iki/backend/message/model_history';
 import { getToolModel, type ToolModelConfig } from '../provider/tool_model';
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import {
   appendCompactionInstruction,
   COMPACTION_INSTRUCTION,

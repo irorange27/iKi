@@ -2,18 +2,18 @@ import type {
   AppConfig,
   ConfigRuntimeInfo,
   NetworkDiagnosticResult,
-} from './config';
+} from '@iki/core/types/config';
 import type {
   Provider,
   ProviderModelDescriptor,
   ProviderModelDiscoveryOverride,
   ProviderUpdatedEvent,
-} from '@iki/backend/types/provider';
-import type { ChatThread, PromptApp, Workspace } from './chat';
-import type { ChatUsagePeriod, ChatUsageSummary } from './chat_usage';
+} from '@iki/core/types/provider';
+import type { ChatThread, PromptApp, Workspace } from '@iki/core/types/chat';
+import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/core/types/chat_usage';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
-import type { DevRuntimeStatus, DevToolsResolveRequest, DevToolsSourceResult } from './devtools';
-import type { McpServerInput, McpServerSummary } from '@iki/backend/types/mcp';
+import type { DevRuntimeStatus, DevToolsResolveRequest, DevToolsSourceResult } from '@iki/core/types/devtools';
+import type { McpServerInput, McpServerSummary } from '@iki/core/types/mcp';
 import type {
   SpeechStatus,
   SpeechTranscriptionInput,
@@ -21,15 +21,15 @@ import type {
   WhisperNodeDownloadProgress,
   WhisperNodeDownloadResult,
   WhisperNodeModelInfo,
-} from './speech';
-import type { SkillSource, SkillSummary } from './skill';
-import type { AppUpdateStatus } from './update';
+} from '@iki/core/types/speech';
+import type { SkillSource, SkillSummary } from '@iki/core/types/skill';
+import type { AppUpdateStatus } from '@iki/core/types/update';
 import type {
   AgentRun,
   AgentEvalLabel,
   AgentRunTrace,
-} from '@iki/backend/types/agent_run';
-import type { CompanionSnapshot } from './companion';
+} from '@iki/core/types/agent_run';
+import type { CompanionSnapshot } from '@iki/core/types/companion';
 import type { ChatInvocationOptions, ChatInvocationResult } from './chat_invocation';
 import type { RunStatusEvent } from '@iki/backend/thread_session/types';
 export type { ChatInvocationOptions, ChatInvocationResult };

@@ -139,8 +139,8 @@ import type {
   ChatUsageHeatmapCell,
   ChatUsagePeriod,
   ChatUsageSummary,
-} from '@iki/backend/types/chat_usage';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+} from '@iki/core/types/chat_usage';
+import { getErrorMessage } from '@iki/core/utils/errors';
 
 const props = defineProps<{
   active: boolean;

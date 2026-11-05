@@ -1,7 +1,7 @@
 import type { CallToolResult, ContentBlock } from '@modelcontextprotocol/sdk/types.js';
 
-import type { McpToolCatalogItem } from '@iki/backend/types/mcp';
-import { isObjectRecord as isRecord } from '@iki/backend/utils/guards';
+import type { McpToolCatalogItem } from '@iki/core/types/mcp';
+import { isObjectRecord as isRecord } from '@iki/core/utils/guards';
 
 const getJoinedTextContent = (content: ContentBlock[]): string | null => {
   const textParts = content

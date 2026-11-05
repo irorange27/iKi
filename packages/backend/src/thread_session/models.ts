@@ -1,11 +1,11 @@
 import * as llmFactory from '../provider/llm/factory';
 import { getProviderModels, getProviderModelsForRecord } from '../provider/llm/model_discovery';
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import type {
   ProviderModelDescriptor,
   ProviderModelDiscoveryOverride,
-} from '@iki/backend/types/provider';
-import { ensureModelCapability } from '@iki/backend/utils/provider_models';
+} from '@iki/core/types/provider';
+import { ensureModelCapability } from '@iki/core/utils/provider_models';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 

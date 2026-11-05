@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeOptionalString, normalizeWhitespace, toIsoNow } from '@iki/backend/utils/text';
+import { normalizeOptionalString, normalizeWhitespace, toIsoNow } from '@iki/core/utils/text';
 
 describe('text utils', () => {
   it('normalizes whitespace-only string inputs consistently', () => {

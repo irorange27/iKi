@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-empty-function -- default no-op bridge */
-import type { ConversationPreview } from './types/companion';
+import type { ConversationPreview } from '@iki/core/types/companion';
 
 export interface ChatCompanionBridge {
   beginThinking(key: string): void;

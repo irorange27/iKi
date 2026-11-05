@@ -5,14 +5,14 @@ import type {
   ModelCapabilitySnapshot,
   Provider,
   ProviderModelDescriptor,
-} from '@iki/backend/types/provider';
+} from '@iki/core/types/provider';
 import { createLogger } from '../logger';
 import {
   getProviderModelOptions,
   normalizeModelCapabilityLimits,
   parseModelList,
   parseProviderModelOptionsMap,
-} from '@iki/backend/utils/provider_models';
+} from '@iki/core/utils/provider_models';
 import { translate } from '../i18n';
 import { getProviderDisplayName } from '../modules/providers/provider_display';
 

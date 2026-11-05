@@ -1,11 +1,11 @@
 import type { HarnessConfig } from '../harness/harness_types';
 import type { AgentTool } from '../types';
-import { getErrorMessage } from '@iki/backend/utils/errors';
-import { withRetry } from '@iki/backend/utils/retry';
+import { getErrorMessage } from '@iki/core/utils/errors';
+import { withRetry } from '@iki/core/utils/retry';
 import {
   getToolRuntimeContext,
   runWithToolRuntimeContext,
-} from '@iki/backend/utils/runtime_context';
+} from '@iki/core/utils/runtime_context';
 import { normalizeToolOutput } from '@iki/backend/message/model_history';
 import { resolveThreadWorkspaceSelectionSnapshot } from '@iki/backend/workspaces/thread_workspace';
 

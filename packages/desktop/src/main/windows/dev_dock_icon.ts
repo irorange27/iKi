@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import path from 'node:path';
 
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 
 const logger = createLogger({ module: 'dev_dock_icon' });
 

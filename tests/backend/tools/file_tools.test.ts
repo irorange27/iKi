@@ -21,7 +21,7 @@ const {
   updateChatThreadMock: vi.fn(),
 }));
 
-vi.mock('@iki/backend/db/workspaces', () => ({
+vi.mock('@iki/store/workspaces', () => ({
   getVisibleWorkspaces: getVisibleWorkspacesMock,
   getWorkspace: getWorkspaceMock,
   getWorkspaceByPath: getWorkspaceByPathMock,
@@ -29,7 +29,7 @@ vi.mock('@iki/backend/db/workspaces', () => ({
   updateWorkspace: updateWorkspaceMock,
 }));
 
-vi.mock('@iki/backend/db/chat_thread', () => ({
+vi.mock('@iki/store/chat_thread', () => ({
   getChatThread: getChatThreadMock,
   updateChatThread: updateChatThreadMock,
 }));
@@ -41,7 +41,7 @@ import {
   UndoEditTool,
   WriteFileTool,
 } from '@iki/backend/tools/file_tools';
-import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/core/utils/runtime_context';
 
 const createWorkspace = (workspacePath: string) => ({
   id: 'workspace_1',

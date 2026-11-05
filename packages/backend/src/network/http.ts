@@ -1,7 +1,7 @@
-import type { AppConfig } from '../types/config';
+import type { AppConfig } from '@iki/core/types/config';
 import { buildProxyUrl } from './proxy';
 import { getAppConfig } from '@iki/backend/config';
-import { getHostFetch } from '../platform';
+import { getHostFetch } from '@iki/core/platform';
 
 const DEFAULT_NETWORK_TIMEOUT_MS = 5000;
 const MIN_NETWORK_TIMEOUT_MS = 1000;

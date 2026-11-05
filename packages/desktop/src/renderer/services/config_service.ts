@@ -2,7 +2,7 @@ import type {
   AppConfig,
   ConfigRuntimeInfo,
   NetworkDiagnosticResult,
-} from '@iki/backend/types/config';
+} from '@iki/core/types/config';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 import { getElectronApiSlice, requireElectronApiSlice } from './electron_api';

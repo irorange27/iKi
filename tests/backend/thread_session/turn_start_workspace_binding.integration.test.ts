@@ -43,10 +43,10 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   }),
 }));
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
-import { addWorkspace } from '@iki/backend/db/workspaces';
-import { getChatThread } from '@iki/backend/db/chat_thread';
+import { addWorkspace } from '@iki/store/workspaces';
+import { getChatThread } from '@iki/store/chat_thread';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { rebuildThreadViewFromEvents } from '@iki/backend/thread_session/session_log';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';

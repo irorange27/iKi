@@ -7,11 +7,11 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const profile = vi.hoisted(() => ({ path: '' }));
-vi.mock('@iki/backend/platform', () => ({ getUserDataPath: () => profile.path }));
+vi.mock('@iki/core/platform', () => ({ getUserDataPath: () => profile.path }));
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
-import { addChatThread } from '@iki/backend/db/chat_thread';
-import { addWorkspace } from '@iki/backend/db/workspaces';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
+import { addChatThread } from '@iki/store/chat_thread';
+import { addWorkspace } from '@iki/store/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { truncateAfterMessage } from '@iki/backend/thread_session/history_truncation';
 import { rebuildThreadViewFromEvents } from '@iki/backend/thread_session/session_log';

@@ -55,7 +55,7 @@ export type ChatStreamEvent =
 
 export type RunStatusEvent = {
   runId: string;
-  status: import('@iki/backend/types/agent_run').AgentRunStatus;
+  status: import('@iki/core/types/agent_run').AgentRunStatus;
   threadId?: string | null;
   timestamp: string;
 };

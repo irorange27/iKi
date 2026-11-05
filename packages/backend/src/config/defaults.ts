@@ -1,5 +1,5 @@
-import type { AppConfig, WebSearchEngine } from '../types/config';
-import { toPlainData as clonePlainData } from '@iki/backend/utils/plain_clone';
+import type { AppConfig, WebSearchEngine } from '@iki/core/types/config';
+import { toPlainData as clonePlainData } from '@iki/core/utils/plain_clone';
 import { createDefaultThemeConfig } from '@iki/theme/registry';
 
 export const DEFAULT_APP_CONFIG: AppConfig = {

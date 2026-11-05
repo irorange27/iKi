@@ -237,7 +237,7 @@ import TrajectoryView from './TrajectoryView.vue';
 import { useI18n } from '../i18n';
 import { useChatUsage } from '../composables/useChatUsage';
 import { createChatInstance } from '../modules/chat/chat_instance';
-import { createPrefixedId } from '@iki/backend/utils/id';
+import { createPrefixedId } from '@iki/core/utils/id';
 import { useTurnRail } from '../composables/useTurnRail';
 import { useChatViewLifecycle } from '../composables/useChatViewLifecycle';
 import { useConfigStore } from '../store/config';

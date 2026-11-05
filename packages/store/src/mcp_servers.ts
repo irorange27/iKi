@@ -1,7 +1,7 @@
 import { commitRows, patchRow, readRows, removeRow } from './collection';
-import type { McpServer, McpServerInput, McpServerUpdate } from '@iki/backend/types/mcp';
-import { toIsoNow } from '@iki/backend/utils/text';
-import { parseJsonStringArray, toStringArray } from '@iki/backend/utils/json';
+import type { McpServer, McpServerInput, McpServerUpdate } from '@iki/core/types/mcp';
+import { toIsoNow } from '@iki/core/utils/text';
+import { parseJsonStringArray, toStringArray } from '@iki/core/utils/json';
 
 type McpServerRow = Omit<McpServer, 'enabled' | 'args' | 'tool_allowlist' | 'headers' | 'env'> & {
   enabled: number | boolean;

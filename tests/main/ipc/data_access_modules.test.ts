@@ -34,7 +34,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('@iki/backend/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -45,7 +45,7 @@ vi.mock('@iki/backend/logger', () => ({
   })),
 }));
 
-vi.mock('@iki/backend/db/providers', () => ({
+vi.mock('@iki/store/providers', () => ({
   getProviders: vi.fn(),
   getProvider: vi.fn(),
   addProvider: vi.fn(),
@@ -53,7 +53,7 @@ vi.mock('@iki/backend/db/providers', () => ({
   deleteProvider: vi.fn(),
 }));
 
-vi.mock('@iki/backend/db/workspaces', () => ({
+vi.mock('@iki/store/workspaces', () => ({
   getWorkspaces: vi.fn(),
   getVisibleWorkspaces: vi.fn(),
   getWorkspace: vi.fn(),
@@ -61,16 +61,16 @@ vi.mock('@iki/backend/db/workspaces', () => ({
   updateWorkspace: vi.fn(),
 }));
 
-vi.mock('@iki/backend/db/prompt_apps', () => ({
+vi.mock('@iki/store/prompt_apps', () => ({
   getEnabledPromptApps: vi.fn(),
 }));
 
 import { registerPromptAppsIpc } from '../../../packages/desktop/src/main/ipc/prompt_apps';
 import { registerProvidersIpc } from '../../../packages/desktop/src/main/ipc/providers';
 import { registerWorkspacesIpc } from '../../../packages/desktop/src/main/ipc/workspaces';
-import * as promptAppDb from '@iki/backend/db/prompt_apps';
-import * as providerDb from '@iki/backend/db/providers';
-import * as workspaceDb from '@iki/backend/db/workspaces';
+import * as promptAppDb from '@iki/store/prompt_apps';
+import * as providerDb from '@iki/store/providers';
+import * as workspaceDb from '@iki/store/workspaces';
 
 const getEnabledPromptAppsMock = vi.mocked(promptAppDb.getEnabledPromptApps);
 

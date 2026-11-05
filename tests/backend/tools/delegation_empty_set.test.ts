@@ -4,7 +4,7 @@ import { delegatedAgentRuntime } from '../helpers/delegated_runtime';
 
 
 import { resolveTools } from '@iki/backend/agent/harness/tool_resolver';
-import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/core/utils/runtime_context';
 
 registerStandardTools({
   delegatedAgentRuntime,

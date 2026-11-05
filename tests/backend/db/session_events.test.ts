@@ -10,16 +10,16 @@ const { getUserDataPathMock } = vi.hoisted(() => ({
   getUserDataPathMock: vi.fn(() => ''),
 }));
 
-vi.mock('@iki/backend/platform', () => ({
+vi.mock('@iki/core/platform', () => ({
   getUserDataPath: getUserDataPathMock,
 }));
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
 import {
   appendSessionEvents,
   getSessionEventRevision,
   getSessionEvents,
-} from '@iki/backend/db/session_events';
+} from '@iki/store/session_events';
 
 const event = (type: string, payload: unknown) => ({ type, version: 1, payload });
 

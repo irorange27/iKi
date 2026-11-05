@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h, ref, type Ref } from 'vue';
-import type { AgentRun, AgentRunTrace } from '@iki/backend/types/agent_run';
+import type { AgentRun, AgentRunTrace } from '@iki/core/types/agent_run';
 import type { ElectronApi, RunStatusEvent } from '@iki/backend/types/electron_api';
 
 import { useTrajectory } from '../../../packages/desktop/src/renderer/composables/useTrajectory';

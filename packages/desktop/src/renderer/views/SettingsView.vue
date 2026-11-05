@@ -144,8 +144,8 @@ import { getElectronAPI } from '../services/electron_api';
 import { useAppConfig } from '../composables/useAppConfig';
 import { useConfigStore } from '../store/config';
 import { createDefaultAppConfig } from '@iki/backend/config/defaults';
-import type { AppConfig } from '@iki/backend/types/config';
-import type { Provider } from '@iki/backend/types/provider';
+import type { AppConfig } from '@iki/core/types/config';
+import type { Provider } from '@iki/core/types/provider';
 
 const electronAPI = getElectronAPI();
 const settingsViewLogger = createLogger({ module: 'settings_view' });

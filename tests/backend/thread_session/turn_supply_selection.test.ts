@@ -6,10 +6,10 @@ import path from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
 import { toModelInputMessages } from '@iki/backend/message/ui_messages';
 import { projectHistoryToPiContext } from '@iki/backend/provider/llm/pi_adapter';
-import { addProvider } from '@iki/backend/db/providers';
+import { addProvider } from '@iki/store/providers';
 import { PiTextTurnHarness } from '@iki/backend/agent/runners/pi_text_turn_harness';
 import { PiToolTurnHarness } from '@iki/backend/agent/runners/pi_tool_turn_harness';
 import {

@@ -12,7 +12,7 @@ import type {
 import { isChatUiMetadataPart } from '@iki/backend/message/message_parts';
 import { isTerminalDynamicToolPart, toInterruptedToolPart , normalizeToolPartForValidation , isObjectRecord } from '@iki/backend/message/tool_parts';
 import type { ChatInputMessage, ChatTransportMessage, LlmChatMessage } from './chat_message_types';
-import { createPrefixedId } from '@iki/backend/utils/id';
+import { createPrefixedId } from '@iki/core/utils/id';
 
 const normalizeUiMessagesForValidation = (
   messages: ChatUiMessage[],

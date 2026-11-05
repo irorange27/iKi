@@ -4,7 +4,7 @@ import type {
   AgentRunStepStatus,
   AgentRunStepType,
   AgentRunTrace,
-} from '@iki/backend/types/agent_run';
+} from '@iki/core/types/agent_run';
 
 type LedgerKind = AgentRunStepType | 'system' | 'user';
 type LedgerLane = 0 | 1 | 2;

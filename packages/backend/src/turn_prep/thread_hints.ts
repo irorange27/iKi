@@ -1,6 +1,6 @@
-import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import { createLogger } from '@iki/backend/logger';
-import type { ChatThread } from '@iki/backend/types/chat';
+import * as chatThreadDb from '@iki/store/chat_thread';
+import { createLogger } from '@iki/core/logger';
+import type { ChatThread } from '@iki/core/types/chat';
 import { buildThreadRuntimeMetadata } from '@iki/backend/message/thread_runtime_hints';
 
 const chatThreadHintsLogger = createLogger({ module: 'chat_thread_hints' });

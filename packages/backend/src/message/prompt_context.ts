@@ -6,7 +6,7 @@ import {
   sanitizeModelConversationMessages,
 } from '@iki/backend/agent/model_messages';
 import type { AgentConfig } from '@iki/backend/agent/types';
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import {
   assembleRequestSystemPrompt,
   type RequestSystemPromptPart,

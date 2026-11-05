@@ -187,9 +187,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { X } from 'lucide-vue-next';
-import type { AgentEvalLabel, AgentEvalLabelType } from '@iki/backend/types/agent_run';
+import type { AgentEvalLabel, AgentEvalLabelType } from '@iki/core/types/agent_run';
 import { getElectronAPI } from '../../services/electron_api';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+import { getErrorMessage } from '@iki/core/utils/errors';
 import { useI18n } from '../../i18n';
 import {
   formatDuration,

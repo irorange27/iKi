@@ -1,4 +1,4 @@
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import type { ModelMessage, ToolApprovalResponse } from '@iki/backend/message/model_history';
 
 import { cloneModelMessages } from '../agent/harness';

@@ -17,7 +17,7 @@ vi.mock('../../../packages/desktop/src/renderer/logger', () => ({
 }));
 
 import { useChatComposerSend } from '../../../packages/desktop/src/renderer/composables/useChatComposerSend';
-import type { Provider } from '@iki/backend/types/provider';
+import type { Provider } from '@iki/core/types/provider';
 
 const buildProvider = (
   overrides: Partial<Provider> & Pick<Provider, 'id' | 'name' | 'type'>

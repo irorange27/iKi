@@ -17,7 +17,7 @@ import type {
   PrepareMessageSendPayload,
 } from '../modules/chat/chat_prepare_send';
 import type { SubmitTurnParams, SubmitTurnResult } from './useChatComposerSend';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+import { getErrorMessage } from '@iki/core/utils/errors';
 
 const chatStreamingLogger = createLogger({ module: 'chat_streaming' });
 

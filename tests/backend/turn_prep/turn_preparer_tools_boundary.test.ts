@@ -7,7 +7,7 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   callPiChat: callPiChatMock,
 }));
 
-vi.mock('@iki/backend/platform', () => ({ getUserDataPath: userDataMock }));
+vi.mock('@iki/core/platform', () => ({ getUserDataPath: userDataMock }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
   disposeLanguageModel: vi.fn(),
@@ -29,12 +29,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
 import { LoadSkillTool } from '@iki/backend/tools/skill_tools';
 import { createChatTurnPreparer } from '@iki/backend/turn_prep/turn_preparer';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
-import { addWorkspace } from '@iki/backend/db/workspaces';
+import { addWorkspace } from '@iki/store/workspaces';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { z } from 'zod';
 

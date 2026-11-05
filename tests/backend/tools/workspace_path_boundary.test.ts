@@ -5,8 +5,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
-vi.mock('@iki/backend/platform', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/platform')>()),
+vi.mock('@iki/core/platform', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/core/platform')>()),
   getUserDataPath: userDataMock,
 }));
 
@@ -15,7 +15,7 @@ import {
   resolveReadableWorkspacePath,
   resolveWritableWorkspacePath,
 } from '@iki/backend/tools/workspace_paths';
-import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/core/utils/runtime_context';
 
 const contextFor = (root: string) =>
   ({

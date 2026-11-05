@@ -4,8 +4,8 @@ import type { ModelMessage } from '@iki/backend/message/model_history';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { getProviders } from '../../db/providers';
-import { createLogger } from '@iki/backend/logger';
+import { getProviders } from '@iki/store/providers';
+import { createLogger } from '@iki/core/logger';
 import { getPersonaPrompt } from '../../persona';
 import { fetchWithTimeout } from '../../network/http';
 import {
@@ -17,13 +17,13 @@ import {
   parseProviderModelOptionsMap,
   type ModelCapability,
   type ModelsDevCatalog,
-} from '@iki/backend/utils/provider_models';
+} from '@iki/core/utils/provider_models';
 import type {
   ProviderModelOptions,
   ProviderModelOptionsMap,
-} from '@iki/backend/types/provider';
-import type { TokenUsageMetrics } from '@iki/backend/types/chat_usage';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+} from '@iki/core/types/provider';
+import type { TokenUsageMetrics } from '@iki/core/types/chat_usage';
+import { getErrorMessage } from '@iki/core/utils/errors';
 import {
   assembleAuxRequestSystemPrompt,
   assembleRequestSystemPrompt,

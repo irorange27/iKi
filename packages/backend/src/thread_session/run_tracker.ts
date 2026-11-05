@@ -4,7 +4,7 @@ import {
   createAgentRun,
   getAgentRun,
   updateAgentRun,
- claimQueuedAgentRun } from '@iki/backend/db/agent_runs';
+ claimQueuedAgentRun } from '@iki/store/agent_runs';
 import type {
   AgentRun,
   AgentRunError,
@@ -15,14 +15,14 @@ import type {
   AgentRunStep,
   AgentRunStepType,
   AgentRunWorkingState,
-} from '@iki/backend/types/agent_run';
+} from '@iki/core/types/agent_run';
 import type { AgentStep, ModelInferenceRecord } from '@iki/backend/agent/agent_step';
-import { createPrefixedId } from '@iki/backend/utils/id';
+import { createPrefixedId } from '@iki/core/utils/id';
 import {
   normalizeWhitespace,
   sanitizePromptMetadataText,
   toIsoNow,
-} from '@iki/backend/utils/text';
+} from '@iki/core/utils/text';
 
 type CreateAgentRunTrackerParams = {
   kind: AgentRunKind;

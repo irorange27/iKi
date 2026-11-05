@@ -1,5 +1,5 @@
 
-import { addProvider } from '@iki/backend/db/providers';
+import { addProvider } from '@iki/store/providers';
 
 export const seedTurnProvider = (options: {
   providerId: string;

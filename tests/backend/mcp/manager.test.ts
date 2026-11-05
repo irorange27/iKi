@@ -90,7 +90,7 @@ vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('@iki/backend/db/mcp_servers', () => ({
+vi.mock('@iki/store/mcp_servers', () => ({
   addMcpServer: vi.fn(),
   deleteMcpServer: vi.fn(),
   getMcpServer: vi.fn(),
@@ -122,11 +122,11 @@ vi.mock('@modelcontextprotocol/sdk/client/sse.js', () => ({
   SSEClientTransport: MockSSEClientTransport,
 }));
 
-import { getMcpServer } from '@iki/backend/db/mcp_servers';
+import { getMcpServer } from '@iki/store/mcp_servers';
 import { defaultToolRegistry } from '@iki/backend/tools';
-import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/core/utils/runtime_context';
 import { McpManager } from '@iki/backend/mcp/manager';
-import type { McpServer } from '@iki/backend/types/mcp';
+import type { McpServer } from '@iki/core/types/mcp';
 
 type TransportBuilder = {
   buildTransport(server: McpServer): Promise<unknown>;

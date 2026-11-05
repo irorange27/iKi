@@ -10,8 +10,8 @@ const callPiChatMock = vi.hoisted(() => vi.fn());
 const rejectedTypes = vi.hoisted(() => ({ types: new Set<string>() }));
 
 // Fail the durable append for a chosen event type at the store boundary.
-vi.mock('@iki/backend/db/session_events', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/backend/db/session_events')>();
+vi.mock('@iki/store/session_events', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/store/session_events')>();
   const guard = (events: { type: string }[]) => {
     if (events.some(event => rejectedTypes.types.has(event.type))) {
       throw new Error('discipline: write rejected');
@@ -39,7 +39,7 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   callPiChat: callPiChatMock,
 }));
 
-vi.mock('@iki/backend/platform', () => ({ getUserDataPath: external.userData }));
+vi.mock('@iki/core/platform', () => ({ getUserDataPath: external.userData }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
   resolvePersonaPrompt: () => 'review',
@@ -59,14 +59,14 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
     baseURL: 'http://127.0.0.1:9/v1',
   }),
 }));
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
 import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import {
   piTurnHarness,
   setTurnHarnessFallback,
 } from '@iki/backend/thread_session/turn_supply_selection';
-import { listAgentRunsByThread } from '@iki/backend/db/agent_runs';
+import { listAgentRunsByThread } from '@iki/store/agent_runs';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';

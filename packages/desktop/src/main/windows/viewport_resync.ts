@@ -1,6 +1,6 @@
 import type { BrowserWindow } from 'electron';
 
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 
 const windowLogger = createLogger({ module: 'main_window' });
 

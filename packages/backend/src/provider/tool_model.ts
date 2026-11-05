@@ -1,9 +1,9 @@
-import { getProviders } from '../db/providers';
+import { getProviders } from '@iki/store/providers';
 import { getAppConfig } from '../config';
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import { generateConversationTitle } from '../runtimes/title_runtime';
 import { generateChatWithModelMessages } from '../provider/llm/factory';
-import { parseModelList } from '@iki/backend/utils/provider_models';
+import { parseModelList } from '@iki/core/utils/provider_models';
 
 export interface ToolModelConfig {
   providerType: string;

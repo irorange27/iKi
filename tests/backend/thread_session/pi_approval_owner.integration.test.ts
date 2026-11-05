@@ -7,10 +7,10 @@ import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
-import { addProvider } from '@iki/backend/db/providers';
-import { addChatThread } from '@iki/backend/db/chat_thread';
-import { getSessionEvents } from '@iki/backend/db/session_events';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
+import { addProvider } from '@iki/store/providers';
+import { addChatThread } from '@iki/store/chat_thread';
+import { getSessionEvents } from '@iki/store/session_events';
 import { recordSessionEvents, SESSION_EVENT_VERSION } from '@iki/backend/thread_session/session_log';
 import {
   registerApprovalBinding,

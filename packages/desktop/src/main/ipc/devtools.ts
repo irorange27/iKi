@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 
-import type { DevToolsResolveRequest, DevToolsSourceResult } from '@iki/backend/types/devtools';
+import type { DevToolsResolveRequest, DevToolsSourceResult } from '@iki/core/types/devtools';
 
 import {
   armElementRecorder,

@@ -5,7 +5,7 @@ import {
   deriveRunTurnPlan,
   journaledExchangePairs,
 } from '@iki/backend/thread_session/run_rehydrator';
-import type { AgentRun } from '@iki/backend/types/agent_run';
+import type { AgentRun } from '@iki/core/types/agent_run';
 
 const baseRun = {
   id: 'run_1',

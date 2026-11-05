@@ -12,8 +12,8 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   callPiChat: callPiChatMock,
 }));
 
-vi.mock('@iki/backend/platform', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/platform')>()),
+vi.mock('@iki/core/platform', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/core/platform')>()),
   getUserDataPath: userDataMock,
 }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
@@ -32,10 +32,10 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   }),
 }));
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
-import * as agentRunDb from '@iki/backend/db/agent_runs';
-import { addWorkspace } from '@iki/backend/db/workspaces';
+import * as agentRunDb from '@iki/store/agent_runs';
+import { addWorkspace } from '@iki/store/workspaces';
 import { createChatService } from '@iki/backend/thread_session/service';
 import {
   piTurnHarness,

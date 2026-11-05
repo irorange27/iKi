@@ -1,5 +1,5 @@
-import type { ApprovalPolicy } from '@iki/backend/utils/action_risk';
-import { isObjectRecord } from '@iki/backend/utils/guards';
+import type { ApprovalPolicy } from '@iki/core/utils/action_risk';
+import { isObjectRecord } from '@iki/core/utils/guards';
 import { THREAD_WORKTREE_WORKSPACE_PREFIX } from './worktree_ids';
 
 export type ThreadWorkMode = 'chat' | 'work';

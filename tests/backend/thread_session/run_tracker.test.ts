@@ -19,8 +19,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
-import { createAgentRun, getAgentRun, listAgentRunSteps } from '@iki/backend/db/agent_runs';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
+import { createAgentRun, getAgentRun, listAgentRunSteps } from '@iki/store/agent_runs';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 
 const created: string[] = [];

@@ -1,6 +1,6 @@
 import { app, ipcMain } from 'electron';
 
-import type { DevRuntimeStatus } from '@iki/backend/types/devtools';
+import type { DevRuntimeStatus } from '@iki/core/types/devtools';
 
 import { restartApp, shouldOfferRestart } from '../windows/app_restart';
 

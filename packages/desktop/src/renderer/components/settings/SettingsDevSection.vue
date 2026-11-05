@@ -18,7 +18,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 
-import type { DevRuntimeStatus } from '@iki/backend/types/devtools';
+import type { DevRuntimeStatus } from '@iki/core/types/devtools';
 import { useI18n } from '../../i18n';
 import { getElectronAPI } from '../../services/electron_api';
 

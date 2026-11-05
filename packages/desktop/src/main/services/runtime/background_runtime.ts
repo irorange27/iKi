@@ -1,6 +1,6 @@
-import { cleanupOldAgentRuns } from '@iki/backend/db/agent_runs';
+import { cleanupOldAgentRuns } from '@iki/store/agent_runs';
 import { recoverStuckRunsOnStartup } from '@iki/backend/thread_session/run_recovery';
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import { startAwaiterScheduler, stopAwaiterScheduler } from '../awaiters/awaiters';
 
 const runtimeLogger = createLogger({ module: 'background_runtime' });

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultAppConfig } from '@iki/backend/config/defaults';
-import type { Provider } from '@iki/backend/types/provider';
+import type { Provider } from '@iki/core/types/provider';
 
 const {
   generateChatWithModelMessagesMock,
@@ -33,11 +33,11 @@ vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('@iki/backend/db/providers', () => ({
+vi.mock('@iki/store/providers', () => ({
   getProviders: getProvidersMock,
 }));
 
-vi.mock('@iki/backend/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),

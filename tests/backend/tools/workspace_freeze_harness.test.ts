@@ -25,7 +25,7 @@ const {
   updateChatThreadMock: vi.fn(),
 }));
 
-vi.mock('@iki/backend/db/workspaces', () => ({
+vi.mock('@iki/store/workspaces', () => ({
   getVisibleWorkspaces: getVisibleWorkspacesMock,
   getWorkspace: getWorkspaceMock,
   getWorkspaceByPath: getWorkspaceByPathMock,
@@ -33,7 +33,7 @@ vi.mock('@iki/backend/db/workspaces', () => ({
   updateWorkspace: updateWorkspaceMock,
 }));
 
-vi.mock('@iki/backend/db/chat_thread', () => ({
+vi.mock('@iki/store/chat_thread', () => ({
   getChatThread: getChatThreadMock,
   updateChatThread: updateChatThreadMock,
 }));
@@ -59,7 +59,7 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
 import { createScriptedPiChat } from '@iki/backend/agent/testing/scripted_pi';
 import { WriteFileTool } from '@iki/backend/tools/file_tools';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
-import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/core/utils/runtime_context';
 
 const toolName = 'freeze_probe';
 

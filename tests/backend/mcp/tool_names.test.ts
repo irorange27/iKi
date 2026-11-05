@@ -5,7 +5,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { McpServer } from '@iki/backend/types/mcp';
+import type { McpServer } from '@iki/core/types/mcp';
 
 const {
   getAppConfigMock,
@@ -92,7 +92,7 @@ vi.mock('@iki/backend/config', () => ({
   getAppConfig: getAppConfigMock,
 }));
 
-vi.mock('@iki/backend/db/mcp_servers', () => ({
+vi.mock('@iki/store/mcp_servers', () => ({
   addMcpServer: vi.fn(),
   deleteMcpServer: vi.fn(),
   getMcpServer: vi.fn((id: string) => serverRows.get(id) ?? null),
@@ -118,7 +118,7 @@ vi.mock('@modelcontextprotocol/sdk/client/sse.js', () => ({
 
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { McpManager } from '@iki/backend/mcp/manager';
-import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/core/utils/runtime_context';
 
 const TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 

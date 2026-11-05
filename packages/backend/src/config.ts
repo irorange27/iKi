@@ -1,9 +1,9 @@
-import type { AppConfig } from './types/config';
+import type { AppConfig } from '@iki/core/types/config';
 import { createDefaultAppConfig } from './config/defaults';
 import { normalizeAppConfig } from './config/normalize';
-import { normalizeAppLocale } from '@iki/backend/i18n/locale';
-import { getConfig, setConfig } from './db/database';
-import { getDisplayScale, getLocale, getTheme } from './platform';
+import { normalizeAppLocale } from '@iki/core/i18n/locale';
+import { getConfig, setConfig } from '@iki/store/database';
+import { getDisplayScale, getLocale, getTheme } from '@iki/core/platform';
 
 function getSystemConfig(): AppConfig {
   const locale = getLocale();

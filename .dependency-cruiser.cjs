@@ -9,6 +9,27 @@
 module.exports = {
   forbidden: [
     {
+      name: 'core-is-a-leaf',
+      comment: '@iki/core holds types/utils/logging/platform and must not reach any consumer: it is what every other package depends on.',
+      severity: 'error',
+      from: { path: '^packages/core/src' },
+      to: { path: '^packages/(backend|store|desktop)/' },
+    },
+    {
+      name: 'store-depends-only-on-core',
+      comment: '@iki/store is the persistence layer: it may use core types/utilities and nothing above it (no agent, tools, turn_prep, thread_session, or the shell).',
+      severity: 'error',
+      from: { path: '^packages/store/src' },
+      to: { path: '^packages/(backend/src/(agent|tools|turn_prep|thread_session|provider|message|mcp|runtimes|awaiters|workspaces|network)|desktop)/' },
+    },
+    {
+      name: 'backend-owns-orchestration',
+      comment: 'The backend composes core, store, tools, session and provider; it must never reach into the shell.',
+      severity: 'error',
+      from: { path: '^packages/backend/src' },
+      to: { path: '^packages/desktop' },
+    },
+    {
       name: 'backend-stays-pure',
       comment: 'Golden rule: packages/backend is pure Node/TS — no Electron/Vue/Vite, no renderer SDKs',
       severity: 'error',

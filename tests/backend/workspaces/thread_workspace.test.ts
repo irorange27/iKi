@@ -20,12 +20,12 @@ const {
   updateWorkspaceMock: vi.fn(),
 }));
 
-vi.mock('@iki/backend/db/chat_thread', () => ({
+vi.mock('@iki/store/chat_thread', () => ({
   getChatThread: getChatThreadMock,
   updateChatThread: updateChatThreadMock,
 }));
 
-vi.mock('@iki/backend/db/workspaces', () => ({
+vi.mock('@iki/store/workspaces', () => ({
   getWorkspace: getWorkspaceMock,
   getWorkspaceByPath: getWorkspaceByPathMock,
   addWorkspace: addWorkspaceMock,

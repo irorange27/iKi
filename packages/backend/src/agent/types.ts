@@ -1,17 +1,8 @@
 import { z } from 'zod';
+import type { ToolRetryConfig } from '@iki/core/types/tool_retry';
+export type { ToolRetryConfig };
 
 export type ToolApprovalFunction = (input: unknown, options: { toolCallId: string; messages: unknown[]; experimental_context?: unknown }) => boolean | Promise<boolean>;
-
-export interface ToolRetryConfig {
-
-  maxRetries: number;
-
-  backoffMs?: number;
-
-  retryableError?: (error: unknown) => boolean;
-
-  fallback?: (lastError: unknown) => unknown | Promise<unknown>;
-}
 
 export const AgentConfigSchema = z.object({
   enabled: z.boolean(),

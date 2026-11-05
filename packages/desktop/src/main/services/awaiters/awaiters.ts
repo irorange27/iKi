@@ -1,6 +1,6 @@
 import { Notification, app } from 'electron';
 
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import {
   createAwaiterRunner,
   type AwaiterRunner,

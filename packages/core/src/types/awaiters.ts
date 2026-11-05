@@ -1,4 +1,4 @@
-import { isObjectRecord } from '@iki/backend/utils/guards';
+import { isObjectRecord } from '@iki/core/utils/guards';
 
 type AwaiterStatus =
   | 'armed'

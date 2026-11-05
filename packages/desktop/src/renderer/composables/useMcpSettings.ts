@@ -5,14 +5,14 @@ import { useI18n } from '../i18n';
 import { confirmAction } from './useConfirm';
 import { getElectronApiSliceMethod } from '../services/electron_api';
 import { useConfigStore } from '../store/config';
-import type { AppConfig } from '@iki/backend/types/config';
+import type { AppConfig } from '@iki/core/types/config';
 import type {
   McpApprovalMode,
   McpServerInput,
   McpServerSummary,
   McpTransport,
-} from '@iki/backend/types/mcp';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+} from '@iki/core/types/mcp';
+import { getErrorMessage } from '@iki/core/utils/errors';
 import { formatTimestamp } from '../utils/formatters';
 
 type ServerForm = {

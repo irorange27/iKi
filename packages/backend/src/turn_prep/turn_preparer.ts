@@ -2,10 +2,10 @@ import * as llmFactory from '../provider/llm/factory';
 import { defaultToolRegistry } from '@iki/backend/tools';
 import { buildThreadWorkspaceSystemMessage } from '@iki/backend/workspaces/thread_workspace';
 import type { ChatExperimentalContext } from '@iki/backend/message/chat_context_mode';
-import type { AgentRunKind } from '@iki/backend/types/agent_run';
-import type { AppConfig } from '@iki/backend/types/config';
-import type { SkillSummary } from '@iki/backend/types/skill';
-import { ensureModelCapability } from '@iki/backend/utils/provider_models';
+import type { AgentRunKind } from '@iki/core/types/agent_run';
+import type { AppConfig } from '@iki/core/types/config';
+import type { SkillSummary } from '@iki/core/types/skill';
+import { ensureModelCapability } from '@iki/core/utils/provider_models';
 import { createChatContextAssembler, type ContextReport } from './context';
 import type {
   ChatInputMessage,

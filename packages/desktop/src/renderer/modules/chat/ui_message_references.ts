@@ -2,9 +2,9 @@ import type { ChatUiMessage, SkillUsageEntry } from '@iki/backend/message/messag
 import type {
   ContextCompositionCategory,
   ContextCompositionSummary,
-} from '@iki/backend/types/context_composition';
-import { normalizeModelCapabilityLimits } from '@iki/backend/utils/provider_models';
-import { normalizeWhitespace } from '@iki/backend/utils/text';
+} from '@iki/core/types/context_composition';
+import { normalizeModelCapabilityLimits } from '@iki/core/utils/provider_models';
+import { normalizeWhitespace } from '@iki/core/utils/text';
 import { translate } from '../../i18n';
 
 import {

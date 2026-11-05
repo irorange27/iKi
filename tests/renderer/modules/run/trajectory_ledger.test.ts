@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AgentRun, AgentRunStep, AgentRunTrace } from '@iki/backend/types/agent_run';
+import type { AgentRun, AgentRunStep, AgentRunTrace } from '@iki/core/types/agent_run';
 import {
   buildTurnLedgers,
   formatDuration,

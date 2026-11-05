@@ -1,18 +1,18 @@
-import * as awaitersDb from '../db/awaiters';
+import * as awaitersDb from '@iki/store/awaiters';
 import {
   DEFAULT_AWAITER_LIST_LIMIT,
   MAX_AWAITER_LIST_LIMIT,
   parseAwaiterTriggerSpec,
   type Awaiter,
   type AwaiterTriggerSpec,
-} from '@iki/backend/types/awaiters';
-import { createPrefixedId } from '@iki/backend/utils/id';
+} from '@iki/core/types/awaiters';
+import { createPrefixedId } from '@iki/core/utils/id';
 import {
   clampListLimit,
   normalizeOptionalProviderId,
   normalizeWhitespace,
   toIsoNow,
-} from '@iki/backend/utils/text';
+} from '@iki/core/utils/text';
 import {
   computeAwaiterNextWakeAt,
   formatAwaiterTriggerSummary,

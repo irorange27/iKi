@@ -1,13 +1,13 @@
 import { computed, onMounted, ref } from 'vue';
 
 import { useI18n } from '../i18n';
-import type { BuiltInProvider } from '@iki/backend/types/settings';
+import type { BuiltInProvider } from '@iki/core/types/settings';
 import { BUILTIN_PROVIDERS } from '@iki/backend/constants/ProvidersSettings';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+import { getErrorMessage } from '@iki/core/utils/errors';
 import {
   parseModelList,
   serializeProviderModelOptionsMap,
-} from '@iki/backend/utils/provider_models';
+} from '@iki/core/utils/provider_models';
 import { createLogger } from '../logger';
 import { useProviderDrafts, type ProviderRecord } from './useProviderDrafts';
 import { useProvidersSettingsEditor } from './useProvidersSettingsEditor';

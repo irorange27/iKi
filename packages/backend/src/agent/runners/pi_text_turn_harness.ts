@@ -1,7 +1,7 @@
 import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-ai';
 
-import { createLogger } from '@iki/backend/logger';
-import { getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
+import { createLogger } from '@iki/core/logger';
+import { getErrorMessage, isRetryableError } from '@iki/core/utils/errors';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import {
   appendUserPromptToHistory,

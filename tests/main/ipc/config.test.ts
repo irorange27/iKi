@@ -26,7 +26,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('@iki/backend/db/database', () => ({
+vi.mock('@iki/store/database', () => ({
   setConfig: vi.fn(),
   migrateFromJson: vi.fn(),
   getStorePath: () => '/tmp/iki-user-data/iki-store',

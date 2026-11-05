@@ -1,16 +1,16 @@
 import { app, ipcMain } from 'electron';
 import path from 'node:path';
 
-import { setConfig, migrateFromJson, getStorePath } from '@iki/backend/db/database';
+import { setConfig, migrateFromJson, getStorePath } from '@iki/store/database';
 import { getAppConfig } from '@iki/backend/config';
-import { applyAppLoggingConfig, createLogger } from '@iki/backend/logger';
+import { applyAppLoggingConfig, createLogger } from '@iki/core/logger';
 import { getMcpManager } from '@iki/backend/mcp';
 import { normalizeAppConfig } from '@iki/backend/config/normalize';
 import type {
   AppConfig,
   ConfigRuntimeInfo,
   NetworkDiagnosticResult,
-} from '@iki/backend/types/config';
+} from '@iki/core/types/config';
 import { testNetworkConnectivity } from '../services/network/network_diagnostics';
 import { applyAppUpdateConfig } from '../services/update/auto_update_service';
 import { broadcastToRenderers } from '../utils/ipc_helpers';

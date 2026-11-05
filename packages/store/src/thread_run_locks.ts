@@ -8,8 +8,8 @@
  * the SQL version it replaced.
  */
 
-import { createLogger } from '@iki/backend/logger';
-import { createPrefixedId } from '@iki/backend/utils/id';
+import { createLogger } from '@iki/core/logger';
+import { createPrefixedId } from '@iki/core/utils/id';
 
 const lockLogger = createLogger({ module: 'thread_run_locks' });
 

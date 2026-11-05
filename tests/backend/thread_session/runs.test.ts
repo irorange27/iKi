@@ -20,11 +20,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
-import { createAgentRun, getAgentRun } from '@iki/backend/db/agent_runs';
-import { addChatThread } from '@iki/backend/db/chat_thread';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
+import { createAgentRun, getAgentRun } from '@iki/store/agent_runs';
+import { addChatThread } from '@iki/store/chat_thread';
 import { createChatRuns } from '@iki/backend/thread_session/runs';
-import { getSessionEvents } from '@iki/backend/db/session_events';
+import { getSessionEvents } from '@iki/store/session_events';
 import { TURN_STARTED, recordSessionEvents } from '@iki/backend/thread_session/session_log';
 
 const created: string[] = [];

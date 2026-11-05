@@ -1,12 +1,12 @@
 import type { AssistantMessage, Message as PiMessage } from '@earendil-works/pi-ai';
 
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import {
   getErrorMessage,
   isContextOverflowError,
   isRetryableError,
   RefusalError,
-} from '@iki/backend/utils/errors';
+} from '@iki/core/utils/errors';
 import {
   CONTENT_FILTER_PATTERN,
   PI_RETRY_MAX_ATTEMPTS,

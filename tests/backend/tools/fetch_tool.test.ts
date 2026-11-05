@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/backend/db/database', () => ({
+vi.mock('@iki/store/database', () => ({
   getConfig: vi.fn(() => null),
 }));
 

@@ -19,7 +19,7 @@ vi.mock('electron', () => {
   };
 });
 
-vi.mock('@iki/backend/db/awaiters', () => ({
+vi.mock('@iki/store/awaiters', () => ({
   getAwaiter: vi.fn(),
   listDueAwaiters: vi.fn(),
   updateAwaiter: vi.fn(),
@@ -27,11 +27,11 @@ vi.mock('@iki/backend/db/awaiters', () => ({
   reclaimStaleWakingAwaiters: vi.fn(() => 0),
 }));
 
-vi.mock('@iki/backend/db/chat_thread', () => ({
+vi.mock('@iki/store/chat_thread', () => ({
   touchChatThread: vi.fn(),
 }));
 
-vi.mock('@iki/backend/db/agent_runs', () => ({
+vi.mock('@iki/store/agent_runs', () => ({
   getAgentRun: vi.fn(() => null),
   getLatestAgentRunCheckpoint: vi.fn(() => null),
 }));
@@ -46,14 +46,14 @@ vi.mock('../../../../packages/desktop/src/main/services/chat/service', () => ({
 
 import { BrowserWindow, Notification } from 'electron';
 
-import type { Awaiter } from '@iki/backend/types/awaiters';
+import type { Awaiter } from '@iki/core/types/awaiters';
 import {
   runAwaiterWake,
   startAwaiterScheduler,
   stopAwaiterScheduler,
 } from '../../../../packages/desktop/src/main/services/awaiters/awaiters';
-import * as awaitersDb from '@iki/backend/db/awaiters';
-import * as chatThreadDb from '@iki/backend/db/chat_thread';
+import * as awaitersDb from '@iki/store/awaiters';
+import * as chatThreadDb from '@iki/store/chat_thread';
 import { chatService } from '../../../../packages/desktop/src/main/services/chat/service';
 
 const baseAwaiter = (overrides: Partial<Awaiter> = {}): Awaiter => ({

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { decideToolApproval } from '@iki/backend/utils/action_risk';
+import { decideToolApproval } from '@iki/core/utils/action_risk';
 
 describe('decideToolApproval (the single approval authority)', () => {
   it('gates shell without guessing what arbitrary programs do', () => {

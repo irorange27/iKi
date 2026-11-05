@@ -17,7 +17,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   };
 });
 
-import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/core/utils/runtime_context';
 import { PiToolTurnHarness, type PiToolModelCall } from '@iki/backend/agent/runners/pi_tool_turn_harness';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { z } from 'zod';

@@ -11,6 +11,8 @@ export default defineConfig({
       { find: '@iki/theme', replacement: new URL('./packages/theme/src/index.ts', import.meta.url).pathname },
       { find: '@iki/backend/', replacement: new URL('./packages/backend/src/', import.meta.url).pathname },
       { find: '@iki/backend', replacement: new URL('./packages/backend/src/index.ts', import.meta.url).pathname },
+      { find: '@iki/core/', replacement: new URL('./packages/core/src/', import.meta.url).pathname },
+      { find: '@iki/store/', replacement: new URL('./packages/store/src/', import.meta.url).pathname },
     ],
   },
   test: {

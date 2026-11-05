@@ -16,7 +16,7 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   callPiChat: callPiChatMock,
 }));
 
-vi.mock('@iki/backend/platform', () => ({ getUserDataPath: external.userData }));
+vi.mock('@iki/core/platform', () => ({ getUserDataPath: external.userData }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   ...(await importOriginal<typeof import('@iki/backend/provider/llm/factory')>()),
   createModel: external.model,
@@ -31,16 +31,16 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   }),
 }));
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
-import { hasLiveThreadRunLease } from '@iki/backend/db/thread_run_locks';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
+import { hasLiveThreadRunLease } from '@iki/store/thread_run_locks';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import {
   piTurnHarness,
   setTurnHarnessFallback,
 } from '@iki/backend/thread_session/turn_supply_selection';
-import { addWorkspace } from '@iki/backend/db/workspaces';
-import { updateChatThread } from '@iki/backend/db/chat_thread';
-import { tryAcquireCrossProcessThreadRun } from '@iki/backend/db/thread_run_locks';
+import { addWorkspace } from '@iki/store/workspaces';
+import { updateChatThread } from '@iki/store/chat_thread';
+import { tryAcquireCrossProcessThreadRun } from '@iki/store/thread_run_locks';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
@@ -54,7 +54,7 @@ import {
   planToRunTrackerParams,
 } from '@iki/backend/thread_session/execution_plan';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
-import { getAgentRun } from '@iki/backend/db/agent_runs';
+import { getAgentRun } from '@iki/store/agent_runs';
 import {
   deriveResumeStreamOptions,
   rebuildResumeHistoryFromEvents,

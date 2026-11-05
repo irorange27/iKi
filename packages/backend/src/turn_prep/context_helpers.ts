@@ -1,7 +1,7 @@
 import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
 import { clipTextToTokenBudget, estimateTextTokens } from '../agent/context_budget';
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
-import type { AppConfig } from '@iki/backend/types/config';
+import type { AppConfig } from '@iki/core/types/config';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 import type {
   AssembleChatContextResult,
@@ -13,7 +13,7 @@ import type {
 import type {
   ContextCompositionCategory,
   ContextCompositionSummary,
-} from '@iki/backend/types/context_composition';
+} from '@iki/core/types/context_composition';
 
 export const getContextConfig = (configured?: AppConfig['context'] | null): ContextConfig => ({
   ...DEFAULT_APP_CONFIG.context,

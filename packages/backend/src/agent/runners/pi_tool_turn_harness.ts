@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Message as PiMessage } from '@earendil-works/pi-ai';
 
-import { createLogger } from '@iki/backend/logger';
-import { RefusalError } from '@iki/backend/utils/errors';
+import { createLogger } from '@iki/core/logger';
+import { RefusalError } from '@iki/core/utils/errors';
 import type { ToolApprovalRequest , AgentTool, AgentTurnPerf, AgentUsage } from '../types';
 import { assembleRequestSystemPrompt } from '@iki/backend/message/system_prompt';
 import {
@@ -37,7 +37,7 @@ import {
   estimateTextTokens,
   estimateToolSchemaTokens,
 } from '../context_budget';
-import { getToolRuntimeContext } from '../../utils/runtime_context';
+import { getToolRuntimeContext } from '@iki/core/utils/runtime_context';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../../workspaces/thread_workspace';
 import type {
   HarnessConfig,

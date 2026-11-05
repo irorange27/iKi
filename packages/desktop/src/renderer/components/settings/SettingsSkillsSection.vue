@@ -129,8 +129,8 @@ import { RefreshCw } from 'lucide-vue-next';
 
 import { useI18n } from '../../i18n';
 import { getElectronApiSlice } from '../../services/electron_api';
-import type { SkillSummary } from '@iki/backend/types/skill';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+import type { SkillSummary } from '@iki/core/types/skill';
+import { getErrorMessage } from '@iki/core/utils/errors';
 
 const props = defineProps<{
   active: boolean;

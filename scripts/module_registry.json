@@ -63,14 +63,14 @@
     {
       "id": "backend/db",
       "roots": [
-        "packages/backend/src/db"
+        "packages/store/src"
       ],
       "layer": "domain",
       "role": "File-backed persistence: collections, append-only session logs, row codecs",
       "tests": [
         "tests/backend/db"
       ],
-      "notes": "Migration modules must not reach for the getDb singleton (depcruiser db-migration-above-database)."
+      "notes": "File store only: one JSON file per collection plus append-only JSONL session logs. The depcruise rules core-is-a-leaf and store-depends-only-on-core keep this package from reaching upward."
     },
     {
       "id": "backend/message",
@@ -121,12 +121,12 @@
     {
       "id": "backend/foundation",
       "roots": [
-        "packages/backend/src/utils",
+        "packages/core/src/utils",
         "packages/backend/src/config",
         "packages/backend/src/constants",
-        "packages/backend/src/types",
-        "packages/backend/src/logging",
-        "packages/backend/src/i18n",
+        "packages/core/src/types",
+        "packages/core/src/logging",
+        "packages/core/src/i18n",
         "packages/backend/src/network",
         "packages/backend/src/runtimes"
       ],

@@ -1,9 +1,9 @@
 import { ipcMain } from 'electron';
 
 import { getAppConfig } from '@iki/backend/config';
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import { defaultToolRegistry } from '@iki/backend/tools';
-import { decideToolApproval } from '@iki/backend/utils/action_risk';
+import { decideToolApproval } from '@iki/core/utils/action_risk';
 import { withIpcLogging } from '../utils/ipc_helpers';
 
 let toolsIpcRegistered = false;

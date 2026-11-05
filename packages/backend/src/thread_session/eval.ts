@@ -1,5 +1,5 @@
-import * as agentEvalDb from '@iki/backend/db/agent_eval';
-import type { AgentEvalLabel, AgentEvalLabelType } from '@iki/backend/types/agent_run';
+import * as agentEvalDb from '@iki/store/agent_eval';
+import type { AgentEvalLabel, AgentEvalLabelType } from '@iki/core/types/agent_run';
 
 import { exportRunTrajectory } from './atif_export';
 

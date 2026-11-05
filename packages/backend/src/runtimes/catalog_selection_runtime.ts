@@ -1,7 +1,7 @@
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import type { ToolModelConfig } from '../provider/tool_model';
 import { generatePromptText } from './prompt_text_generator';
-import { normalizeWhitespace } from '@iki/backend/utils/text';
+import { normalizeWhitespace } from '@iki/core/utils/text';
 
 export type SelectionMessage = {
   role: 'system' | 'user' | 'assistant';

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { createLogger } from '../logger';
+import { createLogger } from '@iki/core/logger';
 
 const toolJsonSchemaLogger = createLogger({ module: 'tool_json_schema' });
 

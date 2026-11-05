@@ -1,12 +1,12 @@
 import { ipcMain } from 'electron';
 
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import {
   getToolModel,
   generateTitle,
   testToolModelLatency,
 } from '@iki/backend/provider/tool_model';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+import { getErrorMessage } from '@iki/core/utils/errors';
 import type { ToolModelLatencyTestResult } from '@iki/backend/types/electron_api';
 import { withIpcLogging } from '../utils/ipc_helpers';
 

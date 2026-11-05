@@ -1,8 +1,8 @@
 import type { ModelMessage } from '../message/model_history';
 
 import { addTurnPerf, type AgentStep, type AgentTurnPerf } from '@iki/backend/agent';
-import type { ConversationPreview } from '@iki/backend/types/companion';
-import { runWithToolRuntimeContext } from '../utils/runtime_context';
+import type { ConversationPreview } from '@iki/core/types/companion';
+import { runWithToolRuntimeContext } from '@iki/core/utils/runtime_context';
 import type { TurnDriverHarness, TurnOutput } from '../agent/harness';
 import type { AgentRunTracker } from './run_tracker';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';

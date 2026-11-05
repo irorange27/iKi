@@ -59,7 +59,7 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   }),
 }));
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import {
   piTurnHarness,

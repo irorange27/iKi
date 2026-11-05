@@ -1,15 +1,15 @@
-import * as providerDb from '@iki/backend/db/providers';
+import * as providerDb from '@iki/store/providers';
 import { getAppConfig } from '@iki/backend/config';
-import { createLogger } from '@iki/backend/logger';
-import { parseModelList } from '@iki/backend/utils/provider_models';
+import { createLogger } from '@iki/core/logger';
+import { parseModelList } from '@iki/core/utils/provider_models';
 import type {
   CompanionDormantReason,
   CompanionPhase,
   CompanionSnapshot,
   ConversationPreview,
-} from '@iki/backend/types/companion';
-import type { AppConfig } from '@iki/backend/types/config';
-import type { Provider } from '@iki/backend/types/provider';
+} from '@iki/core/types/companion';
+import type { AppConfig } from '@iki/core/types/config';
+import type { Provider } from '@iki/core/types/provider';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
 
 type CompanionWindowTarget = {

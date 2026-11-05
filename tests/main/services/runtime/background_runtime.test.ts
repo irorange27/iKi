@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/backend/db/agent_runs', () => ({
+vi.mock('@iki/store/agent_runs', () => ({
   cleanupOldAgentRuns: vi.fn(() => ({ deletedRuns: 0 })),
 }));
 
@@ -14,7 +14,7 @@ vi.mock('@iki/backend/thread_session/run_recovery', () => ({
   })),
 }));
 
-vi.mock('@iki/backend/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: () => ({ event: vi.fn() }),
 }));
 

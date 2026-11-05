@@ -1,6 +1,6 @@
 import type { ChatInvocationOptions } from '@iki/backend/types/electron_api';
-import { toPlainData as clonePlainData } from '@iki/backend/utils/plain_clone';
-import type { ModelCapabilitySnapshot, Provider } from '@iki/backend/types/provider';
+import { toPlainData as clonePlainData } from '@iki/core/utils/plain_clone';
+import type { ModelCapabilitySnapshot, Provider } from '@iki/core/types/provider';
 
 type ComposerReadyProvider = {
   provider: Provider;

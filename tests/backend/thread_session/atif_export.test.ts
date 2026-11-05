@@ -5,12 +5,12 @@ const agentRunDbMocks = vi.hoisted(() => ({
   listAgentRunSteps: vi.fn(() => []),
 }));
 
-vi.mock('@iki/backend/db/agent_runs', () => ({
+vi.mock('@iki/store/agent_runs', () => ({
   getAgentRun: agentRunDbMocks.getAgentRun,
   listAgentRunSteps: agentRunDbMocks.listAgentRunSteps,
 }));
 
-import type { AgentRun, AgentRunStep } from '@iki/backend/types/agent_run';
+import type { AgentRun, AgentRunStep } from '@iki/core/types/agent_run';
 import {
   buildRunTrajectory,
   exportRunTrajectory,

@@ -26,6 +26,12 @@
       ],
       "@iki/backend/*": [
         "./packages/backend/src/*"
+      ],
+      "@iki/core/*": [
+        "./packages/core/src/*"
+      ],
+      "@iki/store/*": [
+        "./packages/store/src/*"
       ]
     },
     "typeRoots": [
@@ -35,6 +41,8 @@
   },
   "include": [
     "packages/desktop/src/**/*",
-    "packages/backend/src/**/*"
+    "packages/backend/src/**/*",
+    "packages/core/src/**/*",
+    "packages/store/src/**/*"
   ]
 }

@@ -1,5 +1,5 @@
 import { commitRows, patchRow, readRows } from './collection';
-import { Workspace } from '@iki/backend/types/chat';
+import { Workspace } from '@iki/core/types/chat';
 
 type WorkspaceRow = Workspace & { is_temporary?: number; show_in_list?: number };
 

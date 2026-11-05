@@ -9,9 +9,9 @@ vi.mock('@iki/backend/config', () => ({
 }));
 
 import { createDefaultAppConfig } from '@iki/backend/config/defaults';
-import type { AppConfig } from '@iki/backend/types/config';
+import type { AppConfig } from '@iki/core/types/config';
 import { getAppConfig } from '@iki/backend/config';
-import { setHostFetch } from '@iki/backend/platform';
+import { setHostFetch } from '@iki/core/platform';
 import {
   fetchWithTimeout,
   getNetworkRetryAttempts,

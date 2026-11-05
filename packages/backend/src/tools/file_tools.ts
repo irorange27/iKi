@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { getToolRuntimeContext } from '../utils/runtime_context';
+import { getToolRuntimeContext } from '@iki/core/utils/runtime_context';
 import { BaseTool } from '@iki/backend/tools/base';
 import {
   DeleteFileInputSchema,

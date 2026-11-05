@@ -45,7 +45,7 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   }),
 }));
 
-import { closeDatabase, getStorePath, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, getStorePath, initializeDatabase } from '@iki/store/database';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
 import {
   rebuildThreadViewFromEvents,

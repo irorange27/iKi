@@ -8,7 +8,7 @@ import {
   turnFactsToEvents,
 } from './session_log';
 import type { TurnOutput } from '../agent/harness';
-import type { AgentRunStatus } from '@iki/backend/types/agent_run';
+import type { AgentRunStatus } from '@iki/core/types/agent_run';
 
 export const runFailureFromError = (error: unknown, message: string) => ({
   message,

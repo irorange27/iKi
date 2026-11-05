@@ -28,7 +28,7 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
   callPiChat: callPiChatMock,
 }));
 
-vi.mock('@iki/backend/db/agent_runs', () => ({
+vi.mock('@iki/store/agent_runs', () => ({
   appendAgentRunStep: vi.fn(),
   appendAgentRunStepAndUpdateRun: vi.fn(
     (step: { runId: string; stepIndex: number }, updates: Record<string, unknown>) => ({
@@ -90,7 +90,7 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   }),
 }));
 
-import * as agentRunDb from '@iki/backend/db/agent_runs';
+import * as agentRunDb from '@iki/store/agent_runs';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import {
   piTurnHarness,
@@ -102,7 +102,7 @@ import {
   type PiScript,
   type PiScriptStep,
 } from '@iki/backend/agent/testing/scripted_pi';
-import { getToolRuntimeContext } from '@iki/backend/utils/runtime_context';
+import { getToolRuntimeContext } from '@iki/core/utils/runtime_context';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 
 const toolName = 'streaming_context_probe';

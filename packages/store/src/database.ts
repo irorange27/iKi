@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { getUserDataPath } from '../platform';
+import { getUserDataPath } from '@iki/core/platform';
 import { commitRows, readRows, setDefaultStoreRootResolver, setStoreRoot, storeRoot } from './collection';
 
 let pathOverride: string | null = null;

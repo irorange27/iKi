@@ -34,7 +34,7 @@ import type {
   TurnEvent,
   TurnInput,
 } from '@iki/backend/agent/harness/harness_types';
-import { RefusalError } from '@iki/backend/utils/errors';
+import { RefusalError } from '@iki/core/utils/errors';
 
 const finalMessage = (overrides: Partial<AssistantMessage> = {}): AssistantMessage => ({
   role: 'assistant',

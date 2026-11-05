@@ -5,14 +5,14 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 const profile = vi.hoisted(() => ({ path: '' }));
-vi.mock('@iki/backend/platform', () => ({ getUserDataPath: () => profile.path }));
-import { initializeDatabase, closeDatabase } from '@iki/backend/db/database';
-import { addChatThread } from '@iki/backend/db/chat_thread';
+vi.mock('@iki/core/platform', () => ({ getUserDataPath: () => profile.path }));
+import { initializeDatabase, closeDatabase } from '@iki/store/database';
+import { addChatThread } from '@iki/store/chat_thread';
 import {
   appendSessionEvents,
   getSessionEventRevision,
   getSessionEvents,
-} from '@iki/backend/db/session_events';
+} from '@iki/store/session_events';
 import {
   executeApprovedTool,
   prepareToolExecution,

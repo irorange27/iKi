@@ -1,6 +1,6 @@
 import { fetchModelsFromDev, getProviderConfig } from './factory';
 import { fetchWithTimeout } from '../../network/http';
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 
 const modelDiscoveryLogger = createLogger({ module: 'llm_model_discovery' });
 

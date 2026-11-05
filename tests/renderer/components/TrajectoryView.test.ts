@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
-import type { AgentRun, AgentRunTrace } from '@iki/backend/types/agent_run';
+import type { AgentRun, AgentRunTrace } from '@iki/core/types/agent_run';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import TrajectoryView from '../../../packages/desktop/src/renderer/views/TrajectoryView.vue';
 import { setLocale } from '../../../packages/desktop/src/renderer/i18n';

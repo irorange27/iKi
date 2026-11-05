@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/backend/db/awaiters', () => ({
+vi.mock('@iki/store/awaiters', () => ({
   addAwaiter: vi.fn(),
   deleteAwaiter: vi.fn(),
   getAwaiter: vi.fn(),
@@ -8,8 +8,8 @@ vi.mock('@iki/backend/db/awaiters', () => ({
   updateAwaiter: vi.fn(),
 }));
 
-import * as awaitersDb from '@iki/backend/db/awaiters';
-import type { Awaiter } from '@iki/backend/types/awaiters';
+import * as awaitersDb from '@iki/store/awaiters';
+import type { Awaiter } from '@iki/core/types/awaiters';
 import {
   createAwaiter,
   deleteAwaiter,

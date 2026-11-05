@@ -4,9 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
-import { addWorkspace } from '@iki/backend/db/workspaces';
-import * as agentRunDb from '@iki/backend/db/agent_runs';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
+import { addWorkspace } from '@iki/store/workspaces';
+import * as agentRunDb from '@iki/store/agent_runs';
 import {
   INPUT_ACCEPTED,
   MODEL_OUTPUT_COMMITTED,

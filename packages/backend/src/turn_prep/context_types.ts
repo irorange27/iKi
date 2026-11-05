@@ -1,15 +1,15 @@
 import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
 import type { ChatContextMode } from '@iki/backend/message/chat_context_mode';
-import type { AppConfig } from '@iki/backend/types/config';
+import type { AppConfig } from '@iki/core/types/config';
 import type { ModelMessage } from '../message/model_history';
-import type { ModelCapability } from '@iki/backend/utils/provider_models';
-import type { SkillSummary } from '@iki/backend/types/skill';
+import type { ModelCapability } from '@iki/core/utils/provider_models';
+import type { SkillSummary } from '@iki/core/types/skill';
 import type { EffectiveContextConfig } from './context_budget';
 
 export type {
   ContextCompositionCategory,
   ContextCompositionSummary,
-} from '@iki/backend/types/context_composition';
+} from '@iki/core/types/context_composition';
 
 type ChatInputMessage = ModelMessage;
 

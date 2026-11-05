@@ -134,7 +134,7 @@
 import { computed, ref, toRef, watch } from 'vue';
 import { Clock3, ListCollapse, RefreshCw, Search, Wrench } from 'lucide-vue-next';
 import { getElectronAPI } from '../services/electron_api';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+import { getErrorMessage } from '@iki/core/utils/errors';
 import { useI18n } from '../i18n';
 import { useTrajectory } from '../composables/useTrajectory';
 import TrajectoryTiming from '../components/run/TrajectoryTiming.vue';

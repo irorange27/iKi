@@ -33,10 +33,10 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   };
 });
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
-import { addWorkspace } from '@iki/backend/db/workspaces';
-import { getAgentRun, listAgentRunsByThread } from '@iki/backend/db/agent_runs';
-import { getSessionEvents } from '@iki/backend/db/session_events';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
+import { addWorkspace } from '@iki/store/workspaces';
+import { getAgentRun, listAgentRunsByThread } from '@iki/store/agent_runs';
+import { getSessionEvents } from '@iki/store/session_events';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import {
@@ -49,7 +49,7 @@ import {
 } from '@iki/backend/agent/testing/scripted_pi';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
-import { addChatThread } from '@iki/backend/db/chat_thread';
+import { addChatThread } from '@iki/store/chat_thread';
 
 const PROBE = 'outcome_budget_probe';
 

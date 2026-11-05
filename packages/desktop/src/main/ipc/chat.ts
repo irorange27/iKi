@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 
-import { toPlainData } from '@iki/backend/utils/plain_clone';
+import { toPlainData } from '@iki/core/utils/plain_clone';
 import { chatService, type ChatStreamTarget } from '../services/chat/service';
 
 let chatIpcRegistered = false;

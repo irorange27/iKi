@@ -1,11 +1,11 @@
 import { commitRows, readRows } from './collection';
-import { clampNonNegativeInteger, clampNonNegativeNumber } from '@iki/backend/utils/text';
+import { clampNonNegativeInteger, clampNonNegativeNumber } from '@iki/core/utils/text';
 import type {
   ChatUsageDailyPoint,
   ChatUsageEvent,
   ChatUsageMonthlyPoint,
   ChatUsageTotals,
-} from '@iki/backend/types/chat_usage';
+} from '@iki/core/types/chat_usage';
 
 type ChatUsageRange = { from?: string | null; to?: string | null };
 

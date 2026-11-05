@@ -278,7 +278,7 @@
 import { computed, ref, watchEffect } from 'vue';
 import type { Component } from 'vue';
 import { Check, Hand, Settings, ShieldCheck, Zap } from 'lucide-vue-next';
-import type { Provider } from '@iki/backend/types/provider';
+import type { Provider } from '@iki/core/types/provider';
 import {
   buildContextCompositionRows,
   buildTokenUsageIndicator,

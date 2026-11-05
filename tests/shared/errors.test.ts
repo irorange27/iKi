@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getErrorMessage, getStreamErrorMessage } from '@iki/backend/utils/errors';
+import { getErrorMessage, getStreamErrorMessage } from '@iki/core/utils/errors';
 
 describe('error utils', () => {
   it('prefers Error messages', () => {

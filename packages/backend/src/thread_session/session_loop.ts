@@ -1,6 +1,6 @@
 import { getAppConfig } from '@iki/backend/config';
-import { createLogger } from '@iki/backend/logger';
-import { getStreamErrorMessage } from '@iki/backend/utils/errors';
+import { createLogger } from '@iki/core/logger';
+import { getStreamErrorMessage } from '@iki/core/utils/errors';
 import type { ApprovalRecoveryContext, RegisterApprovalBatch } from './approval_types';
 import { createApprovalRecoveryContext } from './approval_types';
 import {

@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import type { AppConfig } from '../types/config';
+import type { AppConfig } from '@iki/core/types/config';
 import { DEFAULT_APP_CONFIG } from './defaults';
 import { Base46ThemePresetInputSchema } from '@iki/theme/base46_schema';
-import { normalizeAppLocale } from '@iki/backend/i18n/locale';
+import { normalizeAppLocale } from '@iki/core/i18n/locale';
 
 const booleanField = (value: boolean) => z.boolean().catch(value);
 const numberField = (value: number) => z.number().finite().catch(value);

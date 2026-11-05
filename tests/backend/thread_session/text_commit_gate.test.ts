@@ -4,12 +4,12 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const profile = vi.hoisted(() => ({ path: '' }));
-vi.mock('@iki/backend/platform', () => ({ getUserDataPath: () => profile.path }));
+vi.mock('@iki/core/platform', () => ({ getUserDataPath: () => profile.path }));
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
-import { addChatThread } from '@iki/backend/db/chat_thread';
-import { addWorkspace } from '@iki/backend/db/workspaces';
-import { getSessionEvents } from '@iki/backend/db/session_events';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
+import { addChatThread } from '@iki/store/chat_thread';
+import { addWorkspace } from '@iki/store/workspaces';
+import { getSessionEvents } from '@iki/store/session_events';
 import {
   MODEL_TEXT_COMMITTED,
   SessionLogCommitError,

@@ -4,7 +4,7 @@ const { getAppConfigMock } = vi.hoisted(() => ({
   getAppConfigMock: vi.fn(),
 }));
 
-vi.mock('@iki/backend/db/database', () => ({
+vi.mock('@iki/store/database', () => ({
   getConfig: vi.fn(() => null),
 }));
 

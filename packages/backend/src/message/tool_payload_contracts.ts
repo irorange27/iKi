@@ -1,4 +1,4 @@
-import { isObjectRecord } from '@iki/backend/utils/guards';
+import { isObjectRecord } from '@iki/core/utils/guards';
 
 import { normalizeToolNameKey } from './tool_parts/normalize';
 import { parseMaybeJson } from './tool_parts/parse';

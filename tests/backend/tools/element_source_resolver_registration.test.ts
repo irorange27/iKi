@@ -4,7 +4,7 @@ import {
   ElementSourceTool,
   setElementSourceResolver,
 } from '@iki/backend/tools/element_source_tool';
-import type { DevToolsResolveRequest } from '@iki/backend/types/devtools';
+import type { DevToolsResolveRequest } from '@iki/core/types/devtools';
 import { delegatedAgentRuntime } from '../helpers/delegated_runtime';
 
 

@@ -1,4 +1,4 @@
-import * as agentRunDb from '@iki/backend/db/agent_runs';
+import * as agentRunDb from '@iki/store/agent_runs';
 import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
 import { noopPlatformDeps } from '@iki/backend/chat_platform';
 import type { ChatStreamTarget } from './types';
@@ -13,12 +13,12 @@ import { createThreadStreamCoordinator } from './thread_stream_coordinator';
 import {
   hasLiveThreadRunLease,
   tryAcquireCrossProcessThreadRun,
-} from '@iki/backend/db/thread_run_locks';
+} from '@iki/store/thread_run_locks';
 import { createChatUsage } from './usage';
 import { setChatServicePlatformDeps } from './platform';
 import { deriveResumeStreamOptions, rebuildResumeHistoryFromEvents } from './run_rehydrator';
-import type { AgentRun, AgentRunKind } from '@iki/backend/types/agent_run';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+import type { AgentRun, AgentRunKind } from '@iki/core/types/agent_run';
+import { getErrorMessage } from '@iki/core/utils/errors';
 import type { ModelMessage } from '../message/model_history';
 import { buildThreadMarkdown } from '../message/thread_markdown_export';
 import { searchThreadContent } from '../message/thread_content_search';

@@ -3,18 +3,18 @@ import {
   AppConfig,
   ConfigRuntimeInfo,
   NetworkDiagnosticResult,
-} from '@iki/backend/types/config';
-import type { AppUpdateStatus } from '@iki/backend/types/update';
-import type { CompanionSnapshot } from '@iki/backend/types/companion';
+} from '@iki/core/types/config';
+import type { AppUpdateStatus } from '@iki/core/types/update';
+import type { CompanionSnapshot } from '@iki/core/types/companion';
 import type {
   Provider,
   ProviderUpdatedEvent,
   ProviderModelDiscoveryOverride,
-} from '@iki/backend/types/provider';
-import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/backend/types/chat_usage';
-import type { McpServerInput, McpServerSummary } from '@iki/backend/types/mcp';
-import type { AgentRun, AgentRunTrace } from '@iki/backend/types/agent_run';
-import type { DevToolsResolveRequest, DevToolsSourceResult , DevRuntimeStatus } from '@iki/backend/types/devtools';
+} from '@iki/core/types/provider';
+import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/core/types/chat_usage';
+import type { McpServerInput, McpServerSummary } from '@iki/core/types/mcp';
+import type { AgentRun, AgentRunTrace } from '@iki/core/types/agent_run';
+import type { DevToolsResolveRequest, DevToolsSourceResult , DevRuntimeStatus } from '@iki/core/types/devtools';
 import type {
   SpeechStatus,
   SpeechTranscriptionInput,
@@ -22,7 +22,7 @@ import type {
   WhisperNodeDownloadProgress,
   WhisperNodeDownloadResult,
   WhisperNodeModelInfo,
-} from '@iki/backend/types/speech';
+} from '@iki/core/types/speech';
 import type {
   ChatInvocationOptions,
   ElectronApi,

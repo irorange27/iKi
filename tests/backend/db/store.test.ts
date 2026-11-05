@@ -11,9 +11,9 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { getUserDataPathMock } = vi.hoisted(() => ({ getUserDataPathMock: vi.fn(() => '') }));
-vi.mock('@iki/backend/platform', () => ({ getUserDataPath: getUserDataPathMock }));
+vi.mock('@iki/core/platform', () => ({ getUserDataPath: getUserDataPathMock }));
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
 import {
   createAgentRun,
   getAgentRun,
@@ -24,12 +24,12 @@ import {
   appendAgentRunStep,
   listAgentRunSteps,
   cleanupOldAgentRuns,
-} from '@iki/backend/db/agent_runs';
-import { addAwaiter, getAwaiter, listDueAwaiters, reclaimStaleWakingAwaiters, updateAwaiterIfStatus } from '@iki/backend/db/awaiters';
-import { addChatUsageEvent, getChatUsageTotals, listChatUsageDaily } from '@iki/backend/db/chat_usage';
-import { addProvider, getProvider, getProviders, updateProvider, deleteProvider } from '@iki/backend/db/providers';
-import { addWorkspace, getWorkspaceByPath, getVisibleWorkspaces } from '@iki/backend/db/workspaces';
-import { addChatThread, deleteChatThread, getChatThread, touchChatThread } from '@iki/backend/db/chat_thread';
+} from '@iki/store/agent_runs';
+import { addAwaiter, getAwaiter, listDueAwaiters, reclaimStaleWakingAwaiters, updateAwaiterIfStatus } from '@iki/store/awaiters';
+import { addChatUsageEvent, getChatUsageTotals, listChatUsageDaily } from '@iki/store/chat_usage';
+import { addProvider, getProvider, getProviders, updateProvider, deleteProvider } from '@iki/store/providers';
+import { addWorkspace, getWorkspaceByPath, getVisibleWorkspaces } from '@iki/store/workspaces';
+import { addChatThread, deleteChatThread, getChatThread, touchChatThread } from '@iki/store/chat_thread';
 
 let root = '';
 

@@ -1,5 +1,5 @@
 import { commitRows, patchRow, readRows, removeRow } from './collection';
-import { Provider } from '@iki/backend/types/provider';
+import { Provider } from '@iki/core/types/provider';
 
 type ProviderRow = Provider & { enabled: number | boolean; is_response_api?: number | boolean };
 

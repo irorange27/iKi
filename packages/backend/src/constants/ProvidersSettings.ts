@@ -1,4 +1,4 @@
-import type { BuiltInProvider } from '../types/settings';
+import type { BuiltInProvider } from '@iki/core/types/settings';
 
 export const BUILTIN_PROVIDERS: BuiltInProvider[] = [
   {

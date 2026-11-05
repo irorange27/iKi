@@ -6,11 +6,11 @@ import { getElectronAPI } from '../services/electron_api';
 import { updateService } from '../services/update_service';
 import { useConfigStore } from '../store/config';
 import { useI18n } from '../i18n';
-import type { AppConfig } from '@iki/backend/types/config';
-import type { Provider } from '@iki/backend/types/provider';
-import type { AppUpdateStatus } from '@iki/backend/types/update';
-import { getErrorMessage } from '@iki/backend/utils/errors';
-import { parseModelList } from '@iki/backend/utils/provider_models';
+import type { AppConfig } from '@iki/core/types/config';
+import type { Provider } from '@iki/core/types/provider';
+import type { AppUpdateStatus } from '@iki/core/types/update';
+import { getErrorMessage } from '@iki/core/utils/errors';
+import { parseModelList } from '@iki/core/utils/provider_models';
 import { getProviderDisplayName } from '../modules/providers/provider_display';
 import { formatLabel } from '../components/settings/settings_formatters';
 

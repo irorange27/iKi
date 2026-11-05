@@ -1,5 +1,5 @@
-import { getErrorMessage } from '@iki/backend/utils/errors';
-import type { AgentRun, AgentRunTrace } from '@iki/backend/types/agent_run';
+import { getErrorMessage } from '@iki/core/utils/errors';
+import type { AgentRun, AgentRunTrace } from '@iki/core/types/agent_run';
 import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { onMounted, onUnmounted, ref, shallowRef, watch, type Ref } from 'vue';
 

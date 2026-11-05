@@ -32,7 +32,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { FolderOpen, FolderPlus } from 'lucide-vue-next';
 
-import type { Workspace } from '@iki/backend/types/chat';
+import type { Workspace } from '@iki/core/types/chat';
 import { useI18n } from '../i18n';
 import { getOptionalElectronAPI } from '../services/electron_api';
 import { useThreadSessionStore } from '../store/thread_session';

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { BaseTool } from '@iki/backend/tools/base';
-import type { DevToolsResolveRequest, DevToolsSourceResult } from '@iki/backend/types/devtools';
+import type { DevToolsResolveRequest, DevToolsSourceResult } from '@iki/core/types/devtools';
 import { ElementSourceInputSchema } from './schemas';
 
 export type ElementSourceResolver = (

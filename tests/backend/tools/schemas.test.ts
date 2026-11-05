@@ -51,7 +51,8 @@ describe('tool input schemas', () => {
           specifier === 'zod' ||
           specifier === '@iki/backend/tools/schemas' ||
           specifier.startsWith('./') ||
-          specifier.startsWith('../../types/')
+          specifier.startsWith('../../types/') ||
+          specifier.startsWith('@iki/core/types/')
       )
     ).toBe(true);
   });

@@ -2,7 +2,7 @@ import type {
   AgentRunInput,
   AgentRunKind,
   AgentRunWorkingState,
-} from '@iki/backend/types/agent_run';
+} from '@iki/core/types/agent_run';
 import type { ApprovalPolicy } from '../agent/harness/tool_resolver';
 import type { HarnessConfig } from '../agent/harness/harness_types';
 import type { ThreadWorkspaceSelection } from '../workspaces/thread_workspace';

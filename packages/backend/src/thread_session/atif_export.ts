@@ -1,13 +1,13 @@
 import { version } from '../../../../package.json';
-import { isObjectRecord } from '../utils/guards';
+import { isObjectRecord } from '@iki/core/utils/guards';
 import { z } from 'zod';
-import * as agentRunDb from '@iki/backend/db/agent_runs';
-import type { AgentRun, AgentRunStep } from '@iki/backend/types/agent_run';
+import * as agentRunDb from '@iki/store/agent_runs';
+import type { AgentRun, AgentRunStep } from '@iki/core/types/agent_run';
 import type {
   AtifStep,
   AtifTrajectory,
   AtifTrajectoryExportResult,
-} from '@iki/backend/types/atif';
+} from '@iki/core/types/atif';
 import { extractTextFromModelMessageContent } from '@iki/backend/agent/model_messages';
 
 const ATIF_SCHEMA_VERSION = 'ATIF-v1.8';

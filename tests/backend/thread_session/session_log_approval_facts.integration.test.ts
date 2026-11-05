@@ -9,8 +9,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 const callPiChatMock = vi.hoisted(() => vi.fn());
 const rejectedTypes = vi.hoisted(() => ({ types: new Set<string>() }));
 
-vi.mock('@iki/backend/db/session_events', async importOriginal => {
-  const actual = await importOriginal<typeof import('@iki/backend/db/session_events')>();
+vi.mock('@iki/store/session_events', async importOriginal => {
+  const actual = await importOriginal<typeof import('@iki/store/session_events')>();
   const guard = (events: { type: string }[]) => {
     if (events.some(event => rejectedTypes.types.has(event.type))) {
       throw new Error('facts: write rejected');
@@ -56,9 +56,9 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {
   };
 });
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
 import { seedTurnProvider } from '../helpers/seed_turn_provider';
-import { addWorkspace } from '@iki/backend/db/workspaces';
+import { addWorkspace } from '@iki/store/workspaces';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import {
   piTurnHarness,

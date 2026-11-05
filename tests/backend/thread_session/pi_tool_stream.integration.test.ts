@@ -57,8 +57,8 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   }),
 }));
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
-import { addProvider } from '@iki/backend/db/providers';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
+import { addProvider } from '@iki/store/providers';
 import {
   MODEL_TEXT_COMMITTED,
   rebuildThreadViewFromEvents,
@@ -66,7 +66,7 @@ import {
 import { createChatApproval } from '@iki/backend/thread_session/approval';
 import { createChatStreaming } from '@iki/backend/thread_session/session_loop';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
-import * as agentRunDb from '@iki/backend/db/agent_runs';
+import * as agentRunDb from '@iki/store/agent_runs';
 import { exportRunTrajectory } from '@iki/backend/thread_session/atif_export';
 import { createThreadStreamCoordinator } from '@iki/backend/thread_session/thread_stream_coordinator';
 import { createTool, defaultToolRegistry } from '@iki/backend/tools';

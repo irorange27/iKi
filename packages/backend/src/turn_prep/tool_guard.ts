@@ -1,6 +1,6 @@
 import { defaultToolRegistry } from '@iki/backend/tools';
-import { decideToolApproval } from '@iki/backend/utils/action_risk';
-import { createLogger } from '@iki/backend/logger';
+import { decideToolApproval } from '@iki/core/utils/action_risk';
+import { createLogger } from '@iki/core/logger';
 import { selectToolsWithAgent } from '../provider/tool_selection';
 import type { ChatInputMessage } from '@iki/backend/message/chat_message_types';
 import { toLlmChatMessages } from '@iki/backend/message/ui_messages';

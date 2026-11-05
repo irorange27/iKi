@@ -1,4 +1,4 @@
-import { isObjectRecord, type ObjectRecord } from '@iki/backend/utils/guards';
+import { isObjectRecord, type ObjectRecord } from '@iki/core/utils/guards';
 
 type ThreadLlmSelectionState = {
   providerType?: string;

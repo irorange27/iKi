@@ -1,17 +1,17 @@
 import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import started from 'electron-squirrel-startup';
-import { wirePlatformContext } from '@iki/backend/platform_wiring';
+import { wirePlatformContext } from '@iki/core/platform_wiring';
 import { getAppConfig } from '@iki/backend/config';
 import {
   applyAppLoggingConfig,
   createLogger,
   setBaseLogContext,
   setConsoleLoggingEnabled,
-} from '@iki/backend/logger';
+} from '@iki/core/logger';
 import { registerStandardTools } from '@iki/backend/tools';
 import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { getMcpManager } from '@iki/backend/mcp';
-import { setHostFetch, setPlatformInfo } from '@iki/backend/platform';
+import { setHostFetch, setPlatformInfo } from '@iki/core/platform';
 import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
 import {
   finalizeHarnessTurn,

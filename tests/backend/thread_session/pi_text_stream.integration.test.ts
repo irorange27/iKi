@@ -54,8 +54,8 @@ vi.mock('@iki/backend/thread_session/platform', () => ({
   }),
 }));
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
-import { addProvider } from '@iki/backend/db/providers';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
+import { addProvider } from '@iki/store/providers';
 import {
   MODEL_TEXT_COMMITTED,
   rebuildThreadViewFromEvents,

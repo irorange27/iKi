@@ -1,12 +1,12 @@
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import type { ChatUiMessage } from '@iki/backend/message/message_parts';
-import type { AgentRunStatus } from '@iki/backend/types/agent_run';
+import type { AgentRunStatus } from '@iki/core/types/agent_run';
 import {
   appendSessionFacts,
   getSessionEvents,
   type NewSessionEvent,
   type StoredSessionEvent,
-} from '@iki/backend/db/session_events';
+} from '@iki/store/session_events';
 
 const logger = createLogger({ module: 'session_log' });
 
@@ -53,7 +53,7 @@ export {
   APPROVAL_DECIDED,
   MESSAGES_TRUNCATED,
   SESSION_EVENT_VERSION,
-} from '@iki/backend/types/session_events';
+} from '@iki/core/types/session_events';
 import {
   INPUT_ACCEPTED,
   TURN_STARTED,
@@ -64,7 +64,7 @@ import {
   APPROVAL_DECIDED,
   MESSAGES_TRUNCATED,
   SESSION_EVENT_VERSION,
-} from '@iki/backend/types/session_events';
+} from '@iki/core/types/session_events';
 
 const TURN_COMPLETED = 'turn_completed';
 const TURN_FAILED = 'turn_failed';

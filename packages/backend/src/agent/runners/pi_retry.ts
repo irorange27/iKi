@@ -1,4 +1,4 @@
-import { RefusalError, getErrorMessage } from '@iki/backend/utils/errors';
+import { RefusalError, getErrorMessage } from '@iki/core/utils/errors';
 
 // Shared retry vocabulary for the two Pi turn harnesses (text + tool). The
 // driver loops stay per-harness — they stream and recover differently — but

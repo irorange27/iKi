@@ -1,6 +1,6 @@
-import { listAgentRunsByStatus } from '@iki/backend/db/agent_runs';
-import { appendSessionFacts, getSessionEvents } from '@iki/backend/db/session_events';
-import { hasLiveThreadRunLease } from '@iki/backend/db/thread_run_locks';
+import { listAgentRunsByStatus } from '@iki/store/agent_runs';
+import { appendSessionFacts, getSessionEvents } from '@iki/store/session_events';
+import { hasLiveThreadRunLease } from '@iki/store/thread_run_locks';
 import {
   APPROVAL_REQUESTED,
   APPROVAL_DECIDED,
@@ -16,7 +16,7 @@ import {
   isTerminalDynamicToolPart,
   toInterruptedToolPart,
 } from '@iki/backend/message/tool_parts';
-import type { AgentRunStatus } from '@iki/backend/types/agent_run';
+import type { AgentRunStatus } from '@iki/core/types/agent_run';
 import { rehydrateAgentRunTracker } from './run_tracker';
 
 type RunRecoveryResult = {

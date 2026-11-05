@@ -1,8 +1,8 @@
 import { ipcMain } from 'electron';
 
-import * as providerDb from '@iki/backend/db/providers';
-import { createLogger } from '@iki/backend/logger';
-import type { ProviderUpdatedEvent } from '@iki/backend/types/provider';
+import * as providerDb from '@iki/store/providers';
+import { createLogger } from '@iki/core/logger';
+import type { ProviderUpdatedEvent } from '@iki/core/types/provider';
 import { broadcastToRenderers, withIpcLogging } from '../utils/ipc_helpers';
 import { companionService } from '../services/companion/companion_service';
 

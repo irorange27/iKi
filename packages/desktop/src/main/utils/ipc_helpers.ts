@@ -1,4 +1,4 @@
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 
 import { getAllBrowserWindows } from './browser_windows';
 

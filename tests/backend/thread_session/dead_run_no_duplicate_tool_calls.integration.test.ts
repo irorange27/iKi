@@ -17,7 +17,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import { persistAssistantTurnMessage } from '@iki/backend/thread_session/turn_persistence';
 import {
@@ -175,7 +175,7 @@ describe('a dead run is fully excluded from the retry request', () => {
     // duplicates the journaled exchange. If this control ever stops showing
     // the duplicate, the exclusion it documents has moved and the production
     // pin above needs re-reading.
-    const { appendSessionFacts } = await import('@iki/backend/db/session_events');
+    const { appendSessionFacts } = await import('@iki/store/session_events');
     appendSessionFacts(THREAD_ID, [
       {
         type: INPUT_ACCEPTED,

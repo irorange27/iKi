@@ -1,5 +1,5 @@
-import * as chatThreadDb from '@iki/backend/db/chat_thread';
-import { insertSessionEventsAtHead } from '@iki/backend/db/session_events';
+import * as chatThreadDb from '@iki/store/chat_thread';
+import { insertSessionEventsAtHead } from '@iki/store/session_events';
 import {
   MESSAGES_TRUNCATED,
   SESSION_EVENT_VERSION,

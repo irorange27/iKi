@@ -4,20 +4,20 @@ import {
   findMessageEvent,
   getSessionEventRevision,
   getSessionEvents,
-} from '../db/session_events';
+} from '@iki/store/session_events';
 import type { ModelMessage } from '../message/model_history';
 import { normalizeToolOutput } from '../message/model_history';
 import { normalizeUiMessage } from '../message/ui_message_codec';
 import { toModelInputMessages } from '../message/ui_messages';
-import { getErrorMessage } from '../utils/errors';
-import { getToolRuntimeContext, runWithToolRuntimeContext } from '../utils/runtime_context';
+import { getErrorMessage } from '@iki/core/utils/errors';
+import { getToolRuntimeContext, runWithToolRuntimeContext } from '@iki/core/utils/runtime_context';
 import { parseStoredWorkspaceSelection } from '../workspaces/thread_workspace';
 import { defaultToolRegistry } from '../tools/base';
 import {
   TOOL_EXECUTION_FINISHED,
   TOOL_EXECUTION_PREPARED,
   TOOL_EXECUTION_STARTED,
-} from '@iki/backend/types/session_events';
+} from '@iki/core/types/session_events';
 import {
   APPROVAL_DECIDED,
   MODEL_OUTPUT_COMMITTED,
@@ -32,7 +32,7 @@ export {
   TOOL_EXECUTION_FINISHED,
   TOOL_EXECUTION_PREPARED,
   TOOL_EXECUTION_STARTED,
-} from '@iki/backend/types/session_events';
+} from '@iki/core/types/session_events';
 const EXECUTION_EVENTS = [TOOL_EXECUTION_PREPARED, TOOL_EXECUTION_STARTED, TOOL_EXECUTION_FINISHED];
 
 type ReplayPolicy = 'safe' | 'unsafe';

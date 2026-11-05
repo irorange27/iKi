@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@iki/backend/db/chat_usage', () => ({
+vi.mock('@iki/store/chat_usage', () => ({
   addChatUsageEvent: vi.fn(),
   getChatUsageTotals: vi.fn(),
   listChatUsageDaily: vi.fn(),
   listChatUsageMonthly: vi.fn(),
 }));
 
-import * as chatUsageDb from '@iki/backend/db/chat_usage';
+import * as chatUsageDb from '@iki/store/chat_usage';
 import { createChatUsage } from '@iki/backend/thread_session/usage';
 
 beforeEach(() => {

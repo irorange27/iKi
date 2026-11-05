@@ -1,5 +1,5 @@
 import { readRows } from './collection';
-import { PromptApp } from '@iki/backend/types/chat';
+import { PromptApp } from '@iki/core/types/chat';
 
 type PromptAppRow = PromptApp & {
   enabled?: number;

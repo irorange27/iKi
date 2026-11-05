@@ -16,8 +16,8 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => {
   };
 });
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
-import { addProvider } from '@iki/backend/db/providers';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
+import { addProvider } from '@iki/store/providers';
 import { generateChatWithModelMessages } from '@iki/backend/provider/llm/factory';
 import { callPiChat } from '@iki/backend/provider/llm/pi_adapter';
 import { getPersonaPrompt } from '@iki/backend/persona';

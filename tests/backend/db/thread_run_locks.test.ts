@@ -10,7 +10,7 @@ import {
   hasLiveThreadRunLease,
   resetThreadRunLocksForTests,
   tryAcquireCrossProcessThreadRun,
-} from '@iki/backend/db/thread_run_locks';
+} from '@iki/store/thread_run_locks';
 
 afterEach(() => {
   resetThreadRunLocksForTests();

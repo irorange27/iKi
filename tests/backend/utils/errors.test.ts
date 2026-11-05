@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { isContextOverflowError } from '@iki/backend/utils/errors';
+import { isContextOverflowError } from '@iki/core/utils/errors';
 
 describe('isContextOverflowError', () => {
   it('matches the real provider over-length strings', () => {

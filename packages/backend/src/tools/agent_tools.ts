@@ -11,7 +11,7 @@ import type {
   AgentRunInput,
   AgentRunKind,
   AgentRunWorkingState,
-} from '@iki/backend/types/agent_run';
+} from '@iki/core/types/agent_run';
 import type { TurnOutput } from '../agent/harness/harness_types';
 import type { ToolModelConfig } from '../provider/tool_model';
 import { BaseTool } from '@iki/backend/tools/base';
@@ -25,8 +25,8 @@ import {
   getToolRuntimeContext,
   runWithToolRuntimeContext,
   type ToolRuntimeConversationModel,
-} from '../utils/runtime_context';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+} from '@iki/core/utils/runtime_context';
+import { getErrorMessage } from '@iki/core/utils/errors';
 
 const AGENT_TOOL_NAME = 'agent';
 const DEFAULT_AGENT_MAX_TOKENS = 2000;
@@ -231,7 +231,8 @@ const resolveConversationModel = (): ToolRuntimeConversationModel => {
   };
 };
 
-const resolveRuntimeTools = (): AgentTool[] => getToolRuntimeContext().availableTools ?? [];
+const resolveRuntimeTools = (): AgentTool[] =>
+  (getToolRuntimeContext().availableTools as AgentTool[] | undefined) ?? [];
 
 const resolveDelegableTools = (
   requestedTools: string[] | undefined,

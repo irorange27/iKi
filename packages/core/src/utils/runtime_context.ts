@@ -1,7 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import type { AgentTool } from '@iki/backend/agent/types';
-import type { AgentRun, AgentRunKind } from '@iki/backend/types/agent_run';
+import type { AgentRun, AgentRunKind } from '@iki/core/types/agent_run';
 
 type ToolRuntimeChildRunRecorder = {
   id: string;
@@ -27,7 +26,7 @@ type ToolRuntimeContext = {
   runId?: string;
   runTracker?: ToolRuntimeChildRunRecorder;
   availableSkillIds?: string[];
-  availableTools?: AgentTool[];
+  availableTools?: readonly unknown[];
   conversationModel?: ToolRuntimeConversationModel;
   delegationDepth?: number;
 

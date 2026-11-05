@@ -1,14 +1,14 @@
 import { ipcMain } from 'electron';
 
-import { createLogger } from '@iki/backend/logger';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+import { createLogger } from '@iki/core/logger';
+import { getErrorMessage } from '@iki/core/utils/errors';
 import {
   downloadWhisperNodeModel,
   getSpeechStatus,
   listWhisperNodeModels,
   transcribeSpeech,
 } from '../services/speech/speech_service';
-import type { SpeechTranscriptionInput } from '@iki/backend/types/speech';
+import type { SpeechTranscriptionInput } from '@iki/core/types/speech';
 import { withIpcLogging } from '../utils/ipc_helpers';
 
 let speechIpcRegistered = false;

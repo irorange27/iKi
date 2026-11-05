@@ -1,4 +1,4 @@
-import { createLogger } from '@iki/backend/logger';
+import { createLogger } from '@iki/core/logger';
 import type { ToolModelConfig } from '../provider/tool_model';
 import { generatePromptText } from './prompt_text_generator';
 

@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { closeDatabase, initializeDatabase } from '@iki/backend/db/database';
+import { closeDatabase, initializeDatabase } from '@iki/store/database';
 import { normalizeUiMessage } from '@iki/backend/message/ui_message_codec';
 import { createChatPersistence } from '@iki/backend/turn_prep/persistence';
 import {

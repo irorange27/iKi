@@ -1,6 +1,6 @@
-import type { SkillSource } from '@iki/backend/types/skill';
-import type { ContextCompositionSummary } from '@iki/backend/types/context_composition';
-import { isObjectRecord } from '@iki/backend/utils/guards';
+import type { SkillSource } from '@iki/core/types/skill';
+import type { ContextCompositionSummary } from '@iki/core/types/context_composition';
+import { isObjectRecord } from '@iki/core/utils/guards';
 
 export { isObjectRecord };
 

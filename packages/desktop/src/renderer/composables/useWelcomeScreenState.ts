@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue';
 
-import type { Provider } from '@iki/backend/types/provider';
+import type { Provider } from '@iki/core/types/provider';
 import { resolveProviderSelection } from './useChatProviderSelection';
 import { useI18n } from '../i18n';
 import { getProviderDisplayName } from '../modules/providers/provider_display';

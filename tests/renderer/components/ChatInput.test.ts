@@ -7,7 +7,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS,
   DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
-} from '@iki/backend/utils/provider_models';
+} from '@iki/core/utils/provider_models';
 import { useThreadSessionStore } from '../../../packages/desktop/src/renderer/store/thread_session';
 
 const { loggerEventMock } = vi.hoisted(() => ({
@@ -25,9 +25,9 @@ vi.mock('../../../packages/desktop/src/renderer/logger', () => ({
   })),
 }));
 
-import type { Provider } from '@iki/backend/types/provider';
-import type { PromptApp, Workspace } from '@iki/backend/types/chat';
-import type { SkillSummary } from '@iki/backend/types/skill';
+import type { Provider } from '@iki/core/types/provider';
+import type { PromptApp, Workspace } from '@iki/core/types/chat';
+import type { SkillSummary } from '@iki/core/types/skill';
 
 const createDeferred = <T>() => {
   let resolve!: (value: T) => void;

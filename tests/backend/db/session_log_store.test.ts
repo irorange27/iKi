@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createJsonlSessionLogStore,
   type SessionLogStore,
-} from '@iki/backend/db/session_log_store';
+} from '@iki/store/session_log_store';
 
 const event = (type: string, payload: unknown) => ({ type, version: 1, payload });
 

@@ -10,7 +10,7 @@ import {
 } from '../awaiters/awaiter_manager';
 import { BaseTool } from '@iki/backend/tools/base';
 import { zodSchemaToJsonSchema } from '@iki/backend/tools/json_schema';
-import { getToolRuntimeContext, resolveConversationModelDefaults } from '../utils/runtime_context';
+import { getToolRuntimeContext, resolveConversationModelDefaults } from '@iki/core/utils/runtime_context';
 import {
   DeleteAwaiterInputSchema,
   DeleteAwaiterOutputSchema,

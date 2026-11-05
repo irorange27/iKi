@@ -19,7 +19,7 @@ vi.mock('@iki/backend/provider/llm/pi_adapter', async importOriginal => ({
 }));
 
 vi.mock('@iki/backend/runtimes/thread_summary', () => ({ generateThreadSummary: summarize }));
-vi.mock('@iki/backend/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: () => ({
     event: vi.fn(),
     warn: vi.fn(),

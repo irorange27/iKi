@@ -1,7 +1,7 @@
 import { commitRows, patchRow, readRows, removeRow } from './collection';
-import type { AgentEvalLabel, AgentEvalLabelType } from '@iki/backend/types/agent_run';
-import { normalizeWhitespace, toIsoNow } from '@iki/backend/utils/text';
-import { createPrefixedId } from '@iki/backend/utils/id';
+import type { AgentEvalLabel, AgentEvalLabelType } from '@iki/core/types/agent_run';
+import { normalizeWhitespace, toIsoNow } from '@iki/core/utils/text';
+import { createPrefixedId } from '@iki/core/utils/id';
 
 type AgentEvalLabelRow = {
   id: string;

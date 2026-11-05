@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import * as chatThreadDb from '../db/chat_thread';
-import * as workspaceDb from '../db/workspaces';
-import type { Workspace } from '@iki/backend/types/chat';
-import { getUserDataPath } from '../platform';
+import * as chatThreadDb from '@iki/store/chat_thread';
+import * as workspaceDb from '@iki/store/workspaces';
+import type { Workspace } from '@iki/core/types/chat';
+import { getUserDataPath } from '@iki/core/platform';
 import { resolveThreadWorkMode } from './thread_mode';
 
 export type ThreadWorkspaceSelection = {

@@ -1,7 +1,7 @@
-import { getSessionEvents } from '../db/session_events';
-import { getChatThreads } from '../db/chat_thread';
-import * as chatThreadDb from '../db/chat_thread';
-import { INPUT_ACCEPTED, MODEL_OUTPUT_COMMITTED } from '@iki/backend/types/session_events';
+import { getSessionEvents } from '@iki/store/session_events';
+import { getChatThreads } from '@iki/store/chat_thread';
+import * as chatThreadDb from '@iki/store/chat_thread';
+import { INPUT_ACCEPTED, MODEL_OUTPUT_COMMITTED } from '@iki/core/types/session_events';
 import { extractTextFromMessageParts, isObjectRecord } from './message_parts';
 
 const MESSAGE_EVENT_TYPES_FOR_SEARCH = [INPUT_ACCEPTED, MODEL_OUTPUT_COMMITTED];

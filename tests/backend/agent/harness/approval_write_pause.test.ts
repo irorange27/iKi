@@ -8,8 +8,8 @@ import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
 import { z } from 'zod';
 
 const userDataMock = vi.hoisted(() => vi.fn(() => ''));
-vi.mock('@iki/backend/platform', async importOriginal => ({
-  ...(await importOriginal<typeof import('@iki/backend/platform')>()),
+vi.mock('@iki/core/platform', async importOriginal => ({
+  ...(await importOriginal<typeof import('@iki/core/platform')>()),
   getUserDataPath: userDataMock,
 }));
 vi.mock('@iki/backend/provider/llm/factory', async importOriginal => {

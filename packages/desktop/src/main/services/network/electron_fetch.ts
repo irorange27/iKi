@@ -2,8 +2,8 @@ import type { Session } from 'electron';
 
 import { getAppConfig } from '@iki/backend/config';
 import { buildProxyUrl, getProxyCredentials } from '@iki/backend/network/proxy';
-import type { AppConfig } from '@iki/backend/types/config';
-import { getErrorMessage } from '@iki/backend/utils/errors';
+import type { AppConfig } from '@iki/core/types/config';
+import { getErrorMessage } from '@iki/core/utils/errors';
 
 const ELECTRON_NETWORK_PARTITION = 'iki-runtime-network';
 const MAX_REDIRECTS = 8;

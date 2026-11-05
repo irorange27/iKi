@@ -6,7 +6,7 @@ const { fetchWithTimeoutMock, fetchModelsFromDevMock, getProviderConfigMock } = 
   getProviderConfigMock: vi.fn(() => ({ models: [] as string[], apiKey: '' })),
 }));
 
-vi.mock('@iki/backend/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: () => ({
     error: vi.fn(),
     warn: vi.fn(),

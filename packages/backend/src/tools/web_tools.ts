@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { BaseTool } from '@iki/backend/tools/base';
 import { fetchWithTimeout, getNetworkRetryAttempts, getNetworkTimeoutMs } from '@iki/backend/network/http';
-import { RetryableError, getErrorMessage } from '@iki/backend/utils/errors';
+import { RetryableError, getErrorMessage } from '@iki/core/utils/errors';
 import { getAppConfig } from '../config';
-import type { WebSearchEngine } from '../types/config';
-import { normalizeWhitespace } from '@iki/backend/utils/text';
+import type { WebSearchEngine } from '@iki/core/types/config';
+import { normalizeWhitespace } from '@iki/core/utils/text';
 import {
   DEFAULT_FETCH_MAX_CHARS,
   DEFAULT_SEARCH_RESULT_LIMIT,

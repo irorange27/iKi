@@ -15,7 +15,7 @@ vi.mock('@iki/backend/provider/llm/factory', async importOriginal => ({
   getModelGenerationSettings: vi.fn(() => ({})),
 }));
 
-vi.mock('@iki/backend/logger', () => ({
+vi.mock('@iki/core/logger', () => ({
   createLogger: vi.fn(() => ({
     debug: vi.fn(),
     info: vi.fn(),

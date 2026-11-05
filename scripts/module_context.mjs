@@ -18,7 +18,13 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const registry = JSON.parse(readFileSync(join(ROOT, 'scripts/module_registry.json'), 'utf8'));
 
-const SOURCE_GLOBS = ['packages/backend/src', 'packages/theme/src', 'packages/desktop/src'];
+const SOURCE_GLOBS = [
+  'packages/backend/src',
+  'packages/core/src',
+  'packages/store/src',
+  'packages/theme/src',
+  'packages/desktop/src',
+];
 const EXTS = ['.ts', '.vue'];
 
 const listFiles = (dir, out = []) => {

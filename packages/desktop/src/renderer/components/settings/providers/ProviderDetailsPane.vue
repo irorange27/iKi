@@ -144,7 +144,7 @@ import { BookOpen, ExternalLink, Eye, EyeOff } from 'lucide-vue-next';
 import ProviderModelsPanel from './ProviderModelsPanel.vue';
 import { useI18n } from '../../../i18n';
 import type { ProviderDraft } from '../../../composables/useProviderDrafts';
-import type { BuiltInProvider } from '@iki/backend/types/settings';
+import type { BuiltInProvider } from '@iki/core/types/settings';
 import type { ProviderSupportLink } from './provider_settings_shared';
 
 defineProps<{

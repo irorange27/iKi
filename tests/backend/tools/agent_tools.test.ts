@@ -37,7 +37,7 @@ import { startPiTurnHarness } from '@iki/backend/agent/harness';
 import { defaultToolRegistry } from '@iki/backend/tools/base';
 import { ReadFileTool, WriteFileTool, UndoEditTool } from '@iki/backend/tools/file_tools';
 import { ShellExecutionTool } from '@iki/backend/tools/shell_tools';
-import { runWithToolRuntimeContext } from '@iki/backend/utils/runtime_context';
+import { runWithToolRuntimeContext } from '@iki/core/utils/runtime_context';
 
 const setRunResult = (result: unknown) => {
   runMock.mockImplementation(

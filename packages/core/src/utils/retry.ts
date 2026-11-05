@@ -1,6 +1,6 @@
 import { createLogger } from '../logger';
-import { getErrorMessage, isRetryableError } from '@iki/backend/utils/errors';
-import type { ToolRetryConfig } from '@iki/backend/agent/types';
+import { getErrorMessage, isRetryableError } from '@iki/core/utils/errors';
+import type { ToolRetryConfig } from '@iki/core/types/tool_retry';
 
 export type { ToolRetryConfig };
 
