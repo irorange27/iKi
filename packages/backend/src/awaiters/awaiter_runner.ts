@@ -100,18 +100,7 @@ export const createAwaiterRunner = (deps: AwaiterRunnerDeps) => {
   chat.createMessage({
     id: uiMessage.id,
     thread_id: params.threadId,
-    parent_id: null,
-    depth: 0,
-    message: JSON.stringify(uiMessage),
-    timestamp: params.startedAt,
-    metadata: JSON.stringify({
-      format: 'ai-ui-message-v1',
-      source: 'awaiter',
-      awaiterId: params.awaiter.id,
-      kind: params.kind,
-      ...(params.stage ? { stage: params.stage } : {}),
-      ...(params.runId ? { runId: params.runId } : {}),
-    }),
+    message: uiMessage,
   });
 
   chatThreadDb.touchChatThread(params.threadId);

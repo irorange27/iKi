@@ -40,14 +40,14 @@ export type ProviderInput = Partial<Provider> &
 
 export type ChatThreadInput = Partial<ChatThread>;
 /**
- * The renderer's edit path may still cross the IPC with a serialized message;
- * the backend boundary normalizes it to the structured ChatUiMessage the session
- * log stores. New callers should hand over the object directly (Electron
- * structured-clones it) — the row-shaped `{ message: string }` transport is gone.
+ * The message an IPC caller hands over, in the one shape that exists: the
+ * structured ChatUiMessage the session log stores. Electron structured-clones
+ * it across the bridge — the `| string` escape hatch and the write-only
+ * `metadata` marker existed only to shuttle a fake row-shaped copy, and both
+ * are gone.
  */
 export type ChatMessageInput = {
-  message: ChatUiMessage | string;
-  metadata?: string;
+  message: ChatUiMessage;
 };
 
 export type ToolModelConfig = {

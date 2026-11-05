@@ -204,8 +204,7 @@ export const useChatStreaming = (deps: {
 
           deps.messageStore.replaceAt(messageIndex, updatedUserMessage);
           await deps.electronAPI.chat.messages.update(updatedUserMessage.id, {
-            message: JSON.stringify(updatedUserMessage),
-            metadata: JSON.stringify({ format: 'ai-ui-message-v1' }),
+            message: updatedUserMessage,
           });
           await truncateConversationAfterIndex(messageIndex);
 

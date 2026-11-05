@@ -94,23 +94,12 @@ const normalizeThreadInput = (
 };
 
 /**
- * Take the message a caller hands in and land it as the structured ChatUiMessage
- * the session log stores. A JSON string is parsed (the renderer's edit path still
- * crosses the IPC with one); a plain non-JSON string becomes a user text message,
- * exactly the shape the input fact has always carried. Nothing is ever
- * re-stringified into a row-shaped `message` column — that fake row was the
- * second copy of every message and it is gone.
+ * The one message codec at the persistence boundary: callers hand over the
+ * structured ChatUiMessage, and anything that is not one is a bug the caller
+ * learns about immediately — never silently re-parsed or re-stringified.
  */
 const structuredUiMessage = (message: unknown, fallbackId: string): ChatUiMessage => {
-  let source: unknown = message;
-  if (typeof source === 'string') {
-    try {
-      source = JSON.parse(source);
-    } catch {
-      source = { content: source };
-    }
-  }
-  const ui = normalizeUiMessage(source, { fallbackId });
+  const ui = normalizeUiMessage(message, { fallbackId });
   if (!ui) {
     throw new Error(`Message ${fallbackId} has no structured ChatUiMessage to persist`);
   }
