@@ -60,9 +60,21 @@ export interface SessionLogStore {
 
 const HEADER_VERSION = 1;
 
-type JsonlLine =
-  | { kind: 'header'; version: number; threadId: string }
-  | ({ kind: 'event' } & StoredSessionEvent);
+type HeaderLine = { kind: 'header'; version: number; threadId: string };
+
+/**
+ * One line = one append call = one atomic commit. SQLite wraps a batch in a
+ * transaction; a file cannot, so the whole batch is a single JSON line. A crash
+ * mid-write leaves one torn line that is discarded whole — the batch either landed
+ * completely or not at all, never half of it.
+ */
+type BatchLine = {
+  kind: 'batch';
+  firstRevision: number;
+  events: Array<{ type: string; version: number; payload: unknown; createdAt: string }>;
+};
+
+type JsonlLine = HeaderLine | BatchLine;
 
 const fileFor = (rootDir: string, threadId: string): string =>
   path.join(rootDir, `${encodeURIComponent(threadId)}.jsonl`);
@@ -91,7 +103,7 @@ const repairTornTail = (file: string): void => {
  * incomplete final line; every earlier line is a committed fact and stays. This is
  * pi's "torn-line repair" (durable/docs/spec.md:5177-5185) in its simplest form.
  */
-const readLines = (file: string): JsonlLine[] => {
+const readEvents = (file: string): StoredSessionEvent[] => {
   let text: string;
   try {
     text = fs.readFileSync(file, 'utf8');
@@ -99,14 +111,14 @@ const readLines = (file: string): JsonlLine[] => {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw error;
   }
-  const out: JsonlLine[] = [];
+  const out: StoredSessionEvent[] = [];
   for (const line of text.split('\n')) {
     if (!line.trim()) continue;
     let parsed: JsonlLine;
     try {
       parsed = JSON.parse(line) as JsonlLine;
     } catch {
-      // Torn tail: stop here. Everything before it is intact and durable.
+      // Torn tail: stop here. Every earlier line is a complete, committed batch.
       break;
     }
     if (parsed.kind === 'header') {
@@ -115,7 +127,9 @@ const readLines = (file: string): JsonlLine[] => {
       }
       continue;
     }
-    if (parsed.kind === 'event') out.push(parsed);
+    for (const [index, event] of parsed.events.entries()) {
+      out.push({ revision: parsed.firstRevision + index, ...event });
+    }
   }
   return out;
 };
@@ -134,14 +148,8 @@ const messageIdOf = (payload: unknown): string | undefined => {
 export const createJsonlSessionLogStore = (rootDir: string): SessionLogStore => {
   fs.mkdirSync(rootDir, { recursive: true });
 
-  const eventsOf = (threadId: string): StoredSessionEvent[] => {
-    const events = readLines(fileFor(rootDir, threadId)).filter(
-      (line): line is Extract<JsonlLine, { kind: 'event' }> => line.kind === 'event'
-    );
-    return events
-      .map(({ kind: _kind, ...event }) => event)
-      .sort((a, b) => a.revision - b.revision);
-  };
+  const eventsOf = (threadId: string): StoredSessionEvent[] =>
+    readEvents(fileFor(rootDir, threadId));
 
   const headRevision = (threadId: string): number => {
     const events = eventsOf(threadId);
@@ -164,22 +172,13 @@ export const createJsonlSessionLogStore = (rootDir: string): SessionLogStore => 
       ensureHeader(threadId, file);
       repairTornTail(file);
       const now = new Date().toISOString();
-      let revision = current;
-      // One write for the whole batch: an atomic commit in the single-writer model.
-      const batch = events.map(event => {
-        revision += 1;
-        const line: JsonlLine = {
-          kind: 'event',
-          revision,
-          type: event.type,
-          version: event.version,
-          payload: event.payload,
-          createdAt: now,
-        };
-        return JSON.stringify(line);
-      });
-      fs.appendFileSync(file, `${batch.join('\n')}\n`);
-      return revision;
+      const batch: BatchLine = {
+        kind: 'batch',
+        firstRevision: current + 1,
+        events: events.map(event => ({ ...event, createdAt: now })),
+      };
+      fs.appendFileSync(file, `${JSON.stringify(batch)}\n`);
+      return current + events.length;
     },
 
     readThread(threadId, types, match) {
@@ -213,8 +212,8 @@ export const createJsonlSessionLogStore = (rootDir: string): SessionLogStore => 
       let best: { revision: number; threadId: string; payload: unknown } | null = null;
       for (const file of files) {
         const owner = decodeURIComponent(path.basename(file, '.jsonl'));
-        for (const line of readLines(file)) {
-          if (line.kind !== 'event' || !isMessageEvent(line.type)) continue;
+        for (const line of readEvents(file)) {
+          if (!isMessageEvent(line.type)) continue;
           if (messageIdOf(line.payload) !== needle) continue;
           if (!best || line.revision >= best.revision) {
             best = { revision: line.revision, threadId: owner, payload: line.payload };

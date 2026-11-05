@@ -171,6 +171,29 @@ describe('SessionLogStore: JSONL and SQLite are equivalent', () => {
     expect(reopened.readThread('thread_torn').map(e => e.revision)).toEqual([1, 2]);
   });
 
+  it('treats one append as one atomic batch, never half a batch', () => {
+    // SQLite wraps a batch in a transaction. The file backend must match: a torn
+    // line discards the whole batch, not the first events of it.
+    jsonl.append('thread_batch', 0, [
+      event('input_accepted', { messageId: 'msg_ok' }),
+      event('turn_started', { runId: 'run_batch' }),
+    ]);
+    const file = path.join(root, 'sessions', 'thread_batch.jsonl');
+    const tornBatch = JSON.stringify({ kind: 'batch', firstRevision: 3, events: [
+      { type: 'tool_executed', version: 1, payload: { toolCallId: 'c1' }, createdAt: 't' },
+      { type: 'turn_completed', version: 1, payload: { runId: 'run_batch' }, createdAt: 't' },
+    ] });
+    fs.appendFileSync(file, tornBatch.slice(0, Math.floor(tornBatch.length / 2)));
+
+    const reopened = createJsonlSessionLogStore(path.join(root, 'sessions'));
+    expect(reopened.readThread('thread_batch')).toHaveLength(2);
+    expect(reopened.headRevision('thread_batch')).toBe(2);
+    expect(reopened.readThread('thread_batch').map(e => e.type)).toEqual([
+      'input_accepted',
+      'turn_started',
+    ]);
+  });
+
   it('refuses a session file from a format version it does not understand', () => {
     const file = path.join(root, 'sessions', 'thread_future.jsonl');
     fs.writeFileSync(file, `${JSON.stringify({ kind: 'header', version: 999, threadId: 'thread_future' })}\n`);
