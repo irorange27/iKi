@@ -1,5 +1,5 @@
 import type { ThemeConfig } from '@iki/theme/types';
-import type { SupportedLocale } from '../i18n/locale';
+import type { AppSettings } from '../domain/settings';
 
 export interface ConfigRuntimeInfo {
   userDataPath: string;
@@ -28,101 +28,13 @@ export interface NetworkDiagnosticResult {
 
 export type WebSearchEngine = 'google' | 'duckduckgo' | 'bing';
 
-export interface AppConfig {
-  general: {
-    language: SupportedLocale;
-    theme: 'light' | 'dark' | 'system';
-    themePresetId: string;
-    autoUpdate: boolean;
-    minimizeToTray: boolean;
-    closeToTray: boolean;
-    startMinimized: boolean;
-    quickChatHideOnBlur: boolean;
-    autoApproveToolRequests: boolean;
-  };
-  ui: {
-    fontSize: number;
-    density: 'compact' | 'comfortable' | 'spacious';
-    chatContentPadding: number;
-    composerPadding: number;
-    messageBubblePaddingX: number;
-    messageBubblePaddingY: number;
-    messageGap: number;
-    companion: {
-      enabled: boolean;
-      alwaysOnTop: boolean;
-      rememberPosition: boolean;
-      reduceMotion: boolean;
-      openMainWindowOnClick: boolean;
-      position: {
-        x: number | null;
-        y: number | null;
-      };
-    };
-  };
+/**
+ * The app configuration is the settings domain contract (`../domain/settings`,
+ * where every default is declared exactly once in the schema) plus the theme
+ * section, which belongs to `@iki/theme`. The hand-written per-section
+ * interfaces and their `.catch()` mirror in the old `backend/config/schema.ts`
+ * are deleted — one schema, one projection.
+ */
+export interface AppConfig extends AppSettings {
   themes: ThemeConfig;
-  network: {
-    proxy: {
-      enable: boolean;
-      type: 'http' | 'https' | 'socks5';
-      host: string;
-      port: number | null;
-      username?: string;
-      password?: string;
-    };
-    webSearch: {
-      preferredEngine: WebSearchEngine;
-    };
-    timeout: number;
-    retryAttempts: number;
-  };
-  security: {
-    encryptApikeys: boolean;
-    requirePassword: boolean;
-    sessionTimeout: number;
-    enableLogging: boolean;
-    logLevel: 'debug' | 'info' | 'warn' | 'error';
-  };
-  keybindings: {
-    sendMessage: string;
-    openSettings: string;
-  };
-  chat: {
-    composer: {
-      preferredProviderId: string;
-      preferredModel: string;
-    };
-  };
-
-  context: {
-    enabled: boolean;
-    maxIdentityTokens: number;
-    maxSkillTokens: number;
-  };
-  speech: {
-    enabled: boolean;
-    providerType: 'openai' | 'whisper-node' | '';
-    apiKey: string;
-    baseUrl: string;
-    downloadBaseUrl: string;
-    model: string;
-    modelPath: string;
-    language: string;
-    prompt: string;
-  };
-  toolModel: {
-    providerId: string;
-    model: string;
-  };
-  toolExecution: {
-    shellApprovalMode: 'always';
-  };
-  mcp: {
-    enabled: boolean;
-    connectOnStartup: boolean;
-    allowRemoteServers: boolean;
-    defaultApprovalMode: 'always' | 'safe-only' | 'never';
-    requestTimeoutMs: number;
-    maxConcurrentRequests: number;
-  };
 }

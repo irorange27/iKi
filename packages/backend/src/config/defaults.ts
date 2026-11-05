@@ -1,211 +1,46 @@
-import type { AppConfig, WebSearchEngine } from '@iki/core/types/config';
+/**
+ * Defaults are derived from the schema — there is no literal table to drift.
+ * `AppConfigSchema.parse({})` is the default document: every leaf declares its
+ * own `.catch()` fallback, so a missing or malformed value resolves to the
+ * same place the mirror table used to hard-code.
+ */
+import type { AppConfig } from '@iki/core/types/config';
+import { isObjectRecord } from '@iki/core/utils/guards';
 import { toPlainData as clonePlainData } from '@iki/core/utils/plain_clone';
-import { createDefaultThemeConfig } from '@iki/theme/registry';
+import { AppConfigSchema } from './schema';
 
-export const DEFAULT_APP_CONFIG: AppConfig = {
-  general: {
-    language: 'en',
-    theme: 'system',
-    themePresetId: 'iki-default',
-    autoUpdate: true,
-    minimizeToTray: false,
-    closeToTray: false,
-    startMinimized: false,
-    quickChatHideOnBlur: false,
-    autoApproveToolRequests: false,
-  },
-  ui: {
-    fontSize: 15,
-    density: 'comfortable',
-    chatContentPadding: 24,
-    composerPadding: 10,
-    messageBubblePaddingX: 16,
-    messageBubblePaddingY: 12,
-    messageGap: 18,
-    companion: {
-      enabled: true,
-      alwaysOnTop: true,
-      rememberPosition: true,
-      reduceMotion: false,
-      openMainWindowOnClick: true,
-      position: {
-        x: null,
-        y: null,
-      },
-    },
-  },
-  themes: createDefaultThemeConfig(),
-  network: {
-    proxy: {
-      enable: false,
-      type: 'http',
-      host: '',
-      port: null,
-    },
-    webSearch: {
-      preferredEngine: 'google',
-    },
-    timeout: 5000,
-    retryAttempts: 3,
-  },
-  security: {
-    encryptApikeys: true,
-    requirePassword: false,
-    sessionTimeout: 60,
-    enableLogging: true,
-    logLevel: 'info',
-  },
-  keybindings: {
-    sendMessage: 'Enter',
-    openSettings: 'Cmd+,',
-  },
-  chat: {
-    composer: {
-      preferredProviderId: '',
-      preferredModel: '',
-    },
-  },
-
-  context: {
-    enabled: true,
-    maxIdentityTokens: 320,
-    maxSkillTokens: 1200,
-  },
-  speech: {
-    enabled: false,
-    providerType: 'openai',
-    apiKey: '',
-    baseUrl: '',
-    downloadBaseUrl: '',
-    model: 'whisper-1',
-    modelPath: '',
-    language: '',
-    prompt: '',
-  },
-  toolModel: {
-    providerId: '',
-    model: '',
-  },
-  toolExecution: {
-    shellApprovalMode: 'always',
-  },
-  mcp: {
-    enabled: false,
-    connectOnStartup: false,
-    allowRemoteServers: false,
-    defaultApprovalMode: 'safe-only',
-    requestTimeoutMs: 20000,
-    maxConcurrentRequests: 4,
-  },
-};
+export const DEFAULT_APP_CONFIG = AppConfigSchema.parse({}) as AppConfig;
 
 export const createDefaultAppConfig = (): AppConfig => clonePlainData(DEFAULT_APP_CONFIG);
 
-const normalizeLegacyWebSearchEngine = (value: unknown): WebSearchEngine | null => {
-  if (value === 'google' || value === 'duckduckgo' || value === 'bing') {
-    return value;
+/** Structural merge of a stored partial over a base document. */
+const deepMerge = (
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>
+): Record<string, unknown> => {
+  const out: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue;
+    const existing = out[key];
+    out[key] = isObjectRecord(value) && isObjectRecord(existing) ? deepMerge(existing, value) : value;
   }
-  return null;
+  return out;
 };
 
+/**
+ * `base` is the system-adapted config (display scale, OS locale, platform
+ * keybindings); stored values overlay it before the schema repairs types.
+ */
 export const mergeAppConfigWithBase = (
   base: AppConfig,
   rawConfig?: Partial<AppConfig> | null
-): AppConfig => {
-  if (!rawConfig) return base;
-  const { webSearch: legacyWebSearch, ...restRawConfig } = rawConfig as Partial<AppConfig> & {
-    webSearch?: {
-      engine?: unknown;
-    };
-  };
-  const legacyPreferredEngine = normalizeLegacyWebSearchEngine(legacyWebSearch?.engine);
-
-  return {
-    ...base,
-    ...restRawConfig,
-    general: {
-      ...base.general,
-      ...(rawConfig.general ?? {}),
-    },
-    ui: {
-      ...base.ui,
-      ...(rawConfig.ui ?? {}),
-      companion: {
-        ...base.ui.companion,
-        ...((rawConfig.ui ?? {}).companion ?? {}),
-        position: {
-          ...base.ui.companion.position,
-          ...(((rawConfig.ui ?? {}).companion ?? {}).position ?? {}),
-        },
-      },
-    },
-    themes: {
-      ...base.themes,
-      ...(rawConfig.themes ?? {}),
-      base46Presets: {
-        ...base.themes.base46Presets,
-        ...((rawConfig.themes ?? {}).base46Presets ?? {}),
-      },
-    },
-    network: {
-      ...base.network,
-      ...(rawConfig.network ?? {}),
-      proxy: {
-        ...base.network.proxy,
-        ...((rawConfig.network ?? {}).proxy ?? {}),
-      },
-      webSearch: {
-        ...base.network.webSearch,
-        ...(legacyPreferredEngine ? { preferredEngine: legacyPreferredEngine } : {}),
-        ...((rawConfig.network ?? {}).webSearch ?? {}),
-      },
-    },
-    security: {
-      ...base.security,
-      ...(rawConfig.security ?? {}),
-    },
-    keybindings: {
-      ...base.keybindings,
-      ...(rawConfig.keybindings ?? {}),
-    },
-    chat: {
-      ...base.chat,
-      ...(rawConfig.chat ?? {}),
-      composer: {
-        ...base.chat.composer,
-        ...((rawConfig.chat ?? {}).composer ?? {}),
-      },
-    },
-
-    context: {
-      enabled: rawConfig.context?.enabled ?? base.context.enabled,
-      maxIdentityTokens: rawConfig.context?.maxIdentityTokens ?? base.context.maxIdentityTokens,
-      maxSkillTokens: rawConfig.context?.maxSkillTokens ?? base.context.maxSkillTokens,
-    },
-    speech: {
-      ...base.speech,
-      ...(rawConfig.speech ?? {}),
-    },
-    toolModel: {
-      providerId:
-        typeof rawConfig.toolModel?.providerId === 'string'
-          ? rawConfig.toolModel.providerId
-          : base.toolModel.providerId,
-      model:
-        typeof rawConfig.toolModel?.model === 'string'
-          ? rawConfig.toolModel.model
-          : base.toolModel.model,
-    },
-    toolExecution: {
-      ...base.toolExecution,
-      ...(rawConfig.toolExecution ?? {}),
-    },
-    mcp: {
-      ...base.mcp,
-      ...(rawConfig.mcp ?? {}),
-    },
-  };
-};
+): AppConfig =>
+  rawConfig
+    ? (deepMerge(
+        base as unknown as Record<string, unknown>,
+        rawConfig as Record<string, unknown>
+      ) as unknown as AppConfig)
+    : base;
 
 export const mergeAppConfig = (rawConfig?: Partial<AppConfig> | null): AppConfig =>
   mergeAppConfigWithBase(createDefaultAppConfig(), rawConfig);

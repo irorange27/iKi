@@ -115,41 +115,40 @@ export const SettingsSchema = z.object({
   showCacheMissNotices: z.boolean().default(false),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
-
 /* iKi GUI sections — field names follow `types/config.ts` ------------------- */
 
 export const GeneralSettingsSchema = z.object({
-  language: z.enum(['en', 'zh-CN']).default('en'),
-  theme: z.enum(['light', 'dark', 'system']).default('system'),
-  themePresetId: z.string().default('iki-default'),
-  autoUpdate: z.boolean().default(true),
-  minimizeToTray: z.boolean().default(false),
-  closeToTray: z.boolean().default(false),
-  startMinimized: z.boolean().default(false),
-  quickChatHideOnBlur: z.boolean().default(false),
-  autoApproveToolRequests: z.boolean().default(false),
+  language: z.enum(['en', 'zh-CN']).catch('en'),
+  theme: z.enum(['light', 'dark', 'system']).catch('system'),
+  themePresetId: z.string().catch('iki-default'),
+  autoUpdate: z.boolean().catch(true),
+  minimizeToTray: z.boolean().catch(false),
+  closeToTray: z.boolean().catch(false),
+  startMinimized: z.boolean().catch(false),
+  quickChatHideOnBlur: z.boolean().catch(false),
+  autoApproveToolRequests: z.boolean().catch(false),
 });
 export type GeneralSettings = z.infer<typeof GeneralSettingsSchema>;
 
 export const UiSettingsSchema = z.object({
-  fontSize: z.number().finite().default(15),
-  density: z.enum(['compact', 'comfortable', 'spacious']).default('comfortable'),
-  chatContentPadding: z.number().finite().default(24),
-  composerPadding: z.number().finite().default(10),
-  messageBubblePaddingX: z.number().finite().default(16),
-  messageBubblePaddingY: z.number().finite().default(12),
-  messageGap: z.number().finite().default(18),
+  fontSize: z.number().finite().catch(15),
+  density: z.enum(['compact', 'comfortable', 'spacious']).catch('comfortable'),
+  chatContentPadding: z.number().finite().catch(24),
+  composerPadding: z.number().finite().catch(10),
+  messageBubblePaddingX: z.number().finite().catch(16),
+  messageBubblePaddingY: z.number().finite().catch(12),
+  messageGap: z.number().finite().catch(18),
   companion: z
     .object({
-      enabled: z.boolean().default(true),
-      alwaysOnTop: z.boolean().default(true),
-      rememberPosition: z.boolean().default(true),
-      reduceMotion: z.boolean().default(false),
-      openMainWindowOnClick: z.boolean().default(true),
+      enabled: z.boolean().catch(true),
+      alwaysOnTop: z.boolean().catch(true),
+      rememberPosition: z.boolean().catch(true),
+      reduceMotion: z.boolean().catch(false),
+      openMainWindowOnClick: z.boolean().catch(true),
       position: z
         .object({
-          x: z.number().finite().nullable().default(null),
-          y: z.number().finite().nullable().default(null),
+          x: z.number().finite().nullable().catch(null),
+          y: z.number().finite().nullable().catch(null),
         })
         .prefault({}),
     })
@@ -160,116 +159,120 @@ export type UiSettings = z.infer<typeof UiSettingsSchema>;
 export const NetworkSettingsSchema = z.object({
   proxy: z
     .object({
-      enable: z.boolean().default(false),
-      type: z.enum(['http', 'https', 'socks5']).default('http'),
-      host: z.string().default(''),
-      port: z.number().finite().nullable().default(null),
+      enable: z.boolean().catch(false),
+      type: z.enum(['http', 'https', 'socks5']).catch('http'),
+      host: z.string().catch(''),
+      port: z.number().finite().nullable().catch(null),
       username: z.string().optional(),
       password: z.string().optional(),
     })
     .prefault({}),
   webSearch: z
     .object({
-      preferredEngine: z.enum(['google', 'duckduckgo', 'bing']).default('google'),
+      preferredEngine: z.enum(['google', 'duckduckgo', 'bing']).catch('google'),
     })
     .prefault({}),
-  timeout: z.number().finite().default(5000),
-  retryAttempts: z.number().finite().default(3),
+  timeout: z.number().finite().catch(5000),
+  retryAttempts: z.number().finite().catch(3),
 });
 export type NetworkSettings = z.infer<typeof NetworkSettingsSchema>;
 
 export const SecuritySettingsSchema = z.object({
-  encryptApikeys: z.boolean().default(true),
-  requirePassword: z.boolean().default(false),
-  sessionTimeout: z.number().finite().default(60),
-  enableLogging: z.boolean().default(true),
-  logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  encryptApikeys: z.boolean().catch(true),
+  requirePassword: z.boolean().catch(false),
+  sessionTimeout: z.number().finite().catch(60),
+  enableLogging: z.boolean().catch(true),
+  logLevel: z.enum(['debug', 'info', 'warn', 'error']).catch('info'),
 });
 export type SecuritySettings = z.infer<typeof SecuritySettingsSchema>;
 
 export const KeybindingsSettingsSchema = z.object({
-  sendMessage: z.string().default('Enter'),
-  openSettings: z.string().default('Cmd+,'),
+  sendMessage: z.string().catch('Enter'),
+  openSettings: z.string().catch('Cmd+,'),
 });
 export type KeybindingsSettings = z.infer<typeof KeybindingsSettingsSchema>;
 
 export const ChatSettingsSchema = z.object({
   composer: z
     .object({
-      preferredProviderId: z.string().default(''),
-      preferredModel: z.string().default(''),
+      preferredProviderId: z.string().catch(''),
+      preferredModel: z.string().catch(''),
     })
     .prefault({}),
 });
 export type ChatSettings = z.infer<typeof ChatSettingsSchema>;
 
 export const ContextSettingsSchema = z.object({
-  enabled: z.boolean().default(true),
-  maxIdentityTokens: z.number().int().nonnegative().default(320),
-  maxSkillTokens: z.number().int().nonnegative().default(1200),
+  enabled: z.boolean().catch(true),
+  maxIdentityTokens: z.number().int().nonnegative().catch(320),
+  maxSkillTokens: z.number().int().nonnegative().catch(1200),
 });
 export type ContextSettings = z.infer<typeof ContextSettingsSchema>;
 
 export const SpeechSettingsSchema = z.object({
-  enabled: z.boolean().default(false),
-  providerType: z.enum(['openai', 'whisper-node', '']).default('openai'),
-  apiKey: z.string().default(''),
-  baseUrl: z.string().default(''),
-  downloadBaseUrl: z.string().default(''),
-  model: z.string().default('whisper-1'),
-  modelPath: z.string().default(''),
-  language: z.string().default(''),
-  prompt: z.string().default(''),
+  enabled: z.boolean().catch(false),
+  providerType: z.enum(['openai', 'whisper-node', '']).catch('openai'),
+  apiKey: z.string().catch(''),
+  baseUrl: z.string().catch(''),
+  downloadBaseUrl: z.string().catch(''),
+  model: z.string().catch('whisper-1'),
+  modelPath: z.string().catch(''),
+  language: z.string().catch(''),
+  prompt: z.string().catch(''),
 });
 export type SpeechSettings = z.infer<typeof SpeechSettingsSchema>;
 
 export const ToolModelSettingsSchema = z.object({
-  providerId: z.string().default(''),
-  model: z.string().default(''),
+  providerId: z.string().catch(''),
+  model: z.string().catch(''),
 });
 export type ToolModelSettings = z.infer<typeof ToolModelSettingsSchema>;
 
 export const ToolExecutionSettingsSchema = z.object({
-  shellApprovalMode: z.literal('always').default('always'),
+  shellApprovalMode: z.literal('always').catch('always'),
 });
 export type ToolExecutionSettings = z.infer<typeof ToolExecutionSettingsSchema>;
 
 export const McpSettingsSchema = z.object({
-  enabled: z.boolean().default(false),
-  connectOnStartup: z.boolean().default(false),
-  allowRemoteServers: z.boolean().default(false),
-  defaultApprovalMode: z.enum(['always', 'safe-only', 'never']).default('safe-only'),
-  requestTimeoutMs: z.number().finite().default(20000),
-  maxConcurrentRequests: z.number().int().nonnegative().default(4),
+  enabled: z.boolean().catch(false),
+  connectOnStartup: z.boolean().catch(false),
+  allowRemoteServers: z.boolean().catch(false),
+  defaultApprovalMode: z.enum(['always', 'safe-only', 'never']).catch('safe-only'),
+  requestTimeoutMs: z.number().finite().catch(20000),
+  maxConcurrentRequests: z.number().int().nonnegative().catch(4),
 });
 export type McpSettings = z.infer<typeof McpSettingsSchema>;
 
 /**
  * The iKi settings domain (`AppSettings`): the aggregate that replaces the
- * hand-written `AppConfig` form mirror. The `themes` section is intentionally
- * not mirrored here — theme presets belong to the separate `@iki/theme`
- * domain, and this contract is a leaf. Unknown keys (including `themes` in old
- * persisted files) are stripped by `z.object` rather than breaking the load.
+ * hand-written `AppConfig` form mirror. Each section carries its defaults
+ * twice over — `.prefault({})` feeds an empty object through the leaf
+ * `.catch()` chain, and `.catch(parse({}))` absorbs a wholly malformed
+ * section (`general: null` from a hand-edited file) exactly as the old
+ * per-section mirror did. The `themes` section is intentionally not here:
+ * theme presets belong to `@iki/theme` and are added by the app schema.
  */
 export const AppSettingsSchema = z.object({
-  general: GeneralSettingsSchema.prefault({}),
-  ui: UiSettingsSchema.prefault({}),
-  network: NetworkSettingsSchema.prefault({}),
-  security: SecuritySettingsSchema.prefault({}),
-  keybindings: KeybindingsSettingsSchema.prefault({}),
-  chat: ChatSettingsSchema.prefault({}),
-  context: ContextSettingsSchema.prefault({}),
-  speech: SpeechSettingsSchema.prefault({}),
-  toolModel: ToolModelSettingsSchema.prefault({}),
-  toolExecution: ToolExecutionSettingsSchema.prefault({}),
-  mcp: McpSettingsSchema.prefault({}),
+  general: GeneralSettingsSchema.prefault({}).catch(GeneralSettingsSchema.parse({})),
+  ui: UiSettingsSchema.prefault({}).catch(UiSettingsSchema.parse({})),
+  network: NetworkSettingsSchema.prefault({}).catch(NetworkSettingsSchema.parse({})),
+  security: SecuritySettingsSchema.prefault({}).catch(SecuritySettingsSchema.parse({})),
+  keybindings: KeybindingsSettingsSchema.prefault({}).catch(KeybindingsSettingsSchema.parse({})),
+  chat: ChatSettingsSchema.prefault({}).catch(ChatSettingsSchema.parse({})),
+  context: ContextSettingsSchema.prefault({}).catch(ContextSettingsSchema.parse({})),
+  speech: SpeechSettingsSchema.prefault({}).catch(SpeechSettingsSchema.parse({})),
+  toolModel: ToolModelSettingsSchema.prefault({}).catch(ToolModelSettingsSchema.parse({})),
+  toolExecution: ToolExecutionSettingsSchema.prefault({}).catch(
+    ToolExecutionSettingsSchema.parse({})
+  ),
+  mcp: McpSettingsSchema.prefault({}).catch(McpSettingsSchema.parse({})),
 });
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
 
 /**
  * The single runtime entry: validate the whole document once and hand out a
  * fully defaulted snapshot. Missing fields and missing sections are resolved by
- * the `.default()` declarations above — there is no second defaults table and
+ * the `.catch()` declarations above — there is no second defaults table and
  * no per-field `.catch()` chain. A wholly malformed document (not an object)
  * resolves to the same default snapshot instead of throwing into the UI.
  */
