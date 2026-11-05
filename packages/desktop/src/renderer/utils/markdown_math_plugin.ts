@@ -1,4 +1,4 @@
-import katex from 'katex';
+import { renderToString } from 'katex';
 import 'katex/dist/katex.min.css';
 
 import type {
@@ -61,7 +61,7 @@ const isValidInlineContent = (
 
 const renderKatex = (tex: string, displayMode: boolean): string | null => {
   try {
-    return katex.renderToString(tex, {
+    return renderToString(tex, {
       displayMode,
       throwOnError: true,
       strict: 'ignore',

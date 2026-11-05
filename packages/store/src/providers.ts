@@ -77,7 +77,7 @@ export const addProvider = (provider: ProviderDeclaration): Provider => {
     ...(provider.isResponseApi === true ? { isResponseApi: true } : {}),
   };
   writeConfig({ providers: { ...config.providers, [provider.id]: declaration } });
-  return getProvider(provider.id)!;
+  return { ...declaration, id: provider.id };
 };
 
 /** Merge a partial update into one declaration; `id` is immutable. */
@@ -90,10 +90,9 @@ export const updateProvider = (id: string, patch: Partial<Provider>): Provider |
   const current = config.providers[id];
   if (!current) return null;
 
-  writeConfig({
-    providers: { ...config.providers, [id]: { ...current, ...changes } },
-  });
-  return getProvider(id)!;
+  const next: ProviderConfig = { ...current, ...changes };
+  writeConfig({ providers: { ...config.providers, [id]: next } });
+  return { ...next, id };
 };
 
 export const deleteProvider = (id: string): void => {

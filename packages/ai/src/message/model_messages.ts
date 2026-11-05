@@ -48,7 +48,7 @@ const namedCallsOfMessage = (message: { role: string; content: unknown }): { id:
     ? message.content
         .filter(part => partField(part, 'type') === 'tool-call')
         .map(part => ({
-          id: partField(part, 'toolCallId')!,
+          id: partField(part, 'toolCallId') ?? '',
           name: partField(part, 'toolName'),
         }))
         .filter(call => call.id.length > 0 && call.name.length > 0)

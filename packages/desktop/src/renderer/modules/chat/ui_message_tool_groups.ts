@@ -80,7 +80,8 @@ export const getToolCallTypeBadge = (part: unknown): string => {
     agent: 'AGT',
     skill: 'SKILL',
   };
-  if (fallbackByVerb[verb]) return fallbackByVerb[verb]!;
+  const fallback = fallbackByVerb[verb];
+  if (fallback) return fallback;
   if (path) return 'FILE';
   return '';
 };

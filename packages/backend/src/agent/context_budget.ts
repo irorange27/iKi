@@ -97,8 +97,9 @@ export const autoCompactHistory = (params: {
   const conversation = history.filter(message => message.role !== 'system');
   const lastUser = conversation.findLastIndex(message => message.role === 'user');
   const boundaries = conversation.flatMap((message, index) => message.role !== 'tool' ? [index] : []);
-  if (boundaries.length < 2 || lastUser < 0) return unchanged;
-  let start = boundaries.at(-1)!;
+  const lastBoundary = boundaries.at(-1);
+  if (boundaries.length < 2 || lastBoundary === undefined || lastUser < 0) return unchanged;
+  let start = lastBoundary;
   const protectedUser = start > lastUser ? [conversation[lastUser]] : [];
   let tokens = [...systems, ...protectedUser, ...conversation.slice(start)].reduce((sum, message) => sum + estimateMessageTokens(message), 0);
   for (let i = boundaries.length - 2; i >= 0; i--) {

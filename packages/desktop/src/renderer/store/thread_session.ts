@@ -369,8 +369,8 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
 
     if (currentThread.value) {
       const previousThreadModel = currentThread.value.model;
-      const previousProviderType = currentThread.value.provider_type;
-      const previousProviderId = currentThread.value.provider_id;
+      const previousThreadProviderType = currentThread.value.provider_type;
+      const previousThreadProviderId = currentThread.value.provider_id;
       const threadId = currentThread.value.id;
       const selection = {
         model: data.model,
@@ -403,8 +403,8 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
               currentThread.value = {
                 ...currentThread.value,
                 model: previousThreadModel,
-                provider_type: previousProviderType,
-                provider_id: previousProviderId,
+                provider_type: previousThreadProviderType,
+                provider_id: previousThreadProviderId,
               };
             }
           }

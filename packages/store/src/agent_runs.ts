@@ -274,14 +274,6 @@ const patchRunRow = (
   return next;
 };
 
-const writeRun = (row: AgentRunRow): void => {
-  const rows = readRows<AgentRunRow>(RUNS);
-  const index = rows.findIndex(entry => entry.id === row.id);
-  if (index >= 0) rows[index] = row;
-  else rows.push(row);
-  commitRows(RUNS, rows);
-};
-
 export const updateAgentRun = (
   id: string,
   updates: Partial<Omit<AgentRun, 'id' | 'createdAt' | 'updatedAt'>>

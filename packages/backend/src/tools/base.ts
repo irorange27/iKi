@@ -171,8 +171,9 @@ export function createTool<P extends z.ZodTypeAny>(options: {
 }): AgentTool {
   const parameters =
     options.parameters ?? zodSchemaToJsonSchema(options.paramSchema, { title: options.name });
-  const handler: AgentTool['handler'] = options.paramSchema
-    ? (args: unknown) => options.handler(options.paramSchema!.parse(args))
+  const { paramSchema } = options;
+  const handler: AgentTool['handler'] = paramSchema
+    ? (args: unknown) => options.handler(paramSchema.parse(args))
     : (args: unknown) => options.handler(args as z.infer<P>);
   return {
     ...options,

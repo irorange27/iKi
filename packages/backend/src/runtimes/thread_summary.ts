@@ -92,7 +92,7 @@ export const generateThreadSummary = async (params: {
   // a fresh system prompt. Without history there is nothing to replay, so fall
   // back to the transcript-in-one-prompt shape.
   const messages: ModelMessage[] = hasHistory
-    ? appendCompactionInstruction(params.history!)
+    ? appendCompactionInstruction(params.history ?? [])
     : appendCompactionInstruction([
         {
           role: 'user',

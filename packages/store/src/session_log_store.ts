@@ -151,7 +151,7 @@ export const createJsonlSessionLogStore = (rootDir: string): SessionLogStore => 
 
   const headRevision = (threadId: string): number => {
     const events = eventsOf(threadId);
-    return events.length > 0 ? events[events.length - 1]!.revision : 0;
+    return events.at(-1)?.revision ?? 0;
   };
 
   const ensureHeader = (threadId: string, file: string): void => {

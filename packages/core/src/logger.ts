@@ -2,7 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import winston from 'winston';
+import { config, createLogger as winstonCreateLogger, format, transports } from 'winston';
+import type { Logger, transport } from 'winston';
 
 import type { AppConfig } from '@iki/core/types/config';
 import type {
@@ -100,7 +101,7 @@ const TRUNCATED_VALUE = '[TRUNCATED]';
 
 const REDACTED_KEY_PATTERN = /(token|secret|authorization|cookie|password|credential|api[-_]?key)/i;
 
-const winstonJsonLine = winston.format.printf(info => JSON.stringify(stripWinstonFields(info)));
+const winstonJsonLine = format.printf(info => JSON.stringify(stripWinstonFields(info)));
 
 const contextStorage = new AsyncLocalStorage<LogContext>();
 
@@ -114,7 +115,7 @@ const runtimeConfig: RuntimeLoggingConfig = {
   console: true,
 };
 
-let sinkLogger: winston.Logger | null = null;
+let sinkLogger: Logger | null = null;
 let sinkTransportsKey: string | null = null;
 
 function isTestEnvironment(): boolean {
@@ -348,10 +349,10 @@ function shouldUseAnsiColors(): boolean {
   return Boolean(process.stdout?.isTTY || process.stderr?.isTTY);
 }
 
-function buildConsoleTransport(): winston.transport {
-  return new winston.transports.Console({
+function buildConsoleTransport(): transport {
+  return new transports.Console({
     stderrLevels: ['error'],
-    format: winston.format.printf(info =>
+    format: format.printf(info =>
       formatStructuredConsoleLine(stripWinstonFields(info) as StructuredConsoleFormatterInput, {
         colorize: shouldUseAnsiColors(),
       })
@@ -359,8 +360,8 @@ function buildConsoleTransport(): winston.transport {
   });
 }
 
-function buildFileTransport(filename: string, level?: StructuredLogLevel): winston.transport {
-  return new winston.transports.File({
+function buildFileTransport(filename: string, level?: StructuredLogLevel): transport {
+  return new transports.File({
     filename,
     level,
     maxsize: 5242880,
@@ -369,17 +370,17 @@ function buildFileTransport(filename: string, level?: StructuredLogLevel): winst
   });
 }
 
-function getSinkLogger(): winston.Logger {
+function getSinkLogger(): Logger {
   if (sinkLogger) return sinkLogger;
-  sinkLogger = winston.createLogger({
-    levels: winston.config.npm.levels,
+  sinkLogger = winstonCreateLogger({
+    levels: config.npm.levels,
     level: runtimeConfig.level,
     transports: [],
   });
   return sinkLogger;
 }
 
-function ensureSinkTransports(): winston.Logger {
+function ensureSinkTransports(): Logger {
   const logger = getSinkLogger();
   logger.level = runtimeConfig.level;
   const logDirectory = resolveLogDirectory();
