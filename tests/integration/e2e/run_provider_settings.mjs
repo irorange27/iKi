@@ -138,6 +138,25 @@ const preflightPortsFree = () => {
   }
 };
 
+const waitForCdpPortFree = async () => {
+  for (let i = 0; i < 15; i++) {
+    if (!portBusy(CDP_PORT)) return;
+    await sleep(1000);
+  }
+  throw new Error(`CDP port ${CDP_PORT} still held after killing the app`);
+};
+
+const killAppByUserDataDir = () => {
+  for (const pattern of [`user-data-dir=${workDir}/userdata`, `user-data-dir=/private${workDir}/userdata`]) {
+    try {
+      const out = execFileSync('pgrep', ['-f', pattern], { encoding: 'utf8' });
+      for (const pid of out.split('\n').filter(Boolean)) {
+        try { process.kill(Number(pid), 'SIGKILL'); } catch {}
+      }
+    } catch {}
+  }
+};
+
 const launchApp = async label => {
   const child = spawn(
     'npx',
@@ -412,7 +431,7 @@ const main = async () => {
   if (!providerUp) throw new Error('faux provider did not come up');
 
   step('boot app WITHOUT any provider configuration');
-  const mainCdp = await launchApp('boot1');
+  let mainCdp = await launchApp('boot1');
   // The store exists, nothing seeded: provider list must be empty.
   if (readModelsToml() && Object.keys(readModelsToml()).length > 0) {
     throw new Error('expected an empty models.toml at boot, isolation failed');
@@ -612,6 +631,61 @@ const main = async () => {
       awaitPromise: true,
     })
     .catch(() => {});
+
+  step('assert the thread row persists typed arrays (skill pin contract)');
+  // The real skill registry lives on the machine, so the gate asserts the
+  // storage contract — skill ids cross the IPC and land as a JSON array on
+  // the row, exactly what `thread_session/skills.ts` reads back — instead of
+  // pinning a machine-specific skill.
+  await mainCdp
+    .send('Runtime.evaluate', {
+      expression: `(async () => {
+        const threads = await window.electronAPI.chat.threads.list();
+        const target = threads.find(t => t.model === ${JSON.stringify(MODEL_ALT)});
+        await window.electronAPI.chat.threads.update(target.id, { skill_ids: ['a:alpha', 'b:beta'] });
+        return target.id;
+      })()`,
+      awaitPromise: true,
+      returnByValue: true,
+    })
+    .then(r => r.result.value)
+    .catch(e => { throw new Error('skill_ids update failed: ' + e.message); });
+  const skillRow = await waitForFile(() => {
+    try {
+      const rows = JSON.parse(fs.readFileSync(path.join(storeDir(), 'chat_threads.json'), 'utf8'));
+      const row = rows.find(r => Array.isArray(r.skill_ids) && r.skill_ids.length === 2);
+      return row || null;
+    } catch {
+      return null;
+    }
+  }, 'chat_threads.json row with a typed skill_ids array', 10000);
+  log('skill_ids persisted as array:', JSON.stringify(skillRow.skill_ids));
+
+  step('restart and verify the typed bindings survived the replay');
+  mainCdp.close();
+  killAppByUserDataDir();
+  await waitForCdpPortFree();
+  const boot2 = await launchApp('boot2-after-restart');
+  await sleep(4000);
+  // The thread row is the same JSON the store re-reads after boot; assert the
+  // array survived disk, and the composer re-derived the selection from it.
+  const restarted = await waitForFile(() => {
+    try {
+      const rows = JSON.parse(fs.readFileSync(path.join(storeDir(), 'chat_threads.json'), 'utf8'));
+      const row = rows.find(r => Array.isArray(r.skill_ids) && r.model === MODEL_ALT);
+      return row || null;
+    } catch {
+      return null;
+    }
+  }, 'thread row with skill_ids array + switched model after restart', 15000);
+  log('after restart row intact:', restarted.id, restarted.model, JSON.stringify(restarted.skill_ids));
+  await waitForEval(
+    boot2,
+    `document.querySelector('.model-selector-trigger')?.textContent?.includes(${JSON.stringify(MODEL_ALT)}) ? 1 : 0`,
+    'trigger shows the switched model after restart',
+    30000
+  );
+  mainCdp = boot2;
 
   step('assert the session log recorded both turns');
   const events = await waitForFile(() => (sessionEventCount() >= 2 ? sessionEventCount() : null), 'session events for two turns', 10000);
