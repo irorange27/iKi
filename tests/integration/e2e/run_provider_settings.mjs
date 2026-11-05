@@ -6,8 +6,8 @@
 //      toggle a model on, enable the provider, press Save.
 //   2. The saved declaration actually works: models.toml holds the structured
 //      declaration (asserted by reading the file), the chat composer picks the
-//      provider WITHOUT a reload (providers:updated broadcast), and a real
-//      turn streams through it.
+//      provider WITHOUT a reload — the MAIN model selector lists, accepts, and
+//      shows it (providers:updated broadcast) — and a real turn streams.
 //   3. Multi-turn history is carried: turn two sends CHECK_HISTORY, which the
 //      faux endpoint only answers with a HISTORY_REPORT when the request
 //      contains the earlier turns — the boss's "每轮 = 过去请求总和 + 新输入"
@@ -271,18 +271,62 @@ const typeAndSend = async (cdp, text) => {
   if (sent !== 'OK') throw new Error('send failed: ' + sent);
 };
 
-const ensureModelSelected = async cdp => {
-  await waitForEval(cdp, `document.body.textContent.includes(${JSON.stringify(MODEL)})`, 'model visible in composer');
-  if (await cdp.eval(`(function(){ return document.querySelector('.model-selector-trigger')?.textContent?.includes(${JSON.stringify(MODEL)}) ? 1 : 0; })()`)) return;
-  await cdp.eval(`(function(){ document.querySelector('.model-selector-trigger')?.click(); return 1; })()`);
-  await sleep(700);
-  const picked = await cdp.eval(`(function(){
-    const options = [...document.querySelectorAll('button, [role=option], [role=menuitem], li')];
-    const target = options.find(o => (o.textContent || '').includes(${JSON.stringify(MODEL)}));
-    if (!target) return 'NO_OPTION';
-    target.click(); return 'OK';
+// The saved provider must show up in the MAIN window's model selector — that
+// is the user-visible contract of "configured in settings, usable on the home
+// page": the dropdown lists the Ollama group with the model option, clicking
+// it registers the selection, and the trigger reflects it. All without a
+// page reload (driven by the providers:updated broadcast).
+const assertProviderVisibleInModelSelector = async cdp => {
+  const opened = await cdp.eval(`(function(){
+    const trigger = document.querySelector('.model-selector-trigger');
+    if (!trigger) return 'NO_TRIGGER';
+    trigger.click();
+    return 'OK';
   })()`);
-  if (picked !== 'OK') throw new Error('model selection failed: ' + picked);
+  if (opened !== 'OK') throw new Error('model selector trigger missing: ' + opened);
+
+  // The dropdown opens on the root menu (DSH-style drill-in cells); the
+  // grouped provider/model list lives one pane deeper — click into "Model".
+  const drilled = await waitForEval(
+    cdp,
+    `(function(){
+      const cell = [...document.querySelectorAll('.model-menu-cell')].find(b => b.querySelector('.model-menu-cell-label'));
+      if (!cell) return 0;
+      cell.click();
+      return 1;
+    })()`,
+    'model pane offered from the selector root menu',
+    10000
+  ).catch(() => 0);
+  if (!drilled) throw new Error('selector root menu never rendered the Model cell');
+
+  const listed = await waitForEval(
+    cdp,
+    `[...document.querySelectorAll('.model-option')].some(b => (b.querySelector('.model-option-name')?.textContent || b.textContent).trim() === ${JSON.stringify(MODEL)}) ? 1 : 0`,
+    `saved model ${MODEL} listed in the model selector dropdown`,
+    30000
+  ).catch(() => null);
+  if (!listed) throw new Error(MODEL + ' was not offered in the model selector after the settings save');
+
+  const grouped = await cdp.eval(
+    `[...document.querySelectorAll('.model-provider-group')].some(g => (g.querySelector('.model-provider-name')?.textContent || '').includes('Ollama') && [...g.querySelectorAll('.model-option')].some(b => (b.textContent || '').includes(${JSON.stringify(MODEL)}))) ? 1 : 0`
+  ).catch(() => 0);
+  if (!grouped) throw new Error('the Ollama group carrying the saved model was not rendered in the selector');
+
+  const picked = await cdp.eval(`(function(){
+    const btn = [...document.querySelectorAll('.model-option')].find(b => (b.querySelector('.model-option-name')?.textContent || b.textContent).trim() === ${JSON.stringify(MODEL)});
+    if (!btn) return 'NO_OPTION';
+    btn.click();
+    return 'OK';
+  })()`);
+  if (picked !== 'OK') throw new Error('model option click failed: ' + picked);
+
+  await waitForEval(
+    cdp,
+    `document.querySelector('.model-selector-trigger')?.textContent?.includes(${JSON.stringify(MODEL)}) ? 1 : 0`,
+    'model selector trigger shows the saved model after picking it',
+    15000
+  );
 };
 
 const main = async () => {
@@ -392,16 +436,14 @@ const main = async () => {
   if (provider.api_key !== 'sk-e2e') throw new Error('api_key mismatch');
   log('saved provider declaration OK:', providerId, JSON.stringify({ type: provider.type, models: modelsField, base_url: provider.base_url }));
 
-  step('close the settings window; composer must show the model WITHOUT a reload');
+  step('close the settings window; the main model selector must offer the saved provider live');
   try {
     await settingsCdp.send('Target.closeTarget', { targetId: (await findSettingsTarget())?.id });
   } catch (error) {
     log('closeTarget failed (non-fatal):', error.message);
   }
   settingsCdp.close();
-  await mainCdp.eval(`(function(){ document.querySelector('textarea')?.focus(); return 1; })()`);
-  await waitForEval(mainCdp, `document.body.textContent.includes(${JSON.stringify(MODEL)})`, 'composer picked the saved provider live', 30000);
-  await ensureModelSelected(mainCdp);
+  await assertProviderVisibleInModelSelector(mainCdp);
 
   step('turn 1 through the UI-configured provider');
   await typeAndSend(mainCdp, 'PING_SETTINGS_E2E');
