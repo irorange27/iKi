@@ -24,28 +24,29 @@ export const getChatThread = (id: string): ChatThread | null => {
 };
 
 export const addChatThread = (
-  thread: Partial<ChatThread> & { id: string; title: string; metadata: string }
+  thread: Partial<ChatThread> & { id: string; title: string }
 ): void => {
   const now = new Date().toISOString();
-  const row: ChatThread = {
+  // Defaults first, then every field the caller actually provided. A
+  // hand-picked field list silently drops new columns — the approval policy
+  // regression this replaces. `undefined` means "not provided", so it never
+  // overwrites a default.
+  const base: ChatThread = {
     id: thread.id,
     title: thread.title,
-    model: thread.model || null,
-    is_generating: thread.is_generating === true,
-    reasoning_effort: thread.reasoning_effort || 'medium',
-    metadata: thread.metadata,
     created_at: now,
     updated_at: now,
-    client_id: thread.client_id || null,
-    prompt_app_id: thread.prompt_app_id || null,
-    tools: thread.tools || null,
-    is_favorited: thread.is_favorited === true,
-    is_incognito: thread.is_incognito === true,
-    workspace_id: thread.workspace_id || null,
-    enable_artifacts: thread.enable_artifacts === true,
-    artifact_workspace_id: thread.artifact_workspace_id || null,
-    skill_ids: thread.skill_ids || null,
+    is_generating: false,
+    is_favorited: false,
+    is_incognito: false,
+    enable_artifacts: false,
+    reasoning_effort: 'medium',
   };
+  const provided = Object.fromEntries(
+    Object.entries(thread).filter(([, value]) => value !== undefined)
+  );
+  const row: ChatThread = { ...base, ...provided, id: thread.id, title: thread.title };
+
   const rows = readRows<ChatThread>('chat_threads').filter(entry => entry.id !== thread.id);
   rows.push(row);
   commitRows('chat_threads', rows);

@@ -14,6 +14,7 @@ import { isObjectRecord } from '@iki/core/utils/guards';
 import { normalizeOptionalString } from '@iki/core/utils/text';
 import { createPrefixedId } from '@iki/core/utils/id';
 import { ensureThreadWorkspaceSelection } from '@iki/backend/workspaces/thread_workspace';
+import { parseApprovalPolicy } from '@iki/backend/workspaces/thread_mode';
 import { isThreadWorktreeWorkspaceId } from '@iki/backend/workspaces/worktree_ids';
 
 const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
@@ -39,7 +40,6 @@ const normalizeThreadInput = (
     ChatThread,
     | 'id'
     | 'title'
-    | 'metadata'
     | 'is_generating'
     | 'is_favorited'
     | 'is_incognito'
@@ -56,6 +56,11 @@ const normalizeThreadInput = (
     | 'workspace_id'
     | 'artifact_workspace_id'
     | 'skill_ids'
+    | 'provider_type'
+    | 'provider_id'
+    | 'work_mode'
+    | 'approval_policy'
+    | 'personality'
   > => {
   const thread = isObjectRecord(input) ? (input as Partial<ChatThread>) : {};
 
@@ -70,8 +75,6 @@ const normalizeThreadInput = (
       (typeof thread.title === 'string' && thread.title.trim() ? thread.title : 'New Chat'),
     model: normalizeOptionalString(thread.model) ?? undefined,
     reasoning_effort: normalizeOptionalString(thread.reasoning_effort) || 'medium',
-    metadata:
-      typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
     is_generating: false,
     client_id: normalizeOptionalString(thread.client_id) ?? undefined,
     prompt_app_id: normalizeOptionalString(thread.prompt_app_id) ?? undefined,
@@ -82,6 +85,11 @@ const normalizeThreadInput = (
     enable_artifacts: normalizeFlag(thread.enable_artifacts),
     artifact_workspace_id: normalizeOptionalString(thread.artifact_workspace_id) ?? undefined,
     skill_ids: normalizeOptionalString(thread.skill_ids) ?? undefined,
+    provider_type: normalizeOptionalString(thread.provider_type) ?? null,
+    provider_id: normalizeOptionalString(thread.provider_id) ?? null,
+    work_mode: thread.work_mode === 'work' || thread.work_mode === 'chat' ? thread.work_mode : undefined,
+    approval_policy: parseApprovalPolicy(thread.approval_policy) ?? undefined,
+    personality: normalizeOptionalString(thread.personality) ?? undefined,
   };
 };
 

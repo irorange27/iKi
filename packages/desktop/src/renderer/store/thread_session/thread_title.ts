@@ -39,8 +39,20 @@ export const createThreadTitleActions = (ctx: ThreadTitleContext) => {
       typeof thread.reasoning_effort === 'string' && thread.reasoning_effort.trim()
         ? thread.reasoning_effort
         : undefined,
-    metadata:
-      typeof thread.metadata === 'string' && thread.metadata.trim() ? thread.metadata : '{}',
+    provider_type:
+      typeof thread.provider_type === 'string' && thread.provider_type.trim()
+        ? thread.provider_type
+        : undefined,
+    provider_id:
+      typeof thread.provider_id === 'string' && thread.provider_id.trim()
+        ? thread.provider_id
+        : undefined,
+    work_mode: thread.work_mode === 'work' || thread.work_mode === 'chat' ? thread.work_mode : undefined,
+    approval_policy: thread.approval_policy ?? undefined,
+    personality:
+      typeof thread.personality === 'string' && thread.personality.trim()
+        ? thread.personality
+        : undefined,
     client_id:
       typeof thread.client_id === 'string' && thread.client_id.trim()
         ? thread.client_id

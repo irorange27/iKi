@@ -1,8 +1,8 @@
 import type { ApprovalPolicy } from '@iki/core/utils/action_risk';
-import { isObjectRecord } from '@iki/core/utils/guards';
+import type { ThreadWorkMode } from '@iki/core/types/chat';
 import { THREAD_WORKTREE_WORKSPACE_PREFIX } from './worktree_ids';
 
-export type ThreadWorkMode = 'chat' | 'work';
+export type { ThreadWorkMode };
 
 export type { ApprovalPolicy };
 
@@ -23,38 +23,19 @@ export const parseApprovalPolicy = (value: unknown): ApprovalPolicy | null => {
 
 export const THREAD_SCRATCH_WORKSPACE_PREFIX = 'workspace_thread_';
 
-const THREAD_WORK_MODE_METADATA_KEY = 'mode';
-
 const isScratchOrWorktreeWorkspaceId = (workspaceId: string): boolean =>
   workspaceId.startsWith(THREAD_SCRATCH_WORKSPACE_PREFIX) ||
   workspaceId.startsWith(THREAD_WORKTREE_WORKSPACE_PREFIX);
 
 export const resolveThreadWorkMode = (
-  thread:
-    | {
-        workspace_id?: string | null;
-        metadata?: string | null;
-      }
-    | null
-    | undefined
+  thread: { workspace_id?: string | null; work_mode?: ThreadWorkMode | null } | null | undefined
 ): ThreadWorkMode => {
-  if (isObjectRecord(thread) || thread) {
-    const metadataRaw = typeof thread?.metadata === 'string' ? thread.metadata : '';
-    if (metadataRaw.trim()) {
-      try {
-        const parsed: unknown = JSON.parse(metadataRaw);
-        if (isObjectRecord(parsed)) {
-          const mode = parsed[THREAD_WORK_MODE_METADATA_KEY];
-          if (mode === 'work' || mode === 'chat') return mode;
-        }
-      } catch {
-    // Intentionally ignored: the caller cannot act on it.
-  }
-    }
+  if (!thread) return 'chat';
 
-    const workspaceId = typeof thread?.workspace_id === 'string' ? thread.workspace_id.trim() : '';
-    if (workspaceId && !isScratchOrWorktreeWorkspaceId(workspaceId)) return 'work';
-  }
+  if (thread.work_mode === 'work' || thread.work_mode === 'chat') return thread.work_mode;
+
+  const workspaceId = typeof thread.workspace_id === 'string' ? thread.workspace_id.trim() : '';
+  if (workspaceId && !isScratchOrWorktreeWorkspaceId(workspaceId)) return 'work';
 
   return 'chat';
 };

@@ -1,10 +1,22 @@
+import type { ApprovalPolicy } from '../utils/action_risk';
+
+/** How a thread runs: plain chat, or chat bound to a work workspace. */
+export type ThreadWorkMode = 'chat' | 'work';
+
 export interface ChatThread {
   id: string;
   title: string;
+  /** The thread's model binding — what the last turn used. */
   model?: string;
+  provider_type?: string | null;
+  provider_id?: string | null;
   is_generating: boolean;
   reasoning_effort?: string;
-  metadata: string;
+  /** Per-thread run settings. These used to hide inside a stringified JSON
+   *  `metadata` blob; each is now a field the compiler can see. */
+  work_mode?: ThreadWorkMode;
+  approval_policy?: ApprovalPolicy | null;
+  personality?: string | null;
   created_at: string;
   updated_at: string;
   client_id?: string;
@@ -24,7 +36,8 @@ export interface ChatThread {
 // resumed turn's replay input — take the same `ChatUiMessage` value from it. The old
 // row shape (parent_id / slot_id / depth / metadata / message-as-JSON-string) only
 // existed so one projection could hand a fake SQL row to the renderer, which
-// re-parsed the string back into the object it already had.
+// re-parsed the string back into the object it already had. `ChatThread.metadata`
+// met the same fate in 2026-11: its four real keys are now fields.
 
 export interface Workspace {
   id: string;

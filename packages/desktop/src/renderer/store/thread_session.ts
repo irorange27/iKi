@@ -11,14 +11,9 @@ import type { ElectronApi } from '@iki/backend/types/electron_api';
 import { createLogger } from '../logger';
 import { getCurrentLocale, translateWithLocale } from '../i18n';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';
-import {
-  parseJsonRecord,
-  parseThreadLlmSelectionState,
-} from '@iki/ai/message/thread_runtime_hints';
 import { normalizePersonality } from '@iki/ai/message/personality';
 import {
   parseApprovalPolicy,
-  THREAD_APPROVAL_POLICY_KEY,
   type ApprovalPolicy,
   type ThreadWorkMode,
 } from '@iki/backend/workspaces/thread_mode';
@@ -103,10 +98,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const syncProviderState = (thread: ChatThread | null) => {
-    const providerId = thread
-      ? parseThreadLlmSelectionState(thread.metadata).providerId
-      : undefined;
-    currentProviderId.value = providerId ?? null;
+    currentProviderId.value = thread?.provider_id?.trim() || null;
   };
 
   const syncWorkspaceState = (thread: ChatThread | null) => {
@@ -121,14 +113,11 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
   };
 
   const syncPersonalityState = (thread: ChatThread | null) => {
-    const metadata = thread ? parseJsonRecord(thread.metadata) : {};
-    currentPersonality.value = normalizePersonality(metadata.personality) ?? '';
+    currentPersonality.value = normalizePersonality(thread?.personality) ?? '';
   };
 
   const syncApprovalPolicyState = (thread: ChatThread | null) => {
-    const metadata = thread ? parseJsonRecord(thread.metadata) : {};
-    currentApprovalPolicy.value =
-      parseApprovalPolicy(metadata[THREAD_APPROVAL_POLICY_KEY]) ?? 'askRisky';
+    currentApprovalPolicy.value = parseApprovalPolicy(thread?.approval_policy) ?? 'askRisky';
   };
 
   const restoreDraftComposerSelection = () => {
@@ -180,14 +169,13 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       const draftProviderId = currentProviderId.value;
       const draftEffort = currentReasoningEffort.value;
       const draftPersonality = currentPersonality.value;
-      const metadata: Record<string, unknown> = { mode };
-      if (draftPersonality) metadata.personality = draftPersonality;
-      metadata[THREAD_APPROVAL_POLICY_KEY] = currentApprovalPolicy.value || 'askRisky';
       const thread = await electronAPI.chat.threads.create({
         title: translateWithLocale(getCurrentLocale(), 'chat.thread.newTitle'),
         model: model || null,
         reasoning_effort: draftEffort || null,
-        metadata: JSON.stringify(metadata),
+        work_mode: mode,
+        personality: draftPersonality || null,
+        approval_policy: currentApprovalPolicy.value || 'askRisky',
         is_incognito: isIncognito.value,
         workspace_id:
           options?.workspaceId ??
@@ -380,28 +368,18 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     });
 
     if (currentThread.value) {
-      const metadata = parseJsonRecord(currentThread.value.metadata);
-      const llm = isObjectRecord(metadata.llm) ? metadata.llm : {};
-      const previousMetadata = currentThread.value.metadata;
       const previousThreadModel = currentThread.value.model;
+      const previousProviderType = currentThread.value.provider_type;
+      const previousProviderId = currentThread.value.provider_id;
       const threadId = currentThread.value.id;
-      const updatedMetadata = {
-        ...metadata,
-        llm: {
-          ...llm,
-          providerType: data.provider.type,
-          providerId: data.provider.id,
-          model: data.model,
-          updatedAt: new Date().toISOString(),
-        },
+      const selection = {
+        model: data.model,
+        provider_type: data.provider.type,
+        provider_id: data.provider.id,
       };
-      const nextMetadata = JSON.stringify(updatedMetadata);
-      currentThread.value = { ...currentThread.value, metadata: nextMetadata, model: data.model };
+      currentThread.value = { ...currentThread.value, ...selection };
       void requireRuntime()
-        .electronAPI.chat.threads.update(threadId, {
-          model: data.model,
-          metadata: nextMetadata,
-        })
+        .electronAPI.chat.threads.update(threadId, selection)
         .catch(error => {
           threadSessionLogger.event({
             level: 'warn',
@@ -424,8 +402,9 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
             if (currentThread.value.model === data.model) {
               currentThread.value = {
                 ...currentThread.value,
-                metadata: previousMetadata,
                 model: previousThreadModel,
+                provider_type: previousProviderType,
+                provider_id: previousProviderId,
               };
             }
           }
@@ -548,15 +527,15 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
     if (!activeThread || currentPersonality.value === normalizedValue) return;
     const { electronAPI } = requireRuntime();
 
-    const metadata = parseJsonRecord(activeThread.metadata);
-    const previousMetadata = activeThread.metadata;
-    const nextMetadata = JSON.stringify({ ...metadata, personality: normalizedValue });
+    const previousPersonality = activeThread.personality ?? '';
 
     currentPersonality.value = normalizedValue;
-    currentThread.value = { ...activeThread, metadata: nextMetadata };
+    currentThread.value = { ...activeThread, personality: normalizedValue || null };
 
     try {
-      await electronAPI.chat.threads.update(activeThread.id, { metadata: nextMetadata });
+      await electronAPI.chat.threads.update(activeThread.id, {
+        personality: normalizedValue || null,
+      });
     } catch (error) {
       threadSessionLogger.event({
         level: 'warn',
@@ -568,7 +547,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
         },
       });
       if (currentThread.value?.id === activeThread.id) {
-        currentThread.value = { ...currentThread.value, metadata: previousMetadata };
+        currentThread.value = { ...currentThread.value, personality: previousPersonality || null };
         syncPersonalityState(currentThread.value);
       }
     }
@@ -581,24 +560,17 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
       currentApprovalPolicy.value = normalizedValue ?? '';
       return;
     }
-    const previousValue = parseApprovalPolicy(
-      parseJsonRecord(activeThread.metadata)[THREAD_APPROVAL_POLICY_KEY]
-    );
+    const previousValue = parseApprovalPolicy(activeThread.approval_policy);
     if (previousValue === normalizedValue) return;
 
-    const metadata = parseJsonRecord(activeThread.metadata);
-    const previousMetadata = activeThread.metadata;
-    const nextMetadata = JSON.stringify({
-      ...metadata,
-      [THREAD_APPROVAL_POLICY_KEY]: normalizedValue ?? '',
-    });
+    const previousPolicy = activeThread.approval_policy ?? null;
 
     currentApprovalPolicy.value = normalizedValue ?? '';
-    currentThread.value = { ...activeThread, metadata: nextMetadata };
+    currentThread.value = { ...activeThread, approval_policy: normalizedValue ?? null };
 
     try {
       await requireRuntime().electronAPI.chat.threads.update(activeThread.id, {
-        metadata: nextMetadata,
+        approval_policy: normalizedValue ?? null,
       });
     } catch (error) {
       threadSessionLogger.event({
@@ -611,7 +583,7 @@ export const useThreadSessionStore = defineStore('threadSession', () => {
         },
       });
       if (currentThread.value?.id === activeThread.id) {
-        currentThread.value = { ...currentThread.value, metadata: previousMetadata };
+        currentThread.value = { ...currentThread.value, approval_policy: previousPolicy };
         syncApprovalPolicyState(currentThread.value);
       }
     }
