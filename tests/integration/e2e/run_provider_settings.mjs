@@ -551,6 +551,68 @@ const main = async () => {
   }
   log('model switch persisted on the thread row:', bound.id, bound.provider_type, bound.provider_id);
 
+  step('mcp row storage: typed lists and maps round-trip');
+  const mcpProbe = await mainCdp
+    .send('Runtime.evaluate', {
+      expression: `(async () => {
+        try {
+          // addServer generates the id itself and only connects when the
+          // global mcp switch is on (it is off by default) — capture the id
+          // from the returned server rather than assuming one.
+          const added = await window.electronAPI.mcp.add({
+            name: 'E2E Probe',
+            transport: 'stdio',
+            command: '/nonexistent/e2e-binary',
+            args: ['--flag', 'value'],
+            env: { E2E: 'yes' },
+          }).catch(e => 'ADD_FAIL: ' + (e && e.message));
+          if (typeof added === 'string') return added;
+          const probeId = added.id;
+          const updated = await window.electronAPI.mcp.update(probeId, {
+            args: ['--changed'],
+          });
+          const listed = await window.electronAPI.mcp.list();
+          const row = listed.find(s => s.id === probeId);
+          return JSON.stringify({
+            ok: !!row,
+            probeId,
+            args: row && row.args,
+            env: row && row.env,
+            updatedArgs: updated && updated.args,
+          });
+        } catch (e) { return 'MCP_FAIL: ' + (e && e.message); }
+      })()`,
+      awaitPromise: true,
+      returnByValue: true,
+    })
+    .then(r => (r.result && r.result.value) || 'NO_VALUE')
+    .catch(e => 'SEND_FAIL: ' + e.message);
+  log('mcp probe:', mcpProbe);
+  const mcpParsed = JSON.parse(mcpProbe || '{}');
+  if (!mcpParsed.ok) throw new Error('mcp probe failed: ' + mcpProbe);
+  if (!Array.isArray(mcpParsed.updatedArgs) || mcpParsed.updatedArgs[0] !== '--changed') {
+    throw new Error('mcp update did not persist a typed args array: ' + mcpProbe);
+  }
+  if (!mcpParsed.env || mcpParsed.env.E2E !== 'yes') {
+    throw new Error('mcp env did not persist as a map: ' + mcpProbe);
+  }
+  const mcpRow = await waitForFile(() => {
+    try {
+      const rows = JSON.parse(fs.readFileSync(path.join(storeDir(), 'mcp_servers.json'), 'utf8'));
+      const row = rows.find(r => r.id === mcpParsed.probeId);
+      return row && Array.isArray(row.args) && row.env && typeof row.env === 'object' ? row : null;
+    } catch {
+      return null;
+    }
+  }, 'mcp_servers.json row storing args/env as real arrays/objects', 10000);
+  log('mcp row on disk:', JSON.stringify({ args: mcpRow.args, env: mcpRow.env }));
+  await mainCdp
+    .send('Runtime.evaluate', {
+      expression: `(async () => { try { await window.electronAPI.mcp.delete(${JSON.stringify(mcpParsed.probeId)}); } catch {} return 1; })()`,
+      awaitPromise: true,
+    })
+    .catch(() => {});
+
   step('assert the session log recorded both turns');
   const events = await waitForFile(() => (sessionEventCount() >= 2 ? sessionEventCount() : null), 'session events for two turns', 10000);
   log('session event batches:', events);
