@@ -78,7 +78,7 @@ export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 export const ProviderSchema = ProviderConfigSchema.extend({ id: z.string().min(1) });
 export type Provider = z.infer<typeof ProviderSchema>;
 
-/** The whole `models.json` document (pi's `ModelsConfig`). */
+/** The whole `models.toml` document (pi's `ModelsConfig`). */
 export const ModelsConfigSchema = z.object({
   providers: z.record(z.string(), ProviderConfigSchema),
 });

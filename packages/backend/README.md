@@ -1,5 +1,17 @@
 # @iki/backend
 
+> **中文导读**（下方为英文契约正文，锚点保持不变，供 [AGENTS.md](../../AGENTS.md) 引用）
+>
+> 纯 Node/TS 业务逻辑层：所有业务规则都在这里，Electron 壳只做转发。
+>
+> - **入口**：[Entry points](#entry-points) —— 一轮对话从 `thread_session/session_loop.ts` 进入，经 `agent/harness/assembly.ts` 组装 Pi turn harness，由 `agent/runners/` 驱动唯一的模型执行循环。
+> - **必读契约**：[Runtime contracts](#runtime-contracts) —— 每条运行时不变量都有唯一 owner、契约说明与回归测试；改核心路径前连同 [HARNESS_REVIEW.md](./HARNESS_REVIEW.md) 一起看。
+> - **恢复与限制**：正文的 "Event authority flip"（ADR 008 回滚三分）与 [Limits](#limits)；验证命令见 [Fast verification](#fast-verification)。
+> - 依赖方向单向：`@iki/backend` → `@iki/ai` / `@iki/store` / `@iki/core` / `@iki/theme`，不得反向依赖 desktop。
+> - 常用命令：`pnpm run ci:quality`、`pnpm exec vitest run <path>`、`pnpm run arch:context backend/thread_session`。
+>
+> ⚠️ 正文记录的是 2026-10 的架构快照，其中 SQLite / migration / AI SDK 相关段落已被后续重构取代（现在是文件型 store + Pi 供应层）。读时以代码为准。
+
 Pure Node/TypeScript business logic shared by the Electron desktop shell. No Electron or Vue imports.
 Dependencies point from shells to backend; the architecture gate checks backend layer direction too.
 

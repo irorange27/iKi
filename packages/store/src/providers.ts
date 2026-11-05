@@ -1,14 +1,17 @@
 /**
  * Provider configuration is a declaration, not a table.
  *
- * One `models.json`, providers keyed by id, structured values. The document is
+ * One `models.toml`, providers keyed by id, structured values. TOML tables keep
+ * it pleasant to edit by hand (`[providers.<id>]`); the document is still
  * validated and frozen by the domain contract (`@iki/core/domain/models`) on
  * every read — the file is the source of truth, so an edit made by another
  * process or by hand is visible on the next request without a cache to
- * invalidate.
+ * invalidate. TOML has no null, so optional fields are expressed by omission.
  */
 import fs from 'node:fs';
 import path from 'node:path';
+
+import { parse, stringify, TomlError } from 'smol-toml';
 
 import {
   loadModelsConfig,
@@ -19,7 +22,7 @@ import {
 } from '@iki/core/domain/models';
 import { storeRoot } from './collection';
 
-const CONFIG_FILE = 'models.json';
+const CONFIG_FILE = 'models.toml';
 
 export type ProviderDeclaration = Pick<ProviderConfig, 'name' | 'type' | 'api_key'> &
   Partial<Omit<ProviderConfig, 'name' | 'type' | 'api_key'>> & { id: string };
@@ -27,11 +30,19 @@ export type ProviderDeclaration = Pick<ProviderConfig, 'name' | 'type' | 'api_ke
 const configPath = (): string => path.join(storeRoot(), CONFIG_FILE);
 
 const readConfig = (): ModelsConfig => {
+  let raw: string;
   try {
-    return loadModelsConfig(JSON.parse(fs.readFileSync(configPath(), 'utf8')));
+    raw = fs.readFileSync(configPath(), 'utf8');
   } catch (error) {
-    // A missing or torn file is an empty configuration; the next write repairs it.
-    if (error instanceof SyntaxError) return loadModelsConfig(undefined);
+    // A missing file is an empty configuration; the next write creates it.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return loadModelsConfig(undefined);
+    throw error;
+  }
+  try {
+    return loadModelsConfig(parse(raw));
+  } catch (error) {
+    // A torn file is an empty configuration; the next write repairs it.
+    if (error instanceof TomlError) return loadModelsConfig(undefined);
     throw error;
   }
 };
@@ -39,7 +50,9 @@ const readConfig = (): ModelsConfig => {
 const writeConfig = (config: ModelsConfig): void => {
   const file = configPath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(config, null, 2));
+  // smol-toml omits null/undefined members, which is how the schema's nullable
+  // capability overrides become "unset" in a format that has no null.
+  fs.writeFileSync(file, stringify(config));
 };
 
 export const getProviders = (): Provider[] =>

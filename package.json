@@ -35,7 +35,8 @@
     "ci:quality": "pnpm run -s lint && pnpm run -s ts && pnpm run -s ts:vue && pnpm run -s lint:arch && pnpm run -s knip",
     "commit": "git-cz",
     "commit:check": "commitlint --from=HEAD~20 --to=HEAD --verbose",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:e2e": "node tests/integration/e2e/run_smoke.mjs"
   },
   "keywords": [],
   "repository": {
@@ -81,7 +82,8 @@
     "vite": "^6.4.5",
     "vitest": "^4.1.12",
     "vue-eslint-parser": "^9.4.3",
-    "vue-tsc": "^3.3.14"
+    "vue-tsc": "^3.3.14",
+    "smol-toml": "^1.9.1"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^1.5.0",

@@ -1,5 +1,17 @@
 # @iki/desktop
 
+> **中文导读**（下方为英文契约正文）
+>
+> Electron 薄壳，三层：`src/main/`（IPC 注册、窗口、平台服务，只做转发）、`src/preload/`（contextBridge 暴露 `electronAPI`）、`src/renderer/`（Vue 3 + Tailwind SPA）。唯一入口是 [src/main.ts](src/main.ts)。
+>
+> - **禁令**：[Don't](#dont) —— main 层不写业务逻辑；用 `ipcMain.handle`；native / OTel 依赖列入 `VITE_EXTERNAL_RUNTIME_DEPS`；teleported portal 由全局样式接管。
+> - **打包**：[Packaging](#packaging-what-the-asar-actually-contains) —— asar 才是真正的消费边界，打 tag 前本地 package 并从终端启动看 stderr。
+> - **轨迹与失效契约**：[Trajectory presentation](#trajectory-presentation)、[Renderer invalidation contracts](#renderer-invalidation-contracts)。
+> - 依赖单向：`@iki/desktop` → `@iki/backend` / `@iki/theme`；IPC 契约类型在 `@iki/backend/types/electron_api`。
+> - 常用命令：`pnpm run app:dev`、`pnpm run app:debug` + `pnpm run cdp`、`pnpm run ci:quality`。
+>
+> ⚠️ 正文含 2026-10 快照，个别命令、模块与供应层描述可能已退役；以代码为准。改前读 [AGENTS.md](../../AGENTS.md)。
+
 Electron shell. Three layers:
 
 - **`src/main/`** — Electron main process. IPC handlers (`ipc/`), window management (`windows/`), platform services (`services/`). Should be thin: register handlers, delegate to `@iki/backend`.

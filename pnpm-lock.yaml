@@ -248,6 +248,9 @@ importers:
       prettier:
         specifier: ^3.9.10
         version: 3.9.10
+      smol-toml:
+        specifier: ^1.9.1
+        version: 1.9.1
       source-map-js:
         specifier: ^1.2.2
         version: 1.2.2
@@ -335,6 +338,9 @@ importers:
       '@iki/core':
         specifier: workspace:*
         version: link:../core
+      smol-toml:
+        specifier: ^1.9.1
+        version: 1.9.1
 
   packages/theme: {}
 
