@@ -27,25 +27,10 @@ export const resolveSkillsSystemPrompt = async (params: {
   const skillMode = params.skillMode === 'auto' ? 'auto' : 'manual';
   const normalizedThreadId = typeof params.threadId === 'string' ? params.threadId.trim() : '';
 
-  let pinnedSkillIds: string[] = [];
-  if (normalizedThreadId) {
-    try {
-      const thread = chatThreadDb.getChatThread(normalizedThreadId);
-      if (thread?.skill_ids) {
-        pinnedSkillIds = normalizeSkillIds(JSON.parse(thread.skill_ids));
-      }
-    } catch (error) {
-      chatSkillsLogger.event({
-        level: 'warn',
-        event: 'chat.skills.thread_state_load',
-        outcome: 'failed',
-        error,
-        entity: {
-          thread_id: normalizedThreadId,
-        },
-      });
-    }
-  }
+  // Pinned skills are a row field now — no parse step, no parse failures.
+  const pinnedSkillIds = normalizeSkillIds(
+    chatThreadDb.getChatThread(normalizedThreadId)?.skill_ids ?? []
+  );
 
   let normalizedSkillIds = normalizeSkillIds(params.skillIds);
   let availableSkills: SkillSummary[] = [];
@@ -59,7 +44,7 @@ export const resolveSkillsSystemPrompt = async (params: {
     if (normalizedThreadId && Array.isArray(params.skillIds)) {
       try {
         chatThreadDb.updateChatThread(normalizedThreadId, {
-          skill_ids: JSON.stringify(normalizedSkillIds),
+          skill_ids: normalizedSkillIds,
         });
       } catch (error) {
         chatSkillsLogger.event({

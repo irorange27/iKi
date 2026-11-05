@@ -23,8 +23,8 @@ type AgentRunRow = {
   provider_id?: string | null;
   model: string;
   system_prompt: string;
-  enabled_tools: string;
-  available_skill_ids: string;
+  enabled_tools: string[];
+  available_skill_ids: string[];
   input_json: string;
   working_json: string;
   output_json?: string | null;
@@ -134,7 +134,7 @@ const mapAgentRunRow = (row: AgentRunRow): AgentRun => ({
   model: row.model,
   systemPrompt: row.system_prompt,
   enabledTools: normalizeStringArray(row.enabled_tools),
-  availableSkillIds: normalizeStringArray(row.available_skill_ids),
+  availableSkillIds: row.available_skill_ids,
   input: normalizeInput(row.input_json),
   working: normalizeWorking(row.working_json),
   output: normalizeOutput(row.output_json),
@@ -170,8 +170,8 @@ const runRowOf = (run: AgentRun, now: string): AgentRunRow => ({
   provider_id: normalizeWhitespace(run.providerId) || null,
   model: run.model,
   system_prompt: run.systemPrompt,
-  enabled_tools: JSON.stringify(run.enabledTools ?? []),
-  available_skill_ids: JSON.stringify(run.availableSkillIds ?? []),
+  enabled_tools: run.enabledTools ?? [],
+  available_skill_ids: run.availableSkillIds ?? [],
   input_json: JSON.stringify(run.input ?? {}),
   working_json: JSON.stringify(run.working),
   output_json: run.output ? JSON.stringify(run.output) : null,
@@ -261,10 +261,9 @@ const patchRunRow = (
     next.provider_id = normalizeWhitespace(updates.providerId) || null;
   if (updates.model !== undefined) next.model = updates.model;
   if (updates.systemPrompt !== undefined) next.system_prompt = updates.systemPrompt;
-  if (updates.enabledTools !== undefined)
-    next.enabled_tools = JSON.stringify(updates.enabledTools ?? []);
+  if (updates.enabledTools !== undefined) next.enabled_tools = updates.enabledTools ?? [];
   if (updates.availableSkillIds !== undefined)
-    next.available_skill_ids = JSON.stringify(updates.availableSkillIds ?? []);
+    next.available_skill_ids = updates.availableSkillIds ?? [];
   if (updates.input !== undefined) next.input_json = JSON.stringify(updates.input ?? {});
   if (updates.working !== undefined) next.working_json = JSON.stringify(updates.working);
   if (updates.output !== undefined)

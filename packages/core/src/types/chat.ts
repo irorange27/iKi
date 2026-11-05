@@ -21,13 +21,12 @@ export interface ChatThread {
   updated_at: string;
   client_id?: string;
   prompt_app_id?: string;
-  tools?: string;
   is_favorited: boolean;
   is_incognito: boolean;
   workspace_id?: string;
   enable_artifacts: boolean;
   artifact_workspace_id?: string;
-  skill_ids?: string;
+  skill_ids?: string[] | null;
 }
 
 // There is no `ChatMessage` row type any more (task-1 / ADR-008). The session log
@@ -55,13 +54,11 @@ export interface PromptApp {
   description?: string;
   icon?: string;
   prompt_template: string;
-  placeholders: string;
   model?: string;
   enabled: boolean;
   sort_order: number;
   created_at: string;
   updated_at: string;
-  tools?: string;
   reasoning_effort?: string;
   expects_image_result: boolean;
   is_incognito: boolean;

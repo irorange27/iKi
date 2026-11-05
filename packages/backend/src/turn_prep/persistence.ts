@@ -21,6 +21,13 @@ const chatPersistenceLogger = createLogger({ module: 'chat_persistence' });
 
 const normalizeFlag = (value: unknown): boolean => Boolean(value);
 
+/** Accept only a real array of non-empty strings; anything else is unset. */
+const normalizeStringList = (value: unknown): string[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const list = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  return list.length > 0 ? list : undefined;
+};
+
 export type ChatPersistenceDeps = {
   /**
    * The session log is the one rebuild of a thread's conversation (ADR-008).
@@ -52,7 +59,6 @@ const normalizeThreadInput = (
     | 'reasoning_effort'
     | 'client_id'
     | 'prompt_app_id'
-    | 'tools'
     | 'workspace_id'
     | 'artifact_workspace_id'
     | 'skill_ids'
@@ -78,13 +84,12 @@ const normalizeThreadInput = (
     is_generating: false,
     client_id: normalizeOptionalString(thread.client_id) ?? undefined,
     prompt_app_id: normalizeOptionalString(thread.prompt_app_id) ?? undefined,
-    tools: normalizeOptionalString(thread.tools) ?? undefined,
     is_favorited: normalizeFlag(thread.is_favorited),
     is_incognito: normalizeFlag(thread.is_incognito),
     workspace_id: normalizeOptionalString(thread.workspace_id) ?? undefined,
     enable_artifacts: normalizeFlag(thread.enable_artifacts),
     artifact_workspace_id: normalizeOptionalString(thread.artifact_workspace_id) ?? undefined,
-    skill_ids: normalizeOptionalString(thread.skill_ids) ?? undefined,
+    skill_ids: normalizeStringList(thread.skill_ids),
     provider_type: normalizeOptionalString(thread.provider_type) ?? null,
     provider_id: normalizeOptionalString(thread.provider_id) ?? null,
     work_mode: thread.work_mode === 'work' || thread.work_mode === 'chat' ? thread.work_mode : undefined,

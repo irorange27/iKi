@@ -1,42 +1,28 @@
 import { commitRows, patchRow, readRows, removeRow } from './collection';
 import type { McpServer, McpServerInput, McpServerUpdate } from '@iki/core/types/mcp';
 import { toIsoNow } from '@iki/core/utils/text';
-import { parseJsonStringArray, toStringArray } from '@iki/core/utils/json';
 
-type McpServerRow = Omit<McpServer, 'enabled' | 'args' | 'tool_allowlist' | 'headers' | 'env'> & {
-  enabled: number | boolean;
-  args?: string | null;
-  tool_allowlist?: string | null;
-  headers?: string | null;
-  env?: string | null;
-};
+// Legacy rows stored lists/maps as JSON strings and `enabled` as 0/1. The
+// normalizers below accept both eras; every write stores the typed value.
+type McpServerRow = Omit<McpServer, 'enabled'> & { enabled?: number | boolean };
 
-const parseStringMap = (raw: string | null | undefined): Record<string, string> | null => {
-  if (!raw || typeof raw !== 'string') return null;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    const cleaned: Record<string, string> = {};
-    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof key !== 'string' || !key.trim()) continue;
-      if (typeof value !== 'string') continue;
-      cleaned[key.trim()] = value;
-    }
-    return Object.keys(cleaned).length > 0 ? cleaned : null;
-  } catch {
-    return null;
-  }
-};
+const normalizeStringList = (raw: unknown): string[] | null =>
+  Array.isArray(raw) && raw.length > 0 && raw.every(item => typeof item === 'string')
+    ? (raw as string[])
+    : null;
 
-const emptyToNull = (value: string[]): string[] | null => (value.length > 0 ? value : null);
+const normalizeStringMap = (raw: unknown): Record<string, string> | null =>
+  raw && typeof raw === 'object' && !Array.isArray(raw) && Object.keys(raw).length > 0
+    ? (raw as Record<string, string>)
+    : null;
 
 const normalizeRow = (row: McpServerRow): McpServer => ({
   ...row,
   enabled: Boolean(row.enabled),
-  args: emptyToNull(parseJsonStringArray(row.args)),
-  tool_allowlist: emptyToNull(parseJsonStringArray(row.tool_allowlist)),
-  headers: parseStringMap(row.headers) ?? null,
-  env: parseStringMap(row.env) ?? null,
+  args: normalizeStringList(row.args),
+  tool_allowlist: normalizeStringList(row.tool_allowlist),
+  headers: normalizeStringMap(row.headers),
+  env: normalizeStringMap(row.env),
 });
 
 export const listMcpServers = (): McpServer[] =>
@@ -51,22 +37,22 @@ export const getMcpServer = (id: string): McpServer | null => {
 
 export const addMcpServer = (input: McpServerInput & { id: string }): void => {
   const now = toIsoNow();
-  const args = toStringArray(input.args);
-  const allowlist = toStringArray(input.tool_allowlist);
+  const args = input.args ?? [];
+  const allowlist = input.tool_allowlist ?? [];
 
   const row = {
     id: input.id,
     name: input.name,
     transport: input.transport,
     command: input.command ?? null,
-    args: args.length > 0 ? JSON.stringify(args) : null,
+    args: args.length > 0 ? args : null,
     cwd: input.cwd ?? null,
-    env: input.env ? JSON.stringify(input.env) : null,
+    env: input.env ?? null,
     base_url: input.base_url ?? null,
-    headers: input.headers ? JSON.stringify(input.headers) : null,
+    headers: input.headers ?? null,
     auth_ref: input.auth_ref ?? null,
     enabled: input.enabled !== false,
-    tool_allowlist: allowlist.length > 0 ? JSON.stringify(allowlist) : null,
+    tool_allowlist: allowlist.length > 0 ? allowlist : null,
     approval_mode: input.approval_mode ?? null,
     created_at: now,
     updated_at: now,
@@ -80,21 +66,9 @@ export const addMcpServer = (input: McpServerInput & { id: string }): void => {
 
 /** Apply a partial update, encoding list/map fields for the row file. */
 export const updateMcpServer = (id: string, updates: McpServerUpdate): McpServer | null => {
-  const patch: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(updates)) {
-    if (key === 'id') continue;
-    if (key === 'args' || key === 'tool_allowlist') {
-      patch[key] = JSON.stringify(toStringArray(value));
-      continue;
-    }
-    if ((key === 'headers' || key === 'env') && value && typeof value === 'object') {
-      patch[key] = JSON.stringify(value);
-      continue;
-    }
-    patch[key] = value;
-  }
-  if (Object.keys(patch).length === 0) return null;
-  if (!patchRow<McpServerRow>('mcp_servers', 'id', id, patch)) return null;
+  if (Object.keys(updates).length === 0) return null;
+  // McpServerUpdate cannot name the id — patchRow pins it regardless.
+  if (!patchRow<McpServerRow>('mcp_servers', 'id', id, { ...updates })) return null;
   return getMcpServer(id);
 };
 
