@@ -302,7 +302,7 @@ import {
   Loader2,
   ShieldBan,
   XCircle,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import type { ChatUiMessage } from '@iki/llm/message/message_parts';
 
 import {

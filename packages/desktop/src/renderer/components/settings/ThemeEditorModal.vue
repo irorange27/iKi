@@ -139,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { SlidersHorizontal, Sparkles } from 'lucide-vue-next';
+import { SlidersHorizontal, Sparkles } from '@lucide/vue';
 
 import ThemeColorField from './ThemeColorField.vue';
 import ThemePreview from './ThemePreview.vue';

@@ -10,6 +10,7 @@
     ".": "./src/main.ts"
   },
   "dependencies": {
+    "@earendil-works/pi-tui": "^1.6.0",
     "@iki/core": "workspace:*",
     "@iki/harness": "workspace:*",
     "@iki/llm-pi-ai": "workspace:*",

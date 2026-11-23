@@ -199,7 +199,7 @@
 import SettingsSwitch from './SettingsSwitch.vue';
 import { computed, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { RefreshCw } from 'lucide-vue-next';
+import { RefreshCw } from '@lucide/vue';
 
 import SettingsSelect from './SettingsSelect.vue';
 import { useI18n } from '../../i18n';

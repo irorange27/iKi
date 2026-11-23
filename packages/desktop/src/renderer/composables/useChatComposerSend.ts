@@ -225,7 +225,7 @@ export const useChatComposerSend = (deps: {
 
     const previousMessage = deps.message.value;
     deps.message.value = '';
-    deps.attachedImages?.value && (deps.attachedImages.value = []);
+    if (deps.attachedImages?.value) deps.attachedImages.value = [];
     resolvedSendRequest.onCommitted?.();
     isLoading.value = true;
     isStopping.value = false;

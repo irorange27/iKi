@@ -277,7 +277,7 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue';
 import type { Component } from 'vue';
-import { Check, Hand, Settings, ShieldCheck, Zap } from 'lucide-vue-next';
+import { Check, Hand, Settings, ShieldCheck, Zap } from '@lucide/vue';
 import type { Provider } from '@iki/core/types/provider';
 import {
   buildContextCompositionRows,

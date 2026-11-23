@@ -1,5 +1,4 @@
 import { app, BrowserWindow, nativeTheme, screen } from 'electron';
-import started from 'electron-squirrel-startup';
 import { wirePlatformContext } from '@iki/core/platform_wiring';
 import { getAppConfig } from '@iki/harness/config';
 import { initializeDatabase } from '@iki/store/database';
@@ -110,7 +109,7 @@ registerStandardTools({
 void getMcpManager().initialize();
 registerMainIpc();
 
-if (started) {
+if (process.platform === 'win32' && process.argv.some(arg => arg.startsWith('--squirrel-'))) {
   app.quit();
 }
 

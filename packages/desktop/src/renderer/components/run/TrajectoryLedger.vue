@@ -90,7 +90,7 @@
 </template>
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, type ComponentPublicInstance } from 'vue';
-import { ChevronRight, Ellipsis } from 'lucide-vue-next';
+import { ChevronRight, Ellipsis } from '@lucide/vue';
 import { useI18n } from '../../i18n';
 import type { LedgerEntry, TurnLedger } from '../../modules/run/trajectory_ledger';
 const props = defineProps<{

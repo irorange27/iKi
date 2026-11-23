@@ -428,7 +428,7 @@ import {
   SquarePen,
   Trash2,
   X,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { createLogger } from '../logger';
 import { translate, useI18n } from '../i18n';
 import {

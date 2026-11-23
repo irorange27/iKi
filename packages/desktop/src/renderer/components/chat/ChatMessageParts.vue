@@ -135,7 +135,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import VueMarkdown from 'vue-markdown-render';
-import { Brain, ChevronDown } from 'lucide-vue-next';
+import { Brain, ChevronDown } from '@lucide/vue';
 
 import {
   type ChatUiMessage,

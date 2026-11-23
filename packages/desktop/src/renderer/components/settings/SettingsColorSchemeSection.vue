@@ -130,7 +130,7 @@
 <script setup lang="ts">
 import { watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { MonitorCog, Moon, Palette, Plus, Search, Sun } from 'lucide-vue-next';
+import { MonitorCog, Moon, Palette, Plus, Search, Sun } from '@lucide/vue';
 
 import ThemeEditorModal from './ThemeEditorModal.vue';
 import ThemePresetGrid from './ThemePresetGrid.vue';

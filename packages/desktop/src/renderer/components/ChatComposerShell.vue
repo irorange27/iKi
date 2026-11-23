@@ -80,7 +80,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Maximize2, Minimize2 } from 'lucide-vue-next';
+import { Maximize2, Minimize2 } from '@lucide/vue';
 import { useI18n } from '../i18n';
 
 type ComposerTextControl = HTMLTextAreaElement;

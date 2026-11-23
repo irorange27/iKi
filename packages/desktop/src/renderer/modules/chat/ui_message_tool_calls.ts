@@ -9,7 +9,7 @@ import {
   Terminal,
   Trash2,
   Wrench,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 import {
   getToolCallIdFromPart,

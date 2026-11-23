@@ -94,7 +94,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { CheckCircle, ChevronDown, CircleHelp, Loader2, ShieldBan, XCircle } from 'lucide-vue-next';
+import { CheckCircle, ChevronDown, CircleHelp, Loader2, ShieldBan, XCircle } from '@lucide/vue';
 import type { ChatUiMessage } from '@iki/llm/message/message_parts';
 
 import ToolCallPart from './ToolCallPart.vue';

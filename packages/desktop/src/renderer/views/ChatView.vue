@@ -223,7 +223,7 @@
 
 <script setup lang="ts">
 import { computed, ref, nextTick, watch, onBeforeUnmount } from 'vue';
-import { PanelLeftDashed, SquarePen } from 'lucide-vue-next';
+import { PanelLeftDashed, SquarePen } from '@lucide/vue';
 import { storeToRefs } from 'pinia';
 import Sidebar from '../components/Sidebar.vue';
 import WelcomeScreen from '../components/WelcomeScreen.vue';

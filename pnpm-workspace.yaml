@@ -25,3 +25,5 @@ allowBuilds:
   protobufjs: false
   unrs-resolver: false
   vue-demi: true
+minimumReleaseAgeExclude:
+  - '@lucide/vue@1.78.0'

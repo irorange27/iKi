@@ -139,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { BookOpen, ExternalLink, Eye, EyeOff } from 'lucide-vue-next';
+import { BookOpen, ExternalLink, Eye, EyeOff } from '@lucide/vue';
 
 import ProviderModelsPanel from './ProviderModelsPanel.vue';
 import { useI18n } from '../../../i18n';

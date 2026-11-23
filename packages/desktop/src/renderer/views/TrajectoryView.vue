@@ -132,7 +132,7 @@
 </template>
 <script setup lang="ts">
 import { computed, ref, toRef, watch } from 'vue';
-import { Clock3, ListCollapse, RefreshCw, Search, Wrench } from 'lucide-vue-next';
+import { Clock3, ListCollapse, RefreshCw, Search, Wrench } from '@lucide/vue';
 import { getElectronAPI } from '../services/electron_api';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { useI18n } from '../i18n';

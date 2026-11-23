@@ -53,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { Check, Pencil, Trash2 } from 'lucide-vue-next';
+import { Check, Pencil, Trash2 } from '@lucide/vue';
 
 import { useI18n } from '../../i18n';
 import type { ThemeVariant } from '@iki/theme/types';

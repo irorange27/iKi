@@ -30,7 +30,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { FolderOpen, FolderPlus } from 'lucide-vue-next';
+import { FolderOpen, FolderPlus } from '@lucide/vue';
 
 import type { Workspace } from '@iki/core/types/chat';
 import { useI18n } from '../i18n';

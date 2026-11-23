@@ -124,7 +124,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { Bot, Brain, Cog } from 'lucide-vue-next';
+import { Bot, Brain, Cog } from '@lucide/vue';
 
 import SettingsGeneralSection from '../components/settings/SettingsGeneralSection.vue';
 import SettingsUiSection from '../components/settings/SettingsUiSection.vue';

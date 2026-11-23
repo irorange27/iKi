@@ -17,7 +17,9 @@
     "katex",
     "@iki/harness",
     "@iki/theme",
-    "@tailwindcss/vite"
+    "@tailwindcss/vite",
+    "ffmpeg-static",
+    "whisper-node"
   ],
   "workspaces": {
     ".": {
@@ -35,10 +37,10 @@
     },
     "packages/cli": {
       "entry": [
-        "src/main.ts"
+        "src/main.ts!"
       ],
       "project": [
-        "src/**/*.ts"
+        "src/**/*.ts!"
       ]
     },
     "packages/theme": {

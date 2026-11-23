@@ -124,7 +124,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
-import { Copy, MoreHorizontal, Pencil, RotateCcw } from 'lucide-vue-next';
+import { Copy, MoreHorizontal, Pencil, RotateCcw } from '@lucide/vue';
 import type { ChatUiMessage } from '@iki/llm/message/message_parts';
 import { copyTextToClipboard } from '../../composables/useMarkdownCopy';
 import { useI18n } from '../../i18n';

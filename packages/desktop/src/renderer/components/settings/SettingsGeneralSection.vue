@@ -240,7 +240,7 @@
 <script setup lang="ts">
 import SettingsSwitch from './SettingsSwitch.vue';
 import { toRefs } from 'vue';
-import { RefreshCw } from 'lucide-vue-next';
+import { RefreshCw } from '@lucide/vue';
 
 import SettingsSelect from './SettingsSelect.vue';
 import { useI18n } from '../../i18n';

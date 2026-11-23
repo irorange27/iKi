@@ -147,7 +147,7 @@ import {
   RefreshCw,
   Search,
   SlidersHorizontal,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 import type { ProviderModelOptionsMap } from '@iki/core/types/provider';
 import { getProviderModelOptions } from '@iki/core/utils/provider_models';
