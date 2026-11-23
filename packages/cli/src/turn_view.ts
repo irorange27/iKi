@@ -1,4 +1,13 @@
-import { Box, Container, Markdown, Spacer, Text } from '@earendil-works/pi-tui';
+import {
+  Box,
+  Container,
+  Markdown,
+  Spacer,
+  Text,
+  truncateToWidth,
+  visibleWidth,
+  type Component,
+} from '@earendil-works/pi-tui';
 import { cliMarkdownTheme, cliTheme } from './theme';
 import {
   formatToolCallCompleted,
@@ -237,5 +246,54 @@ export class TurnView extends Container {
     }
     this.closeActiveThinking();
     this.closeActiveText();
+  }
+}
+
+export class CliFooter implements Component {
+  private leftTop = '';
+  private leftBottom = '';
+  private rightBottom = '';
+
+  update(params: { leftTop: string; leftBottom: string; rightBottom: string }): void {
+    this.leftTop = params.leftTop;
+    this.leftBottom = params.leftBottom;
+    this.rightBottom = params.rightBottom;
+  }
+
+  invalidate(): void {
+    /* stateless formatting */
+  }
+
+  render(width: number): readonly string[] {
+    if (width <= 0) return ['', ''];
+    const innerWidth = Math.max(0, width - 2);
+    if (innerWidth === 0) {
+      return [
+        truncateToWidth(cliTheme.dim(this.leftTop), width),
+        truncateToWidth(cliTheme.dim(this.leftBottom), width),
+      ];
+    }
+
+    const line1 = truncateToWidth(` ${truncateToWidth(cliTheme.dim(this.leftTop), innerWidth)}`, width);
+
+    const leftW = visibleWidth(this.leftBottom);
+    const rightW = visibleWidth(this.rightBottom);
+    let line2Body: string;
+
+    if (leftW + rightW + 2 <= innerWidth) {
+      const gap = innerWidth - leftW - rightW;
+      line2Body = `${cliTheme.dim(this.leftBottom)}${' '.repeat(gap)}${cliTheme.muted(this.rightBottom)}`;
+    } else if (!this.rightBottom || innerWidth < 12) {
+      line2Body = truncateToWidth(cliTheme.dim(this.leftBottom), innerWidth);
+    } else {
+      const rightBudget = Math.min(rightW, Math.max(6, Math.floor(innerWidth * 0.48)));
+      const leftBudget = Math.max(0, innerWidth - rightBudget - 2);
+      const leftPart = leftBudget > 0 ? truncateToWidth(cliTheme.dim(this.leftBottom), leftBudget) : '';
+      const rightPart = truncateToWidth(cliTheme.muted(this.rightBottom), rightBudget);
+      line2Body = leftPart ? `${leftPart}  ${rightPart}` : rightPart;
+    }
+
+    const line2 = truncateToWidth(` ${line2Body}`, width);
+    return [line1, line2];
   }
 }

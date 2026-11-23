@@ -10,12 +10,12 @@ import {
   Loader,
   Markdown,
   ProcessTerminal,
+  ScrollView,
   Spacer,
   Text,
-  TuiMainScreen,
+  TuiAltScreen,
+  VStack,
   matchesKey,
-  visibleWidth,
-  type Component,
 } from '@earendil-works/pi-tui';
 import type { ChatStreamTarget } from '@iki/harness/thread_session';
 import { rebuildThreadViewFromEvents } from '@iki/harness/thread_session/session_log';
@@ -34,7 +34,7 @@ import {
 import { openSearchablePickerOverlay } from './selectors';
 import { cliMarkdownTheme, cliTheme, createCliEditorTheme, selectListTheme } from './theme';
 import { formatToolCallPipedSummary } from './tool_render';
-import { TurnView } from './turn_view';
+import { CliFooter, TurnView } from './turn_view';
 
 export { createWorkspaceSelection, type InteractiveCliState } from './commands';
 
@@ -62,34 +62,6 @@ const formatDisplayPath = (targetPath?: string): string => {
     ? `~${targetPath.slice(home.length)}`
     : targetPath;
 };
-
-class CliFooter implements Component {
-  private leftTop = '';
-  private leftBottom = '';
-  private rightBottom = '';
-
-  update(params: { leftTop: string; leftBottom: string; rightBottom: string }): void {
-    this.leftTop = params.leftTop;
-    this.leftBottom = params.leftBottom;
-    this.rightBottom = params.rightBottom;
-  }
-
-  invalidate(): void {
-    /* stateless formatting */
-  }
-
-  render(width: number): readonly string[] {
-    const line1 = ` ${cliTheme.dim(this.leftTop)}`;
-    const leftText = cliTheme.dim(this.leftBottom);
-    const rightText = cliTheme.muted(this.rightBottom);
-    const gap = width - 2 - visibleWidth(this.leftBottom) - visibleWidth(this.rightBottom);
-    const line2 =
-      gap >= 2
-        ? ` ${leftText}${' '.repeat(gap)}${rightText} `
-        : ` ${leftText}  ${rightText}`;
-    return [line1, line2];
-  }
-}
 
 const buildTurnStreamRequest = (state: InteractiveCliState, prompt: string) => {
   const history = state.chatService.listMessages(state.threadId);
@@ -138,7 +110,12 @@ const styleBannerLine = (line: string): string => {
 const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> => {
   const totals: UsageTotals = { turns: 0, inputTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
   const terminal = new ProcessTerminal();
-  const tui = new TuiMainScreen(terminal, true);
+  const tui = new TuiAltScreen(terminal, true, undefined, {
+    wheelScrollLines: 'auto',
+    mouse: true,
+    copyOnSelect: true,
+    scrollToEndIndicator: () => cliTheme.dim(' ↓ Jump to bottom '),
+  });
   tui.setClearOnShrink(true);
 
   const transcript = new Container();
@@ -244,10 +221,29 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
   renderResumedTail(state.threadId);
   refreshFooter();
 
+  const transcriptScroll = new ScrollView(transcript, {
+    follow: 'end',
+    primary: true,
+    overscroll: 'chain',
+    scrollbar: 'auto',
+    scrollbarTrackStyle: text => cliTheme.borderMuted(text),
+    scrollbarThumbStyle: text => cliTheme.borderAccent(text),
+  });
+  const dock = new VStack([
+    { component: loaderSlot, shrink: 1, minSize: 0 },
+    { component: editor, shrink: 1, minSize: 3 },
+    { component: footer, shrink: 1, minSize: 0 },
+  ]);
+  const layoutRoot = new VStack([
+    { component: transcriptScroll, basis: 0, grow: 1, shrink: 1, minSize: 1 },
+    { component: dock, basis: 'auto', grow: 0, shrink: 1, minSize: 1 },
+  ]);
+
   tui.addChild(transcript);
   tui.addChild(loaderSlot);
   tui.addChild(editor);
   tui.addChild(footer);
+  tui.setLayoutRoot(layoutRoot);
   tui.setFocus(editor);
 
   const stopAll = () => {
@@ -273,6 +269,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     let turnUsage: { inputTokens?: number; cacheReadTokens?: number; outputTokens?: number } | undefined;
 
     appendUserMessage(prompt);
+    transcriptScroll.scrollToEnd();
 
     const turnView = new TurnView({ hideThinking });
     turnViews.push(turnView);
@@ -437,10 +434,12 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     if (picked && picked.value !== state.threadId) {
       state.threadId = picked.value;
       ensureThreadExists(state, state.threadId, 'Interactive CLI');
+      tui.resetTextSelection();
       transcript.clear();
       turnViews.length = 0;
       await appendBanner();
       renderResumedTail(state.threadId);
+      transcriptScroll.scrollToEnd();
     }
   };
 
@@ -528,14 +527,18 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     } else if (outcome.kind === 'pick-skill') {
       await openSkillPicker();
     } else if (outcome.kind === 'clear') {
+      tui.resetTextSelection();
       transcript.clear();
       turnViews.length = 0;
       appendInfoBlock(outcome.lines, styleBannerLine);
+      transcriptScroll.scrollToEnd();
     } else if (state.threadId !== previousThreadId) {
+      tui.resetTextSelection();
       transcript.clear();
       turnViews.length = 0;
       await appendBanner();
       renderResumedTail(state.threadId);
+      transcriptScroll.scrollToEnd();
     } else if (outcome.kind === 'handled') {
       appendInfoBlock(outcome.lines, cliTheme.muted);
     }

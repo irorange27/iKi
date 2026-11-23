@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TurnView } from '../src/turn_view';
+import { visibleWidth } from '@earendil-works/pi-tui';
+import { CliFooter, TurnView } from '../src/turn_view';
 
 const ANSI_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 const stripAnsi = (value: string): string => value.replace(ANSI_RE, '');
@@ -70,5 +71,24 @@ describe('TurnView chronological ordering & thinking collapse/expand', () => {
     const rendered = stripAnsi(view.render(100).join('\n'));
     expect(rendered.indexOf('Checking files...')).toBeLessThan(rendered.indexOf('$ ls'));
     expect(rendered.indexOf('$ ls')).toBeLessThan(rendered.indexOf('Found package.json.'));
+  });
+});
+
+describe('CliFooter resize width safety', () => {
+  it('never exceeds terminal width across narrow and wide resizes', () => {
+    const footer = new CliFooter();
+    footer.update({
+      leftTop: '~/Developer/MyRepo/iki (refactor/agent-harness-monorepo)',
+      leftBottom: 'cli_86e750d2 · t:1 · 8708in/5568c · Ctrl+T thinking',
+      rightBottom: 'working · local_gateway/workbuddy/hy4flash-free',
+    });
+
+    for (const width of [4, 10, 24, 40, 62, 80, 140]) {
+      const lines = footer.render(width);
+      expect(lines).toHaveLength(2);
+      for (const line of lines) {
+        expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+      }
+    }
   });
 });
