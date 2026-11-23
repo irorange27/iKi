@@ -1,51 +1,65 @@
 # AGENTS.md — iKi orientation
 
-**iKi**: an agent harness for durable, multi-agent, long-horizon work, with flexible control/admin surfaces. Supports any model provider.
+**iKi**: an  AI agent harness for durable, multi-agent, long-horizon work, with terminal CLI (`@iki/cli`) and macOS Electron (`@iki/desktop`) surfaces. Supports any model provider.
 
-**Golden rule:** all business logic lives in `packages/backend` (pure Node/TS). `desktop/` (Electron) is a thin shell; dependencies point one way only: `desktop` → `backend`.
+**Golden rule:** all business logic lives in pure Node/TS workspace packages (`packages/core` .. `packages/harness`). `packages/cli` and `packages/desktop` are thin shells; dependencies point one way only (`cli` / `desktop` → `harness` → lower packages), enforced by `.dependency-cruiser.cjs`.
 
-## Workflow
+## Monorepo layout (`packages/`)
 
-1. Get it running first (`README.md` § Quick Start), then find the file via the table below and read before writing. Smallest reversible change, no speculative abstraction.
-2. `pnpm run ci:quality` must pass before declaring done. UI changes: click through in the running app — type-check ≠ feature-correct; `pnpm run app:debug` + `pnpm run cdp` is the scripted path against the real renderer. Cross-layer wiring (renderer→IPC→backend→SDK→tools→persistence): `pnpm run test:e2e`.
-3. Non-negotiables (full list in `docs/conventions.md`): no `pnpm-lock.yaml`/`.github` edits without explicit request; no native/OTel/Langfuse deps in the Vite main chunk.
-4. Release tags trigger the full macOS build (`release-build.yml`) and must match the root `package.json` version. Before pushing a tag: package locally (`cd packages/desktop && pnpm exec electron-forge package`), then launch the bundle's executable from a terminal — `out/iki-darwin-<arch>/iki.app/Contents/MacOS/iki` (arm64 machines: `out/iki-darwin-arm64`) — and watch stderr; the packaged asar is the real consumer boundary. Runbook: `docs/design/packaging-release.md`.
-5. Reviews gate merges. Run the PR review protocol (`packages/backend/HARNESS_REVIEW.md` § PR review protocol — the in-repo replacement for the former Sourcery bot, which reviewed only a PR's first push): generate the brief (`node scripts/pr_review_brief.mjs`), have a fresh-context reviewer pass over the diff, and address or explicitly resolve every blocking finding before merging. The review of record must postdate the branch HEAD — a push after it invalidates it, and a green CI check was never a review.
-6. After any rework, capture the lesson per `docs/conventions.md` § Lessons: a regression test that fails on the old code first, an ownership-map row if a boundary moved, prose last.
+| Package | Role |
+|---|---|
+| `core` | Leaf contracts: domain settings (`settings.toml` Zod schemas incl. `[tools.shell]`), platform paths, logger, action risk, utils |
+| `theme` | Base46 theme presets & schema |
+| `store` | Local JSON/TOML persistence (`~/.iki/models.toml`, `~/.iki/settings.toml`, `~/.iki/state/`) |
+| `session` | Append-only `SessionEvent` JSONL log (`~/.iki/sessions/<threadId>.jsonl`) |
+| `system-prompt` | Static system prompt slots (`persona` → `planPrompt` → `extraPrompt` → `transcriptSystem`) & dynamic `<system_reminder>` snapshots |
+| `llm` | Model-neutral transcript types, chronological UI ↔ `ModelMessage` projection (`ui_to_model.ts`), tool payload contracts |
+| `llm-pi-ai` | `@earendil-works/pi-ai` provider adapter, model capability resolution, `sessionId` affinity & prompt-cache retention |
+| `agent` | Tool & step contracts (`BaseTool`, `ToolRegistry`, `AgentStep`, `AgentHooks`) |
+| `agent-loop` | Pure multi-step tool-calling loop (`runAgentLoop`) |
+| `tools` | Pluggable built-in tools (`@iki/tools/shell`: OS-split `bash`/`pwsh` + durable background `job` tool, configured via `[tools.shell]`) |
+| `harness` | Composition root: `thread_session`, `turn_prep`, `agent/turn`, `workspaces`, `mcp`, `runtimes`, `config`, host tool wiring |
+| `cli` | Fullscreen `pi-tui` (`TuiAltScreen`) interactive REPL & `--print` / `--json` CLI |
+| `desktop` | Thin Electron + Vue shell (main/preload/renderer) |
 
-## Changing the harness
+Every package has its own `README.md` documenting boundaries and entry points.
 
-Read the [backend ownership and regression map](packages/backend/README.md#runtime-contracts) before editing a core path. It is tracked; design notes under `docs/` may be missing or stale.
+## Workflow & Quality Gates
 
-- For concurrency, recovery or tool lifecycle changes, use the [implementation and review checklist](packages/backend/HARNESS_REVIEW.md). State the invariant and scope, then prove it through the real consumer before claiming completion.
-- Reproduce at the actual consumer boundary: provider inputs, SDK step count, persisted approval decision, or exported trajectory. A mock returning the expected text does not validate the wiring.
-- Extend the existing owner; do not add another history slicer, approval policy evaluator, retry loop, or trajectory recorder in a caller.
-- Change behavior, its boundary regression, and the ownership map together. Preserve unrelated uncommitted edits; do not “repair” a failing regression by restoring behavior that the contract explicitly forbids.
-- Use `pnpm run test:harness` for the focused loop; `pnpm run ci:quality` remains the completion gate. Keep fixes local to backend unless the transport contract changes.
+1. Read before writing; keep changes minimal, reversible, and free of speculative abstraction.
+2. Completion gate: `pnpm run ci:quality` (`eslint`, `tsc`, `vue-tsc`, `depcruise`, `knip --production`) + unit tests (`pnpm exec vitest run packages/*/tests`).
+3. CLI / cross-layer verification: `pnpm run test:e2e:cli:faux` (keyless multi-turn, KV-cache prefix stability, `/jobs`, `/compact`, REPL) and `pnpm run test:e2e:live` (real-API smoke, self-skips if local gateway unreachable). Desktop UI changes: `pnpm run app:debug` + `pnpm run cdp` / `pnpm run test:e2e`.
+4. Non-negotiables: no `pnpm-lock.yaml` or `.github` edits without explicit request; no native/OTel/Langfuse deps in the Vite main chunk; never import `@iki/tools` or `packages/harness/src/tools` from desktop renderer code.
+5. Release tags trigger the macOS build (`release-build.yml`) and must match root `package.json` version. Before pushing a tag, package locally (`pnpm run package`) and launch `packages/desktop/out/iki-darwin-<arch>/iki.app/Contents/MacOS/iki` from a terminal to watch stderr.
+6. Reviews gate merges: run the PR review protocol (`packages/harness/HARNESS_REVIEW.md`, `node scripts/pr_review_brief.mjs`) and resolve every blocking finding before merging.
 
-**Task starting points**
+## Harness Invariants
+
+Read [packages/harness/README.md](packages/harness/README.md) and [packages/harness/HARNESS_REVIEW.md](packages/harness/HARNESS_REVIEW.md) before editing core turn/session/recovery paths.
+
+- **KV-cache prefix stability**: keep `systemPrompt` strictly static (`persona` + rules + `<project_context>` + `<skills>`); dynamic per-turn facts (`<system_reminder name="runtime">`) and `<compacted-summary>` live in `role: 'user'` messages. Multi-step tool turns must replay as chronological `[assistant, tool, assistant, ...]` steps without double-wrapping tool outputs, and every provider call must forward `sessionId: threadId`.
+- **No hardcoded tool tunables**: expose runtime knobs under `AppSettingsSchema` (`packages/core/src/domain/settings.ts`, e.g. `[tools.shell]`) and inject via DI at registration time (`packages/harness/src/tools/index.ts`).
+- **Single owner**: extend the existing owner rather than adding duplicate history slicers, approval evaluators, retry loops, or session writers in callers. Preserve unrelated uncommitted edits.
+
+## Task Starting Points
 
 | You want to… | Start here |
 |---|---|
-| Add/modify a tool | `packages/backend/src/tools/` + `tools/schemas/` + register in `tools/index.ts` |
-| Change context budget / compaction | `packages/backend/src/agent/context_budget.ts` + runner `prepareStep`; see backend contract |
-| Change prompt assembly | `packages/backend/src/turn_prep/context.ts`, `context_blocks.ts` |
-| LLM-call surface / add a provider | `packages/backend/src/provider/llm/factory.ts` |
-| Understand a module's contract surface before editing | `pnpm run arch:context <module-id>` (generated per-module context; registry: `scripts/module_registry.json`) — see the `architecture-governance` skill |
-| Tool approval UX | `packages/backend/src/thread_session/approval.ts` + renderer `modules/chat/tool_approval_controller.ts` |
-| New IPC channel | `desktop/src/preload/index.ts` + `main/ipc/` + types in `packages/backend/src/types/electron_api.ts` |
-| Understand the chat-turn pipeline / harness | `packages/backend/README.md` (pipeline) + `docs/harness.md` (concepts) |
-| Package the app / cut a release | `packages/desktop/forge.config.ts` + `src/build/runtime_packaging.ts`; runbook: `docs/design/packaging-release.md` |
+| Add / modify a built-in tool plugin | `packages/tools/src/` + `[tools.*]` in `packages/core/src/domain/settings.ts` + wire in `packages/harness/src/tools/index.ts` |
+| Change system prompt order / `<system_reminder>` | `packages/system-prompt/src/` (`README.md` documents exact slot order) + `packages/harness/src/turn_prep/context.ts`, `context_blocks.ts` |
+| Change context budget / compaction | `packages/harness/src/agent/context_budget.ts`, `agent/turn/turn_budget.ts`, `thread_session/compaction.ts` |
+| Change LLM adapter / caching / providers | `packages/llm-pi-ai/src/factory.ts`, `pi_adapter.ts` |
+| Change UI ↔ ModelMessage replay | `packages/llm/src/message/ui_to_model.ts`, `ui_messages.ts`, `model_history.ts` |
+| Change CLI TUI / slash commands / tool cards | `packages/cli/src/interactive.ts`, `turn_view.ts`, `tool_render.ts`, `commands.ts` |
+| Change tool approval policy / desktop UX | `packages/core/src/utils/action_risk.ts`, `packages/harness/src/agent/harness/tool_resolver.ts`, `packages/desktop/src/renderer/modules/chat/tool_approval_controller.ts` |
+| Add / modify Desktop IPC channel | `packages/desktop/src/preload/index.ts` + `packages/desktop/src/main/ipc/` + `packages/harness/src/types/electron_api.ts` |
+| Inspect module contract surface | `pnpm run arch:context <module-id>` (`scripts/module_registry.json`) |
+| Package Desktop / cut a release | `packages/desktop/forge.config.ts`, `packages/desktop/src/build/runtime_packaging.ts` |
 
-## Details live here (read on demand)
+## Details Live Here (Read on Demand)
 
-- `packages/backend/README.md` — chat-turn pipeline, backend directory map, harness invariants (memory, approval, observability)
-- `docs/harness.md` — runtime concept model in current framework vocabulary (context engineering, op-loop/steering, HITL approvals, durable execution); read before renaming or moving these concepts
-- `packages/desktop/README.md` — shell boundary rules
-- `docs/conventions.md` — code conventions, prohibited actions, landmines, testing, commit governance
-- `docs/decisions/` — ADRs: why `AgentHarness` exists, why `turn_prep/` is the boundary, why `@iki/core` was deleted
-- `postmortem/backend-bugs-2026-04.md` — bug patterns (pre-monorepo paths, see its banner)
-- `docs/design/` — operative subsystem notes only (MCP, awaiters, logging contract) — see its README index
-- `docs/archive/` — **historical archive, not authority** (`archive/reports/` dated audits, `archive/process/` proposals): many claims are superseded by current code. Do not treat anything there (or its file:line pointers) as fact without checking the code. Nothing under `docs/` is tracked in git.
-- `README.md` — user-facing (features, download, quick start); `.impeccable.md` — UI design philosophy
-- `CLAUDE.md` / `IKI.md` — pointer stubs to this file; don't add content there
+- `packages/*/README.md` — per-package contracts, entry points, and boundaries (tracked; authority over `docs/`)
+- `packages/harness/HARNESS_REVIEW.md` — concurrency, recovery, tool lifecycle, and PR review checklist
+- `docs/harness.md`, `docs/conventions.md`, `docs/design/` — untracked local notes; verify file paths against current code before relying on them (`docs/archive/` is historical only)
+- `README.md` — user-facing overview & quick start; `.impeccable.md` — UI design philosophy
+- `CLAUDE.md` — pointer stub to this file; do not add content there

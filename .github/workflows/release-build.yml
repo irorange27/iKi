@@ -26,6 +26,8 @@ jobs:
     name: Verify release candidate
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     outputs:
       checkout_ref: ${{ steps.meta.outputs.checkout_ref }}
       should_publish: ${{ steps.meta.outputs.should_publish }}
@@ -85,6 +87,12 @@ jobs:
 
       - name: Run release quality gate
         run: pnpm run -s ci:quality
+
+      - name: Run unit tests (vitest)
+        run: pnpm exec vitest run packages/*/tests
+
+      - name: Run CLI keyless E2E (faux provider)
+        run: pnpm run -s test:e2e:cli:faux
 
   build-publish:
     name: Build and publish (darwin-arm64)

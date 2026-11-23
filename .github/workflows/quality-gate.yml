@@ -15,10 +15,16 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: quality-gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,12 +37,18 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint + Typecheck + Tests + Coverage
+      - name: Static quality gate (lint, tsc, vue-tsc, depcruise, knip)
         run: pnpm run -s ci:quality
+
+      - name: Unit tests (vitest)
+        run: pnpm exec vitest run packages/*/tests
+
+      - name: CLI keyless E2E (faux provider)
+        run: pnpm run -s test:e2e:cli:faux

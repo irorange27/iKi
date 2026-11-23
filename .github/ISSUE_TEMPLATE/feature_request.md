@@ -1,34 +1,33 @@
 ---
 name: Feature Request
-about: Suggest an idea for this project
+about: Suggest an improvement or new capability for iKi
 title: "[Feature] "
 labels: enhancement
 assignees: ''
-
 ---
 
-## Description / 描述
+## Surface / 目标范围
 
-Please provide a clear and concise description of the feature you want.  
-请提供一个清晰简洁的功能描述。
+- [ ] CLI (`@iki/cli`)
+- [ ] Desktop (`@iki/desktop`)
+- [ ] Harness / Tools (`@iki/harness`, `@iki/tools`)
 
-## Motivation / 动机
+## Problem & Motivation / 背景与动机
 
-Why is this feature important?  
-为什么此功能很重要？  
-...
+What problem does this solve, and why is it valuable?  
+想解决什么痛点？为什么需要这个能力？
 
-## Proposed Solution / 提议的解决方案
+## Proposed Solution / 提议方案
 
-Describe how you think this feature should be implemented.  
-描述您认为此功能应如何实现。
+Describe the expected behavior, UX, or configuration (e.g. `settings.toml` keys / slash commands / tool behavior).  
+描述你期望的交互、配置或实现思路。
 
 ## Alternatives Considered / 替代方案
 
-Have you considered any alternative solutions or features?  
-您是否考虑过其他替代解决方案或功能？
+Any alternative approaches or trade-offs considered.  
+是否有考虑过其他方案？
 
-## Additional Context / 附加信息
+## Additional Context / 补充信息
 
-Add any other context or screenshots about the feature request here.  
-在此处添加有关功能请求的其他上下文或截图。
+Links, mockups, or references.  
+其他相关参考或截图。
