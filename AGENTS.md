@@ -65,4 +65,3 @@ Read [packages/harness/README.md](packages/harness/README.md) and [packages/harn
 - `packages/harness/HARNESS_REVIEW.md` — concurrency, recovery, tool lifecycle, and PR review checklist
 - `docs/harness.md`, `docs/conventions.md`, `docs/design/` — untracked local notes; verify file paths against current code before relying on them (`docs/archive/` is historical only)
 - `README.md` — user-facing overview & quick start; `.impeccable.md` — UI design philosophy
-- `CLAUDE.md` — pointer stub to this file; do not add content there
