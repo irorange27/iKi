@@ -31,7 +31,7 @@ Every package has its own `README.md` documenting boundaries and entry points.
 3. CLI / cross-layer verification: `pnpm run test:e2e:cli:faux` (keyless multi-turn, KV-cache prefix stability, `/jobs`, `/compact`, REPL) and `pnpm run test:e2e:live` (real-API smoke, self-skips if local gateway unreachable). Desktop UI changes: `pnpm run app:debug` + `pnpm run cdp` / `pnpm run test:e2e`.
 4. Non-negotiables: no `pnpm-lock.yaml` or `.github` edits without explicit request; no native/OTel/Langfuse deps in the Vite main chunk; never import `@iki/tools` or `packages/harness/src/tools` from desktop renderer code.
 5. Release tags trigger the macOS build (`release-build.yml`) and must match root `package.json` version. Before pushing a tag, package locally (`pnpm run package`) and launch `packages/desktop/out/iki-darwin-<arch>/iki.app/Contents/MacOS/iki` from a terminal to watch stderr.
-6. Reviews gate merges: run the PR review protocol (`packages/harness/HARNESS_REVIEW.md`, `node scripts/pr_review_brief.mjs`) and resolve every blocking finding before merging.
+6. Reviews & GitHub templates: before creating or updating an Issue or PR, read and follow `.github/ISSUE_TEMPLATE/` (`bug_report.md`, `feature_request.md`) or `.github/pull_request_template.md`, and keep PR titles Conventional Commits compliant (`.github/workflows/semantic-pr-title.yml`). Run the PR review protocol (`packages/harness/HARNESS_REVIEW.md`, `node scripts/pr_review_brief.mjs`) and resolve every blocking finding before merging.
 
 ## Harness Invariants
 
@@ -55,6 +55,7 @@ Read [packages/harness/README.md](packages/harness/README.md) and [packages/harn
 | Add / modify Desktop IPC channel | `packages/desktop/src/preload/index.ts` + `packages/desktop/src/main/ipc/` + `packages/harness/src/types/electron_api.ts` |
 | Inspect module contract surface | `pnpm run arch:context <module-id>` (`scripts/module_registry.json`) |
 | Package Desktop / cut a release | `packages/desktop/forge.config.ts`, `packages/desktop/src/build/runtime_packaging.ts` |
+| Open a GitHub Issue or PR | `.github/ISSUE_TEMPLATE/` (`bug_report.md`, `feature_request.md`) & `.github/pull_request_template.md` |
 
 ## Details Live Here (Read on Demand)
 
