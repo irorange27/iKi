@@ -3,6 +3,11 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import { getProviders } from '@iki/store/providers';
+import {
+  getCachedInputTokens,
+  getUncachedInputTokens,
+  type TokenUsageCounts,
+} from '@iki/core/utils/token_usage';
 import { getAppConfig } from '@iki/harness/config';
 import { getBuiltinToolNames } from '@iki/harness/tools';
 import {
@@ -35,10 +40,30 @@ export type InteractiveCliState = {
 
 export type UsageTotals = {
   turns: number;
-  inputTokens: number;
+  uncachedInputTokens: number;
   cacheReadTokens: number;
   outputTokens: number;
 };
+
+export type TurnTokenUsage = TokenUsageCounts;
+
+export const extractTurnTokenUsage = (data: Record<string, unknown>): TurnTokenUsage => ({
+  ...(typeof data.inputTokens === 'number' ? { inputTokens: data.inputTokens } : {}),
+  ...(typeof data.cacheReadTokens === 'number' ? { cacheReadTokens: data.cacheReadTokens } : {}),
+  ...(typeof data.cacheWriteTokens === 'number'
+    ? { cacheWriteTokens: data.cacheWriteTokens }
+    : {}),
+  ...(typeof data.outputTokens === 'number' ? { outputTokens: data.outputTokens } : {}),
+});
+
+export const accumulateUsageTotals = (totals: UsageTotals, usage: TurnTokenUsage): void => {
+  totals.uncachedInputTokens += getUncachedInputTokens(usage);
+  totals.cacheReadTokens += getCachedInputTokens(usage);
+  totals.outputTokens += Math.max(0, usage.outputTokens ?? 0);
+};
+
+export const formatTurnUsageBadge = (usage: TurnTokenUsage, elapsedSec: string): string =>
+  `[in ${getUncachedInputTokens(usage)} · cache ${getCachedInputTokens(usage)} · out ${Math.max(0, usage.outputTokens ?? 0)} · ${elapsedSec}s]`;
 
 export type EnabledModelOption = {
   providerId: string;
@@ -602,7 +627,7 @@ export const executeSlashCommand = async (
     return {
       kind: 'handled',
       lines: [
-        `Session usage: ${totals.turns} turn(s), in=${totals.inputTokens}, cacheRead=${totals.cacheReadTokens}, out=${totals.outputTokens}`,
+        `Session usage: ${totals.turns} turn(s), in=${totals.uncachedInputTokens}, cache=${totals.cacheReadTokens}, out=${totals.outputTokens}`,
       ],
     };
   }

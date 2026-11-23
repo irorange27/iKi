@@ -5,6 +5,7 @@ import type {
 } from '@iki/core/types/context_composition';
 import { normalizeModelCapabilityLimits } from '@iki/core/utils/provider_models';
 import { normalizeWhitespace } from '@iki/core/utils/text';
+import { getUncachedInputTokens } from '@iki/core/utils/token_usage';
 import { translate } from '../../i18n';
 
 import {
@@ -121,6 +122,7 @@ export type SessionPerfStats = {
   tokensPerSecond: number | null;
   cacheHitPercent: number | null;
   inputTokens: number;
+  uncachedInputTokens: number;
   outputTokens: number;
   totalTokens: number;
   cacheReadTokens: number;
@@ -440,6 +442,7 @@ export const buildSessionPerfStats = (
     tokensPerSecond: null,
     cacheHitPercent: null,
     inputTokens: 0,
+    uncachedInputTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
     cacheReadTokens: 0,
@@ -480,6 +483,7 @@ export const buildSessionPerfStats = (
     firstTokenSamples > 0 ? firstTokenMsSum / firstTokenSamples : null;
   stats.tokensPerSecond =
     stats.llmMs > 0 ? stats.outputTokens / (stats.llmMs / 1000) : null;
+  stats.uncachedInputTokens = getUncachedInputTokens(stats);
   stats.cacheHitPercent =
     stats.inputTokens > 0 ? (stats.cacheReadTokens / stats.inputTokens) * 100 : null;
 

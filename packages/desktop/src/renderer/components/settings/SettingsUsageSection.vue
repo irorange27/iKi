@@ -33,7 +33,7 @@
         <div class="usage-metric-card">
           <div class="usage-metric-label">{{ t('settings.usage.inputTokens') }}</div>
           <div class="usage-metric-value">
-            {{ formatCompactNumber(usageSummary.totals.inputTokens) }}
+            {{ formatCompactNumber(getUncachedInputTokens(usageSummary.totals)) }}
           </div>
         </div>
         <div class="usage-metric-card">
@@ -141,6 +141,7 @@ import type {
   ChatUsageSummary,
 } from '@iki/core/types/chat_usage';
 import { getErrorMessage } from '@iki/core/utils/errors';
+import { getUncachedInputTokens } from '@iki/core/utils/token_usage';
 
 const props = defineProps<{
   active: boolean;

@@ -19,16 +19,21 @@ import {
 } from '@earendil-works/pi-tui';
 import type { ChatStreamTarget } from '@iki/harness/thread_session';
 import { rebuildThreadViewFromEvents } from '@iki/harness/thread_session/session_log';
+import { listAgentRunsByThread } from '@iki/store/agent_runs';
 import { listSkills } from '@iki/harness/tools/skills';
 import {
+  accumulateUsageTotals,
   buildSlashCommands,
   collectEnabledModels,
   createWorkspaceSelection,
   ensureThreadExists,
   executeSlashCommand,
+  extractTurnTokenUsage,
   formatBannerLines,
+  formatTurnUsageBadge,
   switchModel,
   type InteractiveCliState,
+  type TurnTokenUsage,
   type UsageTotals,
 } from './commands';
 import { openSearchablePickerOverlay } from './selectors';
@@ -62,6 +67,13 @@ const formatDisplayPath = (targetPath?: string): string => {
     ? `~${targetPath.slice(home.length)}`
     : targetPath;
 };
+
+/** Total harness steps recorded for a thread (across runs and CLI restarts). */
+const countThreadSteps = (threadId: string): number =>
+  listAgentRunsByThread(threadId).reduce(
+    (total, run) => total + Math.max(0, run.working.lastStepIndex),
+    0
+  );
 
 const buildTurnStreamRequest = (state: InteractiveCliState, prompt: string) => {
   const history = state.chatService.listMessages(state.threadId);
@@ -108,7 +120,7 @@ const styleBannerLine = (line: string): string => {
 };
 
 const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> => {
-  const totals: UsageTotals = { turns: 0, inputTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
+  const totals: UsageTotals = { turns: 0, uncachedInputTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
   const terminal = new ProcessTerminal();
   const tui = new TuiAltScreen(terminal, true, undefined, {
     wheelScrollLines: 'auto',
@@ -151,7 +163,8 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     const leftTop = cachedBranch ? `${pathPart} (${cachedBranch})` : pathPart;
     const compactFlag = view.compaction ? ' · compacted' : '';
     const thinkFlag = hideThinking ? ' · Ctrl+T thinking' : ' · thinking:on';
-    const leftBottom = `${state.threadId} · t:${totals.turns} · ${totals.inputTokens}in/${totals.cacheReadTokens}c${compactFlag}${thinkFlag}`;
+    const stepCount = countThreadSteps(state.threadId);
+    const leftBottom = `${state.threadId} · turn:${totals.turns}/step:${stepCount} · ${totals.uncachedInputTokens}in/${totals.cacheReadTokens}c${compactFlag}${thinkFlag}`;
     footer.update({
       leftTop,
       leftBottom,
@@ -266,7 +279,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     refreshFooter();
     const startedAt = Date.now();
     let aborted = false;
-    let turnUsage: { inputTokens?: number; cacheReadTokens?: number; outputTokens?: number } | undefined;
+    let turnUsage: TurnTokenUsage | undefined;
 
     appendUserMessage(prompt);
     transcriptScroll.scrollToEnd();
@@ -316,12 +329,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
         } else if (chunk.type === 'abort') {
           aborted = true;
         } else if (chunk.type === 'data-token-usage' && chunk.data && typeof chunk.data === 'object') {
-          const data = chunk.data as Record<string, unknown>;
-          turnUsage = {
-            ...(typeof data.inputTokens === 'number' ? { inputTokens: data.inputTokens } : {}),
-            ...(typeof data.cacheReadTokens === 'number' ? { cacheReadTokens: data.cacheReadTokens } : {}),
-            ...(typeof data.outputTokens === 'number' ? { outputTokens: data.outputTokens } : {}),
-          };
+          turnUsage = extractTurnTokenUsage(chunk.data as Record<string, unknown>);
         }
       },
     };
@@ -343,19 +351,11 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
 
       totals.turns += 1;
       if (turnUsage) {
-        totals.inputTokens += turnUsage.inputTokens ?? 0;
-        totals.cacheReadTokens += turnUsage.cacheReadTokens ?? 0;
-        totals.outputTokens += turnUsage.outputTokens ?? 0;
+        accumulateUsageTotals(totals, turnUsage);
         const sec = ((Date.now() - startedAt) / 1000).toFixed(1);
         turnView.addChild(new Spacer(1));
         turnView.addChild(
-          new Text(
-            cliTheme.dim(
-              `[in ${turnUsage.inputTokens ?? 0} · cache ${turnUsage.cacheReadTokens ?? 0} · out ${turnUsage.outputTokens ?? 0} · ${sec}s]`
-            ),
-            1,
-            0
-          )
+          new Text(cliTheme.dim(formatTurnUsageBadge(turnUsage, sec)), 1, 0)
         );
       }
       transcript.addChild(new Spacer(1));
@@ -596,14 +596,14 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
 };
 
 const runPipedInteractiveCli = async (state: InteractiveCliState): Promise<void> => {
-  const totals: UsageTotals = { turns: 0, inputTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
+  const totals: UsageTotals = { turns: 0, uncachedInputTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
   const slashNames = buildSlashCommands(state).map(c => `/${c.name}`);
 
   const runTurn = async (prompt: string) => {
     const startedAt = Date.now();
     let inReasoning = false;
     let printedText = false;
-    let turnUsage: { inputTokens?: number; cacheReadTokens?: number; outputTokens?: number } | undefined;
+    let turnUsage: TurnTokenUsage | undefined;
 
     const closeReasoning = () => {
       if (!inReasoning) return;
@@ -638,12 +638,7 @@ const runPipedInteractiveCli = async (state: InteractiveCliState): Promise<void>
           const err = typeof chunk.errorText === 'string' ? chunk.errorText : 'failed';
           output.write(`  ${cliTheme.error('✗')} ${chunk.toolName}: ${cliTheme.error(err)}\n`);
         } else if (chunk.type === 'data-token-usage' && chunk.data && typeof chunk.data === 'object') {
-          const data = chunk.data as Record<string, unknown>;
-          turnUsage = {
-            ...(typeof data.inputTokens === 'number' ? { inputTokens: data.inputTokens } : {}),
-            ...(typeof data.cacheReadTokens === 'number' ? { cacheReadTokens: data.cacheReadTokens } : {}),
-            ...(typeof data.outputTokens === 'number' ? { outputTokens: data.outputTokens } : {}),
-          };
+          turnUsage = extractTurnTokenUsage(chunk.data as Record<string, unknown>);
         }
       },
     };
@@ -660,15 +655,9 @@ const runPipedInteractiveCli = async (state: InteractiveCliState): Promise<void>
 
     totals.turns += 1;
     if (turnUsage) {
-      totals.inputTokens += turnUsage.inputTokens ?? 0;
-      totals.cacheReadTokens += turnUsage.cacheReadTokens ?? 0;
-      totals.outputTokens += turnUsage.outputTokens ?? 0;
+      accumulateUsageTotals(totals, turnUsage);
       const sec = ((Date.now() - startedAt) / 1000).toFixed(1);
-      output.write(
-        cliTheme.dim(
-          `  [in ${turnUsage.inputTokens ?? 0} · cache ${turnUsage.cacheReadTokens ?? 0} · out ${turnUsage.outputTokens ?? 0} · ${sec}s]`
-        ) + '\n'
-      );
+      output.write(cliTheme.dim(`  ${formatTurnUsageBadge(turnUsage, sec)}`) + '\n');
     }
     output.write('\n');
   };

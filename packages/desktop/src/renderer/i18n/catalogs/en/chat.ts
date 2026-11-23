@@ -313,7 +313,8 @@ export const chat = {
   'chat.sessionStats.toolTime': ({ time }) => `Tools ${asText(time)}`,
   'chat.sessionStats.firstTokenAvg': ({ time }) => `First token avg ${asText(time)}`,
   'chat.sessionStats.tokensPerSecond': ({ speed }) => `${asText(speed)} tok/s`,
-  'chat.sessionStats.cacheHit': ({ percent }) => `Cache hit ${asText(percent)}%`,
+  'chat.sessionStats.cacheHit': ({ percent, tokens }) =>
+    `Cache ${asText(tokens)} tok (${asText(percent)}%)`,
   'chat.sessionStats.inputTokens': ({ tokens }) => `Input ${asText(tokens)} tok`,
   'chat.sessionStats.outputTokens': ({ tokens }) => `Output ${asText(tokens)} tok`,
   'chat.sessionStats.tooltip.toolCalls': ({ count }) =>

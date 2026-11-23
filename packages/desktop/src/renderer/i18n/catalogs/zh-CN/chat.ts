@@ -300,7 +300,8 @@ export const chat = {
   'chat.sessionStats.toolTime': ({ time }) => `工具 ${asText(time)}`,
   'chat.sessionStats.firstTokenAvg': ({ time }) => `首 token 平均 ${asText(time)}`,
   'chat.sessionStats.tokensPerSecond': ({ speed }) => `${asText(speed)} tok/s`,
-  'chat.sessionStats.cacheHit': ({ percent }) => `缓存命中 ${asText(percent)}%`,
+  'chat.sessionStats.cacheHit': ({ percent, tokens }) =>
+    `缓存 ${asText(tokens)} tok（${asText(percent)}%）`,
   'chat.sessionStats.inputTokens': ({ tokens }) => `输入 ${asText(tokens)} tok`,
   'chat.sessionStats.outputTokens': ({ tokens }) => `输出 ${asText(tokens)} tok`,
   'chat.sessionStats.tooltip.toolCalls': ({ count }) => `工具调用 ${asText(count)} 次`,

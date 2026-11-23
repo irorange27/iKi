@@ -72,7 +72,10 @@ const cacheLabel = computed(() => {
   if (!stats) return '';
   const hasCacheData = stats.cacheReadTokens > 0 || stats.cacheWriteTokens > 0;
   if (!hasCacheData || stats.cacheHitPercent === null) return '';
-  return t('chat.sessionStats.cacheHit', { percent: Math.round(stats.cacheHitPercent) });
+  return t('chat.sessionStats.cacheHit', {
+    tokens: formatCompactNumber(stats.cacheReadTokens),
+    percent: Math.round(stats.cacheHitPercent),
+  });
 });
 
 const cacheTitle = computed(() => {
@@ -87,8 +90,12 @@ const tokensLabel = computed(() => {
   const stats = props.stats;
   if (!stats) return '';
   const parts: string[] = [];
-  if (stats.inputTokens > 0) {
-    parts.push(t('chat.sessionStats.inputTokens', { tokens: formatCompactNumber(stats.inputTokens) }));
+  if (stats.inputTokens > 0 || stats.uncachedInputTokens > 0) {
+    parts.push(
+      t('chat.sessionStats.inputTokens', {
+        tokens: formatCompactNumber(stats.uncachedInputTokens),
+      })
+    );
   }
   if (stats.outputTokens > 0) {
     parts.push(

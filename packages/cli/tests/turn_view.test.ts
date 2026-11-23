@@ -79,7 +79,7 @@ describe('CliFooter resize width safety', () => {
     const footer = new CliFooter();
     footer.update({
       leftTop: '~/Developer/MyRepo/iki (refactor/agent-harness-monorepo)',
-      leftBottom: 'cli_86e750d2 · t:1 · 8708in/5568c · Ctrl+T thinking',
+      leftBottom: 'cli_86e750d2 · turn:1/step:42 · 8708in/5568c · Ctrl+T thinking',
       rightBottom: 'working · local_gateway/workbuddy/hy4flash-free',
     });
 
