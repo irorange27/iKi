@@ -1,6 +1,17 @@
 # iKi
 
-A local-first Electron desktop chat client for AI models — assemble prompts, run tool calls, and manage conversations from your Mac. iKi routes messages to third-party LLM providers, executes file operations and shell commands locally, and stores everything in SQLite. It is **not itself an AI** — the intelligence comes from the external APIs you connect.
+A local-first AI agent harness and desktop companion for macOS and the terminal. iKi connects to external LLM providers (or local models), runs workspace-scoped tools with human-in-the-loop approval, and persists durable conversations in local SQLite. It is **not itself an AI** — the intelligence comes from the providers you configure.
+
+> **Status:** Early-stage (`v0.1.0`) and actively evolving. Expect rapid iteration across the desktop app, CLI, and internal harness packages.
+
+<!-- TODO: Add screenshots / GIFs of the desktop app, companion overlay, and CLI TUI -->
+
+## What You Can Do With iKi
+
+- **Work inside a local project with guardrails** — Read, write, edit, and delete files, run shell commands, or search the web, scoped to a chosen workspace directory with approval gates for destructive actions.
+- **Orchestrate multiple AI providers** — Use one interface for OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, local Ollama models, or ACP-backed agents.
+- **Run durable, long-horizon workflows** — Persist threads and compaction checkpoints in local SQLite (`node:sqlite`), delegate tasks to sub-agents, write personal skill instructions, and set one-shot deferred reminders (**awaiters**) to continue a thread later.
+- **Choose your surface** — Work in the macOS Electron desktop app (complete with a **Companion overlay** showing the agent's current phase) or from the terminal via the interactive CLI / headless mode.
 
 ## Download
 
@@ -12,47 +23,60 @@ Download the `.dmg` from the latest release, open it, and drag iKi to Applicatio
 
 ## Quick Start
 
+Requires **Node.js 24.x** with Corepack enabled.
+
 ```bash
 git clone https://github.com/irorange27/iKi.git
 cd iKi
 corepack enable
 pnpm install --frozen-lockfile
-pnpm run app:dev
 ```
 
-Requires **Node.js 24.x** with Corepack enabled.
+### Desktop App
+
+```bash
+pnpm app:dev
+```
 
 On first launch, add a provider (OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, Ollama, or ACP) with your API key, then start chatting.
+
+### CLI
+
+```bash
+pnpm cli
+```
+
+Supports interactive TUI mode, single-prompt execution, thread continuation, and shared local storage (`~/.iki` by default).
+
+## Workspace Structure
+
+| Package | Role |
+|---|---|
+| `packages/desktop` | Electron shell (`main`, `preload`, Vue 3 renderer) and Companion overlay |
+| `packages/cli` | Terminal entrypoint (`@iki/cli`) with interactive TUI and headless modes |
+| `packages/harness` | Core runtime wiring, tools, and thread-session orchestration |
+| `packages/agent` & `packages/agent-loop` | Agent abstractions and execution loop |
+| `packages/llm` & `packages/llm-pi-ai` | Provider interfaces and `@earendil-works/pi-ai` adapter |
+| `packages/session` & `packages/store` | Session state and local SQLite persistence |
+| `packages/system-prompt` | System prompt assembly and dynamic tool/persona rules |
+| `packages/core` | Shared platform, logging, and core utilities |
+| `packages/theme` | Shared UI theme tokens |
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Shell | Electron 39, Node.js 24 |
+| Shell | Electron 45, Node.js 24 |
 | UI | Vue 3 + Pinia + Tailwind CSS 4 |
 | Build | Vite, electron-forge |
 | Data | `node:sqlite` (Node.js built-in) |
-| AI SDK | Vercel AI SDK (`ai`), `@ai-sdk/*` |
-| Testing | Vitest, happy-dom, vue-tsc |
+| LLM Layer | `@earendil-works/pi-ai` |
+| Testing & Quality | Vitest, happy-dom, `vue-tsc`, ESLint 9, dependency-cruiser, knip |
 | CI | GitHub Actions |
-
-## Features
-
-- **Multi-provider chat** — one chat surface for OpenAI, Anthropic, DeepSeek, Kimi, MiniMax, Ollama, and ACP-backed agents. Conversations persist in local SQLite.
-- **Tool calling** — read, write, edit, and delete files; run shell commands; search the web; write personal skill instructions; delegate work to sub-agents. Destructive operations require approval. File and shell tools are scoped to a selected workspace directory.
-- **Awaiters** — one-shot deferred reminders that continue a thread later.
-- **Companion overlay** — a small desktop window showing the agent's current phase.
 
 ## Privacy
 
-Messages are sent to whichever third-party API provider you configure. Conversations are stored locally, but content leaves your machine on every API call unless you use a local Ollama model.
-
-## Repository
-
-- [AGENTS.md](AGENTS.md) — architecture map, workflow, commands, conventions
-- [packages/backend/README.md](packages/backend/README.md) — chat-turn pipeline and runtime contracts
-- [changelogs/](changelogs/) — release notes per version
-- [postmortem/](postmortem/) — incident write-ups
+Messages are sent to whichever third-party API provider you configure.
 
 ## License
 
