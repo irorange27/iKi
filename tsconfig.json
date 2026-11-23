@@ -69,6 +69,7 @@
     "packages/llm/src/**/*",
     "packages/llm-pi-ai/src/**/*",
     "packages/agent/src/**/*",
-    "packages/agent-loop/src/**/*"
+    "packages/agent-loop/src/**/*",
+    "packages/cli/src/**/*"
   ]
 }

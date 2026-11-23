@@ -40,10 +40,17 @@ export const getUserDataPath = (): string => {
   if (platformInfo.userDataPath && platformInfo.userDataPath.trim()) {
     return platformInfo.userDataPath.trim();
   }
+  const envHome = process.env.IKI_HOME;
+  if (typeof envHome === 'string' && envHome.trim()) return envHome.trim();
   const envPath = process.env.IKI_USER_DATA_PATH;
   if (typeof envPath === 'string' && envPath.trim()) return envPath.trim();
   return path.join(os.homedir(), '.iki');
 };
+
+export const getIkiHome = (): string => getUserDataPath();
+
+export const getProfileDir = (profile: 'desktop' | 'cli'): string =>
+  path.join(getIkiHome(), 'profiles', profile);
 
 export const getLocale = (): string => {
   const fromInfo = normalizeLocale(platformInfo.locale);

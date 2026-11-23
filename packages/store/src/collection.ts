@@ -37,7 +37,7 @@ export const storeRoot = (): string => {
   return root;
 };
 
-const fileOf = (name: string): string => path.join(storeRoot(), `${name}.json`);
+const fileOf = (name: string): string => path.join(storeRoot(), 'state', `${name}.json`);
 
 /**
  * Read the whole collection from disk. No in-process cache: the files are the

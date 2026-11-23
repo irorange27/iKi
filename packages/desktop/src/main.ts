@@ -2,6 +2,7 @@ import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import started from 'electron-squirrel-startup';
 import { wirePlatformContext } from '@iki/core/platform_wiring';
 import { getAppConfig } from '@iki/harness/config';
+import { initializeDatabase } from '@iki/store/database';
 import {
   applyAppLoggingConfig,
   createLogger,
@@ -63,10 +64,12 @@ const updatePlatformDisplayScale = () => {
   }
 };
 
+const hasExplicitUserDataDir = process.argv.some(arg => arg.startsWith('--user-data-dir='));
 setPlatformInfo({
-  userDataPath: app.getPath('userData'),
+  ...(hasExplicitUserDataDir ? { userDataPath: app.getPath('userData') } : {}),
   locale: app.getLocale(),
 });
+initializeDatabase();
 syncLoggingConfig();
 appLogger.event({
   level: 'info',

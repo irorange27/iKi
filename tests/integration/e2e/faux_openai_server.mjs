@@ -54,9 +54,18 @@ const reply = (res, payload, { text, toolCalls }) =>
     ? sse(res, text !== undefined ? textResponse(text) : toolCallResponse(toolCalls ?? []))
     : jsonResponse(res, { text, toolCalls });
 
+const DEFAULT_USAGE = {
+  prompt_tokens: 120,
+  completion_tokens: 18,
+  total_tokens: 138,
+  prompt_tokens_details: {
+    cached_tokens: 64,
+  },
+};
+
 const textResponse = text => [
   { id: 'chatcmpl-1', object: 'chat.completion.chunk', model: MODEL, choices: [{ index: 0, delta: { role: 'assistant', content: text }, finish_reason: null }] },
-  { id: 'chatcmpl-1', object: 'chat.completion.chunk', model: MODEL, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+  { id: 'chatcmpl-1', object: 'chat.completion.chunk', model: MODEL, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: DEFAULT_USAGE },
 ];
 
 // The streaming path must honor the passed toolCalls: the repeat-approval
@@ -64,7 +73,7 @@ const textResponse = text => [
 const toolCallResponse = toolCalls => [
   { id: 'chatcmpl-2', object: 'chat.completion.chunk', model: MODEL, choices: [{ index: 0, delta: { role: 'assistant', content: 'I will write the file now.' }, finish_reason: null }] },
   { id: 'chatcmpl-2', object: 'chat.completion.chunk', model: MODEL, choices: [{ index: 0, delta: { tool_calls: toolCalls.map((call, index) => ({ index, id: call.id, type: 'function', function: call.function })) }, finish_reason: null }] },
-  { id: 'chatcmpl-2', object: 'chat.completion.chunk', model: MODEL, choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] },
+  { id: 'chatcmpl-2', object: 'chat.completion.chunk', model: MODEL, choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }], usage: DEFAULT_USAGE },
 ];
 
 const server = http.createServer((req, res) => {

@@ -37,7 +37,10 @@
     "commit:check": "commitlint --from=HEAD~20 --to=HEAD --verbose",
     "prepare": "husky",
     "test:e2e": "node tests/integration/e2e/run_smoke.mjs",
-    "test:e2e:settings": "node tests/integration/e2e/run_provider_settings.mjs"
+    "test:e2e:cli:faux": "node tests/integration/e2e/run_cli_faux_e2e.mjs",
+    "test:e2e:live": "node tests/integration/e2e/run_live_api_e2e.mjs",
+    "test:e2e:settings": "node tests/integration/e2e/run_provider_settings.mjs",
+    "cli": "tsx packages/cli/src/main.ts"
   },
   "keywords": [],
   "repository": {
