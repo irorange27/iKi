@@ -26,7 +26,13 @@ import {
   writeTempFile,
 } from './speech_audio';
 
-const nodeRequire = createRequire(fileURLToPath(import.meta.url));
+const nodeRequire = createRequire(
+  typeof __filename === 'string'
+    ? __filename
+    : import.meta.url
+      ? fileURLToPath(import.meta.url)
+      : path.join(process.cwd(), 'package.json')
+);
 
 const WHISPER_NODE_MODELS: Array<Omit<WhisperNodeModelInfo, 'downloaded'>> = [
   { name: 'tiny', fileName: 'ggml-tiny.bin', sizeMB: 75, ramGB: 0.39 },

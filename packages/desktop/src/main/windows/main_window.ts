@@ -49,7 +49,7 @@ export const createMainWindow = (): BrowserWindow => {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 20, y: 20 },
     webPreferences: {
-      preload: path.join(__dirname, './index.js'),
+      preload: path.join(__dirname, './index.cjs'),
       nodeIntegration: false,
     },
   });

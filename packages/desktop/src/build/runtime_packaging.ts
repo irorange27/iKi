@@ -134,7 +134,7 @@ const collectBuiltRuntimePackageNames = (projectDir: string): string[] => {
 
   const entryFiles = fs
     .readdirSync(buildDir)
-    .filter(fileName => fileName === 'index.js' || /^main(?:-[^.]+)?\.js$/.test(fileName));
+    .filter(fileName => /\.c?js$/.test(fileName));
 
   const runtimePackages = new Set<string>();
   const requirePattern = /\brequire(?:\.resolve)?\((['"])([^'"]+)\1\)/g;
@@ -473,22 +473,19 @@ export const copyRuntimePackagesInto = (
   }
 };
 
+type PackagerHookOptions = {
+  buildPath: string;
+  electronVersion: string;
+  platform: 'linux' | 'win32' | 'darwin' | 'mas';
+  arch: string;
+};
+
 /** forge `afterCopy` hook that stages the runtime packages into the app. */
 export const createRuntimePackageCopier =
   (projectDir: string) =>
-  (
-    buildPath: string,
-    _electronVersion: string,
-    platform: NodeJS.Platform,
-    _arch: string,
-    callback: (error?: Error) => void
-  ): void => {
-    try {
-      copyRuntimePackagesInto(projectDir, buildPath, platform);
-      callback();
-    } catch (error) {
-      callback(error instanceof Error ? error : new Error(String(error)));
-    }
+  ({ buildPath, platform }: PackagerHookOptions): void => {
+    const nodePlatform: NodeJS.Platform = platform === 'mas' ? 'darwin' : platform;
+    copyRuntimePackagesInto(projectDir, buildPath, nodePlatform);
   };
 
 export const createRuntimeAsarConfig = (

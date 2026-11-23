@@ -45,7 +45,8 @@ const step = name => {
   log('step:', name);
 };
 
-const storeDir = () => path.join(workDir, 'userdata/iki-store');
+const storeDir = () => path.join(workDir, 'userdata');
+const stateFile = name => path.join(storeDir(), 'state', `${name}.json`);
 const modelsTomlPath = () => path.join(storeDir(), 'models.toml');
 const readModelsToml = () => {
   try {
@@ -551,7 +552,7 @@ const main = async () => {
 
   step('assert the thread row persisted the new provider/model binding');
   const threadRows = await waitForFile(() => {
-    const file = path.join(storeDir(), 'chat_threads.json');
+    const file = stateFile('chat_threads');
     try {
       const rows = JSON.parse(fs.readFileSync(file, 'utf8'));
       return Array.isArray(rows) && rows.length > 0 ? rows : null;
@@ -617,7 +618,7 @@ const main = async () => {
   }
   const mcpRow = await waitForFile(() => {
     try {
-      const rows = JSON.parse(fs.readFileSync(path.join(storeDir(), 'mcp_servers.json'), 'utf8'));
+      const rows = JSON.parse(fs.readFileSync(stateFile('mcp_servers'), 'utf8'));
       const row = rows.find(r => r.id === mcpParsed.probeId);
       return row && Array.isArray(row.args) && row.env && typeof row.env === 'object' ? row : null;
     } catch {
@@ -652,7 +653,7 @@ const main = async () => {
     .catch(e => { throw new Error('skill_ids update failed: ' + e.message); });
   const skillRow = await waitForFile(() => {
     try {
-      const rows = JSON.parse(fs.readFileSync(path.join(storeDir(), 'chat_threads.json'), 'utf8'));
+      const rows = JSON.parse(fs.readFileSync(stateFile('chat_threads'), 'utf8'));
       const row = rows.find(r => Array.isArray(r.skill_ids) && r.skill_ids.length === 2);
       return row || null;
     } catch {
@@ -671,7 +672,7 @@ const main = async () => {
   // array survived disk, and the composer re-derived the selection from it.
   const restarted = await waitForFile(() => {
     try {
-      const rows = JSON.parse(fs.readFileSync(path.join(storeDir(), 'chat_threads.json'), 'utf8'));
+      const rows = JSON.parse(fs.readFileSync(stateFile('chat_threads'), 'utf8'));
       const row = rows.find(r => Array.isArray(r.skill_ids) && r.model === MODEL_ALT);
       return row || null;
     } catch {

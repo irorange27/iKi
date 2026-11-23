@@ -141,7 +141,7 @@ const createCompanionWindow = (config: AppConfig = getAppConfig()): BrowserWindo
     title: 'iKi Companion',
     backgroundColor: '#00000000',
     webPreferences: {
-      preload: path.join(__dirname, './index.js'),
+      preload: path.join(__dirname, './index.cjs'),
       nodeIntegration: false,
       devTools: !app.isPackaged,
     },

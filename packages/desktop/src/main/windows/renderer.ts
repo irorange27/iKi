@@ -23,7 +23,7 @@ export const getRendererDevServerUrl = (): string =>
 export const getRendererProdHtmlPath = (): string =>
   path.join(__dirname, '../renderer/main_window/index.html');
 
-const DEV_SERVER_WAIT_TIMEOUT_MS = 5000;
+const DEV_SERVER_WAIT_TIMEOUT_MS = 15000;
 const DEV_SERVER_RETRY_INTERVAL_MS = 250;
 const DEV_SERVER_REQUEST_TIMEOUT_MS = 500;
 

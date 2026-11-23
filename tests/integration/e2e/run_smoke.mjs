@@ -25,12 +25,11 @@ const require = createRequire(import.meta.url);
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// The prototype store is plain files: one JSON file per collection, one JSONL
-// per conversation, and the declarative models.toml for provider declarations,
-// all under <userData>/iki-store. The e2e asserts state by reading those files,
-// the same way the old assertions read SQLite.
-const storeDir = () => path.join(workDir, 'userdata/iki-store');
-const collectionPath = name => path.join(storeDir(), `${name}.json`);
+// The prototype store is plain files: collections under <userData>/state/*.json,
+// append-only JSONL under <userData>/sessions/, and declarative models.toml
+// directly under <userData>.
+const storeDir = () => path.join(workDir, 'userdata');
+const collectionPath = name => path.join(storeDir(), 'state', `${name}.json`);
 const readCollection = name => {
   try {
     const parsed = JSON.parse(fs.readFileSync(collectionPath(name), 'utf8'));
@@ -40,8 +39,9 @@ const readCollection = name => {
   }
 };
 const writeCollection = (name, rows) => {
-  fs.mkdirSync(storeDir(), { recursive: true });
-  fs.writeFileSync(collectionPath(name), JSON.stringify(rows));
+  const file = collectionPath(name);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(rows));
 };
 // Provider declarations are a document, not a collection: models.toml holds
 // `[providers.<id>]` tables with structured values (arrays, booleans, objects),
@@ -517,7 +517,7 @@ const assertPiSupplyServed = () => {
 
 const assertAppStoreReady = () => {
   const dir = storeDir();
-  if (!fs.existsSync(dir)) {
+  if (!fs.existsSync(path.join(dir, 'state')) || !fs.existsSync(path.join(dir, 'models.toml'))) {
     throw new Error(`app did not create its store under the isolated user data dir (${dir}); --user-data-dir isolation failed`);
   }
 };

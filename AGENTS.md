@@ -28,7 +28,9 @@ Every package has its own `README.md` documenting boundaries and entry points.
 
 1. Read before writing; keep changes minimal, reversible, and free of speculative abstraction.
 2. Completion gate: `pnpm run ci:quality` (`eslint`, `tsc`, `vue-tsc`, `depcruise`, `knip --production`) + unit tests (`pnpm exec vitest run packages/*/tests`).
-3. CLI / cross-layer verification: `pnpm run test:e2e:cli:faux` (keyless multi-turn, KV-cache prefix stability, `/jobs`, `/compact`, REPL) and `pnpm run test:e2e:live` (real-API smoke, self-skips if local gateway unreachable). Desktop UI changes: `pnpm run app:debug` + `pnpm run cdp` / `pnpm run test:e2e`.
+3. Cross-layer E2E verification:
+   - Faux (keyless, deterministic): `pnpm run test:e2e:cli:faux` (CLI multi-turn, KV-cache prefix stability, `/jobs`, `/compact`, REPL) and `pnpm run test:e2e:desktop:faux` (Electron Settings UI, `models.toml`, streaming chat, multi-turn history, restart recovery). `pnpm run test:e2e` runs both.
+   - Live (real LLM API, self-skips if local gateway unreachable): `pnpm run test:e2e:cli:live` and `pnpm run test:e2e:desktop:live` (`pnpm run test:e2e:live` runs both). Desktop UI debugging: `pnpm run app:debug` + `pnpm run cdp`.
 4. Non-negotiables: no `pnpm-lock.yaml` or `.github` edits without explicit request; no native/OTel/Langfuse deps in the Vite main chunk; never import `@iki/tools` or `packages/harness/src/tools` from desktop renderer code.
 5. Release tags trigger the macOS build (`release-build.yml`) and must match root `package.json` version. Before pushing a tag, package locally (`pnpm run package`) and launch `packages/desktop/out/iki-darwin-<arch>/iki.app/Contents/MacOS/iki` from a terminal to watch stderr.
 6. Reviews & GitHub templates: before creating or updating an Issue or PR, read and follow `.github/ISSUE_TEMPLATE/` (`bug_report.md`, `feature_request.md`) or `.github/pull_request_template.md`, and keep PR titles Conventional Commits compliant (`.github/workflows/semantic-pr-title.yml`). Run the PR review protocol (`packages/harness/HARNESS_REVIEW.md`, `node scripts/pr_review_brief.mjs`) and resolve every blocking finding before merging.

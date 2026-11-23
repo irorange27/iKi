@@ -66,7 +66,7 @@ export const ProviderConfigSchema = z.object({
   enabled: z.boolean(),
   models: z.array(z.string()),
   availableModels: z.array(z.string()),
-  modelOptions: ProviderModelOptionsMapSchema,
+  modelOptions: ProviderModelOptionsMapSchema.default({}),
   isResponseApi: z.boolean().optional(),
 });
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
@@ -80,7 +80,7 @@ export type Provider = z.infer<typeof ProviderSchema>;
 
 /** The whole `models.toml` document (pi's `ModelsConfig`). */
 export const ModelsConfigSchema = z.object({
-  providers: z.record(z.string(), ProviderConfigSchema),
+  providers: z.record(z.string(), ProviderConfigSchema).default({}),
 });
 export type ModelsConfig = z.infer<typeof ModelsConfigSchema>;
 
