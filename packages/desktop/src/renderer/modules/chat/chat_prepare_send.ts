@@ -1,5 +1,5 @@
-import type { UiFilePart as FileUIPart } from '@iki/ai/message/ui_protocol';
-import type { ChatUiMessage, ComposerInvocationPartData } from '@iki/ai/message/message_parts';
+import type { UiFilePart as FileUIPart } from '@iki/llm/message/ui_protocol';
+import type { ChatUiMessage, ComposerInvocationPartData } from '@iki/llm/message/message_parts';
 
 export type PrepareMessageSendPayload = {
   content: string;

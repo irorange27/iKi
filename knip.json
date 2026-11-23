@@ -15,7 +15,7 @@
     "vue-markdown-render",
     "highlight.js",
     "katex",
-    "@iki/backend",
+    "@iki/harness",
     "@iki/theme",
     "@tailwindcss/vite"
   ],
@@ -28,7 +28,7 @@
         "scripts/**/*.{mjs,cjs,ts}"
       ]
     },
-    "packages/backend": {
+    "packages/harness": {
       "project": [
         "src/**/*.ts"
       ]

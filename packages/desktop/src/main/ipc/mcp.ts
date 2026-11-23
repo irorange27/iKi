@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 
-import { getMcpManager } from '@iki/backend/mcp';
+import { getMcpManager } from '@iki/harness/mcp';
 import type { McpServerInput } from '@iki/core/types/mcp';
 
 let mcpIpcRegistered = false;

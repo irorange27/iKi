@@ -5,9 +5,9 @@ import {
   getToolModel,
   generateTitle,
   testToolModelLatency,
-} from '@iki/ai/provider/tool_model';
+} from '@iki/llm-pi-ai/tool_model';
 import { getErrorMessage } from '@iki/core/utils/errors';
-import type { ToolModelLatencyTestResult } from '@iki/backend/types/electron_api';
+import type { ToolModelLatencyTestResult } from '@iki/harness/types/electron_api';
 import { withIpcLogging } from '../utils/ipc_helpers';
 
 let toolModelIpcRegistered = false;

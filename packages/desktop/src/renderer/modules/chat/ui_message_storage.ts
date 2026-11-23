@@ -1,5 +1,5 @@
-import type { ChatUiMessage } from '@iki/ai/message/message_parts';
-import { normalizeUiMessage } from '@iki/ai/message/ui_message_codec';
+import type { ChatUiMessage } from '@iki/llm/message/message_parts';
+import { normalizeUiMessage } from '@iki/llm/message/ui_message_codec';
 
 /**
  * The IPC now carries the structured message exactly as the session log stores

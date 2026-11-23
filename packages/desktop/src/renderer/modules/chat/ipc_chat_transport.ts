@@ -1,10 +1,10 @@
-import type { UiChatTransport } from '@iki/ai/message/ui_protocol';
+import type { UiChatTransport } from '@iki/llm/message/ui_protocol';
 
-import type { ChatInvocationOptions, ElectronApi } from '@iki/backend/types/electron_api';
+import type { ChatInvocationOptions, ElectronApi } from '@iki/harness/types/electron_api';
 import { toPlainData as clonePlainData } from '@iki/core/utils/plain_clone';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import { createLogger } from '../../logger';
-import type { ChatUiMessageChunk } from '@iki/ai/message/message_parts';
+import type { ChatUiMessageChunk } from '@iki/llm/message/message_parts';
 
 const transportLogger = createLogger({ module: 'ipc_chat_transport' });
 

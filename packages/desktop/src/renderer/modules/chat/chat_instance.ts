@@ -1,10 +1,10 @@
 import { computed, ref, shallowRef } from 'vue';
-import type { UiChatStatus } from '@iki/ai/message/ui_protocol';
+import type { UiChatStatus } from '@iki/llm/message/ui_protocol';
 import { IkiChat, type ChatStateAdapter } from './iki_chat';
 
-import type { ChatUiMessage } from '@iki/ai/message/message_parts';
+import type { ChatUiMessage } from '@iki/llm/message/message_parts';
 import { isObjectRecord } from '@iki/core/utils/guards';
-import type { ElectronApi } from '@iki/backend/types/electron_api';
+import type { ElectronApi } from '@iki/harness/types/electron_api';
 import { createLogger } from '../../logger';
 import { recordToolChunkTiming } from './tool_ui_state';
 import { createToolApprovalController } from './tool_approval_controller';

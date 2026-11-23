@@ -40,7 +40,7 @@ import { computed } from 'vue';
 import {
   type ChatUiMessage,
   extractTextFromMessageParts,
-} from '@iki/ai/message/message_parts';
+} from '@iki/llm/message/message_parts';
 import { useI18n } from '../../i18n';
 
 const PREVIEW_WIDTH = 340;

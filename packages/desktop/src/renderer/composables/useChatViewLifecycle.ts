@@ -1,6 +1,6 @@
 import { onMounted, onUnmounted } from 'vue';
 
-import type { ElectronApi } from '@iki/backend/types/electron_api';
+import type { ElectronApi } from '@iki/harness/types/electron_api';
 import { createLogger } from '../logger';
 
 type ConfigInitializer = {

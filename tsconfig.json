@@ -24,8 +24,8 @@
       "@iki/theme/*": [
         "./packages/theme/src/*"
       ],
-      "@iki/backend/*": [
-        "./packages/backend/src/*"
+      "@iki/harness/*": [
+        "./packages/harness/src/*"
       ],
       "@iki/core/*": [
         "./packages/core/src/*"
@@ -33,8 +33,26 @@
       "@iki/store/*": [
         "./packages/store/src/*"
       ],
-      "@iki/ai/*": [
-        "./packages/ai/src/*"
+      "@iki/session/*": [
+        "./packages/session/src/*"
+      ],
+      "@iki/llm/*": [
+        "./packages/llm/src/*"
+      ],
+      "@iki/llm-pi-ai/*": [
+        "./packages/llm-pi-ai/src/*"
+      ],
+      "@iki/agent": [
+        "./packages/agent/src/index.ts"
+      ],
+      "@iki/agent/*": [
+        "./packages/agent/src/*"
+      ],
+      "@iki/agent-loop": [
+        "./packages/agent-loop/src/index.ts"
+      ],
+      "@iki/agent-loop/*": [
+        "./packages/agent-loop/src/*"
       ]
     },
     "typeRoots": [
@@ -44,9 +62,13 @@
   },
   "include": [
     "packages/desktop/src/**/*",
-    "packages/backend/src/**/*",
+    "packages/harness/src/**/*",
     "packages/core/src/**/*",
     "packages/store/src/**/*",
-    "packages/ai/src/**/*"
+    "packages/session/src/**/*",
+    "packages/llm/src/**/*",
+    "packages/llm-pi-ai/src/**/*",
+    "packages/agent/src/**/*",
+    "packages/agent-loop/src/**/*"
   ]
 }

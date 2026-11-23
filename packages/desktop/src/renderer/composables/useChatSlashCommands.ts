@@ -1,12 +1,12 @@
 import { computed, nextTick, onMounted, ref, watch, type Ref } from 'vue';
 
 import type { PromptApp } from '@iki/core/types/chat';
-import type { ElectronApi } from '@iki/backend/types/electron_api';
+import type { ElectronApi } from '@iki/harness/types/electron_api';
 import type { SkillSummary } from '@iki/core/types/skill';
 import type {
   ComposerInvocationPartData,
   ComposerInvocationToken,
-} from '@iki/ai/message/message_parts';
+} from '@iki/llm/message/message_parts';
 import {
   extractPromptAppSlashCommands,
   extractSkillSlashCommands,
@@ -17,8 +17,8 @@ import {
   toPromptAppComposerInvocationToken,
   toSkillComposerInvocationToken,
   type PromptAppSlashCommand,
-} from '@iki/ai/message/slash_commands';
-import { normalizePersonality, PERSONALITY_IDS } from '@iki/ai/message/personality';
+} from '@iki/llm/message/slash_commands';
+import { normalizePersonality, PERSONALITY_IDS } from '@iki/llm/message/personality';
 import type { ResolvedComposerSendRequest } from './useChatComposerSend';
 import { createLogger } from '../logger';
 

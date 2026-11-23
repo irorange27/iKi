@@ -1,23 +1,23 @@
 import { app, BrowserWindow, nativeTheme, screen } from 'electron';
 import started from 'electron-squirrel-startup';
 import { wirePlatformContext } from '@iki/core/platform_wiring';
-import { getAppConfig } from '@iki/backend/config';
+import { getAppConfig } from '@iki/harness/config';
 import {
   applyAppLoggingConfig,
   createLogger,
   setBaseLogContext,
   setConsoleLoggingEnabled,
 } from '@iki/core/logger';
-import { registerStandardTools } from '@iki/backend/tools';
-import { startPiTurnHarness } from '@iki/backend/agent/harness';
-import { getMcpManager } from '@iki/backend/mcp';
+import { registerStandardTools } from '@iki/harness/tools';
+import { startPiTurnHarness } from '@iki/harness/agent/harness';
+import { getMcpManager } from '@iki/harness/mcp';
 import { setHostFetch, setPlatformInfo } from '@iki/core/platform';
-import { createAgentRunTracker } from '@iki/backend/thread_session/run_tracker';
+import { createAgentRunTracker } from '@iki/harness/thread_session/run_tracker';
 import {
   finalizeHarnessTurn,
   finalizeTurnFailure,
-} from '@iki/backend/thread_session/turn_finalize';
-import { getToolModel } from '@iki/ai/provider/tool_model';
+} from '@iki/harness/thread_session/turn_finalize';
+import { getToolModel } from '@iki/llm-pi-ai/tool_model';
 import { resolveElement } from './main/services/devtools/element_source';
 import { electronFetchWithTimeout } from './main/services/network/electron_fetch';
 import { registerMainIpc } from './main/ipc';

@@ -4,16 +4,16 @@
     {
       "id": "backend/thread_session",
       "roots": [
-        "packages/backend/src/thread_session"
+        "packages/harness/src/thread_session"
       ],
       "layer": "orchestration",
       "role": "Turn orchestration: session loop, streaming, approval persistence, recovery, run tracker, session-log authority",
-      "notes": "The durable-execution core. Approval/recovery/replay invariants here are pinned by the ownership map in packages/backend/README.md and protected by HARNESS_REVIEW.md."
+      "notes": "The durable-execution core. Approval/recovery/replay invariants here are pinned by the ownership map in packages/harness/README.md and protected by HARNESS_REVIEW.md."
     },
     {
       "id": "backend/agent",
       "roots": [
-        "packages/backend/src/agent"
+        "packages/harness/src/agent"
       ],
       "layer": "orchestration",
       "role": "Agent loop and harness: Pi turn harnesses, step budget, compaction, tool resolution",
@@ -22,7 +22,7 @@
     {
       "id": "backend/tools",
       "roots": [
-        "packages/backend/src/tools"
+        "packages/harness/src/tools"
       ],
       "layer": "domain",
       "role": "Concrete tools: registry, schemas, file/shell/web/skill/awaiter/agent tools"
@@ -30,7 +30,7 @@
     {
       "id": "backend/turn_prep",
       "roots": [
-        "packages/backend/src/turn_prep"
+        "packages/harness/src/turn_prep"
       ],
       "layer": "app",
       "role": "Pre-turn assembly: context blocks, tool guard, prompt inputs",
@@ -65,7 +65,7 @@
     {
       "id": "backend/mcp",
       "roots": [
-        "packages/backend/src/mcp"
+        "packages/harness/src/mcp"
       ],
       "layer": "app",
       "role": "MCP server lifecycle, transports, remote tool registration"
@@ -73,7 +73,7 @@
     {
       "id": "backend/awaiters",
       "roots": [
-        "packages/backend/src/awaiters"
+        "packages/harness/src/awaiters"
       ],
       "layer": "app",
       "role": "Continue-later wakes: awaiter manager, schedule, wake runs"
@@ -81,7 +81,7 @@
     {
       "id": "backend/workspaces",
       "roots": [
-        "packages/backend/src/workspaces"
+        "packages/harness/src/workspaces"
       ],
       "layer": "domain",
       "role": "Workspace and thread modes: scratch workspaces, worktrees, approval-policy parse"
@@ -90,13 +90,13 @@
       "id": "backend/foundation",
       "roots": [
         "packages/core/src/utils",
-        "packages/backend/src/config",
-        "packages/backend/src/constants",
+        "packages/harness/src/config",
+        "packages/harness/src/constants",
         "packages/core/src/types",
         "packages/core/src/logging",
         "packages/core/src/i18n",
         "packages/ai/src/network",
-        "packages/backend/src/runtimes"
+        "packages/harness/src/runtimes"
       ],
       "layer": "foundation",
       "role": "Shared foundation: guards, errors, config, types, logging, locale, http, aux-model runtimes"
@@ -104,7 +104,7 @@
     {
       "id": "backend/standalone",
       "roots": [
-        "packages/backend/src"
+        "packages/harness/src"
       ],
       "layer": "foundation",
       "role": "Top-level backend files (chat_platform, persona, logger) — catch-all below the named modules",

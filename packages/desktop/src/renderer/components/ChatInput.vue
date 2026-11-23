@@ -311,7 +311,7 @@ import { useConfigStore } from '../store/config';
 import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger , HoverCardContent, HoverCardPortal, HoverCardRoot, HoverCardTrigger } from 'reka-ui';
 import {
   parseApprovalPolicy,
- resolveThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
+ resolveThreadWorkMode } from '@iki/harness/workspaces/thread_mode';
 import { storeToRefs } from 'pinia';
 import { useI18n } from '../i18n';
 import { getElectronAPI } from '../services/electron_api';

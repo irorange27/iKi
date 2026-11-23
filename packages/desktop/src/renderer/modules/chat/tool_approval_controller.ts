@@ -1,19 +1,9 @@
 import { ref } from 'vue';
 
-import { getApprovalId } from '@iki/ai/message/tool_parts';
-import type { ChatUiMessage } from '@iki/ai/message/message_parts';
-import type { ElectronApi } from '@iki/backend/types/electron_api';
-import { createLogger } from '../../logger';
-import type { IkiChat } from './iki_chat';
-import type { IpcChatTransport } from './ipc_chat_transport';
+import { getApprovalId } from '@iki/llm/message/tool_parts';
 
-const approvalLogger = createLogger({ module: 'tool_approval_controller' });
-
-export const createToolApprovalController = (deps: {
-  chat: IkiChat;
-  transport: IpcChatTransport;
-  electronAPI: Pick<ElectronApi, 'chat'>;
-}) => {
+export const createToolApprovalController = (_deps?: unknown) => {
+  void _deps;
   const processing = ref<Record<string, boolean>>({});
 
   const isProcessing = (part: unknown): boolean => {
@@ -21,46 +11,9 @@ export const createToolApprovalController = (deps: {
     return approvalId ? !!processing.value[approvalId] : false;
   };
 
-  const setProcessing = (approvalId: string, value: boolean) => {
-    if (!approvalId) return;
-    processing.value = { ...processing.value, [approvalId]: value };
-  };
-
-  const handleToolApproval = async (
-    _message: ChatUiMessage,
-    part: unknown,
-    approved: boolean
-  ): Promise<void> => {
-    const approvalId = getApprovalId(part);
-    if (!approvalId) return;
-    if (isProcessing(part)) return;
-    setProcessing(approvalId, true);
-
-    try {
-      deps.transport.expectFollowUpStream();
-      const result = await deps.electronAPI.chat.approveTool(approvalId, approved);
-      if (!result?.success) {
-        deps.transport.disarmFollowUpStream();
-        throw new Error(result?.error || 'Tool approval failed');
-      }
-
-      deps.chat.addToolApprovalResponse({
-        id: approvalId,
-        approved,
-      });
-
-      deps.transport.closeFollowUpStream();
-      void deps.chat.resumeStream();
-    } catch (error) {
-      approvalLogger.event({
-        level: 'error',
-        event: 'chat.tool_approval',
-        outcome: 'failed',
-        error,
-      });
-    } finally {
-      setProcessing(approvalId, false);
-    }
+  const handleToolApproval = async (...args: unknown[]): Promise<void> => {
+    void args;
+    return Promise.resolve();
   };
 
   return { isApprovalProcessing: isProcessing, handleToolApproval };

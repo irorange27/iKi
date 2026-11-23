@@ -1,15 +1,15 @@
 import * as fs from 'node:fs';
 import { dialog } from 'electron';
 
-import { createChatService } from '@iki/backend/thread_session';
-import type { ChatServicePlatformDeps } from '@iki/backend/chat_platform';
+import { createChatService } from '@iki/harness/thread_session';
+import type { ChatServicePlatformDeps } from '@iki/harness/chat_platform';
 import { companionService } from '../companion/companion_service';
 import * as agentRunDb from '@iki/store/agent_runs';
 import * as agentEvalDb from '@iki/store/agent_eval';
 import { toIsoNow } from '@iki/core/utils/text';
 import type { EvalExportPayload } from '@iki/core/types/agent_run';
 
-export type { ChatStreamTarget } from '@iki/backend/thread_session';
+export type { ChatStreamTarget } from '@iki/harness/thread_session';
 
 const platformDeps: ChatServicePlatformDeps = {
   companion: companionService,

@@ -1,5 +1,4 @@
 import { commitRows, patchRow, readRows, removeRow } from './collection';
-import { deleteSessionEvents } from './session_events';
 import { ChatThread } from '@iki/core/types/chat';
 
 // Rows are read from disk defensively: legacy files still hold 0/1 counters,
@@ -67,6 +66,5 @@ export const touchChatThread = (id: string): void => {
 };
 
 export const deleteChatThread = (id: string): void => {
-  deleteSessionEvents(id);
   removeRow<ChatThread>('chat_threads', 'id', id);
 };

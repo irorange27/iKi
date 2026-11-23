@@ -7,7 +7,7 @@ import {
   getSkillRootsForUi,
   listSkills,
   readSkillContent,
-} from '@iki/backend/tools/skills';
+} from '@iki/harness/tools/skills';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { withIpcLogging } from '../utils/ipc_helpers';
 

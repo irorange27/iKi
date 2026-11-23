@@ -30,7 +30,7 @@ import type {
   ProviderInput,
   ChatThreadInput,
   ChatMessageInput,
-} from '@iki/backend/types/electron_api';
+} from '@iki/harness/types/electron_api';
 
 const subscribe = <T>(channel: string, callback: (payload: T) => void): (() => void) => {
   const handler = (_event: Electron.IpcRendererEvent, payload: T) => {
@@ -83,11 +83,8 @@ const electronApi: ElectronApi = {
     stream: (options: ChatInvocationOptions) => ipcRenderer.invoke('chat:stream', options),
     stopStream: () => ipcRenderer.invoke('chat:stop-stream'),
     onUiChunk: (callback: (chunk: unknown) => void) => subscribe('chat:ui-chunk', callback),
-    approveTool: (approvalId: string, approved: boolean) => {
-      return ipcRenderer.invoke('chat:approve-tool', approvalId, approved);
-    },
     onRunStatus: (
-      callback: (event: import('@iki/backend/types/electron_api').RunStatusEvent) => void
+      callback: (event: import('@iki/harness/types/electron_api').RunStatusEvent) => void
     ) => subscribe('chat:run-status', callback),
     threads: {
       list: () => ipcRenderer.invoke('chat:threads:list'),

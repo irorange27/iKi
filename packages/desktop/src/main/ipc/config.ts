@@ -2,10 +2,10 @@ import { app, ipcMain } from 'electron';
 import path from 'node:path';
 
 import { setConfig, migrateFromJson, getStorePath } from '@iki/store/database';
-import { getAppConfig } from '@iki/backend/config';
+import { getAppConfig } from '@iki/harness/config';
 import { applyAppLoggingConfig, createLogger } from '@iki/core/logger';
-import { getMcpManager } from '@iki/backend/mcp';
-import { normalizeAppConfig } from '@iki/backend/config/normalize';
+import { getMcpManager } from '@iki/harness/mcp';
+import { normalizeAppConfig } from '@iki/harness/config/normalize';
 import type {
   AppConfig,
   ConfigRuntimeInfo,

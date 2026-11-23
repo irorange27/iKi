@@ -1,5 +1,5 @@
 
-import type { ChatUiChunk, ChatUiMessage, UiDynamicToolPart } from '@iki/ai/message/ui_protocol';
+import type { ChatUiChunk, ChatUiMessage, UiDynamicToolPart } from '@iki/llm/message/ui_protocol';
 
 const findToolIndex = (parts: ChatUiMessage['parts'], toolCallId: string): number =>
   parts.findIndex(

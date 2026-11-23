@@ -1,5 +1,5 @@
-import { THREAD_SCRATCH_WORKSPACE_PREFIX } from '@iki/backend/workspaces/thread_mode';
-import { THREAD_WORKTREE_WORKSPACE_PREFIX } from '@iki/backend/workspaces/worktree_ids';
+import { THREAD_SCRATCH_WORKSPACE_PREFIX } from '@iki/harness/workspaces/thread_mode';
+import { THREAD_WORKTREE_WORKSPACE_PREFIX } from '@iki/harness/workspaces/worktree_ids';
 
 export const normalizeWorkspaceId = (value: unknown): string | null => {
   if (typeof value !== 'string') return null;

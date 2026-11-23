@@ -1,5 +1,5 @@
 import { computed, toRaw, type Ref } from 'vue';
-import type { ChatUiMessage } from '@iki/ai/message/message_parts';
+import type { ChatUiMessage } from '@iki/llm/message/message_parts';
 import {
   buildSessionPerfStats,
   getTokenUsageSummary,

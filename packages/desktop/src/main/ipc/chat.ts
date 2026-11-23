@@ -71,11 +71,6 @@ export const registerChatIpc = (): void => {
     return await chatService.stream(target, options);
   });
 
-  ipcMain.handle('chat:approve-tool', async (event, approvalId: string, approved: boolean) => {
-    const target = toChatStreamTarget(event.sender);
-    return await chatService.approveTool(target, approvalId, approved);
-  });
-
   ipcMain.handle('chat:eval:export-trace', async (_, runId: string) => {
     return chatService.eval.exportTrace(runId);
   });

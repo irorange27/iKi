@@ -143,7 +143,7 @@ import { createLogger } from '../logger';
 import { getElectronAPI } from '../services/electron_api';
 import { useAppConfig } from '../composables/useAppConfig';
 import { useConfigStore } from '../store/config';
-import { createDefaultAppConfig } from '@iki/backend/config/defaults';
+import { createDefaultAppConfig } from '@iki/harness/config/defaults';
 import type { AppConfig } from '@iki/core/types/config';
 import type { Provider } from '@iki/core/types/provider';
 

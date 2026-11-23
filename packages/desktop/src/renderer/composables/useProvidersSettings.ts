@@ -2,7 +2,7 @@ import { computed, onMounted, ref } from 'vue';
 
 import { useI18n } from '../i18n';
 import type { BuiltInProvider } from '@iki/core/types/settings';
-import { BUILTIN_PROVIDERS } from '@iki/backend/constants/ProvidersSettings';
+import { BUILTIN_PROVIDERS } from '@iki/harness/constants/ProvidersSettings';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { toPlainData } from '@iki/core/utils/plain_clone';
 import { pruneProviderModelOptionsMap } from '@iki/core/utils/provider_models';

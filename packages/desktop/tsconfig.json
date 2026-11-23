@@ -13,8 +13,8 @@
     "resolveJsonModule": true,
     "sourceMap": true,
     "paths": {
-      "@iki/backend/*": [
-        "../backend/src/*"
+      "@iki/harness/*": [
+        "../harness/src/*"
       ],
       "@iki/core/*": [
         "../core/src/*"
@@ -22,8 +22,26 @@
       "@iki/store/*": [
         "../store/src/*"
       ],
-      "@iki/ai/*": [
-        "../ai/src/*"
+      "@iki/session/*": [
+        "../session/src/*"
+      ],
+      "@iki/llm/*": [
+        "../llm/src/*"
+      ],
+      "@iki/llm-pi-ai/*": [
+        "../llm-pi-ai/src/*"
+      ],
+      "@iki/agent": [
+        "../agent/src/index.ts"
+      ],
+      "@iki/agent/*": [
+        "../agent/src/*"
+      ],
+      "@iki/agent-loop": [
+        "../agent-loop/src/index.ts"
+      ],
+      "@iki/agent-loop/*": [
+        "../agent-loop/src/*"
       ]
     },
     "declaration": true,

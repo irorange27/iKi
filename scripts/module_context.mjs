@@ -19,7 +19,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const registry = JSON.parse(readFileSync(join(ROOT, 'scripts/module_registry.json'), 'utf8'));
 
 const SOURCE_GLOBS = [
-  'packages/backend/src',
+  'packages/harness/src',
   'packages/core/src',
   'packages/store/src',
   'packages/ai/src',
@@ -65,7 +65,7 @@ const IMPORT_RE = /(?:from\s+|import\s*\(\s*)['"]([^'"]+)['"]/g;
 
 const resolveSpecifier = (specifier, importer) => {
   let base = null;
-  if (specifier.startsWith('@iki/backend/')) base = join(ROOT, 'packages/backend/src', specifier.slice('@iki/backend/'.length));
+  if (specifier.startsWith('@iki/harness/')) base = join(ROOT, 'packages/harness/src', specifier.slice('@iki/harness/'.length));
   else if (specifier.startsWith('@iki/theme/')) base = join(ROOT, 'packages/theme/src', specifier.slice('@iki/theme/'.length));
   else if (specifier.startsWith('.')) base = resolve(dirname(importer), specifier);
   else return null; // npm package

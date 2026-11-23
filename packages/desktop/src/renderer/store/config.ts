@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import type { AppConfig } from '@iki/core/types/config';
-import { createDefaultAppConfig, mergeAppConfig } from '@iki/backend/config/defaults';
+import { createDefaultAppConfig, mergeAppConfig } from '@iki/harness/config/defaults';
 import { toPlainData as clonePlainData } from '@iki/core/utils/plain_clone';
 import { createLogger } from '../logger';
 import { configService } from '../services/config_service';

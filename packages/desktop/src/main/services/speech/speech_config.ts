@@ -1,6 +1,6 @@
-import { getAppConfig } from '@iki/backend/config';
+import { getAppConfig } from '@iki/harness/config';
 import type { AppConfig } from '@iki/core/types/config';
-import { DEFAULT_APP_CONFIG } from '@iki/backend/config/defaults';
+import { DEFAULT_APP_CONFIG } from '@iki/harness/config/defaults';
 
 export const DEFAULT_OPENAI_MODEL = 'whisper-1';
 const DEFAULT_WHISPER_NODE_MODEL = 'base.en';

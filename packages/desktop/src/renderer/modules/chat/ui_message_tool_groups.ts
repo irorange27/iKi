@@ -1,5 +1,5 @@
-import { isObjectRecord, isToolPart } from '@iki/ai/message/tool_parts';
-import type { ChatUiMessage } from '@iki/ai/message/message_parts';
+import { isObjectRecord, isToolPart } from '@iki/llm/message/tool_parts';
+import type { ChatUiMessage } from '@iki/llm/message/message_parts';
 
 import {
   formatDurationMs,

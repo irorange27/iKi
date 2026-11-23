@@ -1,4 +1,4 @@
-import { BUILTIN_PROVIDERS } from '@iki/backend/constants/ProvidersSettings';
+import { BUILTIN_PROVIDERS } from '@iki/harness/constants/ProvidersSettings';
 import type { Provider } from '@iki/core/types/provider';
 import { getCanonicalBuiltInProviderName, getProviderFallbackText } from './provider_display';
 

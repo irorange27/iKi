@@ -1,6 +1,6 @@
 import { getErrorMessage } from '@iki/core/utils/errors';
 import type { AgentRun, AgentRunTrace } from '@iki/core/types/agent_run';
-import type { ElectronApi } from '@iki/backend/types/electron_api';
+import type { ElectronApi } from '@iki/harness/types/electron_api';
 import { onMounted, onUnmounted, ref, shallowRef, watch, type Ref } from 'vue';
 
 const POLL_INTERVAL_MS = 2_000;

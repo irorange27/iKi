@@ -4,9 +4,9 @@ import { createLogger } from '@iki/core/logger';
 import {
   createAwaiterRunner,
   type AwaiterRunner,
-} from '@iki/backend/awaiters/awaiter_runner';
+} from '@iki/harness/awaiters/awaiter_runner';
 import { getAllBrowserWindows } from '../../utils/browser_windows';
-import type { ChatStreamTarget } from '@iki/backend/thread_session';
+import type { ChatStreamTarget } from '@iki/harness/thread_session';
 import { chatService } from '../chat/service';
 
 const awaiterLogger = createLogger({ module: 'awaiters' });

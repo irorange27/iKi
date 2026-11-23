@@ -1,0 +1,15 @@
+{
+  "name": "@iki/llm-pi-ai",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@iki/core": "workspace:*",
+    "@iki/llm": "workspace:*",
+    "@iki/store": "workspace:*"
+  }
+}

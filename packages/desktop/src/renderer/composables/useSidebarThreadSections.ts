@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue';
-import { resolveThreadWorkMode } from '@iki/backend/workspaces/thread_mode';
+import { resolveThreadWorkMode } from '@iki/harness/workspaces/thread_mode';
 import { isExternalThread } from '../modules/chat/thread_origin';
 import type { WorkspaceInfo, SidebarChatThread } from './useSidebarData';
 

@@ -213,7 +213,7 @@ import type {
   NetworkDiagnosticTargetKey,
   WebSearchEngine,
 } from '@iki/core/types/config';
-import { buildProxyUrl } from '@iki/ai/network/proxy';
+import { buildProxyUrl } from '@iki/llm/network/proxy';
 import { getErrorMessage } from '@iki/core/utils/errors';
 
 defineProps<{

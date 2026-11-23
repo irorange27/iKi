@@ -1,0 +1,408 @@
+import { defaultToolRegistry } from '@iki/harness/tools';
+import { reduceChunkLogToMessage } from '@iki/llm/message/ui_chunk_reducer';
+import type {
+  ChatUiMessageChunk,
+  SkillUsageEntry,
+  TokenUsagePartData,
+} from '@iki/llm/message/message_parts';
+import { isObjectRecord } from '@iki/llm/message/tool_parts';
+import { createLogger } from '@iki/core/logger';
+
+import type {
+  ChatStreamTarget,
+  ChatStreamEvent,
+  UiChunkEmitter,
+} from './types';
+import { createPrefixedId } from '@iki/core/utils/id';
+
+const uiStreamLogger = createLogger({ module: 'ui_stream' });
+
+const getNestedToolEventField = (
+  event: ChatStreamEvent,
+  field: 'toolCallId' | 'toolName'
+): unknown => {
+  if (field === 'toolCallId' && 'toolCallId' in event) {
+    const value = event.toolCallId;
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  if (field === 'toolName' && 'toolName' in event) {
+    const value = event.toolName;
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  if (event.type !== 'tool-approval-request') return undefined;
+  return event.toolCall?.[field];
+};
+
+const getToolCallIdFromEvent = (event: ChatStreamEvent): string => {
+  const candidate =
+    typeof getNestedToolEventField(event, 'toolCallId') === 'string'
+      ? (getNestedToolEventField(event, 'toolCallId') as string)
+      : '';
+
+  if (candidate.length > 0) return candidate;
+  return createPrefixedId('tool_call');
+};
+
+const getToolNameFromEvent = (event: ChatStreamEvent): string =>
+  typeof getNestedToolEventField(event, 'toolName') === 'string' &&
+  (getNestedToolEventField(event, 'toolName') as string).length > 0
+    ? (getNestedToolEventField(event, 'toolName') as string)
+    : 'tool';
+
+const getToolDisplayTitle = (toolName: string): string | undefined => {
+  const tool = defaultToolRegistry.get(toolName);
+  if (tool) {
+    const baseName =
+      typeof tool.displayName === 'string' && tool.displayName.trim()
+        ? tool.displayName.trim()
+        : tool.name;
+    return baseName;
+  }
+  if (toolName.startsWith('mcp:')) {
+    const slashIndex = toolName.lastIndexOf('/');
+    if (slashIndex >= 0 && slashIndex < toolName.length - 1) {
+      return toolName.slice(slashIndex + 1);
+    }
+  }
+  const mcpMatch = toolName.match(/^mcp_[a-f0-9]{8}_(.+)$/);
+  if (mcpMatch && mcpMatch[1]) {
+    return mcpMatch[1];
+  }
+  return undefined;
+};
+
+const toUiChunkFromToolEvent = (event: ChatStreamEvent): ChatUiMessageChunk | null => {
+  const toolCallId = getToolCallIdFromEvent(event);
+  const toolName = getToolNameFromEvent(event);
+  const title = getToolDisplayTitle(toolName);
+
+  if (event.type === 'tool-input-start') {
+    return {
+      type: 'tool-input-start',
+      toolCallId,
+      toolName,
+      ...(title ? { title } : {}),
+      dynamic: true,
+    };
+  }
+  if (event.type === 'tool-input-delta') {
+    return {
+      type: 'tool-input-delta',
+      toolCallId,
+      inputTextDelta: event.delta,
+    };
+  }
+  if (event.type === 'tool-input-end') {
+    return null;
+  }
+  if (event.type === 'tool-call') {
+    if (event.invalid) {
+      return {
+        type: 'tool-input-error',
+        toolCallId,
+        toolName,
+        input: event.input ?? {},
+        errorText:
+          typeof event.error === 'string'
+            ? event.error
+            : event.error instanceof Error
+              ? event.error.message
+              : 'Invalid tool call',
+        ...(title ? { title } : {}),
+        dynamic: true,
+      };
+    }
+    return {
+      type: 'tool-input-available',
+      toolCallId,
+      toolName,
+      input: event.input ?? {},
+      ...(title ? { title } : {}),
+      dynamic: true,
+    };
+  }
+  if (event.type === 'tool-result') {
+    return {
+      type: 'tool-output-available',
+      toolCallId,
+      toolName,
+      output: event.output,
+      dynamic: true,
+      ...(typeof event.preliminary === 'boolean' ? { preliminary: event.preliminary } : {}),
+    };
+  }
+  if (event.type === 'tool-error') {
+    return {
+      type: 'tool-output-error',
+      toolCallId,
+      toolName,
+      errorText:
+        typeof event.error === 'string'
+          ? event.error
+          : event.error instanceof Error
+            ? event.error.message
+            : 'Tool execution failed',
+      dynamic: true,
+    };
+  }
+  if (event.type === 'tool-output-denied') {
+    return {
+      type: 'tool-output-denied',
+      toolCallId,
+    };
+  }
+  if (event.type === 'tool-approval-request') {
+    const approvalInput = isObjectRecord(event.toolCall)
+      ? isObjectRecord(event.toolCall.args)
+        ? event.toolCall.args
+        : event.toolCall.input
+      : undefined;
+
+    return {
+      type: 'tool-approval-request',
+      approvalId:
+        typeof event.approvalId === 'string' && event.approvalId.length > 0
+          ? event.approvalId
+          : createPrefixedId('approval'),
+      toolCallId,
+      ...(toolName !== 'tool' ? { toolName } : {}),
+      ...(approvalInput !== undefined ? { input: approvalInput } : {}),
+    };
+  }
+
+  return null;
+};
+
+export const createUiChunkEmitter = (
+  target: ChatStreamTarget,
+  messageId: string = createPrefixedId('assistant')
+): UiChunkEmitter => {
+  let started = false;
+  let textStarted = false;
+  let reasoningStarted = false;
+  let terminated = false;
+  let textSegmentIndex = 0;
+
+  const seededToolCallIds = new Set<string>();
+
+  const chunkLog: ChatUiMessageChunk[] = [];
+
+  const emitChunk = (chunk: ChatUiMessageChunk) => {
+    target.send('chat:ui-chunk', chunk);
+    chunkLog.push(chunk);
+  };
+
+  const ensureStarted = () => {
+    if (started || terminated) return;
+    emitChunk({ type: 'start', messageId });
+    started = true;
+  };
+
+  const getTextSegmentId = (index: number): string => `${messageId}-t${index}`;
+
+  const ensureTextStarted = () => {
+    ensureStarted();
+    if (terminated) return;
+    if (!textStarted) {
+      emitChunk({ type: 'text-start', id: getTextSegmentId(textSegmentIndex) });
+      textStarted = true;
+    }
+  };
+
+  const closeText = () => {
+    if (!textStarted || terminated) return;
+    emitChunk({ type: 'text-end', id: getTextSegmentId(textSegmentIndex) });
+    textStarted = false;
+    textSegmentIndex += 1;
+  };
+
+  const ensureReasoningStarted = () => {
+    ensureStarted();
+    if (terminated) return;
+    if (!reasoningStarted) {
+      emitChunk({ type: 'reasoning-start', id: `${messageId}-r` });
+      reasoningStarted = true;
+    }
+  };
+
+  const closeReasoning = () => {
+    if (!reasoningStarted || terminated) return;
+    emitChunk({ type: 'reasoning-end', id: `${messageId}-r` });
+    reasoningStarted = false;
+  };
+
+  const ensureToolPartSeeded = (toolCallId: string, toolName: string, input: unknown) => {
+    if (seededToolCallIds.has(toolCallId)) return;
+    const title = getToolDisplayTitle(toolName);
+    emitChunk({
+      type: 'tool-input-available',
+      toolCallId,
+      toolName,
+      ...(input !== undefined ? { input } : {}),
+      dynamic: true,
+      ...(title ? { title } : {}),
+    });
+    seededToolCallIds.add(toolCallId);
+  };
+
+  return {
+    messageId,
+
+    settleParts: () => {
+      if (terminated) return;
+      ensureStarted();
+      closeText();
+      closeReasoning();
+    },
+    emitTextDelta: delta => {
+      if (!delta || terminated) return;
+      ensureTextStarted();
+      emitChunk({ type: 'text-delta', id: getTextSegmentId(textSegmentIndex), delta });
+    },
+    emitReasoningDelta: delta => {
+      if (!delta || terminated) return;
+      ensureReasoningStarted();
+      emitChunk({ type: 'reasoning-delta', id: `${messageId}-r`, delta });
+    },
+    emitToolEvent: event => {
+      if (terminated) return;
+      ensureStarted();
+      closeText();
+      closeReasoning();
+      const toolCallId = getToolCallIdFromEvent(event);
+      if (
+        event.type === 'tool-result' ||
+        event.type === 'tool-error' ||
+        event.type === 'tool-output-denied' ||
+        event.type === 'tool-approval-request'
+      ) {
+        const toolName = getToolNameFromEvent(event);
+        const input =
+          event.type === 'tool-approval-request' && event.toolCall
+            ? isObjectRecord(event.toolCall.args)
+              ? event.toolCall.args
+              : event.toolCall.input
+            : undefined;
+        ensureToolPartSeeded(toolCallId, toolName, input);
+      }
+      const uiChunk = toUiChunkFromToolEvent(event);
+      if (uiChunk) {
+        if (uiChunk.type === 'tool-input-start' || uiChunk.type === 'tool-input-available') {
+          seededToolCallIds.add(uiChunk.toolCallId);
+        }
+        emitChunk(uiChunk);
+      }
+    },
+    emitSkillUsage: (payload: { mode?: 'manual' | 'auto'; skills: SkillUsageEntry[] }) => {
+      if (terminated) return;
+      ensureStarted();
+      emitChunk({
+        type: 'data-skill-usage',
+        id: 'skill-usage',
+        data: {
+          ...(payload.mode === 'auto' || payload.mode === 'manual' ? { mode: payload.mode } : {}),
+          skills: Array.isArray(payload.skills) ? payload.skills : [],
+        },
+      });
+    },
+    emitTokenUsage: payload => {
+      if (terminated) return;
+      ensureStarted();
+      const data: TokenUsagePartData = {
+        ...(typeof payload?.inputTokens === 'number' ? { inputTokens: payload.inputTokens } : {}),
+        ...(typeof payload?.outputTokens === 'number'
+          ? { outputTokens: payload.outputTokens }
+          : {}),
+        ...(typeof payload?.totalTokens === 'number' ? { totalTokens: payload.totalTokens } : {}),
+        ...(typeof payload?.cacheReadTokens === 'number'
+          ? { cacheReadTokens: payload.cacheReadTokens }
+          : {}),
+        ...(typeof payload?.cacheWriteTokens === 'number'
+          ? { cacheWriteTokens: payload.cacheWriteTokens }
+          : {}),
+        ...(typeof payload?.reasoningTokens === 'number'
+          ? { reasoningTokens: payload.reasoningTokens }
+          : {}),
+        ...(typeof payload?.estimatedCostUsd === 'number'
+          ? { estimatedCostUsd: payload.estimatedCostUsd }
+          : {}),
+        ...(typeof payload?.lastStepInputTokens === 'number'
+          ? { lastStepInputTokens: payload.lastStepInputTokens }
+          : {}),
+        ...(typeof payload?.maxInputTokens === 'number'
+          ? { maxInputTokens: payload.maxInputTokens }
+          : {}),
+        ...(typeof payload?.maxOutputTokens === 'number'
+          ? { maxOutputTokens: payload.maxOutputTokens }
+          : {}),
+        ...(typeof payload?.model === 'string' ? { model: payload.model } : {}),
+        ...(typeof payload?.providerType === 'string'
+          ? { providerType: payload.providerType }
+          : {}),
+        ...(typeof payload?.providerId === 'string' ? { providerId: payload.providerId } : {}),
+        ...(typeof payload?.llmMs === 'number' ? { llmMs: payload.llmMs } : {}),
+        ...(typeof payload?.toolMs === 'number' ? { toolMs: payload.toolMs } : {}),
+        ...(typeof payload?.firstTokenMs === 'number'
+          ? { firstTokenMs: payload.firstTokenMs }
+          : {}),
+        ...(typeof payload?.firstTokenSamples === 'number'
+          ? { firstTokenSamples: payload.firstTokenSamples }
+          : {}),
+        ...(typeof payload?.steps === 'number' ? { steps: payload.steps } : {}),
+        ...(typeof payload?.toolCalls === 'number' ? { toolCalls: payload.toolCalls } : {}),
+        ...(payload?.contextComposition ? { contextComposition: payload.contextComposition } : {}),
+      };
+      emitChunk({
+        type: 'data-token-usage',
+        id: 'token-usage',
+        data,
+      });
+    },
+    buildPersistedMessage: async (seedParts?: unknown[]) => {
+      if (!started || chunkLog.length === 0) return null;
+
+      let reduced: { parts: unknown[] } | null = null;
+      try {
+        reduced = reduceChunkLogToMessage(chunkLog, {
+
+          messageId,
+          ...(Array.isArray(seedParts) ? { seed: { messageId, parts: seedParts as never } } : {}),
+        });
+      } catch (error) {
+        uiStreamLogger.event({
+          level: 'warn',
+          event: 'chat.ui_stream.persist_reduce',
+          outcome: 'failed',
+          message: 'Failed to reduce the turn chunk log into a persisted message.',
+          error,
+        });
+        return null;
+      }
+      if (!reduced) return null;
+      return { id: messageId, role: 'assistant', parts: reduced.parts };
+    },
+    finish: () => {
+      if (terminated) return;
+      ensureStarted();
+      closeText();
+      closeReasoning();
+      emitChunk({ type: 'finish' });
+      terminated = true;
+    },
+    abort: () => {
+      if (terminated) return;
+      ensureStarted();
+      closeText();
+      closeReasoning();
+      emitChunk({ type: 'abort' });
+      terminated = true;
+    },
+    error: errorText => {
+      if (terminated) return;
+      ensureStarted();
+      closeText();
+      closeReasoning();
+      emitChunk({ type: 'error', errorText });
+    },
+  };
+};

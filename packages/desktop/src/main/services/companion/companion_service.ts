@@ -1,5 +1,5 @@
 import * as providerDb from '@iki/store/providers';
-import { getAppConfig } from '@iki/backend/config';
+import { getAppConfig } from '@iki/harness/config';
 import { createLogger } from '@iki/core/logger';
 import type {
   CompanionDormantReason,

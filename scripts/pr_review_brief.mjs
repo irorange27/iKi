@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generates the review brief for a commit range (PR review protocol, see
-// packages/backend/HARNESS_REVIEW.md): commits, changed files, full diff file,
+// packages/harness/HARNESS_REVIEW.md): commits, changed files, full diff file,
 // and risk-surface warnings. Usage:
 //   node scripts/pr_review_brief.mjs [base...head]   (default: main...HEAD)
 import { execFileSync } from 'node:child_process';
@@ -22,9 +22,9 @@ const fileList = files
   .split('\n')
   .filter(Boolean)
   .map(line => line.split('\t').slice(1).join('\t'));
-const backendSrc = fileList.filter(f => f.includes('packages/backend/src'));
+const backendSrc = fileList.filter(f => f.includes('packages/harness/src'));
 const testFiles = fileList.filter(f => f.startsWith('tests/'));
-const mapUpdated = fileList.some(f => f.endsWith('packages/backend/README.md'));
+const mapUpdated = fileList.some(f => f.endsWith('packages/harness/README.md'));
 
 const lines = [];
 lines.push(`# Review brief: ${range}`);

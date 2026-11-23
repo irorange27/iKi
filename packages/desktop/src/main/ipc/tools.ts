@@ -1,8 +1,8 @@
 import { ipcMain } from 'electron';
 
-import { getAppConfig } from '@iki/backend/config';
+import { getAppConfig } from '@iki/harness/config';
 import { createLogger } from '@iki/core/logger';
-import { defaultToolRegistry } from '@iki/backend/tools';
+import { defaultToolRegistry } from '@iki/harness/tools';
 import { decideToolApproval } from '@iki/core/utils/action_risk';
 import { withIpcLogging } from '../utils/ipc_helpers';
 

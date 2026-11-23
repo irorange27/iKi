@@ -1,0 +1,14 @@
+{
+  "name": "@iki/agent-loop",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@iki/agent": "workspace:*",
+    "@iki/llm": "workspace:*"
+  }
+}

@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 
-import { getAppConfig, setAppConfig } from '@iki/backend/config';
+import { getAppConfig, setAppConfig } from '@iki/harness/config';
 import { companionService } from '../services/companion/companion_service';
 import { broadcastToRenderers } from '../utils/ipc_helpers';
 import { syncCompanionWindowToConfig } from '../windows/companion_window';

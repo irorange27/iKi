@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 import type { ComputedRef } from 'vue';
-import type { UiFilePart as FileUIPart } from '@iki/ai/message/ui_protocol';
+import type { UiFilePart as FileUIPart } from '@iki/llm/message/ui_protocol';
 
 type ImagePayload = { mediaType: string; url: string; filename?: string };
 

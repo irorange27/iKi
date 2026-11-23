@@ -1,0 +1,26 @@
+{
+  "name": "@iki/harness",
+  "version": "0.0.2",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./agent": "./src/agent/index.ts",
+    "./agent/*": "./src/agent/*.ts",
+    "./mcp": "./src/mcp/index.ts",
+    "./thread_session": "./src/thread_session/index.ts",
+    "./thread_session/*": "./src/thread_session/*.ts",
+    "./tools": "./src/tools/index.ts",
+    "./tools/*": "./src/tools/*.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@iki/theme": "workspace:*",
+    "@iki/core": "workspace:*",
+    "@iki/store": "workspace:*",
+    "@iki/session": "workspace:*",
+    "@iki/llm": "workspace:*",
+    "@iki/llm-pi-ai": "workspace:*",
+    "@iki/agent": "workspace:*",
+    "@iki/agent-loop": "workspace:*"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@iki/llm",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@iki/core": "workspace:*",
+    "@iki/session": "workspace:*",
+    "@iki/store": "workspace:*"
+  }
+}
