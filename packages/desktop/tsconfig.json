@@ -42,6 +42,12 @@
       ],
       "@iki/agent-loop/*": [
         "../agent-loop/src/*"
+      ],
+      "@iki/system-prompt": [
+        "../system-prompt/src/index.ts"
+      ],
+      "@iki/system-prompt/*": [
+        "../system-prompt/src/*"
       ]
     },
     "declaration": true,

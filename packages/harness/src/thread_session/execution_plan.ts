@@ -9,8 +9,7 @@ import type { ThreadWorkspaceSelection } from '../workspaces/thread_workspace';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import { getPersonalityStylePrompt } from '@iki/llm/message/personality';
 import {
-  NO_TOOLS_SYSTEM_PROMPT,
-  TOOL_AGENT_SYSTEM_PROMPT,
+  buildToolSystemPrompt,
   resolveToolCallMaxIterations,
 } from './constants';
 import type { ChatTurnOptions, PreparedChatTurn } from '../turn_prep/turn_preparer';
@@ -95,7 +94,10 @@ export const assembleExecutionPlan = (params: {
     ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
     workspaceSelection,
     systemPrompt: [
-      preparedTurn.enableTools ? TOOL_AGENT_SYSTEM_PROMPT : NO_TOOLS_SYSTEM_PROMPT,
+      buildToolSystemPrompt({
+        enableTools: preparedTurn.enableTools,
+        enabledToolNames: preparedTurn.guardedTools,
+      }),
       getPersonalityStylePrompt(options.personality),
     ]
       .filter(part => part.trim().length > 0)

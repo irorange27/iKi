@@ -19,6 +19,8 @@ export default defineConfig({
       { find: '@iki/agent', replacement: path.join(ROOT, 'packages/agent/src/index.ts') },
       { find: '@iki/agent-loop/', replacement: path.join(ROOT, 'packages/agent-loop/src/') },
       { find: '@iki/agent-loop', replacement: path.join(ROOT, 'packages/agent-loop/src/index.ts') },
+      { find: '@iki/system-prompt/', replacement: path.join(ROOT, 'packages/system-prompt/src/') },
+      { find: '@iki/system-prompt', replacement: path.join(ROOT, 'packages/system-prompt/src/index.ts') },
       { find: '@iki/theme/', replacement: path.join(ROOT, 'packages/theme/src/') },
       { find: '@iki/theme', replacement: path.join(ROOT, 'packages/theme/src/index.ts') },
     ],

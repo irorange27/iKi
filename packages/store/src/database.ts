@@ -51,6 +51,10 @@ const STARTER_SETTINGS_TOML = `# iKi user settings (overrides system defaults)
 # theme = "dark"
 `;
 
+const STARTER_PERSONA_MD = `<!-- iKi persona & global user instructions. Edit freely; HTML comments are stripped. -->
+You are iKi.
+`;
+
 const ensureHomeScaffold = (dir: string): void => {
   if (!dir) return;
   for (const sub of ['sessions', 'skills', 'state', 'profiles']) {
@@ -63,6 +67,10 @@ const ensureHomeScaffold = (dir: string): void => {
   const settingsFile = path.join(dir, SETTINGS_FILE);
   if (!fs.existsSync(settingsFile)) {
     fs.writeFileSync(settingsFile, STARTER_SETTINGS_TOML, 'utf8');
+  }
+  const personaFile = path.join(dir, 'PERSONA.md');
+  if (!fs.existsSync(personaFile)) {
+    fs.writeFileSync(personaFile, STARTER_PERSONA_MD, 'utf8');
   }
 };
 

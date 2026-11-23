@@ -53,6 +53,12 @@
       ],
       "@iki/agent-loop/*": [
         "./packages/agent-loop/src/*"
+      ],
+      "@iki/system-prompt": [
+        "./packages/system-prompt/src/index.ts"
+      ],
+      "@iki/system-prompt/*": [
+        "./packages/system-prompt/src/*"
       ]
     },
     "typeRoots": [
@@ -70,6 +76,7 @@
     "packages/llm-pi-ai/src/**/*",
     "packages/agent/src/**/*",
     "packages/agent-loop/src/**/*",
+    "packages/system-prompt/src/**/*",
     "packages/cli/src/**/*"
   ]
 }

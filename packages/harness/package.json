@@ -21,6 +21,7 @@
     "@iki/llm": "workspace:*",
     "@iki/llm-pi-ai": "workspace:*",
     "@iki/agent": "workspace:*",
-    "@iki/agent-loop": "workspace:*"
+    "@iki/agent-loop": "workspace:*",
+    "@iki/system-prompt": "workspace:*"
   }
 }

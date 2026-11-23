@@ -10,6 +10,7 @@
   "dependencies": {
     "@iki/core": "workspace:*",
     "@iki/llm": "workspace:*",
-    "@iki/store": "workspace:*"
+    "@iki/store": "workspace:*",
+    "@iki/system-prompt": "workspace:*"
   }
 }

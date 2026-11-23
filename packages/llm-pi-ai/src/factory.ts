@@ -6,7 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { getProviders } from '@iki/store/providers';
 import { createLogger } from '@iki/core/logger';
-import { getPersonaPrompt } from '@iki/harness/persona';
+import { getPersonaPrompt } from '@iki/system-prompt/persona';
 import { fetchWithTimeout } from '@iki/llm/network/http';
 import {
   getProviderModelOptions,
