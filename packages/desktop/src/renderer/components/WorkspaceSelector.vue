@@ -91,10 +91,11 @@ onMounted(loadWorkspaces);
   gap: 4px;
   min-width: 0;
   max-width: 280px;
-  height: 24px;
+  height: 28px;
   padding: 0 2px 0 6px;
   border-radius: 6px;
   color: var(--text-secondary);
+  -webkit-app-region: no-drag;
   transition: background-color 0.15s ease;
 }
 

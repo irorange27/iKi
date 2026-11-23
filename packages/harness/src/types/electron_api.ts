@@ -256,15 +256,8 @@ export interface ElectronApi {
     probeElement: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
     resolveElement: (request?: DevToolsResolveRequest) => Promise<DevToolsSourceResult>;
   };
-  openSettings: (section?: string) => void;
+  onOpenSettings: (callback: () => void) => () => void;
 
   closeWindow: () => void;
   setWindowShadow: (enabled: boolean) => void;
-
-  windowControls?: {
-    minimize: () => void;
-    toggleMaximize: () => void;
-    onFullscreenChange: (callback: (fullscreen: boolean) => void) => () => void;
-    onFocusChange: (callback: (focused: boolean) => void) => () => void;
-  };
 }

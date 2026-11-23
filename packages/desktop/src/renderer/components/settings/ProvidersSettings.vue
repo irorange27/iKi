@@ -26,7 +26,23 @@
         @select-provider="selectProvider"
       />
 
+      <ProviderEditorPanel
+        v-if="showProviderEditor && editingProvider"
+        :editing-provider="editingProvider"
+        :provider-type-options="providerTypeOptions"
+        :editing-provider-api-format="editingProviderApiFormat"
+        @cancel="cancelCustomProvider"
+        @save="saveProvider"
+        @update:type="updateEditingProviderTypeSelection"
+        @update:api-format="updateEditingProviderApiFormatSelection"
+      />
+
       <ProviderDetailsPane
+        v-else
+        :selected-provider-id="selectedProviderId"
+        :active-options-model-id="
+          modelOptionsEditor?.providerId === selectedProviderId ? modelOptionsEditor.modelId : null
+        "
         :selected-provider-info="selectedProviderInfo"
         :selected-provider-draft="selectedProviderDraft"
         :selected-provider-support-link="selectedProviderSupportLink"
@@ -46,6 +62,8 @@
         @fetch-models="fetchLatestModels"
         @toggle-model="toggleModel"
         @edit-model-options="openModelOptionsEditor"
+        @cancel-model-options="closeModelOptionsEditor"
+        @save-model-options="saveModelOptions"
         @add-model="addModel"
         @reset-draft="resetSelectedProviderDraft"
         @save-config="saveProviderConfig"
@@ -53,39 +71,13 @@
       />
     </div>
   </section>
-
-  <!-- The overlays sit outside `.providers-section` on purpose: that section is
-       a container-query root (container-type: inline-size), and layout
-       containment would make it the containing block for these fixed overlays
-       instead of the viewport. They stay in this component's DOM tree so
-       scoped styles and tests keep finding them. -->
-  <ProviderEditorModal
-    v-if="showProviderEditor && editingProvider"
-      :editing-provider="editingProvider"
-      :provider-type-options="providerTypeOptions"
-      :editing-provider-api-format="editingProviderApiFormat"
-      @cancel="showProviderEditor = false"
-      @save="saveProvider"
-      @update:type="updateEditingProviderTypeSelection"
-      @update:api-format="updateEditingProviderApiFormatSelection"
-    />
-
-    <ProviderModelOptionsModal
-      v-if="modelOptionsEditor && selectedProviderDraft"
-      :provider-id="modelOptionsEditor.providerId"
-      :model-id="modelOptionsEditor.modelId"
-      :model-options="selectedProviderDraft.modelOptions[modelOptionsEditor.modelId] || null"
-      @cancel="closeModelOptionsEditor"
-      @save="saveModelOptions"
-    />
 </template>
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, watch } from 'vue';
 
-import ProviderModelOptionsModal from './providers/ProviderModelOptionsModal.vue';
 import ProviderDetailsPane from './providers/ProviderDetailsPane.vue';
-import ProviderEditorModal from './providers/ProviderEditorModal.vue';
+import ProviderEditorPanel from './providers/ProviderEditorPanel.vue';
 import ProvidersSidebar from './providers/ProvidersSidebar.vue';
 import { useProvidersSettings } from '../../composables/useProvidersSettings';
 
@@ -93,6 +85,7 @@ const {
   addCustomProvider,
   addModel,
   availableModelsList,
+  cancelCustomProvider,
   canSaveSelectedProvider,
   closeModelOptionsEditor,
   editingProvider,

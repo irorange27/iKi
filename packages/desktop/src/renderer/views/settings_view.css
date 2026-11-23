@@ -1,16 +1,13 @@
-/* Width contract for the settings shell (Lead's providers block is built
- * against it):
- *   >=980px   nav 220px, content padding 24px
- *   760-979   nav 188px, content padding 16px
- *   <760      nav is a 56px icon rail, content padding 16px
- * The shell is the whole window, so viewport width is the honest signal here;
- * the sections inside go fluid instead of stacking more viewport breakpoints
- * (see settings_shared.css / component css).
- * ─────────────────────────────────────────────────────────────────────── */
+/* Single-window Settings layout: shares the exact concentric sidebar card and
+ * y=26 top chrome centerline with ChatView so switching between chat and
+ * settings feels continuous on macOS and cleans down to a top tab strip on
+ * narrow/web viewports (< 760px). */
 .settings-container {
   --settings-nav-width: 220px;
   --settings-content-inline-pad: 24px;
+  --sidebar-hairline: color-mix(in srgb, var(--sidebar-border) 55%, transparent);
 
+  position: relative;
   display: flex;
   height: 100%;
   min-height: 0;
@@ -21,63 +18,69 @@
   box-sizing: border-box;
 }
 
-.titlebar-drag-region {
+/* Stationary Back control aligned to the native window controls (y=26 center). */
+.settings-back-btn {
   position: fixed;
-  top: 4px;
-  left: 4px;
-  right: 4px;
-  height: 20px;
-  -webkit-app-region: drag;
-  z-index: var(--z-chrome);
-}
-
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
+  top: 12px;
+  left: 88px;
+  z-index: calc(var(--z-chrome) + 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  border: none;
+  border-radius: 7px;
   background: transparent;
-  margin: 4px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
-::-webkit-scrollbar-thumb {
-  background-color: var(--border-color);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background-color: var(--text-muted);
+.settings-back-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .settings-nav {
   flex: none;
   width: var(--settings-nav-width);
-  background: transparent;
-  border-right: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
-  padding: 44px 10px 12px;
-  /* Long menus scroll instead of clipping in a short window. */
+  margin: 8px 0 8px 8px;
+  border-radius: 18px;
+  background: var(--sidebar-background);
+  box-shadow:
+    inset 0 0 0 1px var(--sidebar-hairline),
+    var(--theme-surface-inset-highlight);
+  padding: 50px 10px 14px;
   overflow-x: hidden;
   overflow-y: auto;
   min-height: 0;
   position: relative;
-  /* The rail is a width change on a flex:none sibling, so it can animate
-     without ever overlapping the content column. */
   transition: width 0.18s ease;
 }
 
 .nav-menu {
-  margin-top: 14px;
+  margin: 0;
+  padding: 0;
   list-style: none;
-  border-color: var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-/* Same row language as the main sidebar: 30px quiet rows, one shared wash
-   for hover and active, no accent fill or inset rail. */
-.nav-menu li {
-  min-height: 30px;
+.nav-menu-tab {
+  width: 100%;
+  min-height: 32px;
   min-width: 0;
-  margin-bottom: 2px;
-  padding: 4px 8px;
+  padding: 5px 10px;
+  border: none;
+  background: transparent;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -85,12 +88,19 @@
   border-radius: var(--control-radius);
   color: var(--text-secondary);
   font-size: 13px;
+  text-align: left;
   transition:
-    background-color 0.15s,
-    color 0.15s;
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
-/* Labels shrink with an ellipsis instead of pushing the content column. */
+.nav-menu-tab .icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
 .nav-label {
   min-width: 0;
   overflow: hidden;
@@ -98,78 +108,41 @@
   white-space: nowrap;
 }
 
-.nav-menu li svg {
-  width: 16px;
-  height: 16px;
-  flex: none;
+.nav-menu-tab:hover {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
 }
 
-.nav-menu li:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.nav-menu li.active {
-  background: var(--bg-active);
-  color: var(--text-primary);
+.nav-menu-tab.active {
+  background: var(--sidebar-active);
+  color: var(--sidebar-accent-foreground);
+  font-weight: 500;
 }
 
 .settings-content {
   flex: 1;
   min-width: 0;
-  padding: 0 var(--settings-content-inline-pad);
-  overflow-y: auto;
-  background: transparent;
   min-height: 0;
-  position: relative;
   display: flex;
   flex-direction: column;
-  /* Keep keyboard-focused controls clear of the sticky header. */
-  scroll-padding-top: 64px;
-}
-
-/* A merged settings page: one scroll, sub-sections titled along the way. */
-.settings-page {
-  display: flex;
-  flex-direction: column;
-  /* Never let a short window compress a section: sections keep their own
-     height and the middle pane scrolls (same precedent as the providers
-     card's flex: 0 0 auto). */
-  flex: 0 0 auto;
-  min-height: 0;
-}
-
-.settings-page-title {
-  margin: 24px 0 4px;
-  padding-top: 20px;
-  border-top: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
-  font-size: 15px;
-  line-height: 22px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.settings-page > .settings-page-title:first-child {
-  padding-top: 16px;
-  border-top: none;
-  margin-top: 0;
 }
 
 .settings-header {
+  flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 16px;
-  padding-bottom: 14px;
+  gap: 10px;
+  min-height: 46px;
+  padding: 12px var(--settings-content-inline-pad) 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
-  margin-bottom: 18px;
-  position: sticky;
-  top: 0;
   background: var(--bg-primary);
-  z-index: 5;
-  padding-left: 6px;
-  padding-right: 6px;
+}
+
+.settings-header-drag-spacer {
+  flex: 1;
+  min-width: 16px;
+  align-self: stretch;
+  -webkit-app-region: drag;
 }
 
 .settings-header-left {
@@ -177,242 +150,168 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  font-size: 15px;
-  font-weight: 600;
   color: var(--text-primary);
 }
 
+.settings-header-left .icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+  flex: none;
+}
+
 .settings-header-left .title {
+  margin: 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.settings-header-left .icon {
-  display: none;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
 }
 
 .settings-header-right {
   display: inline-flex;
   align-items: center;
   flex: none;
-  gap: 8px;
-  font-size: 0.9em;
-  color: var(--text-secondary);
+  gap: 10px;
+}
+
+.settings-save-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
-.settings-header-right.is-unsaved {
+.settings-save-pill.is-unsaved {
   color: var(--warning-color);
 }
 
-.settings-header-right .unsaved-dot {
-  width: 8px;
-  height: 8px;
+.settings-save-pill .unsaved-dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: currentColor;
   opacity: 0;
 }
 
-.settings-header-right.is-unsaved .unsaved-dot {
+.settings-save-pill.is-unsaved .unsaved-dot {
   opacity: 1;
 }
 
-.button-group {
-  display: flex;
-  gap: 8px;
-}
-
-.button-group button {
-  height: 28px;
-  padding: 0 12px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
+.settings-header-save-btn {
+  height: 26px;
+  padding: 0 11px;
+  border: none;
   border-radius: var(--control-radius-sm);
-  cursor: pointer;
+  background: var(--accent-color);
+  color: var(--accent-contrast);
   font-size: 12px;
-  transition:
-    background-color 0.15s,
-    color 0.15s,
-    border-color 0.15s;
-}
-
-.button-group button.active {
-  background: var(--accent-color);
-  color: var(--accent-contrast);
-  border-color: var(--accent-color);
-}
-
-.theme-editor-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
-.theme-editor-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.theme-json-editor {
-  min-height: clamp(180px, 42vh, 320px);
-  line-height: 1.45;
-  font-family: var(--font-mono);
-}
-
-.success-text {
-  color: var(--success-color);
-}
-
-.settings-footer {
-  position: sticky;
-  margin-top: auto;
-  bottom: 0;
-  padding: 16px 0 12px;
-  border-top: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
-  background: var(--bg-primary);
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  z-index: 10;
-}
-
-.save-status {
-  color: var(--success-color);
-  font-size: 0.875em;
-  margin-right: auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-
-.save-status::before {
-  content: '✓';
-  font-weight: bold;
-}
-
-.footer-actions {
-  display: flex;
-  flex: none;
-  margin-left: auto;
-  gap: 12px;
-}
-
-.footer-actions button {
-  height: 30px;
-  padding: 0 14px;
-  border-radius: var(--control-radius);
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition:
-    background-color 0.15s,
-    border-color 0.15s,
-    color 0.15s;
   font-weight: 500;
-  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
-.footer-actions .secondary {
-  background: transparent;
-  border-color: var(--border-color);
-  color: var(--text-primary);
-}
-
-.footer-actions .secondary:hover {
-  background: var(--bg-hover);
-  border-color: var(--text-muted);
-}
-
-.footer-actions .primary {
-  background: var(--accent-color);
-  color: var(--accent-contrast);
-  box-shadow: var(--surface-shadow-sm);
-}
-
-.footer-actions .primary:hover {
+.settings-header-save-btn:hover {
   background: var(--accent-hover);
 }
 
-/* Narrow: labels still fit, the column just tightens. Driven by the same two
-   custom properties as the default state, so there is one source of truth. */
+.settings-scroll-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px var(--settings-content-inline-pad) 36px;
+  scroll-padding-top: 24px;
+}
+
+.settings-scroll-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-scroll-body::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+
+.settings-scroll-body::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
+}
+
+.settings-scroll-body::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.settings-page-title {
+  margin: 8px 0 -6px 4px;
+  padding: 0;
+  border: none;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.settings-page > .settings-page-title:first-child {
+  margin-top: 0;
+}
+
+/* Medium window: slightly narrower nav card */
 @media (max-width: 979px) {
   .settings-container {
-    --settings-nav-width: 188px;
+    --settings-nav-width: 184px;
     --settings-content-inline-pad: 16px;
-  }
-
-  .settings-nav {
-    padding: 40px 8px 12px;
-  }
-
-  .nav-menu {
-    margin-top: 16px;
-  }
-
-  .nav-menu li {
-    padding: 9px 10px;
-    gap: 7px;
-    font-size: 13px;
-  }
-
-  .settings-header {
-    margin-bottom: 18px;
-    padding-bottom: 12px;
   }
 }
 
-/* Icon rail: below 760px the window is narrower than the nav's labels are
-   worth, and every pixel it keeps goes to the section content (which is what
-   lets the provider pane stay side-by-side at a genuinely narrow window).
-   Labels stay in the DOM — clipped, not removed — so the accessible name and
-   the title tooltip still describe each row. */
+/* Narrow desktop / web mobile: stack into a horizontal top pill bar below the
+   y=26 chrome row so content gets 100% of the viewport width. */
 @media (max-width: 759px) {
   .settings-container {
-    --settings-nav-width: 56px;
+    flex-direction: column;
     --settings-content-inline-pad: 16px;
   }
 
   .settings-nav {
-    padding: 40px 6px 12px;
+    width: auto;
+    margin: 48px 12px 0;
+    padding: 6px;
+    border-radius: 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .nav-menu {
-    margin-top: 16px;
+    flex-direction: row;
+    gap: 4px;
   }
 
   .nav-menu li {
-    justify-content: center;
-    min-height: 34px;
-    padding: 6px 0;
-    gap: 0;
+    flex: none;
   }
 
-  .nav-menu li svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  .nav-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+  .nav-menu-tab {
+    width: auto;
+    min-height: 30px;
+    padding: 4px 10px;
   }
 
   .settings-header {
-    margin-bottom: 18px;
-    padding-bottom: 12px;
+    min-height: 40px;
+    padding-top: 10px;
   }
 }

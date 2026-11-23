@@ -45,8 +45,8 @@ const toggle = () => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  padding: 11px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 32%, transparent);
 }
 
 .settings-switch-row--disabled {

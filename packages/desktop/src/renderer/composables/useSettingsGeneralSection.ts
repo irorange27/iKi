@@ -2,8 +2,7 @@ import { computed, onBeforeUnmount, onMounted, ref, type Ref } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import { createLogger } from '../logger';
-import { getElectronAPI } from '../services/electron_api';
-import { updateService } from '../services/update_service';
+import { useSettingsClient } from '../services/settings_client';
 import { useConfigStore } from '../store/config';
 import { useI18n } from '../i18n';
 import type { AppConfig } from '@iki/core/types/config';
@@ -38,7 +37,7 @@ export const useSettingsGeneralSection = (params: {
   providers: Readonly<Ref<Provider[]>>;
   onConfigChange: () => void;
 }) => {
-  const electronAPI = getElectronAPI();
+  const settingsClient = useSettingsClient();
   const settingsGeneralLogger = createLogger({ module: 'settings_general_section' });
   const { t } = useI18n();
   const configStore = useConfigStore();
@@ -328,7 +327,7 @@ export const useSettingsGeneralSection = (params: {
   const loadUpdateStatus = async () => {
     isLoadingUpdateStatus.value = true;
     try {
-      updateStatus.value = await updateService.getStatus();
+      updateStatus.value = await settingsClient.updates.getStatus();
     } catch (error) {
       settingsGeneralLogger.event({
         level: 'warn',
@@ -358,7 +357,7 @@ export const useSettingsGeneralSection = (params: {
 
   const checkForUpdatesNow = async () => {
     try {
-      updateStatus.value = await updateService.check();
+      updateStatus.value = await settingsClient.updates.check();
     } catch (error) {
       settingsGeneralLogger.event({
         level: 'warn',
@@ -379,7 +378,7 @@ export const useSettingsGeneralSection = (params: {
 
   const installDownloadedUpdate = async () => {
     try {
-      await updateService.install();
+      await settingsClient.updates.install();
     } catch (error) {
       settingsGeneralLogger.event({
         level: 'warn',
@@ -401,7 +400,7 @@ export const useSettingsGeneralSection = (params: {
   const testToolModel = async () => {
     if (!canTestToolModel.value) return;
 
-    const testLatency = electronAPI.toolModel?.testLatency;
+    const testLatency = settingsClient.toolModel.testLatency;
     if (typeof testLatency !== 'function') {
       toolModelTestResult.value = {
         status: 'error',
@@ -576,7 +575,7 @@ export const useSettingsGeneralSection = (params: {
   let removeUpdateStatusListener: () => void = () => undefined;
 
   onMounted(async () => {
-    removeUpdateStatusListener = updateService.onStatusChanged(status => {
+    removeUpdateStatusListener = settingsClient.updates.onStatusChanged(status => {
       updateStatus.value = status;
       isLoadingUpdateStatus.value = false;
     });

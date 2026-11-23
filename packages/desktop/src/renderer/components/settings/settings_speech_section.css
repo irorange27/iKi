@@ -1,15 +1,16 @@
 .speech-models-card {
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
+  border-radius: 10px;
   padding: 12px;
-  background: var(--bg-secondary);
-  margin-bottom: 12px;
+  background: var(--bg-primary);
+  margin: 10px 0 8px;
 }
 
 .speech-models-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  font-size: 13px;
   font-weight: 600;
   margin-bottom: 10px;
 }
@@ -18,38 +19,42 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: transparent;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
+  background: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: 0.85em;
-  transition: all 0.2s;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .speech-btn:hover:not(:disabled) {
-  border-color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 12%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--accent-color) 55%, var(--border-color));
+  background: var(--bg-hover);
 }
 
 .speech-btn.is-primary {
-  background: color-mix(in srgb, var(--accent-color) 22%, var(--bg-primary));
-  border-color: color-mix(in srgb, var(--accent-color) 40%, var(--border-color));
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: var(--accent-contrast);
 }
 
 .speech-btn.is-success {
-  background: color-mix(in srgb, var(--success-color, var(--accent-color)) 18%, var(--bg-primary));
-  border-color: color-mix(
-    in srgb,
-    var(--success-color, var(--accent-color)) 35%,
-    var(--border-color)
-  );
-  color: var(--text-primary);
+  background: color-mix(in srgb, var(--success-color) 14%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--success-color) 35%, transparent);
+  color: var(--status-success-color);
 }
 
 .speech-btn.is-danger {
-  background: color-mix(in srgb, var(--danger-color) 18%, var(--bg-primary));
-  border-color: color-mix(in srgb, var(--danger-color) 35%, var(--border-color));
+  background: color-mix(in srgb, var(--danger-color) 14%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--danger-color) 35%, transparent);
+  color: var(--danger-color);
 }
 
 .speech-btn.is-busy {
@@ -57,7 +62,7 @@
 }
 
 .speech-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
@@ -73,17 +78,17 @@
 .speech-models-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .speech-model-row {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: var(--bg-primary);
+  border: 1px solid color-mix(in srgb, var(--border-color) 38%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-secondary) 55%, transparent);
 }
 
 .speech-model-row-main {
@@ -96,16 +101,17 @@
 .speech-model-meta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .speech-model-name {
+  font-size: 13px;
   font-weight: 600;
 }
 
 .speech-model-stats {
-  font-size: 0.85em;
-  color: var(--text-secondary);
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .speech-model-badge {
@@ -114,15 +120,16 @@
   align-self: flex-start;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 0.75em;
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-primary));
-  border: 1px solid color-mix(in srgb, var(--accent-color) 30%, var(--border-color));
+  font-size: 11px;
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-color) 28%, transparent);
 }
 
 .speech-model-badge.is-danger {
-  background: color-mix(in srgb, var(--danger-color) 18%, var(--bg-primary));
-  border-color: color-mix(in srgb, var(--danger-color) 35%, var(--border-color));
+  color: var(--danger-color);
+  background: color-mix(in srgb, var(--danger-color) 12%, transparent);
+  border-color: color-mix(in srgb, var(--danger-color) 32%, transparent);
 }
 
 .speech-model-actions {
@@ -132,27 +139,23 @@
 }
 
 .speech-model-progress {
-  margin-top: 10px;
+  margin-top: 6px;
   width: 100%;
 }
 
 .speech-model-progress-track {
   height: 6px;
   width: 100%;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border-radius: 999px;
   overflow: hidden;
-  border: 1px solid var(--border-color);
+  border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
 }
 
 .speech-model-progress-bar {
   height: 100%;
   width: 0%;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--accent-color) 60%, transparent),
-    color-mix(in srgb, var(--accent-color) 90%, transparent)
-  );
+  background: var(--accent-color);
   border-radius: 999px;
   transition: width 0.2s ease;
 }
@@ -163,28 +166,24 @@
 }
 
 .speech-model-progress-bar.compiling {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--accent-color) 50%, transparent),
-    color-mix(in srgb, var(--accent-color) 80%, transparent)
-  );
+  opacity: 0.8;
 }
 
 .speech-model-progress-text {
   display: inline-block;
-  margin-top: 6px;
-  font-size: 0.8em;
-  color: var(--text-secondary);
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .speech-models-empty {
-  font-size: 0.9em;
-  color: var(--text-secondary);
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .speech-models-error,
 .speech-model-error {
-  font-size: 0.85em;
+  font-size: 12px;
   color: var(--danger-color);
 }
 
@@ -194,36 +193,32 @@
   gap: 10px;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid var(--border-color);
+  border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
   background: var(--bg-primary);
-  margin-bottom: 12px;
+  margin: 10px 0;
 }
 
 .speech-status.is-ready {
-  border-color: color-mix(
-    in srgb,
-    var(--success-color, var(--accent-color)) 40%,
-    var(--border-color)
-  );
-  background: color-mix(in srgb, var(--success-color, var(--accent-color)) 12%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--success-color) 35%, transparent);
+  background: color-mix(in srgb, var(--success-color) 8%, var(--bg-primary));
 }
 
 .speech-status.is-error {
-  border-color: color-mix(in srgb, var(--danger-color) 40%, var(--border-color));
-  background: color-mix(in srgb, var(--danger-color) 12%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--danger-color) 35%, transparent);
+  background: color-mix(in srgb, var(--danger-color) 8%, var(--bg-primary));
 }
 
 .speech-status-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--text-secondary);
+  background: var(--text-muted);
   margin-top: 6px;
   flex-shrink: 0;
 }
 
 .speech-status.is-ready .speech-status-dot {
-  background: var(--success-color, var(--accent-color));
+  background: var(--status-success-color);
 }
 
 .speech-status.is-error .speech-status-dot {
@@ -231,12 +226,13 @@
 }
 
 .speech-status-title {
+  font-size: 13px;
   font-weight: 600;
 }
 
 .speech-status-detail {
-  font-size: 0.85em;
-  color: var(--text-secondary);
+  font-size: 12px;
+  color: var(--text-muted);
   margin-top: 2px;
 }
 
@@ -244,7 +240,6 @@
   0% {
     transform: translateX(-60%);
   }
-
   100% {
     transform: translateX(160%);
   }

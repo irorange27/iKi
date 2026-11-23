@@ -19,7 +19,6 @@
       </a>
     </div>
     <div v-if="!isCompanion" class="titlebar-drag-region"></div>
-    <TrafficLights v-if="!isCompanion" />
     <CompanionView v-if="isCompanion" />
     <SettingsView
       v-else-if="isSettings"
@@ -35,7 +34,6 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import SettingsView from './views/SettingsView.vue';
 import ChatView from './views/ChatView.vue';
-import TrafficLights from './components/TrafficLights.vue';
 import CompanionView from './views/CompanionView.vue';
 import ConfirmDialog from './components/common/ConfirmDialog.vue';
 import { useAppConfig } from './composables/useAppConfig';
@@ -43,8 +41,14 @@ import { useAppLocale } from './composables/useAppLocale';
 import { useI18n } from './i18n';
 import { createSidebar } from './composables/useSidebar';
 import { useTheme } from './composables/useTheme';
+import { getElectronApiMethod } from './services/electron_api';
+import {
+  createElectronSettingsClient,
+  provideSettingsClient,
+} from './services/settings_client';
 
 createSidebar();
+provideSettingsClient(createElectronSettingsClient());
 useTheme();
 useAppLocale();
 const { t } = useI18n();
@@ -68,12 +72,31 @@ const extractSettingsSection = (hash: string): string | undefined => {
   return typeof section === 'string' && section.trim().length > 0 ? section.trim() : undefined;
 };
 
+let removeOpenSettingsListener: (() => void) | null = null;
+
+const toggleSettingsShortcut = (event: KeyboardEvent) => {
+  if ((event.metaKey || event.ctrlKey) && event.key === ',' && !event.shiftKey && !event.altKey) {
+    event.preventDefault();
+    window.location.hash = isSettings.value ? '' : 'settings';
+  }
+};
+
 onMounted(() => {
   window.addEventListener('hashchange', updateHash);
+  window.addEventListener('keydown', toggleSettingsShortcut);
+  const subscribeOpenSettings = getElectronApiMethod('onOpenSettings');
+  if (subscribeOpenSettings) {
+    removeOpenSettingsListener = subscribeOpenSettings(() => {
+      window.location.hash = 'settings';
+    });
+  }
 });
 
 onUnmounted(() => {
   window.removeEventListener('hashchange', updateHash);
+  window.removeEventListener('keydown', toggleSettingsShortcut);
+  removeOpenSettingsListener?.();
+  removeOpenSettingsListener = null;
   document.documentElement.classList.remove('companion-shell-mode');
   document.body.classList.remove('companion-shell-mode');
 });
@@ -190,7 +213,7 @@ html.companion-shell-mode .app-container {
   top: 0;
   left: 0;
   right: 0;
-  height: 20px;
+  height: 10px;
   -webkit-app-region: drag;
   z-index: var(--z-chrome);
 }

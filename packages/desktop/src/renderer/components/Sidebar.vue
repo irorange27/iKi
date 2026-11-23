@@ -1,9 +1,8 @@
 <template>
   <div
-    class="sidebar-shell app-text relative flex flex-col top-1 bottom-1 transition-all rounded-lg duration-300 ease-in-out"
+    class="sidebar-shell app-text"
     :class="{
-      'm-1 border': !sidebar.isCollapsed.value,
-      'm-0 border-0 sidebar-shell-collapsed': sidebar.isCollapsed.value,
+      'sidebar-shell-collapsed': sidebar.isCollapsed.value,
       'sidebar-resizing': isResizing,
     }"
     :style="{
@@ -11,31 +10,12 @@
       '--sidebar-width': `${sidebar.width.value}px`,
     }"
   >
-    <!-- Collapsed: fixed mini toolbar in the top-left corner. Hidden while the
-         chat header is visible — the header renders the same controls inline
-         (ChatView leading cluster); this seat covers the headerless welcome. -->
-    <div
-      v-if="sidebar.isCollapsed.value && !props.hideCollapsedToolbar"
-      class="toolbar-container fixed top-4 left-20 z-[var(--z-chrome)] flex items-center gap-1 transition-all duration-300"
-    >
-      <button class="sidebar-tool-btn icon-btn" @click="sidebar.toggle" :aria-label="t('chat.sidebar.toggle')">
-        <PanelLeftDashed :size="18" />
-      </button>
-      <button class="sidebar-tool-btn icon-btn" :aria-label="t('chat.sidebar.newChat')" @click="handleNewChat">
-        <SquarePen :size="18" />
-      </button>
-    </div>
-
-    <template v-if="contentVisible">
-      <!-- Header row -->
-      <div class="flex flex-shrink-0 items-center pl-20 pr-3 pt-2.5">
-        <button class="sidebar-tool-btn icon-btn" @click="sidebar.toggle" :aria-label="t('chat.sidebar.toggle')">
-          <PanelLeftDashed :size="18" />
-        </button>
-      </div>
+    <div v-if="contentVisible" class="sidebar-inner">
+      <!-- Top safe zone cradling the native traffic lights + stationary sidebar toggle -->
+      <div class="sidebar-header-row" aria-hidden="true"></div>
 
       <!-- Action list -->
-      <nav class="sidebar-actions flex-shrink-0 px-2 pt-1.5" :aria-label="t('chat.sidebar.menu')">
+      <nav class="sidebar-actions flex-shrink-0 px-2 pt-1" :aria-label="t('chat.sidebar.menu')">
         <button class="sidebar-action-item" @click="handleNewChat">
           <SquarePen :size="15" />
           <span>{{ t('chat.sidebar.newChat') }}</span>
@@ -392,18 +372,19 @@
           </DropdownMenuPortal>
         </DropdownMenuRoot>
       </div>
+    </div>
 
-      <!-- draggable handle -->
+    <!-- draggable handle -->
+    <div
+      v-if="contentVisible && !sidebar.isCollapsed.value"
+      class="resize-handle absolute top-0 right-0 z-10 h-full w-1 cursor-col-resize group"
+      @mousedown="startResize"
+      @touchstart="startResize"
+    >
       <div
-        class="resize-handle absolute top-0 right-0 z-10 h-full w-1 cursor-col-resize transition-colors group"
-        @mousedown="startResize"
-        @touchstart="startResize"
-      >
-        <div
-          class="resize-handle-indicator absolute top-1/2 left-1/2 h-8 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 transition-opacity group-hover:opacity-100"
-        ></div>
-      </div>
-    </template>
+        class="resize-handle-indicator absolute top-1/2 left-1/2 h-8 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 transition-all duration-150 group-hover:opacity-100"
+      ></div>
+    </div>
   </div>
 
 
@@ -422,7 +403,6 @@ import {
   Hash,
   MessageSquareShare,
   MoreHorizontal,
-  PanelLeftDashed,
   Search,
   Settings2,
   SquarePen,
@@ -466,7 +446,7 @@ const { selectedWorkspaceId: sessionSelectedWorkspaceId } = storeToRefs(threadSe
 const { t } = useI18n();
 const sidebarLogger = createLogger({ module: 'sidebar' });
 
-const SIDEBAR_TRANSITION_MS = 320;
+const SIDEBAR_TRANSITION_MS = 260;
 const contentVisible = ref(sidebar.isExpanded.value);
 let contentHideTimer: ReturnType<typeof setTimeout> | null = null;
 watch(
@@ -529,8 +509,6 @@ const deletingThreadIds = ref<Record<string, boolean>>({});
 
 const props = defineProps<{
   workspaceLocked?: boolean;
-  
-  hideCollapsedToolbar?: boolean;
 }>();
 
 const emit = defineEmits<{

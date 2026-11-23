@@ -134,7 +134,7 @@ import { computed, ref, watch } from 'vue';
 
 import SettingsSelect from './SettingsSelect.vue';
 import { useI18n } from '../../i18n';
-import { getElectronApiSlice } from '../../services/electron_api';
+import { useSettingsClient } from '../../services/settings_client';
 import type {
   ChatUsageHeatmapCell,
   ChatUsagePeriod,
@@ -145,7 +145,7 @@ import { getErrorMessage } from '@iki/core/utils/errors';
 const props = defineProps<{
   active: boolean;
 }>();
-const chatApi = getElectronApiSlice('chat');
+const settingsClient = useSettingsClient();
 const { t, locale } = useI18n();
 
 const usagePeriod = ref<ChatUsagePeriod>('30d');
@@ -241,14 +241,15 @@ const getMonthlyCostBarStyle = (cost: number): Record<string, string> => {
 const loadUsageSummary = async () => {
   usageLoading.value = true;
   usageError.value = '';
-  if (!chatApi?.usage?.summary) {
+  const getSummary = settingsClient.usage.getSummary;
+  if (!getSummary) {
     usageError.value = t('settings.usage.error.unavailable');
     usageLoading.value = false;
     return;
   }
 
   try {
-    usageSummary.value = await chatApi.usage.summary(usagePeriod.value);
+    usageSummary.value = await getSummary(usagePeriod.value);
   } catch (error: unknown) {
     usageError.value = t('settings.usage.error.loadFailed', { error: getErrorMessage(error) });
   } finally {
@@ -276,53 +277,61 @@ watch(usagePeriod, () => {
 <style scoped src="./settings_shared.css"></style>
 
 <style scoped>
+.usage-section {
+  max-width: 920px;
+}
+
 .usage-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
+  margin-bottom: 12px;
 }
 
 .usage-period-select {
-  width: 220px;
+  width: 200px;
+  padding: 0;
+  border-bottom: none;
   margin-bottom: 0;
 }
 
 .usage-empty {
-  color: var(--text-secondary);
-  font-size: 0.95em;
-  padding: 10px 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 0;
 }
 
 .usage-error {
   color: var(--danger-color);
-  font-size: 0.95em;
-  margin: 10px 0 0;
+  font-size: 12px;
+  margin: 8px 0 0;
 }
 
 .usage-metrics-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .usage-metric-card {
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  background: var(--bg-secondary);
-  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
+  border-radius: 10px;
+  background: var(--bg-primary);
+  padding: 12px 14px;
 }
 
 .usage-metric-label {
-  color: var(--text-secondary);
-  font-size: 0.88em;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .usage-metric-value {
-  font-size: 1.65em;
-  font-weight: 700;
-  margin-top: 8px;
-  line-height: 1;
+  font-size: 20px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  margin-top: 6px;
+  line-height: 1.1;
 }
 
 .usage-heatmap-months {
@@ -376,11 +385,11 @@ watch(usagePeriod, () => {
   display: flex;
   gap: 10px;
   align-items: flex-end;
-  min-height: 180px;
-  padding: 10px 6px 2px;
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  background: var(--bg-secondary);
+  min-height: 170px;
+  padding: 12px 10px 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
+  border-radius: 10px;
+  background: var(--bg-primary);
 }
 
 .usage-month-bar {

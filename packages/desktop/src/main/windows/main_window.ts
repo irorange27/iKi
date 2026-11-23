@@ -6,6 +6,7 @@ import { maybeOpenDevTools } from './devtools_policy';
 import { loadRendererEntry } from './renderer';
 import { attachViewportResyncGuard } from './viewport_resync';
 import { resolveWindowBootstrapBackgroundColor } from './theme_bootstrap';
+import { resolveStandardWindowChromeOptions } from './titlebar';
 
 const windowLogger = createLogger({ module: 'main_window' });
 
@@ -45,9 +46,7 @@ export const createMainWindow = (): BrowserWindow => {
     minHeight: 640,
     backgroundColor: resolveWindowBootstrapBackgroundColor(),
     hasShadow: false,
-    frame: false,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 20, y: 20 },
+    ...resolveStandardWindowChromeOptions(),
     webPreferences: {
       preload: path.join(__dirname, './index.cjs'),
       nodeIntegration: false,
@@ -57,21 +56,6 @@ export const createMainWindow = (): BrowserWindow => {
   mainWindowRef = mainWindow;
 
   attachViewportResyncGuard(mainWindow);
-
-  if (process.platform === 'darwin') {
-    mainWindow.setWindowButtonVisibility(false);
-    mainWindow.on('enter-full-screen', () => {
-      mainWindow.webContents.send('window:fullscreen-changed', true);
-    });
-    mainWindow.on('leave-full-screen', () => {
-      mainWindow.webContents.send('window:fullscreen-changed', false);
-    });
-    const sendFocusChanged = () => {
-      mainWindow.webContents.send('window:focus-changed', mainWindow.isFocused());
-    };
-    mainWindow.on('focus', sendFocusChanged);
-    mainWindow.on('blur', sendFocusChanged);
-  }
 
   void loadRendererEntry(mainWindow, { isPackaged: app.isPackaged });
 

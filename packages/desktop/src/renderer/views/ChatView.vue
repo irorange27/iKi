@@ -2,51 +2,51 @@
   <div class="flex h-full min-h-0 app-background app-text">
     <Sidebar
       :workspace-locked="isWorkspaceLocked"
-      :hide-collapsed-toolbar="showHeaderMeta"
       @thread-selected="selectThread"
       @new-chat="handleNewChat"
       @new-work="handleNewWork"
       @thread-deleted="handleThreadDeleted"
     />
 
+    <!-- Stationary top-left chrome anchored right next to the macOS traffic lights.
+         Placed after Sidebar in DOM order with no underlying drag region so native
+         macOS mouse clicks always reach the button cleanly. -->
+    <div class="chat-chrome-controls">
+      <button
+        class="chat-chrome-btn"
+        type="button"
+        :aria-label="t('chat.sidebar.toggle')"
+        :aria-expanded="sidebar.isExpanded.value"
+        :title="t('chat.sidebar.toggle')"
+        @click="sidebar.toggle"
+      >
+        <PanelLeftDashed :size="16" />
+      </button>
+      <button
+        class="chat-chrome-btn chat-chrome-new-chat"
+        :class="{ 'is-visible': sidebar.isCollapsed.value }"
+        type="button"
+        :aria-hidden="!sidebar.isCollapsed.value"
+        :tabindex="sidebar.isCollapsed.value ? 0 : -1"
+        :aria-label="t('chat.sidebar.newChat')"
+        :title="t('chat.sidebar.newChat')"
+        @click="handleNewChat"
+      >
+        <SquarePen :size="16" />
+      </button>
+    </div>
+
     <!-- Main Content -->
     <div class="chat-content-column flex min-h-0 min-w-0 flex-1 flex-col">
       <!-- Header: conversation title row + view tabs. The hairline under the
            block closes the header, mirroring the sidebar's quiet separation.
-           With the sidebar folded, the collapsed toolbar's controls move into
-           this row as a leading cluster (DSH's leading seat) — they and the
-           title share one line past the macOS traffic lights.
-           The row also carries the workspace seat, so it renders even on the
-           starting screen (no title yet): where tools will run has to be
-           answerable before the first message exists. -->
+           With the sidebar folded, the title row glides cleanly past the
+           stationary chrome controls in lockstep with the sidebar width. -->
       <header
         class="chat-header"
         :class="{ 'chat-header-leading-clear': sidebar.isCollapsed.value }"
       >
         <div class="chat-header-title-row">
-          <template v-if="sidebar.isCollapsed.value">
-            <!-- Two controls, and each must do what its label says. The toggle
-                 used to carry the "Toggle sidebar" label while running
-                 handleNewChat, so a folded sidebar had NO way to be reopened —
-                 the one affordance that claimed to do it created a chat
-                 instead. -->
-            <button
-              class="chat-header-tool-btn"
-              type="button"
-              :aria-label="t('chat.sidebar.toggle')"
-              @click="sidebar.toggle"
-            >
-              <PanelLeftDashed :size="16" />
-            </button>
-            <button
-              class="chat-header-tool-btn"
-              type="button"
-              :aria-label="t('chat.sidebar.newChat')"
-              @click="handleNewChat"
-            >
-              <SquarePen :size="16" />
-            </button>
-          </template>
           <!-- Where tools will run. Leading seat of the title row, outside the
                composer: it is conversation context, not a send-time option. -->
           <WorkspaceSelector />
@@ -60,6 +60,7 @@
           <span v-if="showMessageCount" class="chat-header-meta">
             {{ t('chat.messagesCount', { count: chatMessages.length }) }}
           </span>
+          <div class="chat-header-drag-spacer" aria-hidden="true"></div>
         </div>
 
         <div
@@ -347,7 +348,6 @@ const { latestAssistantTokenUsage, sessionPerfStats } = useChatUsage(
 );
 
 const showMessageCount = computed(() => chatMessages.value.length > 0);
-const showHeaderMeta = true;
 const showWelcomeScreen = computed(() => showWelcome.value && chatMessages.value.length === 0);
 const isWorkspaceLocked = computed(
   () => Boolean(currentThread.value?.id) && chatMessages.value.length > 0

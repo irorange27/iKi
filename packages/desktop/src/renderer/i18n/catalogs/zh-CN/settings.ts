@@ -5,12 +5,14 @@ export const settings = {
   'settings.select.emptyText': '当前没有可选项。',
   'settings.select.ariaLabel': '请选择一项',
   'settings.menu.general': '通用',
+  'settings.menu.appearance': '外观与界面',
   'settings.menu.models': '模型与工具',
   'settings.menu.intelligence': '记忆与技能',
   
   'settings.menu.security': '安全',
   'settings.menu.provider': '供应商',
   'settings.menu.mcp': 'MCP',
+  'settings.menu.system': '语音与系统',
   
   'settings.menu.usage': '用量',
   'settings.menu.skills': '技能',
@@ -20,6 +22,7 @@ export const settings = {
   'settings.menu.speech': '语音',
   
   'settings.fallbackTitle': '设置',
+  'settings.backToChat': '返回',
   'settings.saved.all': '所有更改已保存',
   'settings.saved.unsaved': '有未保存更改',
   'settings.footer.close': '关闭',

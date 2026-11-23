@@ -1,35 +1,38 @@
 .config-section {
-  max-width: 860px;
-  padding-top: 8px;
+  max-width: 780px;
 }
 
 .config-inline {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px 16px;
+}
+
+.config-inline .input-label {
+  border-bottom: none;
+  padding: 6px 0;
 }
 
 .server-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 .server-row {
   display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  align-items: flex-start;
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  padding: 16px;
-  background: var(--bg-secondary);
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--bg-primary);
 }
 
 .server-main {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   flex: 1;
   min-width: 0;
 }
@@ -37,43 +40,45 @@
 .server-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .server-name {
+  font-size: 13px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
-.server-transport {
-  font-size: 0.8em;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-color) 14%, var(--bg-secondary));
-  border: 1px solid color-mix(in srgb, var(--accent-color) 30%, var(--border-color));
-}
-
+.server-transport,
 .server-status {
-  font-size: 0.8em;
+  font-size: 11px;
+  font-weight: 500;
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid var(--border-color);
+  border: 1px solid color-mix(in srgb, var(--border-color) 52%, transparent);
   color: var(--text-secondary);
 }
 
+.server-transport {
+  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--accent-color) 28%, transparent);
+}
+
 .status-connected {
-  color: var(--success-color);
-  border-color: color-mix(in srgb, var(--success-color) 40%, var(--border-color));
+  color: var(--status-success-color);
+  border-color: color-mix(in srgb, var(--success-color) 35%, transparent);
+  background: color-mix(in srgb, var(--success-color) 10%, transparent);
 }
 
 .status-connecting {
   color: var(--warning-color);
-  border-color: color-mix(in srgb, var(--warning-color) 40%, var(--border-color));
+  border-color: color-mix(in srgb, var(--warning-color) 35%, transparent);
 }
 
 .status-error {
   color: var(--danger-color);
-  border-color: color-mix(in srgb, var(--danger-color) 40%, var(--border-color));
+  border-color: color-mix(in srgb, var(--danger-color) 35%, transparent);
 }
 
 .status-disconnected,
@@ -84,52 +89,45 @@
 .server-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  font-size: 0.9em;
-  color: var(--text-secondary);
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .server-actions {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 160px;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 28%, transparent);
+}
+
+.server-actions button {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .server-error {
-  margin-top: 4px;
-}
-
-.config-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  margin-top: 2px;
 }
 
 .form-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   justify-content: flex-end;
   margin-top: 12px;
 }
 
 .empty-state {
-  color: var(--text-secondary);
-  padding: 12px 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 8px 0;
 }
 
 @media (max-width: 840px) {
-  .config-inline,
-  .config-grid {
+  .config-inline {
     grid-template-columns: 1fr;
-  }
-
-  .server-row {
-    flex-direction: column;
-  }
-
-  .server-actions {
-    flex-direction: row;
-    flex-wrap: wrap;
   }
 }

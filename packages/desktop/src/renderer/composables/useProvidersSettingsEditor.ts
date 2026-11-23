@@ -3,7 +3,7 @@ import { computed, ref, type Ref } from 'vue';
 import { useI18n } from '../i18n';
 import { createLogger } from '../logger';
 import { toPlainData } from '@iki/core/utils/plain_clone';
-import { getElectronAPI } from '../services/electron_api';
+import { useSettingsClient } from '../services/settings_client';
 import type { ProviderRecord } from './useProviderDrafts';
 import type {
   EditableProvider,
@@ -17,7 +17,7 @@ export const useProvidersSettingsEditor = (params: {
   providers: Ref<ProviderRecord[]>;
   loadProviders: () => Promise<void>;
 }) => {
-  const electronAPI = getElectronAPI();
+  const settingsClient = useSettingsClient();
   const { t } = useI18n();
 
   const editingProvider = ref<EditableProvider | null>(null);
@@ -105,6 +105,11 @@ export const useProvidersSettingsEditor = (params: {
     showProviderEditor.value = true;
   };
 
+  const cancelCustomProvider = () => {
+    showProviderEditor.value = false;
+    editingProvider.value = null;
+  };
+
   const updateEditingProviderTypeSelection = (value: string) => {
     if (!editingProvider.value) return;
     editingProvider.value.type = value;
@@ -140,9 +145,9 @@ export const useProvidersSettingsEditor = (params: {
       // Same IPC-clone convention as the built-in provider save: strip the
       // reactive draft before it reaches the contextBridge boundary.
       if (params.providers.value.some(provider => provider.id === editingProvider.value?.id)) {
-        await electronAPI.providers.update(editingProvider.value.id, toPlainData(providerData));
+        await settingsClient.providers.update(editingProvider.value.id, toPlainData(providerData));
       } else {
-        await electronAPI.providers.add(toPlainData(providerData));
+        await settingsClient.providers.add(toPlainData(providerData));
       }
     } catch (error) {
       providersSettingsEditorLogger.event({
@@ -161,6 +166,7 @@ export const useProvidersSettingsEditor = (params: {
 
   return {
     addCustomProvider,
+    cancelCustomProvider,
     editingProvider,
     editingProviderApiFormat,
     providerTypeOptions,

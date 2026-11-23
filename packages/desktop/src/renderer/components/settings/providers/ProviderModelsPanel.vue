@@ -83,48 +83,61 @@
 
       <div class="provider-models-list-shell">
         <div v-if="filteredModelRows.length > 0" class="provider-models-list">
-          <div
-            v-for="model in filteredModelRows"
-            :key="model.id"
-            class="provider-model-row"
-            :class="{
-              'provider-model-row-enabled': model.enabled,
-              'provider-model-row-configured': model.hasOptions,
-            }"
-            :title="model.rowTooltip"
-          >
-            <div class="provider-model-row-copy">
-              <span class="provider-model-row-title">{{ model.label }}</span>
-              <span v-if="model.secondary" class="provider-model-row-secondary">
-                {{ model.secondary }}
-              </span>
-            </div>
-
-            <div class="provider-model-row-actions">
-              <button
-                type="button"
-                class="model-options-btn"
-                :class="{ 'model-options-btn-configured': model.hasOptions }"
-                :title="model.optionsTooltip"
-                :aria-label="model.optionsAriaLabel"
-                @click="$emit('edit-model-options', model.id)"
-              >
-                <SlidersHorizontal :size="15" />
-              </button>
-
-              <label class="model-toggle" :title="model.toggleTooltip">
-                <input
-                  type="checkbox"
-                  :checked="model.enabled"
-                  :aria-label="t('a11y.modelEnabled', { model: model.label })"
-                  @change="$emit('toggle-model', model.id)"
-                />
-                <span class="model-toggle-track">
-                  <span class="model-toggle-thumb" />
+          <template v-for="model in filteredModelRows" :key="model.id">
+            <div
+              class="provider-model-row"
+              :class="{
+                'provider-model-row-enabled': model.enabled,
+                'provider-model-row-configured': model.hasOptions,
+              }"
+              :title="model.rowTooltip"
+            >
+              <div class="provider-model-row-copy">
+                <span class="provider-model-row-title">{{ model.label }}</span>
+                <span v-if="model.secondary" class="provider-model-row-secondary">
+                  {{ model.secondary }}
                 </span>
-              </label>
+              </div>
+
+              <div class="provider-model-row-actions">
+                <button
+                  type="button"
+                  class="model-options-btn"
+                  :class="{
+                    'model-options-btn-configured': model.hasOptions,
+                    'model-options-btn-active': props.activeOptionsModelId === model.id,
+                  }"
+                  :title="model.optionsTooltip"
+                  :aria-label="model.optionsAriaLabel"
+                  :aria-expanded="props.activeOptionsModelId === model.id"
+                  @click="$emit('edit-model-options', model.id)"
+                >
+                  <SlidersHorizontal :size="15" />
+                </button>
+
+                <label class="model-toggle" :title="model.toggleTooltip">
+                  <input
+                    type="checkbox"
+                    :checked="model.enabled"
+                    :aria-label="t('a11y.modelEnabled', { model: model.label })"
+                    @change="$emit('toggle-model', model.id)"
+                  />
+                  <span class="model-toggle-track">
+                    <span class="model-toggle-thumb" />
+                  </span>
+                </label>
+              </div>
             </div>
-          </div>
+
+            <ProviderModelOptionsPanel
+              v-if="props.providerId && props.activeOptionsModelId === model.id"
+              :provider-id="props.providerId"
+              :model-id="model.id"
+              :model-options="getSelectedModelOptions(model.id) || null"
+              @cancel="$emit('cancel-model-options')"
+              @save="$emit('save-model-options', $event)"
+            />
+          </template>
         </div>
 
         <div v-else class="provider-models-empty">
@@ -149,13 +162,19 @@ import {
   SlidersHorizontal,
 } from '@lucide/vue';
 
-import type { ProviderModelOptionsMap } from '@iki/core/types/provider';
+import type {
+  ProviderModelOptions,
+  ProviderModelOptionsMap,
+} from '@iki/core/types/provider';
 import { getProviderModelOptions } from '@iki/core/utils/provider_models';
 import { useI18n } from '../../../i18n';
 import { getModelOptionSummary } from '../../../modules/providers/provider_model_options';
+import ProviderModelOptionsPanel from './ProviderModelOptionsPanel.vue';
 
 const props = defineProps<{
   open: boolean;
+  providerId: string | null;
+  activeOptionsModelId: string | null;
   isFetchingModels: boolean;
   availableModels: string[];
   selectedModels: string[];
@@ -169,6 +188,14 @@ const emit = defineEmits<{
   'fetch-models': [];
   'toggle-model': [modelId: string];
   'edit-model-options': [modelId: string];
+  'cancel-model-options': [];
+  'save-model-options': [
+    payload: {
+      providerId: string;
+      modelId: string;
+      options: ProviderModelOptions | null;
+    },
+  ];
   'add-model': [payload: { modelId: string; displayName: string }];
 }>();
 
@@ -530,6 +557,11 @@ const submitManualModel = () => {
 
 .model-options-btn-configured {
   color: var(--accent-color);
+}
+
+.model-options-btn-active {
+  color: var(--text-primary);
+  background: var(--bg-active);
 }
 
 .model-toggle {

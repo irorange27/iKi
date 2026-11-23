@@ -1,8 +1,20 @@
 <template>
   <div class="settings-container">
-    <div class="titlebar-drag-region"></div>
-    <!-- Left Nav: a tab list, so the four sections are one stop in the Tab
-         order and arrow keys move between them. -->
+    <!-- Stationary back control anchored to the same y=26 axis as the native
+         macOS window controls and ChatView's top-left chrome. -->
+    <button
+      class="settings-back-btn"
+      type="button"
+      :aria-label="t('settings.backToChat')"
+      :title="t('settings.backToChat')"
+      @click="saveAndClose"
+    >
+      <ArrowLeft :size="15" />
+      <span>{{ t('settings.backToChat') }}</span>
+    </button>
+
+    <!-- Left Nav: concentric inset card matching Chat Sidebar language on desktop,
+         collapsing cleanly to a scrollable pill bar on narrow viewports / web. -->
     <nav class="settings-nav" :aria-label="t('a11y.settingsNav')">
       <ul class="nav-menu" role="tablist" :aria-label="t('a11y.settingsNav')">
         <li v-for="(item, index) in menuItems" :key="item.key" role="presentation">
@@ -21,7 +33,7 @@
             @keydown="handleTabKeydown($event, index)"
           >
             <span class="icon">
-              <component :is="item.icon" :size="20" />
+              <component :is="item.icon" :size="16" />
             </span>
             <span class="nav-label">{{ item.label }}</span>
           </button>
@@ -29,93 +41,138 @@
       </ul>
     </nav>
 
-    <!-- Right Side Config Panel -->
+    <!-- Right Content Pane -->
     <main class="settings-content" :aria-label="t('a11y.settingsContent')">
-      <div class="settings-header">
+      <header class="settings-header">
         <div class="settings-header-left">
-          <span class="icon"><component :is="activeSectionIcon" :size="22" /></span>
-          <span class="title">{{ activeSectionLabel }}</span>
+          <span class="icon"><component :is="activeSectionIcon" :size="18" /></span>
+          <h1 class="title">{{ activeSectionLabel }}</h1>
         </div>
-        <div class="settings-header-right" :class="{ 'is-unsaved': !saved || providerDraftDirty }">
-          <span class="unsaved-dot" />
-          <span>{{
-            saved && !providerDraftDirty ? t('settings.saved.all') : t('settings.saved.unsaved')
-          }}</span>
+        <div class="settings-header-drag-spacer" aria-hidden="true"></div>
+        <div class="settings-header-right">
+          <span
+            class="settings-save-pill"
+            :class="{ 'is-unsaved': !saved || providerDraftDirty }"
+          >
+            <span class="unsaved-dot" />
+            <span>{{
+              saved && !providerDraftDirty ? t('settings.saved.all') : t('settings.saved.unsaved')
+            }}</span>
+          </span>
+          <button
+            v-if="providerDraftDirty"
+            type="button"
+            class="settings-header-save-btn"
+            @click="savePendingProviderDraft"
+          >
+            {{ t('common.save') }}
+          </button>
         </div>
-      </div>
-      <!-- 通用: lightweight preferences live together on one page. -->
-      <section v-show="activeSection === 'general'" class="settings-page">
-        <SettingsGeneralSection
-          :providers="providers"
-          @config-change="autoSave"
-          @reset="resetSection('general')"
-        />
+      </header>
 
-        <h2 class="settings-page-title">{{ t('settings.menu.ui') }}</h2>
-        <SettingsUiSection @config-change="autoSave" @reset="resetSection('ui')" />
+      <div class="settings-scroll-body">
+        <section
+          v-show="activeSection === 'general'"
+          :id="settingsPanelId('general')"
+          class="settings-page"
+          role="tabpanel"
+          :aria-labelledby="settingsTabId('general')"
+        >
+          <SettingsGeneralSection
+            :providers="providers"
+            @config-change="autoSave"
+            @reset="resetSection('general')"
+          />
+        </section>
 
-        <h2 class="settings-page-title">{{ t('settings.menu.speech') }}</h2>
-        <SettingsSpeechSection
-          :active="activeSection === 'general'"
-          @config-change="autoSave"
-          @reset="resetSection('speech')"
-        />
+        <section
+          v-show="activeSection === 'appearance'"
+          :id="settingsPanelId('appearance')"
+          class="settings-page"
+          role="tabpanel"
+          :aria-labelledby="settingsTabId('appearance')"
+        >
+          <SettingsColorSchemeSection
+            :active="activeSection === 'appearance'"
+            @config-change="autoSave"
+            @reset="resetColorSchemeSection"
+          />
 
-        <h2 class="settings-page-title">{{ t('settings.menu.colorScheme') }}</h2>
-        <SettingsColorSchemeSection
-          :active="activeSection === 'general'"
-          @config-change="autoSave"
-          @reset="resetColorSchemeSection"
-        />
+          <h2 class="settings-page-title">{{ t('settings.menu.ui') }}</h2>
+          <SettingsUiSection @config-change="autoSave" @reset="resetSection('ui')" />
+        </section>
 
-        <h2 class="settings-page-title">{{ t('settings.menu.network') }}</h2>
-        <SettingsNetworkSection
-          :active="activeSection === 'general'"
-          @config-change="autoSave"
-          @reset="resetSection('network')"
-        />
+        <section
+          v-show="activeSection === 'providers'"
+          :id="settingsPanelId('providers')"
+          class="settings-page"
+          role="tabpanel"
+          :aria-labelledby="settingsTabId('providers')"
+        >
+          <ProvidersSettings />
+        </section>
 
-        <h2 class="settings-page-title">{{ t('settings.menu.security') }}</h2>
-        <SettingsSecuritySection @config-change="autoSave" @reset="resetSection('security')" />
+        <section
+          v-show="activeSection === 'mcp'"
+          :id="settingsPanelId('mcp')"
+          class="settings-page"
+          role="tabpanel"
+          :aria-labelledby="settingsTabId('mcp')"
+        >
+          <McpSettings @config-change="autoSave" />
+        </section>
 
-        <SettingsKeybindingsSection
-          v-show="activeSection === 'keybindings'"
-          @config-change="autoSave"
-          @reset="resetSection('keybindings')"
-        />
+        <section
+          v-show="activeSection === 'skills'"
+          :id="settingsPanelId('skills')"
+          class="settings-page"
+          role="tabpanel"
+          :aria-labelledby="settingsTabId('skills')"
+        >
+          <SettingsSkillsSection :active="activeSection === 'skills'" />
+        </section>
 
-        <!-- Dev-only row: restart so main-process edits apply. Renders nothing
-             in the packaged app. -->
-        <SettingsDevSection />
-      </section>
+        <section
+          v-show="activeSection === 'system'"
+          :id="settingsPanelId('system')"
+          class="settings-page"
+          role="tabpanel"
+          :aria-labelledby="settingsTabId('system')"
+        >
+          <h2 class="settings-page-title">{{ t('settings.menu.speech') }}</h2>
+          <SettingsSpeechSection
+            :active="activeSection === 'system'"
+            @config-change="autoSave"
+            @reset="resetSection('speech')"
+          />
 
-      <!-- 模型与工具: providers, MCP servers, and API usage. -->
-      <section v-show="activeSection === 'models'" class="settings-page">
-        <h2 class="settings-page-title">{{ t('settings.menu.provider') }}</h2>
-        <ProvidersSettings />
+          <h2 class="settings-page-title">{{ t('settings.menu.network') }}</h2>
+          <SettingsNetworkSection
+            :active="activeSection === 'system'"
+            @config-change="autoSave"
+            @reset="resetSection('network')"
+          />
 
-        <h2 class="settings-page-title">{{ t('settings.menu.mcp') }}</h2>
-        <McpSettings @config-change="autoSave" />
+          <h2 class="settings-page-title">{{ t('settings.menu.security') }}</h2>
+          <SettingsSecuritySection @config-change="autoSave" @reset="resetSection('security')" />
 
-        <h2 class="settings-page-title">{{ t('settings.menu.usage') }}</h2>
-        <SettingsUsageSection :active="activeSection === 'models'" />
-      </section>
+          <SettingsKeybindingsSection
+            @config-change="autoSave"
+            @reset="resetSection('keybindings')"
+          />
 
-      <!-- 技能: what the agent can do. -->
-      <section v-show="activeSection === 'intelligence'" class="settings-page">
-        <h2 class="settings-page-title">{{ t('settings.menu.skills') }}</h2>
-        <SettingsSkillsSection :active="activeSection === 'intelligence'" />
-      </section>
+          <SettingsDevSection />
+        </section>
 
-      <!-- Footer operabar -->
-      <div class="settings-footer">
-        <span v-if="saved && !providerDraftDirty" class="save-status">{{
-          t('settings.saved.all')
-        }}</span>
-        <div class="footer-actions">
-          <button class="secondary" @click="$emit('close')">{{ t('common.close') }}</button>
-          <button class="primary" @click="saveAndClose">{{ t('common.save') }}</button>
-        </div>
+        <section
+          v-show="activeSection === 'usage'"
+          :id="settingsPanelId('usage')"
+          class="settings-page"
+          role="tabpanel"
+          :aria-labelledby="settingsTabId('usage')"
+        >
+          <SettingsUsageSection :active="activeSection === 'usage'" />
+        </section>
       </div>
     </main>
   </div>
@@ -124,7 +181,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { Bot, Brain, Cog } from '@lucide/vue';
+import {
+  ArrowLeft,
+  BarChart3,
+  Bot,
+  Cog,
+  Palette,
+  Plug,
+  SlidersHorizontal,
+  Sparkles,
+} from '@lucide/vue';
 
 import SettingsGeneralSection from '../components/settings/SettingsGeneralSection.vue';
 import SettingsUiSection from '../components/settings/SettingsUiSection.vue';
@@ -140,31 +206,38 @@ import SettingsUsageSection from '../components/settings/SettingsUsageSection.vu
 import SettingsSkillsSection from '../components/settings/SettingsSkillsSection.vue';
 import { useI18n } from '../i18n';
 import { createLogger } from '../logger';
-import { getElectronAPI } from '../services/electron_api';
+import { useSettingsClient } from '../services/settings_client';
 import { useAppConfig } from '../composables/useAppConfig';
 import { useConfigStore } from '../store/config';
 import { createDefaultAppConfig } from '@iki/harness/config/defaults';
 import type { AppConfig } from '@iki/core/types/config';
 import type { Provider } from '@iki/core/types/provider';
 
-const electronAPI = getElectronAPI();
+const settingsClient = useSettingsClient();
 const settingsViewLogger = createLogger({ module: 'settings_view' });
 const { t } = useI18n();
 
-const SETTINGS_SECTION_KEYS = new Set(['general', 'models', 'intelligence']);
+const SETTINGS_SECTION_KEYS = new Set([
+  'general',
+  'appearance',
+  'providers',
+  'mcp',
+  'skills',
+  'system',
+  'usage',
+]);
 
 const SETTINGS_SECTION_ALIASES: Record<string, string> = {
-  provider: 'models',
-  mcp: 'models',
-  usage: 'models',
-  memory: 'intelligence',
-  skills: 'intelligence',
-  ui: 'general',
-  colorScheme: 'general',
-  speech: 'general',
-  network: 'general',
-  security: 'general',
-  keybindings: 'general',
+  models: 'providers',
+  provider: 'providers',
+  intelligence: 'skills',
+  memory: 'skills',
+  ui: 'appearance',
+  colorScheme: 'appearance',
+  speech: 'system',
+  network: 'system',
+  security: 'system',
+  keybindings: 'system',
 };
 
 const resolveSettingsSection = (value?: string): string => {
@@ -196,7 +269,7 @@ watch(
 
 const loadProviders = async () => {
   try {
-    providers.value = await electronAPI.providers.list();
+    providers.value = await settingsClient.providers.list();
   } catch (error) {
     settingsViewLogger.event({
       level: 'error',
@@ -209,8 +282,12 @@ const loadProviders = async () => {
 
 const menuItems = computed(() => [
   { key: 'general', label: t('settings.menu.general'), icon: Cog },
-  { key: 'models', label: t('settings.menu.models'), icon: Bot },
-  { key: 'intelligence', label: t('settings.menu.intelligence'), icon: Brain },
+  { key: 'appearance', label: t('settings.menu.appearance'), icon: Palette },
+  { key: 'providers', label: t('settings.menu.provider'), icon: Bot },
+  { key: 'mcp', label: t('settings.menu.mcp'), icon: Plug },
+  { key: 'skills', label: t('settings.menu.skills'), icon: Sparkles },
+  { key: 'system', label: t('settings.menu.system'), icon: SlidersHorizontal },
+  { key: 'usage', label: t('settings.menu.usage'), icon: BarChart3 },
 ]);
 
 const settingsTabId = (key: string) => `settings-tab-${key}`;
@@ -312,6 +389,10 @@ const resetColorSchemeSection = () => {
   autoSave();
 };
 
+const savePendingProviderDraft = async () => {
+  await flushProviderDraft();
+};
+
 const saveAndClose = async () => {
   await flushProviderDraft();
   await saveNow();
@@ -319,14 +400,22 @@ const saveAndClose = async () => {
   emit('close');
 };
 
+const handleKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape') return;
+  const activeTag = (document.activeElement as HTMLElement | null)?.tagName?.toLowerCase();
+  if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
+  event.preventDefault();
+  void saveAndClose();
+};
+
 onMounted(async () => {
   window.addEventListener(PROVIDER_DRAFT_DIRTY_EVENT, handleProviderDraftDirty);
+  window.addEventListener('keydown', handleKeydown);
 
-  if (typeof electronAPI.providers.onUpdated === 'function') {
-    removeProviderUpdateListener = electronAPI.providers.onUpdated(() => {
-      void loadProviders();
-    });
-  }
+  removeProviderUpdateListener = settingsClient.providers.onUpdated(() => {
+    void loadProviders();
+  });
+
   if (!configStore.initialized) {
     await configStore.initialize();
   }
@@ -335,6 +424,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener(PROVIDER_DRAFT_DIRTY_EVENT, handleProviderDraftDirty);
+  window.removeEventListener('keydown', handleKeydown);
   removeProviderUpdateListener();
 });
 

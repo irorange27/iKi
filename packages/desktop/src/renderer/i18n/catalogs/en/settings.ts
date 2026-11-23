@@ -5,12 +5,14 @@ export const settings = {
   'settings.select.emptyText': 'No options available.',
   'settings.select.ariaLabel': 'Select an option',
   'settings.menu.general': 'General',
+  'settings.menu.appearance': 'Appearance',
   'settings.menu.models': 'Models & Tools',
   'settings.menu.intelligence': 'Memory & Skills',
   
   'settings.menu.security': 'Security',
   'settings.menu.provider': 'Providers',
   'settings.menu.mcp': 'MCP',
+  'settings.menu.system': 'Voice & System',
   
   'settings.menu.usage': 'Usage',
   'settings.menu.skills': 'Skills',
@@ -20,6 +22,7 @@ export const settings = {
   'settings.menu.speech': 'Speech',
   
   'settings.fallbackTitle': 'Settings',
+  'settings.backToChat': 'Back',
   'settings.saved.all': 'All changes saved',
   'settings.saved.unsaved': 'Unsaved changes',
   'settings.footer.close': 'Close',

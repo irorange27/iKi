@@ -103,6 +103,8 @@
 
             <ProviderModelsPanel
               :open="modelsPanelOpen"
+              :provider-id="selectedProviderId"
+              :active-options-model-id="activeOptionsModelId"
               :is-fetching-models="isFetchingModels"
               :available-models="availableModelsList"
               :selected-models="selectedModelsList"
@@ -113,6 +115,8 @@
               @fetch-models="emit('fetch-models')"
               @toggle-model="emit('toggle-model', $event)"
               @edit-model-options="emit('edit-model-options', $event)"
+              @cancel-model-options="emit('cancel-model-options')"
+              @save-model-options="emit('save-model-options', $event)"
               @add-model="emit('add-model', $event)"
             />
           </div>
@@ -145,9 +149,12 @@ import ProviderModelsPanel from './ProviderModelsPanel.vue';
 import { useI18n } from '../../../i18n';
 import type { ProviderDraft } from '../../../composables/useProviderDrafts';
 import type { BuiltInProvider } from '@iki/core/types/settings';
+import type { ProviderModelOptions } from '@iki/core/types/provider';
 import type { ProviderSupportLink } from './provider_settings_shared';
 
 defineProps<{
+  selectedProviderId: string | null;
+  activeOptionsModelId: string | null;
   selectedProviderInfo: BuiltInProvider | null;
   selectedProviderDraft: ProviderDraft | null;
   selectedProviderSupportLink: ProviderSupportLink | null;
@@ -170,6 +177,14 @@ const emit = defineEmits<{
   'fetch-models': [];
   'toggle-model': [modelId: string];
   'edit-model-options': [modelId: string];
+  'cancel-model-options': [];
+  'save-model-options': [
+    payload: {
+      providerId: string;
+      modelId: string;
+      options: ProviderModelOptions | null;
+    },
+  ];
   'add-model': [payload: { modelId: string; displayName: string }];
   'reset-draft': [];
   'save-config': [];

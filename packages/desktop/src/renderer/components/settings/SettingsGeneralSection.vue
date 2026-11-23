@@ -30,10 +30,10 @@
           />
         </div>
         <div v-if="toolModelTestResult" class="test-result" :class="toolModelTestResult.status">
-          <span v-if="toolModelTestResult.status === 'success'">✅</span>
-          <span v-else-if="toolModelTestResult.status === 'warning'">⚠️</span>
-          <span v-else>❌</span>
-          {{ toolModelTestResult.message }}
+          <CheckCircle2 v-if="toolModelTestResult.status === 'success'" :size="15" />
+          <AlertTriangle v-else-if="toolModelTestResult.status === 'warning'" :size="15" />
+          <XCircle v-else :size="15" />
+          <span>{{ toolModelTestResult.message }}</span>
         </div>
         <div class="tool-model-info">
           <p class="info-text">
@@ -231,16 +231,18 @@
       </button>
     </div>
 
-    <button class="reset-btn" @click="emit('reset')">
-      {{ t('settings.general.reset') }}
-    </button>
+    <div class="config-actions">
+      <button class="reset-btn" type="button" @click="emit('reset')">
+        {{ t('settings.general.reset') }}
+      </button>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import SettingsSwitch from './SettingsSwitch.vue';
 import { toRefs } from 'vue';
-import { RefreshCw } from '@lucide/vue';
+import { AlertTriangle, CheckCircle2, RefreshCw, XCircle } from '@lucide/vue';
 
 import SettingsSelect from './SettingsSelect.vue';
 import { useI18n } from '../../i18n';

@@ -43,6 +43,22 @@
       </div>
     </div>
 
+    <ThemeEditorPanel
+      v-if="editor.open"
+      :editor="editor"
+      :preview-style="previewStyle"
+      :quick-starts="quickStarts"
+      :theme-variant-options="themeVariantOptions"
+      @apply-quick-start="applyQuickStart"
+      @close="closeEditor"
+      @save="saveTheme"
+      @set-editor-mode="setEditorMode"
+      @set-editor-type="setEditorType"
+      @update-advanced-color="updateAdvancedColor($event.key, $event.value)"
+      @update-label="editor.label = $event"
+      @update-simple-color="updateSimpleColor($event.key, $event.value)"
+    />
+
     <div class="settings-card">
       <div class="card-header">
         <div>
@@ -108,22 +124,6 @@
         {{ t('settings.theme.reset') }}
       </button>
     </div>
-
-    <ThemeEditorModal
-      v-if="editor.open"
-      :editor="editor"
-      :preview-style="previewStyle"
-      :quick-starts="quickStarts"
-      :theme-variant-options="themeVariantOptions"
-      @apply-quick-start="applyQuickStart"
-      @close="closeEditor"
-      @save="saveTheme"
-      @set-editor-mode="setEditorMode"
-      @set-editor-type="setEditorType"
-      @update-advanced-color="updateAdvancedColor($event.key, $event.value)"
-      @update-label="editor.label = $event"
-      @update-simple-color="updateSimpleColor($event.key, $event.value)"
-    />
   </section>
 </template>
 
@@ -132,7 +132,7 @@ import { watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { MonitorCog, Moon, Palette, Plus, Search, Sun } from '@lucide/vue';
 
-import ThemeEditorModal from './ThemeEditorModal.vue';
+import ThemeEditorPanel from './ThemeEditorPanel.vue';
 import ThemePresetGrid from './ThemePresetGrid.vue';
 import { useThemeEditor } from '../../composables/useThemeEditor';
 import { useThemePresetGallery } from '../../composables/useThemePresetGallery';

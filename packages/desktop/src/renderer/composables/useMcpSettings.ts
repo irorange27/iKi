@@ -3,7 +3,7 @@ import { storeToRefs } from 'pinia';
 
 import { useI18n } from '../i18n';
 import { confirmAction } from './useConfirm';
-import { getElectronApiSliceMethod } from '../services/electron_api';
+import { useSettingsClient } from '../services/settings_client';
 import { useConfigStore } from '../store/config';
 import type { AppConfig } from '@iki/core/types/config';
 import type {
@@ -47,13 +47,14 @@ const createEmptyForm = (): ServerForm => ({
 
 export const useMcpSettings = (onConfigChange: () => void) => {
   const { t } = useI18n();
-  const listMcpServers = getElectronApiSliceMethod('mcp', 'list');
-  const addMcpServer = getElectronApiSliceMethod('mcp', 'add');
-  const updateMcpServer = getElectronApiSliceMethod('mcp', 'update');
-  const deleteMcpServer = getElectronApiSliceMethod('mcp', 'delete');
-  const connectMcpServer = getElectronApiSliceMethod('mcp', 'connect');
-  const disconnectMcpServer = getElectronApiSliceMethod('mcp', 'disconnect');
-  const refreshMcpServerTools = getElectronApiSliceMethod('mcp', 'refreshTools');
+  const settingsClient = useSettingsClient();
+  const listMcpServers = settingsClient.mcp.list ?? null;
+  const addMcpServer = settingsClient.mcp.add ?? null;
+  const updateMcpServer = settingsClient.mcp.update ?? null;
+  const deleteMcpServer = settingsClient.mcp.delete ?? null;
+  const connectMcpServer = settingsClient.mcp.connect ?? null;
+  const disconnectMcpServer = settingsClient.mcp.disconnect ?? null;
+  const refreshMcpServerTools = settingsClient.mcp.refreshTools ?? null;
 
   const configStore = useConfigStore();
   const { config } = storeToRefs(configStore);

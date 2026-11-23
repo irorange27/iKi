@@ -1,23 +1,67 @@
+/* Stationary top-left chrome centered on the macOS traffic light axis (y=26). */
+.chat-chrome-controls {
+  position: fixed;
+  top: 12px;
+  left: 88px;
+  z-index: calc(var(--z-chrome) + 1);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+.chat-chrome-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.chat-chrome-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.chat-chrome-btn:active {
+  transform: scale(0.95);
+}
+
+.chat-chrome-new-chat {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-6px) scale(0.92);
+  transition:
+    opacity 160ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.chat-chrome-new-chat.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+  transition-delay: 40ms, 40ms, 0s, 0s;
+}
+
 /* Conversation header (DSH ConversationHeader): title row over the view tabs,
    one hairline closing the block. The title is the page's h1; message count
    and origin ride after it as quiet metadata. */
-/* Top-left workspace seat. It owns its row so it stays put whether or not the
-   header (title + tabs) is rendered, and it never competes with the composer
-   for attention. When the sidebar is folded the column reaches the window edge
-   and macOS traffic lights (20,20) overlay this zone, hence the 84px indent —
-   the same clearance the header uses. */
-.chat-workspace-bar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  padding: 8px clamp(14px, 2.2cqw, var(--chat-content-padding, 24px)) 0;
-}
-
-.chat-workspace-bar--collapsed {
-  padding-left: 84px;
-}
-
 .chat-header {
   flex: none;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
@@ -28,40 +72,27 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  /* Vertical rhythm follows the window height: in a short window the header
-     gives rows back to the conversation instead of keeping desktop air. */
-  min-height: clamp(24px, 3.2vh, 30px);
-  padding: clamp(6px, 1.4vh, 10px) clamp(14px, 2.2cqw, var(--chat-content-padding, 24px)) 0;
+  /* Centered on y=26 (12px top + 28px control row) to align with the native
+     traffic lights and stationary sidebar toggle across expand/collapse. */
+  min-height: 46px;
+  padding: 12px clamp(14px, 2.2cqw, var(--chat-content-padding, 24px)) 6px;
+  transition: padding-left 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Sidebar folded: the chat column reaches the window edge, and hiddenInset
-   traffic lights (20,20) overlay the leading zone. The collapsed toolbar's
-   controls render inline in this row, so one indent clears the lights for
-   the whole line. */
+.chat-header-drag-spacer {
+  flex: 1;
+  min-width: 16px;
+  align-self: stretch;
+  -webkit-app-region: drag;
+}
+
+.chat-header-title-row:last-child {
+  padding-bottom: 10px;
+}
+
+/* Sidebar folded: clear traffic lights (19..77) + toggle (88..116) + new chat (120..148). */
 .chat-header-leading-clear .chat-header-title-row {
-  padding-left: 84px;
-}
-
-.chat-header-tool-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background-color 0.15s,
-    color 0.15s;
-}
-
-.chat-header-tool-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  padding-left: 156px;
 }
 
 /* Divides the workspace seat from the conversation title. Quiet on purpose:

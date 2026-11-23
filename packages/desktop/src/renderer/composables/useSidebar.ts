@@ -6,11 +6,11 @@ const AUTO_COLLAPSE_BELOW = 760;
 const AUTO_RESTORE_ABOVE = AUTO_COLLAPSE_BELOW + 96;
 
 function createSidebarState(initialState = true) {
-  const width = ref<number>(200);
+  const width = ref<number>(220);
   const showExternalChats = ref(false);
 
   const setWidth = (newWidth: number): void => {
-    width.value = Math.min(Math.max(newWidth, 190), 500);
+    width.value = Math.min(Math.max(newWidth, 210), 500);
   };
 
   const isExpanded = ref<boolean>(initialState);

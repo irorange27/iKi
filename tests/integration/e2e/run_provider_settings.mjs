@@ -203,24 +203,6 @@ const listPages = async () => {
   return targets.filter(t => t.type === 'page' && !/devtools/i.test(t.url));
 };
 
-const findSettingsTarget = async () => {
-  const pages = await listPages();
-  return pages.find(t => /#settings/.test(t.url)) || null;
-};
-
-const waitForSettingsWindow = async () => {
-  for (let i = 0; i < 40; i++) {
-    const target = await findSettingsTarget();
-    if (target) {
-      const cdp = await connect(target.webSocketDebuggerUrl);
-      if (await cdp.eval('document.readyState').catch(() => null)) return { cdp, targetId: target.id };
-      cdp.close();
-    }
-    await sleep(500);
-  }
-  throw new Error('settings window never appeared over CDP');
-};
-
 // Click the first element matching `selector` whose text contains `text`.
 const clickWhere = async (cdp, selector, text) =>
   cdp.eval(`(function(){
@@ -439,14 +421,12 @@ const main = async () => {
   }
   await sleep(4000);
 
-  step('open Settings window on the models/providers section');
-  const opened = await mainCdp.eval(`(function(){
-    if (!window.electronAPI?.openSettings) return 'NO_API';
-    window.electronAPI.openSettings('models');
+  step('open Settings in the main window on the Providers section');
+  await mainCdp.eval(`(function(){
+    window.location.hash = 'settings/providers';
     return 'OK';
   })()`);
-  if (opened !== 'OK') throw new Error('openSettings failed: ' + opened);
-  const { cdp: settingsCdp } = await waitForSettingsWindow();
+  const settingsCdp = mainCdp;
 
   step('pick the built-in Ollama provider in the sidebar');
   await waitForEval(settingsCdp, `document.querySelector('.provider-list-item') ? 1 : 0`, 'provider sidebar rows');
@@ -518,13 +498,10 @@ const main = async () => {
   if (provider.apiKey !== 'sk-e2e') throw new Error('apiKey mismatch');
   log('saved provider declaration OK:', providerId, JSON.stringify({ type: provider.type, models: modelsField, baseUrl: provider.baseUrl }));
 
-  step('close the settings window; the main model selector must offer the saved provider live');
-  try {
-    await settingsCdp.send('Target.closeTarget', { targetId: (await findSettingsTarget())?.id });
-  } catch (error) {
-    log('closeTarget failed (non-fatal):', error.message);
-  }
-  settingsCdp.close();
+  step('return from Settings to Chat; the main model selector must offer the saved provider live');
+  const backed = await clickWhere(mainCdp, '.settings-back-btn', '');
+  if (backed !== 'OK') throw new Error('settings back button click failed: ' + backed);
+  await waitForEval(mainCdp, `document.querySelector('.model-selector-trigger') ? 1 : 0`, 'chat view restored', 15000);
   await assertProviderVisibleInModelSelector(mainCdp);
 
   step('turn 1 through the UI-configured provider');

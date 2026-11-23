@@ -1,82 +1,80 @@
+/* ── Unified Settings Design System (Apple System Settings / Linear) ───────
+ * Grouped inset cards on the canvas, subtle hairlines between rows inside
+ * each group, quiet 12px/13px typography, and compact 30px desktop controls.
+ * ──────────────────────────────────────────────────────────────────────── */
 .config-section {
-  max-width: 860px;
-  padding-top: 8px;
+  max-width: 780px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   flex: 1 0 auto;
-  --settings-card-gap: 18px;
 }
 
-/* ── Settings layout grammar ──────────────────────────────────────────────
- * Groups are transparent topic containers on the paper canvas — no boxes;
- * separation comes from hairlines. Direction rule: booleans with an immediate
- * effect are ROWS (label left, switch right, via SettingsSwitch); anything
- * that needs typing is a BLOCK (label above its input, .input-label). Rows
- * own their trailing hairline, and the group strips the last one, exactly
- * like DSH's feature-contributed settings rows.
- * ──────────────────────────────────────────────────────────────────────── */
 .settings-card,
 .config-group {
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  padding: 0;
-  margin-bottom: 28px;
+  background: color-mix(in srgb, var(--bg-secondary) 68%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 0;
 }
 
-/* Group titles are small section headers, not card headings. */
 .settings-card > h3,
 .config-group > h3,
 .card-title {
-  margin: 0 0 2px;
+  margin: 0 0 4px;
   font-size: 13px;
-  line-height: 20px;
+  line-height: 19px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-/* A group description sits tight under its title, no separator. */
 .settings-card > .group-description,
 .config-group > .group-description,
 .settings-card > .card-subtitle,
 .config-group > .card-subtitle {
-  margin: 0 0 6px;
-}
-
-.config-section > .settings-card:first-of-type,
-.config-section > .config-group:first-of-type {
-  margin-top: 0;
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--text-muted);
 }
 
 .input-label {
   display: block;
-  padding: 14px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  padding: 11px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 32%, transparent);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
 }
 
-/* Bare selector wrappers ride the same row rhythm (a labelled one already
-   has its row via .input-label, so no double line). */
 .settings-card > .settings-select,
 .config-group > .settings-select {
-  padding: 14px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  padding: 11px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 32%, transparent);
 }
 
 .input-label .settings-select {
   padding: 0;
+  margin-top: 6px;
   border-bottom: none;
 }
 
 .slider-field {
-  padding: 14px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
-/* The last row of a group drops its hairline: the group gap closes it. */
 .settings-card > :last-child,
 .config-group > :last-child {
   border-bottom: none;
+  padding-bottom: 0;
 }
 
 .input-label input,
@@ -84,21 +82,26 @@
 .input-label textarea {
   width: 100%;
   padding: 6px 10px;
-  margin-top: 4px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--control-radius-sm);
-  background: var(--bg-secondary);
+  margin-top: 6px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
+  border-radius: var(--control-radius);
+  background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 13px;
+  box-sizing: border-box;
   transition:
-    border-color 0.2s ease,
-    background-color 0.2s ease,
-    box-shadow 0.2s ease;
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.input-label input,
+.input-label select {
+  height: 32px;
 }
 
 .input-label input::placeholder,
 .input-label textarea::placeholder {
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 
 .input-label input:focus,
@@ -106,30 +109,38 @@
 .input-label textarea:focus {
   outline: none;
   border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 18%, transparent);
 }
 
 .input-label textarea {
   resize: vertical;
-  min-height: 96px;
+  min-height: 88px;
   font-family: var(--font-mono);
 }
 
 .input-hint {
   margin-top: 6px;
-  color: var(--text-secondary);
-  font-size: 0.85em;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .input-help,
 .card-help,
 .card-subtitle,
 .group-description {
-  color: var(--text-secondary);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.card-help {
+  margin: 8px 0 0;
 }
 
 .checkbox-label {
   display: block;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
   cursor: pointer;
 }
 
@@ -138,32 +149,44 @@
   accent-color: var(--accent-color);
 }
 
-.secondary-btn {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  padding: 8px 14px;
-  border-radius: var(--control-radius);
-  cursor: pointer;
+.secondary-btn,
+.primary-btn,
+.danger-btn,
+.reset-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font-size: var(--font-size);
+  height: 30px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: var(--control-radius);
+  font-size: 12px;
+  font-weight: 500;
   line-height: 1;
-  min-height: 36px;
-  transition: all 0.2s;
+  cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.secondary-btn {
+  background: var(--bg-primary);
+  border: 1px solid color-mix(in srgb, var(--border-color) 65%, transparent);
+  color: var(--text-primary);
 }
 
 .secondary-btn:hover:not(:disabled) {
   background: var(--bg-hover);
-  border-color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color) 50%, var(--border-color));
 }
 
 .secondary-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
@@ -171,23 +194,6 @@
   background: var(--accent-color);
   border: 1px solid var(--accent-color);
   color: var(--accent-contrast);
-  padding: 10px 18px;
-  border-radius: var(--control-radius);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: var(--font-size);
-  line-height: 1;
-  min-height: 38px;
-  transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease,
-    opacity 0.2s ease;
-  appearance: none;
-  -webkit-appearance: none;
 }
 
 .primary-btn:hover:not(:disabled) {
@@ -196,82 +202,57 @@
 }
 
 .primary-btn:disabled {
-  opacity: 0.7;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
 .danger-btn {
   background: transparent;
-  border: 1px solid var(--danger-color);
+  border: 1px solid color-mix(in srgb, var(--danger-color) 65%, transparent);
   color: var(--danger-color);
-  padding: 8px 14px;
-  border-radius: var(--control-radius);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: var(--font-size);
-  line-height: 1;
-  min-height: 36px;
-  transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease;
-  appearance: none;
-  -webkit-appearance: none;
 }
 
 .danger-btn:hover:not(:disabled) {
   background: var(--danger-color);
+  border-color: var(--danger-color);
   color: var(--accent-contrast);
 }
 
 .config-actions {
   display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .reset-btn {
   background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  padding: 10px 16px;
-  border-radius: var(--pill-radius);
-  cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease,
-    opacity 0.2s ease;
+  border: 1px solid color-mix(in srgb, var(--border-color) 55%, transparent);
+  color: var(--text-secondary);
 }
 
 .reset-btn:hover:not(:disabled) {
   background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .config-group input[type='range'],
 input[type='range'] {
   width: 100%;
-  margin-top: 8px;
+  margin: 6px 0 4px;
   accent-color: var(--accent-color);
 }
 
-.config-group .value-badge {
-  font-size: 0.85em;
-}
-
-.config-group h3 {
-  margin-bottom: 8px;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 600;
-}
-
-.card-title {
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 600;
-  margin-bottom: 10px;
+.value-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-primary);
+  border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .card-header {
@@ -279,129 +260,31 @@ input[type='range'] {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 8px;
-}
-
-.card-subtitle {
-  font-size: 0.9em;
-  margin-top: 4px;
+  margin-bottom: 12px;
 }
 
 .card-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .config-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px 16px;
 }
 
-.group-description {
-  font-size: 0.95em;
-  margin-bottom: 16px;
-}
-
-.card-help {
-  font-size: 0.93em;
-  margin: 8px 0 16px;
-}
-
-.task-form-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-
-.tasks-empty {
-  color: var(--text-secondary);
-  font-size: 0.95em;
-  padding: 10px 2px;
-}
-
-.tasks-error {
-  color: var(--danger-color);
-  font-size: 0.95em;
-  margin: 10px 0 0;
-  white-space: pre-wrap;
-}
-
-.task-item-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.task-name {
-  min-width: 0;
-  font-weight: 600;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.task-status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--accent-color) 10%, var(--bg-primary));
-  color: var(--text-primary);
-}
-
-.task-status.status-running {
-  background: color-mix(in srgb, var(--accent-color) 18%, var(--bg-primary));
-  border-color: color-mix(in srgb, var(--accent-color) 40%, var(--border-color));
-}
-
-.task-status.status-success {
-  background: color-mix(in srgb, var(--success-color) 16%, var(--bg-primary));
-  border-color: color-mix(in srgb, var(--success-color) 35%, var(--border-color));
-}
-
-.task-status.status-error {
-  background: color-mix(in srgb, var(--danger-color) 14%, var(--bg-primary));
-  border-color: color-mix(in srgb, var(--danger-color) 35%, var(--border-color));
-}
-
-.task-meta-label {
-  color: var(--text-muted);
-  font-weight: 600;
-  margin-right: 6px;
-}
-
-.slider-field {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 12px;
-  font-weight: 600;
+.config-grid .input-label {
+  border-bottom: none;
+  padding: 6px 0;
 }
 
 .slider-hint {
-  color: var(--text-secondary);
-  font-size: 0.88em;
-  margin-top: 8px;
-}
-
-.slider-legend {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.8em;
   color: var(--text-muted);
-  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 4px 0 0;
 }
 
 .warning-text {
@@ -428,12 +311,10 @@ input[type='range'] {
   from {
     transform: rotate(0deg);
   }
-
   to {
     transform: rotate(360deg);
   }
 }
-
 
 /* ── Advanced disclosure: long-tail toggles fold away ─────────────────── */
 .settings-advanced {
@@ -443,9 +324,9 @@ input[type='range'] {
 .settings-advanced > summary {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   padding: 10px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 32%, transparent);
   width: 100%;
   list-style: none;
   cursor: pointer;

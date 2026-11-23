@@ -198,21 +198,9 @@ const electronApi: ElectronApi = {
     resolveElement: (request?: DevToolsResolveRequest): Promise<DevToolsSourceResult> =>
       ipcRenderer.invoke('devtools:resolve-element', request),
   },
-  openSettings: (section?: string) => ipcRenderer.send('open-settings', section),
+  onOpenSettings: (callback: () => void) => subscribe('app:open-settings', callback),
   closeWindow: () => ipcRenderer.send('close-window'),
   setWindowShadow: (enabled: boolean) => ipcRenderer.send('window:set-shadow', enabled),
-  ...(process.platform === 'darwin'
-    ? {
-        windowControls: {
-          minimize: () => ipcRenderer.send('minimize-window'),
-          toggleMaximize: () => ipcRenderer.send('toggle-maximize-window'),
-          onFullscreenChange: (callback: (fullscreen: boolean) => void) =>
-            subscribe('window:fullscreen-changed', callback),
-          onFocusChange: (callback: (focused: boolean) => void) =>
-            subscribe('window:focus-changed', callback),
-        },
-      }
-    : {}),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronApi);

@@ -48,9 +48,11 @@
       </div>
     </div>
 
-    <button class="reset-btn" @click="emit('reset')">
-      {{ t('settings.security.reset') }}
-    </button>
+    <div class="config-actions">
+      <button class="reset-btn" type="button" @click="emit('reset')">
+        {{ t('settings.security.reset') }}
+      </button>
+    </div>
   </section>
 </template>
 

@@ -204,7 +204,7 @@ import { RefreshCw } from '@lucide/vue';
 import SettingsSelect from './SettingsSelect.vue';
 import { useI18n } from '../../i18n';
 import { useConfigStore } from '../../store/config';
-import { configService } from '../../services/config_service';
+import { useSettingsClient } from '../../services/settings_client';
 import { toPlainData as clonePlainData } from '@iki/core/utils/plain_clone';
 import type {
   AppConfig,
@@ -226,6 +226,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const settingsClient = useSettingsClient();
 const configStore = useConfigStore();
 const { config } = storeToRefs(configStore);
 
@@ -409,7 +410,7 @@ const runNetworkTest = async () => {
   clearDiagnostic();
 
   try {
-    diagnostic.value = await configService.testNetwork(clonePlainData(config.value.network));
+    diagnostic.value = await settingsClient.config.testNetwork(clonePlainData(config.value.network));
   } catch (error) {
     diagnostic.value = {
       success: false,
@@ -430,15 +431,15 @@ const runNetworkTest = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--border-color);
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 52%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-primary));
+  background: var(--bg-primary);
   color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  max-width: min(100%, 320px);
+  font-size: 11px;
+  font-weight: 500;
+  max-width: min(100%, 300px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -449,58 +450,60 @@ const runNetworkTest = async () => {
 }
 
 .network-diagnostic-summary {
-  margin-top: 16px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--surface-radius);
-  padding: 14px 16px;
-  background: var(--bg-secondary);
+  margin-top: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--bg-primary);
 }
 
 .network-diagnostic-summary.is-success {
-  border-color: color-mix(in srgb, var(--success-color) 38%, var(--border-color));
-  background: color-mix(in srgb, var(--success-color) 10%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--success-color) 35%, transparent);
+  background: color-mix(in srgb, var(--success-color) 8%, var(--bg-primary));
 }
 
 .network-diagnostic-summary.is-warning {
-  border-color: color-mix(in srgb, var(--warning-color) 40%, var(--border-color));
-  background: color-mix(in srgb, var(--warning-color) 10%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--warning-color) 35%, transparent);
+  background: color-mix(in srgb, var(--warning-color) 8%, var(--bg-primary));
 }
 
 .network-diagnostic-summary.is-error {
-  border-color: color-mix(in srgb, var(--danger-color) 35%, var(--border-color));
-  background: color-mix(in srgb, var(--danger-color) 8%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--danger-color) 35%, transparent);
+  background: color-mix(in srgb, var(--danger-color) 8%, var(--bg-primary));
 }
 
 .network-diagnostic-summary-title {
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .network-diagnostic-summary-body {
-  margin-top: 6px;
+  margin-top: 4px;
+  font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
 }
 
 .network-probe-list {
   display: grid;
-  gap: 12px;
-  margin-top: 14px;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .network-probe-card {
-  border: 1px solid var(--border-color);
-  border-radius: var(--control-radius);
-  padding: 14px 16px;
-  background: var(--bg-secondary);
+  border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
+  border-radius: 10px;
+  padding: 11px 13px;
+  background: var(--bg-primary);
 }
 
 .network-probe-card.is-success {
-  border-color: color-mix(in srgb, var(--success-color) 34%, var(--border-color));
+  border-color: color-mix(in srgb, var(--success-color) 32%, transparent);
 }
 
 .network-probe-card.is-error {
-  border-color: color-mix(in srgb, var(--danger-color) 34%, var(--border-color));
+  border-color: color-mix(in srgb, var(--danger-color) 32%, transparent);
 }
 
 .network-probe-header {
@@ -515,14 +518,16 @@ const runNetworkTest = async () => {
 }
 
 .network-probe-title {
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .network-probe-url {
-  margin-top: 4px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-mono);
   word-break: break-all;
 }
 
@@ -530,30 +535,35 @@ const runNetworkTest = async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px 10px;
+  padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  border: 1px solid color-mix(in srgb, var(--border-color) 48%, transparent);
+  background: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
 }
 
 .network-probe-meta {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin-top: 12px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .network-value-badge {
-  background: var(--bg-active);
+  display: inline-flex;
+  align-items: center;
   padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 0.875em;
+  border-radius: 6px;
+  background: var(--bg-primary);
+  border: 1px solid color-mix(in srgb, var(--border-color) 45%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: var(--font-mono);
 }
 
 @media (max-width: 840px) {

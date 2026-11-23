@@ -11,7 +11,7 @@ import { useProviderDrafts, type ProviderRecord } from './useProviderDrafts';
 import { useProvidersSettingsEditor } from './useProvidersSettingsEditor';
 import { useProviderModelOptionsEditor } from './useProviderModelOptionsEditor';
 import { confirmAction } from './useConfirm';
-import { getElectronAPI } from '../services/electron_api';
+import { useSettingsClient } from '../services/settings_client';
 import type {
   ProviderSupportLink,
   SidebarProvider,
@@ -25,7 +25,7 @@ import {
 } from '../components/settings/providers/provider_settings_derived';
 
 export const useProvidersSettings = () => {
-  const electronAPI = getElectronAPI();
+  const settingsClient = useSettingsClient();
   const providersSettingsLogger = createLogger({ module: 'providers_settings' });
   const { t } = useI18n();
 
@@ -63,7 +63,7 @@ export const useProvidersSettings = () => {
   });
 
   const loadProviders = async () => {
-    providers.value = await electronAPI.providers.list();
+    providers.value = await settingsClient.providers.list();
 
     const selectionIsValid =
       selectedProviderId.value !== null &&
@@ -81,6 +81,7 @@ export const useProvidersSettings = () => {
 
   const {
     addCustomProvider,
+    cancelCustomProvider,
     editingProvider,
     editingProviderApiFormat,
     providerTypeOptions,
@@ -117,7 +118,7 @@ export const useProvidersSettings = () => {
       const providerOverride =
         baseUrl || apiKey ? { baseUrl: baseUrl, ...(apiKey ? { apiKey: apiKey } : {}) } : null;
 
-      const fetched = await electronAPI.chat.getModels(
+      const fetched = await settingsClient.providers.listModels(
         providerLookupKey,
         config?.id,
         providerOverride
@@ -126,7 +127,7 @@ export const useProvidersSettings = () => {
         const modelIds = fetched.map(model => model.id);
         setFetchedModels(modelIds);
         if (config) {
-          await electronAPI.providers.update(config.id, {
+          await settingsClient.providers.update(config.id, {
             availableModels: modelIds,
           });
         }
@@ -246,6 +247,7 @@ export const useProvidersSettings = () => {
   });
 
   const selectProvider = (providerId: string) => {
+    cancelCustomProvider();
     selectedProviderId.value = providerId;
     modelsPanelOpen.value = false;
     closeModelOptionsEditor();
@@ -297,7 +299,7 @@ export const useProvidersSettings = () => {
         // toPlainData: the drafts are Vue reactive proxies and the contextBridge
         // structured-clones every argument — a Proxy dies at the boundary with
         // "An object could not be cloned" before the preload ever sees it.
-        await electronAPI.providers.update(
+        await settingsClient.providers.update(
           existingConfig.id,
           toPlainData({
             ...(selectedProviderId.value === existingConfig.id && existingConfig.type === 'anthropic'
@@ -335,7 +337,7 @@ export const useProvidersSettings = () => {
           enabled: draft.enabled,
           availableModels: availableToSave,
         };
-        await electronAPI.providers.add(toPlainData(newProvider));
+        await settingsClient.providers.add(toPlainData(newProvider));
       }
 
       await loadProviders();
@@ -364,7 +366,7 @@ export const useProvidersSettings = () => {
     });
     if (!confirmed) return;
 
-    await electronAPI.providers.delete(config.id);
+    await settingsClient.providers.delete(config.id);
     await loadProviders();
     resetSelectedProviderDraft();
   };
@@ -377,6 +379,7 @@ export const useProvidersSettings = () => {
     addCustomProvider,
     addModel,
     availableModelsList,
+    cancelCustomProvider,
     canSaveSelectedProvider,
     closeModelOptionsEditor,
     editingProvider,

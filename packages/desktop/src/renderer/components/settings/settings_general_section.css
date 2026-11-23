@@ -1,5 +1,5 @@
 .tool-model-selector {
-  margin-top: 12px;
+  margin-top: 4px;
 }
 
 .tool-model-select :deep(.settings-select-trigger-value),
@@ -16,119 +16,119 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .test-model-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: transparent;
-  border: 1px solid var(--border-color);
+  height: 28px;
+  background: var(--bg-primary);
+  border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
   color: var(--text-secondary);
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 0 10px;
+  border-radius: 7px;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .test-model-btn:hover:not(:disabled) {
   background: var(--bg-hover);
-  border-color: var(--accent-color);
-  color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color) 55%, var(--border-color));
+  color: var(--text-primary);
 }
 
 .test-model-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
 .test-result {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 6px;
-  font-size: 13px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .test-result.success {
-  background: rgba(var(--success-rgb), 0.15);
+  background: rgba(var(--success-rgb), 0.12);
   color: var(--status-success-color);
-  border: 1px solid rgba(var(--success-rgb), 0.3);
+  border: 1px solid rgba(var(--success-rgb), 0.28);
 }
 
 .test-result.warning {
-  background: rgba(var(--warning-rgb), 0.15);
+  background: rgba(var(--warning-rgb), 0.12);
   color: var(--warning-color);
-  border: 1px solid rgba(var(--warning-rgb), 0.3);
+  border: 1px solid rgba(var(--warning-rgb), 0.28);
 }
 
 .test-result.error {
-  background: rgba(var(--danger-rgb), 0.15);
+  background: rgba(var(--danger-rgb), 0.12);
   color: var(--danger-color);
-  border: 1px solid rgba(var(--danger-rgb), 0.3);
+  border: 1px solid rgba(var(--danger-rgb), 0.28);
 }
 
 .tool-model-info {
-  margin-top: 16px;
-  padding: 16px;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
 }
 
 .info-text {
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  margin: 8px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
 }
 
-.info-text:first-child {
-  margin-top: 0;
-}
-
-.info-text:last-child {
-  margin-bottom: 0;
-}
-
-.companion-status-card {
-  margin-top: 16px;
+.companion-status-card,
+.update-status-card {
+  margin-top: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px 18px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
+  background: var(--bg-primary);
 }
 
 .companion-status-card-disabled {
-  border-color: color-mix(in srgb, var(--accent-color) 22%, var(--border-color));
-  background: color-mix(in srgb, var(--bg-secondary) 76%, var(--accent-color) 6%);
+  border-color: color-mix(in srgb, var(--accent-color) 28%, var(--border-color));
 }
 
-.companion-status-copy {
+.companion-status-copy,
+.update-status-copy {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
 }
 
-.companion-status-title {
-  font-size: 0.96em;
+.companion-status-title,
+.update-status-title {
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.companion-status-description {
-  font-size: 0.9em;
-  line-height: 1.55;
-  color: var(--text-secondary);
+.companion-status-description,
+.update-status-description {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .companion-show-btn {
@@ -145,86 +145,56 @@
 
 .update-version-pill {
   flex: 0 0 auto;
-  padding: 6px 10px;
+  padding: 3px 9px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  background: var(--bg-primary);
+  border: 1px solid color-mix(in srgb, var(--border-color) 55%, transparent);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-}
-
-.update-status-card {
-  margin-top: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 20px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  font-family: var(--font-mono);
 }
 
 .update-status-card-success {
   border-color: rgba(var(--success-rgb), 0.3);
-  background: rgba(var(--success-rgb), 0.1);
+  background: rgba(var(--success-rgb), 0.08);
 }
 
 .update-status-card-warning {
   border-color: rgba(var(--warning-rgb), 0.28);
-  background: rgba(var(--warning-rgb), 0.1);
+  background: rgba(var(--warning-rgb), 0.08);
 }
 
 .update-status-card-error {
   border-color: rgba(var(--danger-rgb), 0.28);
-  background: rgba(var(--danger-rgb), 0.1);
-}
-
-.update-status-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.update-status-title {
-  font-size: 0.98em;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.update-status-description {
-  font-size: 0.92em;
-  line-height: 1.55;
-  color: var(--text-secondary);
+  background: rgba(var(--danger-rgb), 0.08);
 }
 
 .update-status-meta {
-  font-size: 0.84em;
+  font-size: 11px;
   color: var(--text-muted);
 }
 
 .update-status-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex: 0 0 auto;
 }
 
 .update-install-btn {
+  height: 28px;
   border: 1px solid rgba(var(--success-rgb), 0.42);
-  background: rgba(var(--success-rgb), 0.18);
+  background: rgba(var(--success-rgb), 0.16);
   color: var(--status-success-color);
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease;
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .update-install-btn:hover {
@@ -237,97 +207,90 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  padding: 18px 20px;
-  border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 42%, transparent);
+  background: var(--bg-primary);
   cursor: pointer;
   text-align: left;
   transition:
-    border-color 0.2s ease,
-    background-color 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.2s ease;
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .permission-request-card:hover {
-  border-color: color-mix(in srgb, var(--accent-color) 34%, var(--border-color));
-  background: color-mix(in srgb, var(--bg-secondary) 72%, var(--accent-color) 6%);
-}
-
-.permission-request-card:focus-visible {
-  outline: none;
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 22%, transparent);
+  border-color: color-mix(in srgb, var(--warning-color) 42%, var(--border-color));
 }
 
 .permission-request-card-enabled {
-  border-color: color-mix(in srgb, var(--accent-color) 45%, var(--border-color));
-  background: color-mix(in srgb, var(--bg-secondary) 68%, var(--accent-color) 10%);
+  border-color: color-mix(in srgb, var(--warning-color) 50%, var(--border-color));
+  background: color-mix(in srgb, var(--warning-color) 7%, var(--bg-primary));
 }
 
 .permission-request-copy {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
 }
 
 .permission-request-title {
-  font-size: 0.98em;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .permission-request-description {
-  font-size: 0.92em;
-  line-height: 1.55;
-  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .permission-request-warning {
-  font-size: 0.84em;
+  font-size: 11px;
   color: var(--warning-color);
 }
 
+/* Matches SettingsSwitch dimensions (36x20) for visual consistency. */
 .permission-request-switch {
   position: relative;
   flex: 0 0 auto;
-  width: 54px;
-  height: 30px;
+  width: 36px;
+  height: 20px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--border-color) 78%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
   transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease;
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .permission-request-card-enabled .permission-request-switch {
-  background: color-mix(in srgb, var(--accent-color) 86%, white 14%);
-  border-color: color-mix(in srgb, var(--accent-color) 88%, white 12%);
+  background: var(--accent-color);
+  border-color: var(--accent-color);
 }
 
 .permission-request-switch-thumb {
   position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 22px;
-  height: 22px;
+  top: 1px;
+  left: 1px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--switch-thumb-bg);
   box-shadow: var(--switch-thumb-shadow);
-  transition: transform 0.2s ease;
+  transition: transform 0.15s ease;
 }
 
 .permission-request-card-enabled .permission-request-switch-thumb {
-  transform: translateX(24px);
+  transform: translateX(16px);
 }
 
 @media (max-width: 760px) {
   .update-status-header,
-  .update-status-card {
+  .update-status-card,
+  .companion-status-card {
     flex-direction: column;
     align-items: stretch;
   }

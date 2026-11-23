@@ -8,6 +8,7 @@ import {
   parseBooleanEnv,
 } from './devtools_policy';
 import { restartApp, shouldOfferRestart } from './app_restart';
+import { showMainWindow } from './main_window';
 
 export const RESTART_ACCELERATOR = 'CommandOrControl+Alt+R';
 
@@ -112,6 +113,17 @@ export const installApplicationMenu = (): void => {
             label: app.name,
             submenu: [
               { role: 'about' },
+              { type: 'separator' },
+              {
+                label: 'Settings...',
+                accelerator: 'Command+,',
+                click: () => {
+                  const mainWindow = showMainWindow();
+                  if (!mainWindow.webContents.isDestroyed()) {
+                    mainWindow.webContents.send('app:open-settings');
+                  }
+                },
+              },
               { type: 'separator' },
               { role: 'services' },
               { type: 'separator' },

@@ -13,6 +13,14 @@ export const useProviderModelOptionsEditor = (params: {
   const openModelOptionsEditor = (modelId: string) => {
     if (!params.selectedProviderId.value || !params.selectedProviderDraft.value) return;
 
+    if (
+      modelOptionsEditor.value?.providerId === params.selectedProviderId.value &&
+      modelOptionsEditor.value?.modelId === modelId
+    ) {
+      modelOptionsEditor.value = null;
+      return;
+    }
+
     modelOptionsEditor.value = {
       providerId: params.selectedProviderId.value,
       modelId,

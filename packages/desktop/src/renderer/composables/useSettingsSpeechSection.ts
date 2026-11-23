@@ -2,7 +2,7 @@ import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import { useI18n } from '../i18n';
-import { getElectronApiSliceMethod } from '../services/electron_api';
+import { useSettingsClient } from '../services/settings_client';
 import { useConfigStore } from '../store/config';
 import type { AppConfig } from '@iki/core/types/config';
 import type {
@@ -26,10 +26,11 @@ export const useSettingsSpeechSection = (params: {
   onConfigChange: () => void;
 }) => {
   const { t } = useI18n();
-  const getSpeechStatus = getElectronApiSliceMethod('speech', 'getStatus');
-  const listSpeechModels = getElectronApiSliceMethod('speech', 'listModels');
-  const downloadSpeechModel = getElectronApiSliceMethod('speech', 'downloadModel');
-  const subscribeSpeechDownloadProgress = getElectronApiSliceMethod('speech', 'onDownloadProgress');
+  const settingsClient = useSettingsClient();
+  const getSpeechStatus = settingsClient.speech.getStatus ?? null;
+  const listSpeechModels = settingsClient.speech.listModels ?? null;
+  const downloadSpeechModel = settingsClient.speech.downloadModel ?? null;
+  const subscribeSpeechDownloadProgress = settingsClient.speech.onDownloadProgress ?? null;
 
   const configStore = useConfigStore();
   const { config } = storeToRefs(configStore);

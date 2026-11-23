@@ -3,8 +3,6 @@ import { asCount, asText, TranslationEntry } from '../../shared';
 export const common = {
   'common.save': '保存',
   'common.close': '关闭',
-  'common.minimize': '最小化',
-  'common.zoom': '缩放',
   'common.cancel': '取消',
   'common.confirm': '确认',
   'common.reset': '重置',
