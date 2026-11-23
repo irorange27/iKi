@@ -1,6 +1,5 @@
 import { createLogger } from '@iki/core/logger';
 import { defaultToolRegistry } from '@iki/harness/tools';
-import { LoadSkillTool } from '@iki/harness/tools/skill_tools';
 import {
   decideToolApproval,
   type ApprovalPolicy,
@@ -103,14 +102,6 @@ export const resolveTools = (params: {
   const policyBox = params.approvalPolicyBox ?? createApprovalPolicyBox(params.approvalPolicy);
 
   for (const toolName of params.enabledToolNames) {
-    if (toolName === 'load_skill') {
-      if (params.availableSkillIds.length > 0) {
-        resolvedTools.push(
-          params.skillToolFactory ? params.skillToolFactory() : new LoadSkillTool().toAgentTool()
-        );
-      }
-      continue;
-    }
     if (!defaultToolRegistry.get(toolName)) {
       logger.warn(`Tool ${toolName} not found in registry`);
       continue;

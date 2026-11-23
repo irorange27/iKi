@@ -52,6 +52,8 @@ const TOOL_PAYLOAD_KINDS = {
 
 const TOOL_PAYLOAD_ALIASES: Record<string, ToolPayloadKind> = {
   web_search: 'web',
+  bash: 'shell',
+  pwsh: 'shell',
 };
 
 export const resolveToolPayloadKind = (toolName: string): ToolPayloadKind | null => {

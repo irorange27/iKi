@@ -61,6 +61,8 @@ export type UiDynamicToolPart = {
 
   title?: string;
 
+  stepIndex?: number;
+
   providerExecuted?: boolean;
 
   dynamic?: boolean;
@@ -94,6 +96,7 @@ export type ChatUiChunk =
       toolCallId: string;
       toolName: string;
       title?: string;
+      stepIndex?: number;
       dynamic: true;
     }
   | { type: 'tool-input-delta'; toolCallId: string; inputTextDelta: string }
@@ -102,6 +105,7 @@ export type ChatUiChunk =
       toolCallId: string;
       toolName?: string;
       input?: unknown;
+      stepIndex?: number;
       dynamic?: true;
     }
   | {

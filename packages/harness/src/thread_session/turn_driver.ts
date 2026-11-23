@@ -135,6 +135,8 @@ const runTurnBatches = async (
   const flushCommittedText = textGate.flush;
   const bufferStreamedText = textGate.buffer;
 
+  const toolNamesByCallId = new Map<string, string>();
+
   const forwardAgentStep = (step: AgentStep) => {
 
     if (step.type === 'message_update' && step.kind === 'reasoning') {
@@ -157,24 +159,29 @@ const runTurnBatches = async (
 
     if (step.type === 'tool_execution_start') {
       state.turnHadToolCalls = true;
+      toolNamesByCallId.set(step.toolCallId, step.toolName);
       sendConversationPreview('tool', previewText || ' ', step.toolName);
       event = {
         type: 'tool-call',
         toolCallId: step.toolCallId,
         toolName: step.toolName,
         input: step.input,
+        ...(typeof step.stepIndex === 'number' ? { stepIndex: step.stepIndex } : {}),
       };
     } else if (step.type === 'tool_execution_end') {
+      const resolvedToolName = toolNamesByCallId.get(step.toolCallId);
       if (step.outcome === 'success') {
         event = {
           type: 'tool-result',
           toolCallId: step.toolCallId,
+          ...(resolvedToolName ? { toolName: resolvedToolName } : {}),
           output: step.output,
         };
       } else {
         event = {
           type: 'tool-error',
           toolCallId: step.toolCallId,
+          ...(resolvedToolName ? { toolName: resolvedToolName } : {}),
           error: step.error ?? 'Tool execution failed',
         };
       }

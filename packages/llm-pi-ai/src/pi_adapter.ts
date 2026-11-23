@@ -32,14 +32,15 @@ type PiModelCompat =
       supportsReasoningEffort: false;
       supportsMidConvoSystemMessages: false;
       requiresReasoningContentOnAssistantMessages: false;
+      sendSessionAffinityHeaders: true;
     }
   | {
       supportsDeveloperRole: false;
       supportsMidConvoSystemMessages: false;
     }
   | {
-
       supportsEagerToolInputStreaming: boolean;
+      sendSessionAffinityHeaders: true;
     };
 
 type PiModelConfig = {
@@ -97,12 +98,13 @@ export const buildPiModel = (config: PiModelConfig): PiModel => {
     api === 'openai-responses'
       ? { supportsDeveloperRole: false, supportsMidConvoSystemMessages: false }
       : api === 'anthropic-messages'
-        ? { supportsEagerToolInputStreaming: true }
+        ? { supportsEagerToolInputStreaming: true, sendSessionAffinityHeaders: true }
         : {
             supportsDeveloperRole: false,
             supportsReasoningEffort: false,
             supportsMidConvoSystemMessages: false,
             requiresReasoningContentOnAssistantMessages: false,
+            sendSessionAffinityHeaders: true,
           };
 
   return {
@@ -134,6 +136,7 @@ export const buildPiModel = (config: PiModelConfig): PiModel => {
  * apart. Callers can pass a stricter value to force long.
  */
 export const shouldUseCacheRetention = (model: PiModel): boolean => {
+  if (model.api === 'anthropic-messages' || model.api === 'openai-responses') return true;
   const cost = model.cost as { cacheWrite?: number } | undefined;
   return (cost?.cacheWrite ?? 0) > 0;
 };
@@ -388,7 +391,14 @@ type PiChatCallContext = {
 export const callPiChat = (
   model: PiModel,
   context: PiChatCallContext & { systemPrompt: string },
-  options: { apiKey?: string; signal?: AbortSignal; maxTokens?: number; temperature?: number; cacheRetention?: 'none' | 'short' | 'long' } = {}
+  options: {
+    apiKey?: string;
+    signal?: AbortSignal;
+    maxTokens?: number;
+    temperature?: number;
+    cacheRetention?: 'none' | 'short' | 'long';
+    sessionId?: string;
+  } = {}
 ): ReturnType<typeof openaiCompletionsStream> => {
   const piContext = normalizeContext({
     systemPrompt: context.systemPrompt,
@@ -401,6 +411,9 @@ export const callPiChat = (
     ...(typeof options.maxTokens === 'number' ? { maxTokens: options.maxTokens } : {}),
     ...(typeof options.temperature === 'number' ? { temperature: options.temperature } : {}),
     ...(options.cacheRetention !== undefined ? { cacheRetention: options.cacheRetention } : {}),
+    ...(typeof options.sessionId === 'string' && options.sessionId.trim()
+      ? { sessionId: options.sessionId.trim() }
+      : {}),
   };
 
   if (model.api === 'anthropic-messages') {

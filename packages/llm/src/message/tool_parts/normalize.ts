@@ -117,6 +117,7 @@ type DynamicToolBase = {
   toolCallId: string;
   toolName: string;
   title?: string;
+  stepIndex?: number;
   providerExecuted?: boolean;
 };
 
@@ -175,6 +176,9 @@ export const normalizeDynamicToolPart = (
     toolCallId,
     toolName,
     ...(typeof part.title === 'string' && part.title.trim() ? { title: part.title } : {}),
+    ...(typeof part.stepIndex === 'number' && Number.isInteger(part.stepIndex) && part.stepIndex >= 0
+      ? { stepIndex: part.stepIndex }
+      : {}),
     ...(typeof part.providerExecuted === 'boolean'
       ? { providerExecuted: part.providerExecuted }
       : {}),

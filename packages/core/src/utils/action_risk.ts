@@ -6,6 +6,7 @@ const READ_TOOLS = new Set([
   'read_file',
   'web_search',
   'fetch',
+  'job',
   'load_skill',
   'list_personal_skills',
   'read_personal_skill',

@@ -74,7 +74,14 @@ export const toolResultToWire = (
 export const toolResultText = (output: unknown): string => toolResultToWire(output, 'lenient').text;
 export const toolResultIsError = (output: unknown): boolean => toolResultToWire(output, 'lenient').isError;
 
-const KNOWN_OUTPUT_TYPES = new Set(['text', 'json', 'error-text', 'content', 'execution-denied']);
+const KNOWN_OUTPUT_TYPES = new Set([
+  'text',
+  'json',
+  'error-text',
+  'error-json',
+  'content',
+  'execution-denied',
+]);
 
 /**
  * Normalize raw tool returns to ToolResultOutput union. Strings become text parts;

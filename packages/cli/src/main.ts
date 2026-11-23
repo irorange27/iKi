@@ -7,12 +7,8 @@ import { setPlatformInfo } from '@iki/core/platform';
 import { wirePlatformContext } from '@iki/core/platform_wiring';
 import { initializeDatabase } from '@iki/store/database';
 import { getProviders } from '@iki/store/providers';
-import { getToolModel } from '@iki/llm-pi-ai/tool_model';
-import { startPiTurnHarness } from '@iki/harness/agent/harness';
 import { registerStandardTools } from '@iki/harness/tools';
 import { createChatService, type ChatStreamTarget } from '@iki/harness/thread_session';
-import { createAgentRunTracker } from '@iki/harness/thread_session/run_tracker';
-import { finalizeHarnessTurn, finalizeTurnFailure } from '@iki/harness/thread_session/turn_finalize';
 import { createWorkspaceSelection, runInteractiveCli } from './interactive';
 
 type CliArgs = {
@@ -145,17 +141,7 @@ const main = async () => {
   setPlatformInfo({ userDataPath: args.dataDir });
   initializeDatabase();
 
-  registerStandardTools({
-    delegatedAgentRuntime: {
-      createRunTracker: createAgentRunTracker,
-      getConversationToolModel: getToolModel,
-      createHarness: startPiTurnHarness,
-      finalize: {
-        finalizeFailure: finalizeTurnFailure,
-        finalizeSuccess: finalizeHarnessTurn,
-      },
-    },
-  });
+  registerStandardTools();
 
   const providers = getProviders().filter(p => p.enabled);
   const selectedProvider =

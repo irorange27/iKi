@@ -21,6 +21,7 @@ import { getErrorMessage } from '@iki/core/utils/errors';
 import type { ModelMessage } from '@iki/llm/message/model_history';
 import { buildThreadMarkdown } from '@iki/llm/message/thread_markdown_export';
 import { searchThreadContent } from '@iki/llm/message/thread_content_search';
+import { compactThreadNow } from './compaction';
 
 export type { ChatStreamTarget } from './types';
 
@@ -267,6 +268,7 @@ export const createChatService = (platformDeps?: ChatServicePlatformDeps) => {
     retryAndExecute,
     exportThreadMarkdown,
     searchThreadContent,
+    compactThread: compactThreadNow,
 
     truncateAfterMessage,
   };

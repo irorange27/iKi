@@ -13,7 +13,7 @@
     "@earendil-works/pi-tui": "^1.6.0",
     "@iki/core": "workspace:*",
     "@iki/harness": "workspace:*",
-    "@iki/llm-pi-ai": "workspace:*",
-    "@iki/store": "workspace:*"
+    "@iki/store": "workspace:*",
+    "@iki/tools": "workspace:*"
   }
 }

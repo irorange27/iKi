@@ -3,7 +3,14 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import { getProviders } from '@iki/store/providers';
+import { getAppConfig } from '@iki/harness/config';
 import { getBuiltinToolNames } from '@iki/harness/tools';
+import {
+  getShellJob,
+  killShellJob,
+  listShellJobs,
+  readBoundedLogSlice,
+} from '@iki/tools/shell';
 import { listSkills } from '@iki/harness/tools/skills';
 import { inspectAgentInstructionsForWorkspace } from '@iki/harness/turn_prep/context_blocks';
 import {
@@ -73,14 +80,19 @@ const readMessagePreview = (parts: unknown): string => {
   return singleLine.length > 120 ? `${singleLine.slice(0, 117)}...` : singleLine;
 };
 
-export const summarizeToolArgs = (value: unknown): string => {
-  if (!value || typeof value !== 'object') return '';
-  try {
-    const raw = JSON.stringify(value);
-    return raw.length > 100 ? `${raw.slice(0, 97)}...` : raw;
-  } catch {
-    return '';
-  }
+const formatJobsLines = (threadId?: string): string[] => {
+  const jobs = listShellJobs(threadId ? { threadId } : undefined);
+  if (jobs.length === 0) return ['No durable background jobs found.'];
+  return [
+    `Durable background jobs (${jobs.length}):`,
+    ...jobs.slice(0, 20).map(job => {
+      const cmd = job.command.replace(/\s+/g, ' ').trim();
+      const preview = cmd.length > 70 ? `${cmd.slice(0, 67)}...` : cmd;
+      const exitPart = typeof job.exitCode === 'number' ? ` exit=${job.exitCode}` : '';
+      return `  ${job.jobId}  [${job.status}${exitPart}]  pid=${job.pid}  ${preview}`;
+    }),
+    'Usage: /jobs [all] | /jobs log <jobId> | /jobs kill <jobId>',
+  ];
 };
 
 const readPersonaSummary = (dataDir: string): { path: string; chars: number; preview: string } => {
@@ -197,7 +209,7 @@ export const formatBannerLines = async (state: InteractiveCliState): Promise<str
     '[Tools]',
     `  ${toolsSummary}`,
     '',
-    'Shortcuts: /models · /resume · /context · /skills · /help',
+    'Shortcuts: /models · /resume · /jobs · /context · /skills · /help',
   ];
 };
 
@@ -209,7 +221,9 @@ const formatHelpLines = (): string[] => [
   '  /context                  Inspect loaded AGENTS.md, PERSONA.md, skills & tools',
   '  /skills [auto|manual|ids] Pick skills, switch skill mode, or list all',
   '  /tools [default|all|a,b]  View or override enabled tools',
+  '  /jobs [all|log|kill]      Inspect, tail, or stop durable background jobs',
   '  /history                  Inspect messages & compaction checkpoint',
+  '  /compact                  Compact older turns into a persistent checkpoint',
   '  /usage                    Show cumulative token usage for this CLI session',
   '  /clear                    Clear screen / transcript',
   '  /exit / /quit             Exit interactive mode',
@@ -250,6 +264,7 @@ const formatContextLines = async (state: InteractiveCliState): Promise<string[]>
   const repoSkillNames = listRepoLocalAgentSkills(state.workspace);
   const view = rebuildThreadViewFromEvents(state.threadId);
   const builtins = getBuiltinToolNames();
+  const shellCfg = getAppConfig().tools.shell;
 
   return [
     'Loaded Context & Harness State:',
@@ -267,6 +282,7 @@ const formatContextLines = async (state: InteractiveCliState): Promise<string[]>
         ]
       : []),
     `  Tools:          ${state.tools ? (state.tools.length ? state.tools.join(', ') : '(disabled)') : `default (${builtins.join(', ')})`}`,
+    `  [tools.shell]:  timeout=${shellCfg.defaultTimeoutMs}ms (max ${shellCfg.maxTimeoutMs}ms), promoteOnTimeout=${shellCfg.promoteOnTimeout}, maxOutput=${shellCfg.maxOutputLines} lines/${shellCfg.maxOutputBytes}B${shellCfg.shellPath ? `, shellPath=${shellCfg.shellPath}` : ''}`,
     `  Compaction:     ${view.compaction ? `active (omitted=${view.compaction.omittedCount}, kept=${view.compaction.keptCount}, anchor=${view.compaction.firstKeptMessageId ?? 'tail'})` : 'none in current thread'}`,
   ];
 };
@@ -368,7 +384,27 @@ export const buildSlashCommands = (state: InteractiveCliState): SlashCommand[] =
       return items.length ? items : null;
     },
   },
+  {
+    name: 'jobs',
+    description: 'Inspect, tail, or kill durable background jobs',
+    argumentHint: 'all | log <jobId> | kill <jobId>',
+    getArgumentCompletions: prefix => {
+      const lower = prefix.toLowerCase();
+      const jobs = listShellJobs().slice(0, 12);
+      const candidates = [
+        { value: 'all', label: 'all', description: 'List jobs across all threads' },
+        ...jobs.flatMap(job => [
+          { value: `log ${job.jobId}`, label: `log ${job.jobId}`, description: `[${job.status}] ${job.command.slice(0, 50)}` },
+          ...(job.status === 'running'
+            ? [{ value: `kill ${job.jobId}`, label: `kill ${job.jobId}`, description: `Kill pid ${job.pid}` }]
+            : []),
+        ]),
+      ].filter(item => !lower || item.value.toLowerCase().includes(lower));
+      return candidates.length ? candidates : null;
+    },
+  },
   { name: 'history', description: 'Inspect messages & compaction checkpoint' },
+  { name: 'compact', description: 'Compact older turns into a persistent checkpoint' },
   { name: 'usage', description: 'Show session token & cache usage' },
   { name: 'clear', description: 'Clear screen / transcript' },
   { name: 'help', description: 'Show commands and shortcuts' },
@@ -405,7 +441,9 @@ export const executeSlashCommand = async (
     '/system',
     '/persona',
     '/tools',
+    '/jobs',
     '/skills',
+    '/compact',
     '/usage',
     '/clear',
     '/exit',
@@ -459,7 +497,52 @@ export const executeSlashCommand = async (
     ensureThreadExists(state, state.threadId, arg || 'Interactive CLI');
     return { kind: 'handled', lines: [`Started new thread: ${state.threadId}`] };
   }
+  if (cmd === '/jobs') {
+    if (!arg) return { kind: 'handled', lines: formatJobsLines(state.threadId) };
+    if (arg === 'all') return { kind: 'handled', lines: formatJobsLines() };
+    const [sub, targetId] = arg.split(/\s+/);
+    if (sub === 'kill' && targetId) {
+      try {
+        const res = await killShellJob(targetId);
+        return { kind: 'handled', lines: [res.message] };
+      } catch (error) {
+        return { kind: 'handled', lines: [error instanceof Error ? error.message : String(error)] };
+      }
+    }
+    if (sub === 'log' && targetId) {
+      try {
+        const job = getShellJob(targetId);
+        if (!job) return { kind: 'handled', lines: [`Job "${targetId}" not found.`] };
+        const slice = readBoundedLogSlice(job.logPath, { maxLines: 40 });
+        return {
+          kind: 'handled',
+          lines: [
+            `Job ${job.jobId} [${job.status}${typeof job.exitCode === 'number' ? ` exit=${job.exitCode}` : ''}] pid=${job.pid}`,
+            `log: ${job.logPath}`,
+            ...(slice.output ? slice.output.split(/\r?\n/) : ['(no output yet)']),
+          ],
+        };
+      } catch (error) {
+        return { kind: 'handled', lines: [error instanceof Error ? error.message : String(error)] };
+      }
+    }
+    return { kind: 'handled', lines: ['Usage: /jobs [all] | /jobs log <jobId> | /jobs kill <jobId>'] };
+  }
   if (cmd === '/history') return { kind: 'handled', lines: formatHistoryLines(state.threadId) };
+  if (cmd === '/compact') {
+    const res = await state.chatService.compactThread(state.threadId);
+    if (res.compacted === false) {
+      return { kind: 'handled', lines: [`Compaction skipped: ${'reason' in res ? res.reason : 'unchanged'}`] };
+    }
+    return {
+      kind: 'handled',
+      lines: [
+        `Compacted thread ${state.threadId}: omitted=${res.omittedCount}, kept=${res.keptCount}` +
+          (res.firstKeptMessageId ? `, anchor=${res.firstKeptMessageId}` : ''),
+        res.summary.slice(0, 300) + (res.summary.length > 300 ? '...' : ''),
+      ],
+    };
+  }
   if (cmd === '/context' || cmd === '/system' || cmd === '/persona') {
     return { kind: 'handled', lines: await formatContextLines(state) };
   }

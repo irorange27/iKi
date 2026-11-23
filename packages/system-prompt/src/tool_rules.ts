@@ -29,11 +29,25 @@ export const buildToolSystemPrompt = (params: {
     );
   }
 
-  if (tools.has('shell')) {
+  if (tools.has('bash')) {
     rules.push(
-      platform === 'darwin'
-        ? 'Use shell for commands, git, builds, or macOS automation (e.g. osascript) when needed; stay conservative with destructive commands.'
-        : 'Use shell for commands, git, and builds when needed; stay conservative with destructive commands.'
+      'Use `bash` for workspace file inspection, edits, git, and builds; stay conservative with destructive commands.'
+    );
+  } else if (tools.has('pwsh')) {
+    rules.push(
+      'Use `pwsh` (PowerShell 7) for workspace file inspection, edits, git, and builds; stay conservative with destructive commands.'
+    );
+  } else if (tools.has('shell')) {
+    rules.push(
+      platform === 'win32'
+        ? 'Use `shell` (PowerShell 7 / pwsh) for workspace file inspection, edits, git, and builds; stay conservative with destructive commands.'
+        : 'Use `shell` (bash) for workspace file inspection, edits, git, and builds; stay conservative with destructive commands.'
+    );
+  }
+
+  if (tools.has('job')) {
+    rules.push(
+      'Long-running commands can run with `background: true` or auto-promote on timeout; use `job` (`list`, `output`, `wait`, `kill`) to inspect or stop durable background jobs.'
     );
   }
 

@@ -1,5 +1,5 @@
 import * as llmFactory from '@iki/llm-pi-ai/factory';
-import { defaultToolRegistry } from '@iki/harness/tools';
+import { defaultToolRegistry, getPrimaryShellToolName } from '@iki/harness/tools';
 import { buildThreadWorkspaceSystemMessage } from '@iki/harness/workspaces/thread_workspace';
 import type { ChatExperimentalContext } from '@iki/llm/message/chat_context_mode';
 import type { AgentRunKind } from '@iki/core/types/agent_run';
@@ -173,8 +173,10 @@ export const createChatTurnPreparer = (deps: {
     const mergedResolvedTools = mergeToolNames(resolvedTools, skillRequiredTools);
     const guardedTools = [...mergedResolvedTools];
 
-    if (!explicitToolSelection && !guardedTools.includes('shell')) {
-      guardedTools.push('shell');
+    const primaryShell = getPrimaryShellToolName();
+    if (!explicitToolSelection) {
+      if (!guardedTools.includes(primaryShell)) guardedTools.push(primaryShell);
+      if (!guardedTools.includes('job')) guardedTools.push('job');
     }
 
     persistThreadRuntimeHints({

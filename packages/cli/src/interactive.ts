@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import {
-  Box,
   CombinedAutocompleteProvider,
   Container,
   Editor,
@@ -28,13 +27,14 @@ import {
   ensureThreadExists,
   executeSlashCommand,
   formatBannerLines,
-  summarizeToolArgs,
   switchModel,
   type InteractiveCliState,
   type UsageTotals,
 } from './commands';
 import { openSearchablePickerOverlay } from './selectors';
 import { cliMarkdownTheme, cliTheme, createCliEditorTheme, selectListTheme } from './theme';
+import { formatToolCallPipedSummary } from './tool_render';
+import { TurnView } from './turn_view';
 
 export { createWorkspaceSelection, type InteractiveCliState } from './commands';
 
@@ -148,9 +148,20 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
   let activeTurn = false;
   let idleInterruptAt = 0;
   let stopped = false;
+  let hideThinking = true;
   let currentLoader: Loader | null = null;
   let cachedWorkspace = state.workspace;
   let cachedBranch = resolveGitBranch(state.workspace);
+  const turnViews: TurnView[] = [];
+
+  const toggleThinkingVisibility = () => {
+    hideThinking = !hideThinking;
+    for (const view of turnViews) {
+      view.setHideThinking(hideThinking);
+    }
+    refreshFooter();
+    tui.requestRender();
+  };
 
   const refreshFooter = () => {
     if (state.workspace !== cachedWorkspace) {
@@ -162,7 +173,8 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     const pathPart = formatDisplayPath(state.workspace) || state.dataDir;
     const leftTop = cachedBranch ? `${pathPart} (${cachedBranch})` : pathPart;
     const compactFlag = view.compaction ? ' · compacted' : '';
-    const leftBottom = `${state.threadId} · t:${totals.turns} · ${totals.inputTokens}in/${totals.cacheReadTokens}c${compactFlag}`;
+    const thinkFlag = hideThinking ? ' · Ctrl+T thinking' : ' · thinking:on';
+    const leftBottom = `${state.threadId} · t:${totals.turns} · ${totals.inputTokens}in/${totals.cacheReadTokens}c${compactFlag}${thinkFlag}`;
     footer.update({
       leftTop,
       leftBottom,
@@ -214,12 +226,15 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       transcript.addChild(new Spacer(1));
     }
     for (const msg of tail) {
-      const text = extractUiText(msg.parts);
-      if (!text) continue;
       if (msg.role === 'user') {
+        const text = extractUiText(msg.parts);
+        if (!text) continue;
         appendUserMessage(text);
       } else {
-        transcript.addChild(new Markdown(text, 1, 0, cliMarkdownTheme, { color: cliTheme.text }));
+        const viewComponent = new TurnView({ hideThinking });
+        viewComponent.hydratePersistedParts(Array.isArray(msg.parts) ? msg.parts : []);
+        turnViews.push(viewComponent);
+        transcript.addChild(viewComponent);
         transcript.addChild(new Spacer(1));
       }
     }
@@ -254,19 +269,14 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     editor.disableSubmit = true;
     refreshFooter();
     const startedAt = Date.now();
-    let reasoningBuf = '';
-    let textBuf = '';
     let aborted = false;
     let turnUsage: { inputTokens?: number; cacheReadTokens?: number; outputTokens?: number } | undefined;
 
     appendUserMessage(prompt);
 
-    const turnContainer = new Container();
-    transcript.addChild(turnContainer);
-
-    let reasoningView: Text | null = null;
-    let markdownView: Markdown | null = null;
-    const toolCards = new Map<string, { box: Box; text: Text; label: string }>();
+    const turnView = new TurnView({ hideThinking });
+    turnViews.push(turnView);
+    transcript.addChild(turnView);
 
     const loader = new Loader(tui, cliTheme.borderAccent, cliTheme.dim, 'Working...');
     currentLoader = loader;
@@ -274,19 +284,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     loader.start();
     tui.requestRender();
 
-    const ensureReasoningView = () => {
-      if (reasoningView) return reasoningView;
-      reasoningView = new Text('', 1, 0);
-      turnContainer.addChild(reasoningView);
-      return reasoningView;
-    };
-
-    const ensureMarkdownView = () => {
-      if (markdownView) return markdownView;
-      markdownView = new Markdown('', 1, 0, cliMarkdownTheme, { color: cliTheme.text });
-      turnContainer.addChild(markdownView);
-      return markdownView;
-    };
+    let toolCounter = 0;
 
     const target: ChatStreamTarget = {
       id: SENDER_ID,
@@ -294,43 +292,28 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
         if (channel !== 'chat:ui-chunk' || !payload || typeof payload !== 'object') return;
         const chunk = payload as Record<string, unknown>;
         if (chunk.type === 'reasoning-delta' && typeof chunk.delta === 'string') {
-          reasoningBuf += chunk.delta;
-          const tail = reasoningBuf.replace(/\s+/g, ' ').trim();
-          const preview = tail.length > 140 ? `...${tail.slice(-137)}` : tail;
-          ensureReasoningView().setText(cliTheme.thinking(`Thinking: ${preview}`));
+          turnView.appendReasoningDelta(chunk.delta);
+          loader.setMessage('Thinking...');
           tui.requestRender();
         } else if (chunk.type === 'text-delta' && typeof chunk.delta === 'string') {
-          textBuf += chunk.delta;
-          ensureMarkdownView().setText(textBuf);
+          turnView.appendTextDelta(chunk.delta);
+          loader.setMessage('Responding...');
           tui.requestRender();
         } else if (chunk.type === 'tool-input-available' && typeof chunk.toolName === 'string') {
-          const callId = typeof chunk.toolCallId === 'string' ? chunk.toolCallId : `${chunk.toolName}-${toolCards.size}`;
-          const args = summarizeToolArgs(chunk.input);
-          const label = `${cliTheme.bold(cliTheme.text(chunk.toolName))} ${cliTheme.dim(args)}`;
-          const text = new Text(`${cliTheme.warning('•')} ${label}`, 0, 0);
-          const box = new Box(1, 0, cliTheme.toolPendingBg);
-          box.addChild(text);
-          toolCards.set(callId, { box, text, label });
-          turnContainer.addChild(box);
+          const callId =
+            typeof chunk.toolCallId === 'string' ? chunk.toolCallId : `${chunk.toolName}-${toolCounter++}`;
+          turnView.addToolPending(callId, chunk.toolName, chunk.input);
           loader.setMessage(`Running ${chunk.toolName}...`);
           tui.requestRender();
-        } else if (chunk.type === 'tool-output-available' && typeof chunk.toolName === 'string') {
+        } else if (chunk.type === 'tool-output-available') {
           const callId = typeof chunk.toolCallId === 'string' ? chunk.toolCallId : '';
-          const card = toolCards.get(callId);
-          if (card) {
-            card.box.setBgFn(cliTheme.toolSuccessBg);
-            card.text.setText(`${cliTheme.success('✓')} ${card.label}`);
-          }
+          turnView.completeTool(callId, chunk.output);
           loader.setMessage('Working...');
           tui.requestRender();
-        } else if (chunk.type === 'tool-output-error' && typeof chunk.toolName === 'string') {
+        } else if (chunk.type === 'tool-output-error') {
           const callId = typeof chunk.toolCallId === 'string' ? chunk.toolCallId : '';
           const err = typeof chunk.errorText === 'string' ? chunk.errorText : 'failed';
-          const card = toolCards.get(callId);
-          if (card) {
-            card.box.setBgFn(cliTheme.toolErrorBg);
-            card.text.setText(`${cliTheme.error('✗')} ${card.label}\n${cliTheme.error(err)}`);
-          }
+          turnView.failTool(callId, err);
           loader.setMessage('Working...');
           tui.requestRender();
         } else if (chunk.type === 'abort') {
@@ -352,13 +335,13 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       loaderSlot.clear();
       currentLoader = null;
 
-      if (!textBuf && 'text' in result && typeof result.text === 'string' && result.text.trim()) {
-        ensureMarkdownView().setText(result.text);
-      }
+      turnView.finishTurn('text' in result && typeof result.text === 'string' ? result.text : undefined);
       if (aborted) {
-        turnContainer.addChild(new Text(cliTheme.warning('[interrupted]'), 1, 0));
+        turnView.addChild(new Spacer(1));
+        turnView.addChild(new Text(cliTheme.warning('[interrupted]'), 1, 0));
       } else if (!result.success && 'error' in result && result.error) {
-        turnContainer.addChild(new Text(cliTheme.error(`[error] ${result.error}`), 1, 0));
+        turnView.addChild(new Spacer(1));
+        turnView.addChild(new Text(cliTheme.error(`[error] ${result.error}`), 1, 0));
       }
 
       totals.turns += 1;
@@ -367,7 +350,8 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
         totals.cacheReadTokens += turnUsage.cacheReadTokens ?? 0;
         totals.outputTokens += turnUsage.outputTokens ?? 0;
         const sec = ((Date.now() - startedAt) / 1000).toFixed(1);
-        turnContainer.addChild(
+        turnView.addChild(new Spacer(1));
+        turnView.addChild(
           new Text(
             cliTheme.dim(
               `[in ${turnUsage.inputTokens ?? 0} · cache ${turnUsage.cacheReadTokens ?? 0} · out ${turnUsage.outputTokens ?? 0} · ${sec}s]`
@@ -382,8 +366,10 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       loader.stop();
       loaderSlot.clear();
       currentLoader = null;
+      turnView.finishTurn();
       const message = error instanceof Error ? error.message : String(error);
-      turnContainer.addChild(new Text(cliTheme.error(`[error] ${message}`), 1, 0));
+      turnView.addChild(new Spacer(1));
+      turnView.addChild(new Text(cliTheme.error(`[error] ${message}`), 1, 0));
       transcript.addChild(new Spacer(1));
     } finally {
       activeTurn = false;
@@ -452,6 +438,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       state.threadId = picked.value;
       ensureThreadExists(state, state.threadId, 'Interactive CLI');
       transcript.clear();
+      turnViews.length = 0;
       await appendBanner();
       renderResumedTail(state.threadId);
     }
@@ -542,9 +529,11 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       await openSkillPicker();
     } else if (outcome.kind === 'clear') {
       transcript.clear();
+      turnViews.length = 0;
       appendInfoBlock(outcome.lines, styleBannerLine);
     } else if (state.threadId !== previousThreadId) {
       transcript.clear();
+      turnViews.length = 0;
       await appendBanner();
       renderResumedTail(state.threadId);
     } else if (outcome.kind === 'handled') {
@@ -578,6 +567,10 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       }
       idleInterruptAt = now;
       appendInfoBlock(['(Press Ctrl+C again or /exit to quit)'], cliTheme.dim);
+      return { consume: true };
+    }
+    if (matchesKey(data, 'ctrl+t')) {
+      toggleThinkingVisibility();
       return { consume: true };
     }
     if (matchesKey(data, 'escape') && activeTurn) {
@@ -634,7 +627,7 @@ const runPipedInteractiveCli = async (state: InteractiveCliState): Promise<void>
         } else if (chunk.type === 'tool-input-available' && typeof chunk.toolName === 'string') {
           closeReasoning();
           output.write(
-            `\n${cliTheme.warning('•')} ${cliTheme.bold(chunk.toolName)} ${cliTheme.dim(summarizeToolArgs(chunk.input))}\n`
+            `\n${cliTheme.warning('•')} ${cliTheme.bold(chunk.toolName)} ${cliTheme.dim(formatToolCallPipedSummary(chunk.toolName, chunk.input))}\n`
           );
         } else if (chunk.type === 'tool-output-available' && typeof chunk.toolName === 'string') {
           output.write(`  ${cliTheme.success('✓')} ${cliTheme.dim(chunk.toolName)}\n`);

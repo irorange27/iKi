@@ -64,6 +64,7 @@ const defaultPiTextModelCall: PiTextModelCall = (config, request) => {
       apiKey: provider.apiKey,
       ...(request.signal ? { signal: request.signal } : {}),
       ...(typeof request.maxTokens === 'number' ? { maxTokens: request.maxTokens } : {}),
+      ...(config.threadId ? { sessionId: config.threadId } : {}),
       ...(shouldUseCacheRetention(model) ? { cacheRetention: 'short' } : {}),
     }
   );
@@ -111,7 +112,7 @@ export class PiTextTurnHarness {
     const initialConversation = this.history.filter(message => message.role !== 'system');
     const existingSummary = input.compactionSummary?.trim() || undefined;
     const priorSummaryMessage: ModelMessage | undefined = existingSummary
-      ? { role: 'system', content: frameCheckpoint(existingSummary) }
+      ? { role: 'user', content: frameCheckpoint(existingSummary) }
       : undefined;
     const budgetHistory = priorSummaryMessage
       ? [

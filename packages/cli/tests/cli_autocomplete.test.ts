@@ -48,7 +48,7 @@ describe('CLI slash command autocomplete', () => {
     expect(slashSuggestions).not.toBeNull();
     const names = slashSuggestions?.items.map(item => item.value) ?? [];
     expect(names).toEqual(
-      expect.arrayContaining(['help', 'model', 'models', 'resume', 'threads', 'thread', 'new', 'history', 'context', 'system', 'tools', 'skills', 'usage', 'clear', 'exit'])
+      expect.arrayContaining(['help', 'models', 'model', 'resume', 'threads', 'thread', 'new', 'history', 'compact', 'context', 'system', 'tools', 'skills', 'usage', 'clear', 'exit'])
     );
 
     const modFilter = await provider.getSuggestions(['/mo'], 0, 3, {

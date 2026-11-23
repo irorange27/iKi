@@ -18,10 +18,7 @@ export const readPersonaMarkdown = (homeDir = getUserDataPath()): string => {
   }
 };
 
-export const getPersonaPrompt = (options?: { homeDir?: string; now?: Date }): string => {
-  const now = options?.now ?? new Date();
-  const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+export const getPersonaPrompt = (options?: { homeDir?: string }): string => {
   const platform = process.platform;
   const osName = platform === 'darwin' ? 'macOS' : platform === 'win32' ? 'Windows' : 'Linux';
 
@@ -30,7 +27,22 @@ export const getPersonaPrompt = (options?: { homeDir?: string; now?: Date }): st
   if (customPersona) {
     parts.push(customPersona);
   }
-  // Keep time day-granular so the leading system prefix remains KV-cache stable.
-  parts.push(`Current date: ${date} (timezone: ${timezone}). Running on ${osName}.`);
+  // Keep the leading persona prompt invariant across days so provider KV cache holds.
+  parts.push(`Running on ${osName}.`);
   return parts.join('\n\n');
+};
+
+export const getRuntimeReminderText = (options?: {
+  now?: Date;
+  workspaceText?: string;
+}): string => {
+  const now = options?.now ?? new Date();
+  const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return [
+    `Current date: ${date} (timezone: ${timezone}).`,
+    options?.workspaceText?.trim() ?? '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 };

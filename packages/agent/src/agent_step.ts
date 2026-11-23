@@ -17,6 +17,7 @@ export interface ToolExecutionStartStep {
   toolCallId: string;
   toolName: string;
   input: Record<string, unknown>;
+  stepIndex?: number;
 }
 
 export interface ToolExecutionEndStep {

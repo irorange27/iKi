@@ -112,7 +112,7 @@ export class PiToolTurnHarness {
     const initialConversation = this.history.filter(message => message.role !== 'system');
     const existingSummary = input.compactionSummary?.trim() || undefined;
     const priorSummaryMessage: ModelMessage | undefined = existingSummary
-      ? { role: 'system', content: frameCheckpoint(existingSummary) }
+      ? { role: 'user', content: frameCheckpoint(existingSummary) }
       : undefined;
     const budgetHistory = priorSummaryMessage
       ? [
@@ -170,6 +170,7 @@ export class PiToolTurnHarness {
     let llmMs = 0;
     let toolMs = 0;
     let toolCallsCount = 0;
+    let currentStepIndex = 0;
     let lastStepUsage: AgentUsage | undefined;
     const pendingNotes: ModelMessage[] = [];
     const toolCallResults: Array<{
@@ -327,6 +328,7 @@ export class PiToolTurnHarness {
         };
       } else if (event.type === 'step_end') {
         const step = event.step;
+        currentStepIndex = step.index;
 
         if (pendingNotes.length > 0) {
           this.history = [...this.history, ...pendingNotes];
@@ -374,6 +376,7 @@ export class PiToolTurnHarness {
             toolCallId: event.call.id,
             toolName: event.call.name,
             input: event.call.arguments,
+            stepIndex: currentStepIndex,
           },
         };
       } else {

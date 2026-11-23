@@ -47,8 +47,18 @@ const STARTER_MODELS_TOML = `# iKi provider & model declarations
 const STARTER_SETTINGS_TOML = `# iKi user settings (overrides system defaults)
 #
 # [general]
-# language = "zh"
+# language = "zh-CN"
 # theme = "dark"
+#
+# [tools.shell]
+# defaultTimeoutMs = 30000
+# maxTimeoutMs = 600000
+# promoteOnTimeout = true
+# maxOutputBytes = 24000
+# maxOutputLines = 200
+# defaultWaitMs = 15000
+# maxWaitMs = 120000
+# shellPath = ""
 `;
 
 const STARTER_PERSONA_MD = `<!-- iKi persona & global user instructions. Edit freely; HTML comments are stripped. -->

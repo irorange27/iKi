@@ -105,7 +105,7 @@ describe('Compaction checkpoints in SessionLog and TurnBudget', () => {
 
   it('merges an existing checkpoint summary without duplicating summary messages and reports firstKeptInitialIndex', async () => {
     const priorSummary: ModelMessage = {
-      role: 'system',
+      role: 'user',
       content: frameCheckpoint('Prior facts from turn 1'),
     };
     const m0: ModelMessage = { role: 'user', content: 'alpha beta gamma delta '.repeat(250) };
@@ -138,9 +138,13 @@ describe('Compaction checkpoints in SessionLog and TurnBudget', () => {
     expect(emittedCheckpoint?.firstKeptInitialIndex).toBe(2);
 
     const checkpointMessages = prepared.requestHistory.filter(
-      msg => msg.role === 'system' && typeof msg.content === 'string' && msg.content.includes('<compacted-summary>')
+      msg => msg.role === 'user' && typeof msg.content === 'string' && msg.content.includes('<compacted-summary>')
     );
     expect(checkpointMessages).toHaveLength(1);
+    const extraSystemCheckpoints = prepared.requestHistory.filter(
+      msg => msg.role === 'system' && typeof msg.content === 'string' && msg.content.includes('<compacted-summary>')
+    );
+    expect(extraSystemCheckpoints).toHaveLength(0);
 
     // Follow-up turn already within budget preserves the summary without re-compacting
     let reCompacted = false;

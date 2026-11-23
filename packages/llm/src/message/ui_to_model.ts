@@ -1,5 +1,5 @@
 
-import type { ModelContentPart, ModelMessage } from './model_history';
+import { normalizeToolOutput, type ModelContentPart, type ModelMessage } from './model_history';
 
 type UiPartLike = {
   type: string;
@@ -10,6 +10,7 @@ type UiPartLike = {
   filename?: unknown;
   toolCallId?: unknown;
   toolName?: unknown;
+  stepIndex?: unknown;
   input?: unknown;
   output?: unknown;
   errorText?: unknown;
@@ -65,17 +66,35 @@ const toModelMessage = (role: string, parts: UiPartLike[]): ModelMessage[] => {
 
   if (role !== 'assistant') return [];
 
-  const assistantParts: ModelContentPart[] = [];
-  const toolResults: ModelContentPart[] = [];
+  const messages: ModelMessage[] = [];
+  let assistantParts: ModelContentPart[] = [];
+  let toolResults: ModelContentPart[] = [];
+  let currentStepHasTools = false;
+  let currentStepIndex: number | undefined;
+
+  const flushStep = () => {
+    if (assistantParts.length > 0) {
+      messages.push({ role: 'assistant', content: assistantParts });
+    }
+    if (toolResults.length > 0) {
+      messages.push({ role: 'tool', content: toolResults });
+    }
+    assistantParts = [];
+    toolResults = [];
+    currentStepHasTools = false;
+    currentStepIndex = undefined;
+  };
 
   for (const part of parts) {
     if (part.type === 'text' && typeof part.text === 'string') {
       if (part.text.length === 0) continue;
+      if (currentStepHasTools) flushStep();
       assistantParts.push({ type: 'text', text: part.text });
       continue;
     }
     if (part.type === 'reasoning' && typeof part.text === 'string') {
       if (part.text.length === 0) continue;
+      if (currentStepHasTools) flushStep();
       assistantParts.push({ type: 'reasoning', text: part.text });
       continue;
     }
@@ -84,6 +103,23 @@ const toModelMessage = (role: string, parts: UiPartLike[]): ModelMessage[] => {
     const toolCallId = readString(part.toolCallId);
     const toolName = readString(part.toolName);
     if (!toolCallId || !toolName) continue;
+
+    const partStepIndex =
+      typeof part.stepIndex === 'number' && Number.isInteger(part.stepIndex) && part.stepIndex >= 0
+        ? part.stepIndex
+        : undefined;
+    if (
+      currentStepHasTools &&
+      partStepIndex !== undefined &&
+      currentStepIndex !== undefined &&
+      partStepIndex !== currentStepIndex
+    ) {
+      flushStep();
+    }
+    if (partStepIndex !== undefined && currentStepIndex === undefined) {
+      currentStepIndex = partStepIndex;
+    }
+    currentStepHasTools = true;
 
     assistantParts.push({
       type: 'tool-call',
@@ -109,7 +145,7 @@ const toModelMessage = (role: string, parts: UiPartLike[]): ModelMessage[] => {
       toolName,
       output:
         state === 'output-available'
-          ? { type: 'json', value: part.output ?? null }
+          ? normalizeToolOutput(part.output ?? null)
           : {
               type: 'error-text',
               value: readString(part.errorText) ?? `tool ${state.replace('output-', '')}`,
@@ -117,13 +153,7 @@ const toModelMessage = (role: string, parts: UiPartLike[]): ModelMessage[] => {
     });
   }
 
-  const messages: ModelMessage[] = [];
-  if (assistantParts.length > 0) {
-    messages.push({ role: 'assistant', content: assistantParts });
-  }
-  if (toolResults.length > 0) {
-    messages.push({ role: 'tool', content: toolResults });
-  }
+  flushStep();
   return messages;
 };
 

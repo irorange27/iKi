@@ -1,5 +1,6 @@
 import { createLogger } from '@iki/core/logger';
 import type { ChatUiMessage } from '@iki/llm/message/message_parts';
+import { toModelInputMessages } from '@iki/llm/message/ui_messages';
 import type { AgentRunStatus } from '@iki/core/types/agent_run';
 import {
   appendSessionFacts,
@@ -258,6 +259,25 @@ export const selectMessagesForCompaction = <T extends { id?: string }>(
     messages: messages.slice(tailIndex),
     summary: compaction.summary,
   };
+};
+
+/**
+ * Maps each converted non-system ModelMessage index back to its originating UI message id
+ * so compaction checkpoints can record the exact `firstKeptMessageId` anchor.
+ */
+export const mapUiMessagesToModelIds = async (
+  uiMessages: readonly ChatUiMessage[],
+  repairInterruptedTools = true
+): Promise<string[]> => {
+  const ids: string[] = [];
+  for (const uiMessage of uiMessages) {
+    if (uiMessage.role === 'system') continue;
+    const converted = await toModelInputMessages([uiMessage], { repairInterruptedTools });
+    for (let i = 0; i < converted.length; i += 1) {
+      ids.push(uiMessage.id);
+    }
+  }
+  return ids;
 };
 
 export const asChatUiMessage = (value: unknown): ChatUiMessage | null => {

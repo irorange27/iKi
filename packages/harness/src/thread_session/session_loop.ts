@@ -26,12 +26,12 @@ import {
 import {
   asChatUiMessage,
   compactionCheckpointToEvent,
+  mapUiMessagesToModelIds,
   recordSessionEvents,
   rebuildThreadViewFromEvents,
   selectMessagesForCompaction,
   turnFactsToEvents,
 } from './session_log';
-import { toModelInputMessages } from '@iki/llm/message/ui_messages';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
 import { createTurnDriver, type TurnDriverHandle } from './turn_driver';
 import {
@@ -176,16 +176,10 @@ export const createChatStreaming = (deps: {
           : threadView
             ? selectMessagesForCompaction(threadView.messages, threadView.compaction).messages
             : [];
-      const initialModelMessageIds: string[] = [];
-      for (const uiMessage of activeUiForBoundaries) {
-        if (uiMessage.role === 'system') continue;
-        const converted = await toModelInputMessages([uiMessage], {
-          repairInterruptedTools: allIncomingAreUi,
-        });
-        for (let i = 0; i < converted.length; i += 1) {
-          initialModelMessageIds.push(uiMessage.id);
-        }
-      }
+      const initialModelMessageIds = await mapUiMessagesToModelIds(
+        activeUiForBoundaries,
+        allIncomingAreUi
+      );
       const turnOptions: ChatTurnOptions = {
         ...options,
         ...(slicedUi ? { messages: slicedUi.messages } : {}),

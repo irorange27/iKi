@@ -11,6 +11,15 @@ export const REQUEST_SYSTEM_PROMPT_SLOTS = {
   transcriptSystem: 400,
 } as const;
 
+export const SYSTEM_PROMPT_SECTION_ORDERS = {
+  persona: 100,
+  planPrompt: 200,
+  extraPrompt: 300,
+  project_context: 400,
+  skills: 500,
+  transcriptSystem: 600,
+} as const;
+
 type RequestSystemPromptSlot = keyof typeof REQUEST_SYSTEM_PROMPT_SLOTS;
 
 export type RequestSystemPromptPart = {

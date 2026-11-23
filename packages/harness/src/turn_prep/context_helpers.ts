@@ -26,22 +26,6 @@ export const buildMessagePreview = (message: ChatInputMessage): string => {
   return extractTextFromModelMessageContent(message.content);
 };
 
-export const insertSystemMessages = (
-  messages: ChatInputMessage[],
-  additions: string[]
-): ChatInputMessage[] => {
-  const nextSystemMessages = additions
-    .map(content => content.trim())
-    .filter(Boolean)
-    .map(content => ({ role: 'system', content }) as ChatInputMessage);
-
-  if (nextSystemMessages.length === 0) return messages;
-
-  const insertIndex = messages.findIndex(message => message.role !== 'system');
-  const headIndex = insertIndex === -1 ? messages.length : insertIndex;
-  return [...messages.slice(0, headIndex), ...nextSystemMessages, ...messages.slice(headIndex)];
-};
-
 export const buildDroppedBlock = (kind: ContextBlockKind, reason: string): ContextReportBlock => ({
   kind,
   status: 'dropped',

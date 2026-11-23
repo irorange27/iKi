@@ -453,6 +453,7 @@ const generateViaPi = async (
               ...(typeof options.temperature === 'number'
                 ? { temperature: options.temperature }
                 : {}),
+              ...(options.threadId ? { sessionId: options.threadId } : {}),
               // Pass cache hint if the model charges for prompt-cache writes.
               ...(shouldUseCacheRetention(model) ? { cacheRetention: 'short' } : {}),
             }

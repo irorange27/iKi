@@ -92,6 +92,7 @@ const applyChunk = (
         found.toolName = chunk.toolName;
         found.state = 'input-streaming';
         if (chunk.title) found.title = chunk.title;
+        if (typeof chunk.stepIndex === 'number') found.stepIndex = chunk.stepIndex;
         return;
       }
       parts.push({
@@ -100,6 +101,7 @@ const applyChunk = (
         toolName: chunk.toolName,
         state: 'input-streaming',
         ...(chunk.title ? { title: chunk.title } : {}),
+        ...(typeof chunk.stepIndex === 'number' ? { stepIndex: chunk.stepIndex } : {}),
       });
       return;
     }
@@ -121,11 +123,13 @@ const applyChunk = (
           toolName: chunk.toolName ?? 'tool',
           state: 'input-available',
           ...(chunk.input !== undefined ? { input: chunk.input } : {}),
+          ...(typeof chunk.stepIndex === 'number' ? { stepIndex: chunk.stepIndex } : {}),
         });
         return;
       }
       found.state = 'input-available';
       if (chunk.input !== undefined) found.input = chunk.input;
+      if (typeof chunk.stepIndex === 'number') found.stepIndex = chunk.stepIndex;
       return;
     }
     case 'tool-input-error': {

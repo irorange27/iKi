@@ -9,16 +9,8 @@ import {
   setConsoleLoggingEnabled,
 } from '@iki/core/logger';
 import { registerStandardTools } from '@iki/harness/tools';
-import { startPiTurnHarness } from '@iki/harness/agent/harness';
 import { getMcpManager } from '@iki/harness/mcp';
 import { setHostFetch, setPlatformInfo } from '@iki/core/platform';
-import { createAgentRunTracker } from '@iki/harness/thread_session/run_tracker';
-import {
-  finalizeHarnessTurn,
-  finalizeTurnFailure,
-} from '@iki/harness/thread_session/turn_finalize';
-import { getToolModel } from '@iki/llm-pi-ai/tool_model';
-import { resolveElement } from './main/services/devtools/element_source';
 import { electronFetchWithTimeout } from './main/services/network/electron_fetch';
 import { registerMainIpc } from './main/ipc';
 import {
@@ -94,18 +86,7 @@ nativeTheme.on('updated', () => {
   updatePlatformTheme();
 });
 
-registerStandardTools({
-  elementSourceResolver: request => resolveElement(request),
-  delegatedAgentRuntime: {
-    createRunTracker: createAgentRunTracker,
-    getConversationToolModel: getToolModel,
-    createHarness: startPiTurnHarness,
-    finalize: {
-      finalizeFailure: finalizeTurnFailure,
-      finalizeSuccess: finalizeHarnessTurn,
-    },
-  },
-});
+registerStandardTools();
 void getMcpManager().initialize();
 registerMainIpc();
 

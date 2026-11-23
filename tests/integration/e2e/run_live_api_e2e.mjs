@@ -76,14 +76,16 @@ const runCli = args => {
   return JSON.parse(out);
 };
 
+const SHELL_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash';
+
 try {
-  // Turn 1: real model must invoke write_file to create live-check.txt
+  // Turn 1: real model must invoke bash/pwsh to create live-check.txt
   const turn1 = runCli([
     '--thread',
     'live-e2e-1',
     '--tools',
-    'write_file',
-    'Use the write_file tool to write a file named "live-check.txt" with the exact content "hello-live-iki". Do not write anything else.',
+    `${SHELL_TOOL},job`,
+    `Use the ${SHELL_TOOL} tool to write a file named "live-check.txt" in the current working directory containing the exact text "hello-live-iki" (without trailing extra words).`,
   ]);
   assert.equal(turn1.success, true, `turn 1 failed: ${turn1.error ?? 'unknown error'}`);
   assert.ok(turn1.usage && turn1.usage.inputTokens > 0, 'turn 1 should report real inputTokens');
@@ -103,7 +105,7 @@ try {
     '--thread',
     'live-e2e-1',
     '--tools',
-    'write_file',
+    `${SHELL_TOOL},job`,
     'What exact text did you just write to live-check.txt? Reply with that text.',
   ]);
   assert.equal(turn2.success, true, `turn 2 failed: ${turn2.error ?? 'unknown error'}`);
@@ -113,7 +115,9 @@ try {
   );
 
   console.log(
-    `[live-e2e] PASS (${MODEL}) — real tool call, JSONL persistence, multi-turn recall, and usage verified (turn1 inputTokens=${turn1.usage.inputTokens}, cacheRead=${turn1.usage.cacheReadTokens ?? 0})`
+    `[live-e2e] PASS (${MODEL}) — real tool call, JSONL persistence, multi-turn recall, and usage verified ` +
+      `(turn1 in=${turn1.usage.inputTokens} cacheRead=${turn1.usage.cacheReadTokens ?? 0}, ` +
+      `turn2 in=${turn2.usage?.inputTokens ?? 0} cacheRead=${turn2.usage?.cacheReadTokens ?? 0})`
   );
 } finally {
   fs.rmSync(workDir, { recursive: true, force: true });

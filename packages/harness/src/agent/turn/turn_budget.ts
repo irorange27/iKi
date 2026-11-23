@@ -104,16 +104,16 @@ export const preparePiTurnHistory = async (params: {
     });
     params.signal?.throwIfAborted();
     const summaryMessage: ModelMessage = {
-      role: 'system',
+      role: 'user',
       content: frameCheckpoint(summaryText),
     };
     turnStartSummaryMessage = summaryMessage;
     requestHistory = [
-      ...planned.history.filter(
-        message => message.role === 'system' && message !== params.previousSummaryMessage
-      ),
+      ...planned.history.filter(message => message.role === 'system'),
       summaryMessage,
-      ...planned.history.filter(message => message.role !== 'system'),
+      ...planned.history.filter(
+        message => message.role !== 'system' && message !== params.previousSummaryMessage
+      ),
     ];
     compactedRecord = {
       summary: summaryText,
@@ -190,7 +190,7 @@ export const compactPiRequestStep = async (params: {
   for (let attempt = 0; attempt <= COMPACTION_RETRIES; attempt += 1) {
     const planned = autoCompactHistory({
       history: view,
-      maxInputTokens: params.force ? Math.max(1, lastTokens) : budget,
+      maxInputTokens: params.force ? Math.max(1, Math.floor(lastTokens * 0.5)) : budget,
       keepRatio: AUTO_COMPACT_KEEP_RATIO / 2 ** attempt,
     });
     // "Nothing left to compact" is not a failure: the view is already all
@@ -207,15 +207,15 @@ export const compactPiRequestStep = async (params: {
     params.signal?.throwIfAborted();
     existingSummary = summaryText;
     const summaryMessage: ModelMessage = {
-      role: 'system',
+      role: 'user',
       content: frameCheckpoint(summaryText),
     };
     view = [
-      ...planned.history.filter(
-        message => message.role === 'system' && message !== previousSummaryMessage
-      ),
+      ...planned.history.filter(message => message.role === 'system'),
       summaryMessage,
-      ...planned.history.filter(message => message.role !== 'system'),
+      ...planned.history.filter(
+        message => message.role !== 'system' && message !== previousSummaryMessage
+      ),
     ];
     previousSummaryMessage = summaryMessage;
     lastSummaryMessage = summaryMessage;

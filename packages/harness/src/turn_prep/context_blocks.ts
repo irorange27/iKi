@@ -67,25 +67,24 @@ export const buildIdentityContext = (
   threadId: string | undefined,
   contextConfig: ContextConfig,
   agentInstructions: string
-): IdentityContext => {
-
-  const identityText = [
-    workspaceSystemMessage?.(threadId)?.trim() ?? '',
+): IdentityContext & { runtimeWorkspaceText: string } => {
+  const runtimeWorkspaceText = workspaceSystemMessage?.(threadId)?.trim() ?? '';
+  const instructionsClip = clipTextToTokenBudget(
     agentInstructions?.trim() ?? '',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
-  const identityClip = clipTextToTokenBudget(identityText, contextConfig.maxIdentityTokens);
+    contextConfig.maxIdentityTokens
+  );
+  const totalText = [runtimeWorkspaceText, instructionsClip.text].filter(Boolean).join('\n\n');
 
   return {
-    systemMessage: identityClip.text,
+    systemMessage: instructionsClip.text,
+    runtimeWorkspaceText,
     block: {
       kind: 'identity',
-      status: identityClip.text ? (identityClip.truncated ? 'truncated' : 'included') : 'dropped',
-      estimatedTokens: estimateTextTokens(identityClip.text),
-      charCount: identityClip.text.length,
-      ...(identityClip.text
-        ? identityClip.truncated
+      status: totalText ? (instructionsClip.truncated ? 'truncated' : 'included') : 'dropped',
+      estimatedTokens: estimateTextTokens(totalText),
+      charCount: totalText.length,
+      ...(totalText
+        ? instructionsClip.truncated
           ? { reason: 'identity block clipped to context budget' }
           : {}
         : { reason: 'no active identity profile or workspace scope available' }),

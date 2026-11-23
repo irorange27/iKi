@@ -28,6 +28,7 @@ export type ChatStreamEvent =
       toolCallId: string;
       toolName: string;
       input?: Record<string, unknown>;
+      stepIndex?: number;
       invalid?: boolean;
       error?: unknown;
     }

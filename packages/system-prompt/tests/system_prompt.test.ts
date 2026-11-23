@@ -7,6 +7,7 @@ import {
   diffPromptSections,
   formatPromptContextSnapshot,
   getPersonaPrompt,
+  getRuntimeReminderText,
   renderPromptSections,
 } from '../src/index';
 
@@ -26,7 +27,7 @@ afterEach(() => {
 });
 
 describe('system-prompt', () => {
-  it('loads PERSONA.md from home dir, strips HTML comments, and uses day-granular date', () => {
+  it('keeps PERSONA.md static across dates and isolates date/workspace into runtime reminder text', () => {
     const dir = makeTempDir();
     fs.writeFileSync(
       path.join(dir, 'PERSONA.md'),
@@ -34,10 +35,17 @@ describe('system-prompt', () => {
       'utf8'
     );
 
-    const prompt = getPersonaPrompt({ homeDir: dir, now: new Date(2026, 10, 23, 16, 55, 0) });
+    const prompt = getPersonaPrompt({ homeDir: dir });
     expect(prompt).toContain('You are a focused assistant.');
     expect(prompt).not.toContain('comment should be stripped');
-    expect(prompt).toContain('Current date: 2026-11-23');
+    expect(prompt).not.toContain('Current date:');
+
+    const runtime = getRuntimeReminderText({
+      now: new Date(2026, 10, 23, 16, 55, 0),
+      workspaceText: 'Current workspace: iki (/repo).',
+    });
+    expect(runtime).toContain('Current date: 2026-11-23');
+    expect(runtime).toContain('Current workspace: iki (/repo).');
   });
 
   it('builds dynamic tool rules only for enabled tools without stale approval or ReAct instructions', () => {
@@ -52,12 +60,21 @@ describe('system-prompt', () => {
     expect(fileOnly).not.toContain('ReAct');
     expect(fileOnly).not.toContain('description');
 
-    const withShell = buildToolSystemPrompt({
+    const withBash = buildToolSystemPrompt({
       enableTools: true,
-      enabledToolNames: ['shell'],
+      enabledToolNames: ['bash', 'job'],
       platform: 'darwin',
     });
-    expect(withShell).toContain('osascript');
+    expect(withBash).toContain('`bash`');
+    expect(withBash).toContain('`job`');
+
+    const withPwsh = buildToolSystemPrompt({
+      enableTools: true,
+      enabledToolNames: ['pwsh', 'job'],
+      platform: 'win32',
+    });
+    expect(withPwsh).toContain('`pwsh`');
+    expect(withPwsh).toContain('PowerShell 7');
   });
 
   it('diffs prompt sections cleanly and formats PromptContext reminders', () => {

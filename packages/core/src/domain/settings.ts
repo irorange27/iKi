@@ -233,6 +233,23 @@ export const ToolExecutionSettingsSchema = z.object({
 });
 export type ToolExecutionSettings = z.infer<typeof ToolExecutionSettingsSchema>;
 
+export const ShellToolSettingsSchema = z.object({
+  defaultTimeoutMs: z.number().int().positive().catch(30000),
+  maxTimeoutMs: z.number().int().positive().catch(600000),
+  promoteOnTimeout: z.boolean().catch(true),
+  maxOutputBytes: z.number().int().positive().catch(24000),
+  maxOutputLines: z.number().int().positive().catch(200),
+  defaultWaitMs: z.number().int().positive().catch(15000),
+  maxWaitMs: z.number().int().positive().catch(120000),
+  shellPath: z.string().catch(''),
+});
+export type ShellToolSettings = z.infer<typeof ShellToolSettingsSchema>;
+
+export const ToolsSettingsSchema = z.object({
+  shell: ShellToolSettingsSchema.prefault({}).catch(ShellToolSettingsSchema.parse({})),
+});
+export type ToolsSettings = z.infer<typeof ToolsSettingsSchema>;
+
 export const McpSettingsSchema = z.object({
   enabled: z.boolean().catch(false),
   connectOnStartup: z.boolean().catch(false),
@@ -265,6 +282,7 @@ export const AppSettingsSchema = z.object({
   toolExecution: ToolExecutionSettingsSchema.prefault({}).catch(
     ToolExecutionSettingsSchema.parse({})
   ),
+  tools: ToolsSettingsSchema.prefault({}).catch(ToolsSettingsSchema.parse({})),
   mcp: McpSettingsSchema.prefault({}).catch(McpSettingsSchema.parse({})),
 });
 export type AppSettings = z.infer<typeof AppSettingsSchema>;

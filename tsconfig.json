@@ -59,6 +59,15 @@
       ],
       "@iki/system-prompt/*": [
         "./packages/system-prompt/src/*"
+      ],
+      "@iki/tools": [
+        "./packages/tools/src/index.ts"
+      ],
+      "@iki/tools/shell": [
+        "./packages/tools/src/shell/index.ts"
+      ],
+      "@iki/tools/*": [
+        "./packages/tools/src/*"
       ]
     },
     "typeRoots": [
@@ -77,6 +86,7 @@
     "packages/agent/src/**/*",
     "packages/agent-loop/src/**/*",
     "packages/system-prompt/src/**/*",
+    "packages/tools/src/**/*",
     "packages/cli/src/**/*"
   ]
 }

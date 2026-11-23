@@ -117,6 +117,7 @@ const toUiChunkFromToolEvent = (event: ChatStreamEvent): ChatUiMessageChunk | nu
       toolCallId,
       toolName,
       input: event.input ?? {},
+      ...(typeof event.stepIndex === 'number' ? { stepIndex: event.stepIndex } : {}),
       ...(title ? { title } : {}),
       dynamic: true,
     };

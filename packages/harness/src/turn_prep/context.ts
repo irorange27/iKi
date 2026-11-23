@@ -8,9 +8,17 @@ import {
   readAgentInstructionsForSelection,
 } from './context_blocks';
 import { buildWorkspaceSystemMessageForSelection } from '../workspaces/thread_workspace';
-import { buildAssembleResult, getContextConfig, insertSystemMessages } from './context_helpers';
+import { buildAssembleResult, getContextConfig } from './context_helpers';
 import { selectRecentHistory } from './context_history';
 import type { AssembleChatContextParams, SkillContext } from './context_types';
+import { getRuntimeReminderText } from '@iki/system-prompt/persona';
+import {
+  SYSTEM_PROMPT_SECTION_ORDERS,
+  formatPromptContextSnapshot,
+  joinPromptSections,
+  renderPromptSections,
+} from '@iki/system-prompt/assembler';
+import type { ModelMessage } from '@iki/llm/message/model_history';
 
 export type {
   ContextBlockKind,
@@ -18,6 +26,11 @@ export type {
   ContextReportBlock,
   ContextReport,
 } from './context_types';
+
+const extractSystemTexts = (messages: readonly ModelMessage[]): string[] =>
+  messages
+    .map(message => (typeof message.content === 'string' ? message.content.trim() : ''))
+    .filter(Boolean);
 
 export const createChatContextAssembler = (deps: {
   workspaceSystemMessage?: (threadId?: string) => string;
@@ -57,6 +70,7 @@ export const createChatContextAssembler = (deps: {
     const identityContext = benchmarkCleanContext
       ? {
           systemMessage: '',
+          runtimeWorkspaceText: '',
           block: buildDroppedBlock('identity', 'disabled for benchmark clean mode'),
         }
       : buildIdentityContext(
@@ -79,10 +93,35 @@ export const createChatContextAssembler = (deps: {
         : buildDroppedBlock('thread-summary', 'managed at model step boundary')
     );
 
-    const withIdentity = insertSystemMessages(
-      [...recentHistory.systemMessages, ...recentHistory.recentMessages],
-      [identityContext.systemMessage]
-    );
+    const runtimeReminderText = benchmarkCleanContext
+      ? ''
+      : formatPromptContextSnapshot([
+          {
+            name: 'runtime',
+            order: 10,
+            text: getRuntimeReminderText({ workspaceText: identityContext.runtimeWorkspaceText }),
+          },
+        ]);
+    const runtimeReminderMessage: ModelMessage | null = runtimeReminderText
+      ? { role: 'user', content: runtimeReminderText }
+      : null;
+
+    const projectSystemSection = identityContext.systemMessage
+      ? joinPromptSections(
+          renderPromptSections([
+            {
+              name: 'project_context',
+              order: SYSTEM_PROMPT_SECTION_ORDERS.project_context,
+              text: identityContext.systemMessage,
+            },
+          ])
+        )
+      : '';
+    const skillInputMessages: ModelMessage[] = [
+      ...(projectSystemSection ? [{ role: 'system' as const, content: projectSystemSection }] : []),
+      ...(runtimeReminderMessage ? [runtimeReminderMessage] : []),
+      ...recentHistory.recentMessages,
+    ];
 
     const skillContext: SkillContext = benchmarkCleanContext
       ? {
@@ -92,7 +131,7 @@ export const createChatContextAssembler = (deps: {
           block: buildDroppedBlock('skills', 'disabled for benchmark clean mode'),
         }
       : await buildSkillContext({
-          inputMessages: withIdentity,
+          inputMessages: skillInputMessages,
           threadId: params.threadId,
           skillIds: params.skillIds,
           skillMode: params.skillMode,
@@ -101,8 +140,41 @@ export const createChatContextAssembler = (deps: {
         });
     blocks.push(skillContext.block);
 
+    const staticSections = joinPromptSections(
+      renderPromptSections([
+        ...(identityContext.systemMessage
+          ? [
+              {
+                name: 'project_context',
+                order: SYSTEM_PROMPT_SECTION_ORDERS.project_context,
+                text: identityContext.systemMessage,
+              },
+            ]
+          : []),
+        ...(skillContext.systemMessage
+          ? [
+              {
+                name: 'skills',
+                order: SYSTEM_PROMPT_SECTION_ORDERS.skills,
+                text: skillContext.systemMessage,
+              },
+            ]
+          : []),
+      ])
+    );
+    const singleSystemText = [
+      ...extractSystemTexts(recentHistory.systemMessages),
+      staticSections,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
     return buildAssembleResult({
-      messages: insertSystemMessages(withIdentity, [skillContext.systemMessage]),
+      messages: [
+        ...(singleSystemText ? [{ role: 'system' as const, content: singleSystemText }] : []),
+        ...(runtimeReminderMessage ? [runtimeReminderMessage] : []),
+        ...recentHistory.recentMessages,
+      ],
       usedSkills: skillContext.usedSkills,
       skillMode: skillContext.skillMode,
       retainedRecentMessages: recentHistory.recentMessages.length,

@@ -41,10 +41,17 @@ const jsonResponse = (res, { text, toolCalls }) => {
   }));
 };
 
+const SHELL_TOOL_NAME = process.platform === 'win32' ? 'pwsh' : 'bash';
+
 const writeCall = (id, filePath, content) => ({
   id,
   type: 'function',
-  function: { name: 'write_file', arguments: JSON.stringify({ path: filePath, content }) },
+  function: {
+    name: SHELL_TOOL_NAME,
+    arguments: JSON.stringify({
+      command: `mkdir -p e2e && printf '%s' ${JSON.stringify(content)} > ${JSON.stringify(filePath)}`,
+    }),
+  },
 });
 const CALL_1 = writeCall('call_e2e_1', 'e2e/hello.txt', 'e2e-written-by-agent');
 const CALL_2 = writeCall('call_e2e_2', 'e2e/second.txt', 'e2e-second-approval');
@@ -101,13 +108,21 @@ const server = http.createServer((req, res) => {
       .reduce((count, m) => count + (Array.isArray(m.tool_calls) ? m.tool_calls.length : 0), 0);
     const lastUser = [...messages].reverse().find(m => m.role === 'user');
     const lastUserText = typeof lastUser?.content === 'string' ? lastUser.content : JSON.stringify(lastUser?.content ?? '');
-    log({ t: Date.now(), roles, toolMsgs: toolMsgs.length, assistantToolCalls: assistantToolCalls.length, lastUserText: lastUserText.slice(0, 120) });
+    log({
+      t: Date.now(),
+      roles,
+      toolMsgs,
+      assistantToolCalls,
+      lastUserText: lastUserText.slice(0, 120),
+      sessionAffinity: req.headers['x-session-affinity'] ?? null,
+      messages,
+    });
 
-    // Meta-request from the harness: dynamic tool selection. Enable write_file.
+    // Meta-request from the harness: dynamic tool selection. Enable shell.
     const allText = JSON.stringify(messages);
     if (allText.includes('smallest set of tools')) {
       log({ t: Date.now(), phase: 'tool-selection' });
-      reply(res, payload, { text: '{"tools":["write_file"]}' });
+      reply(res, payload, { text: JSON.stringify({ tools: [SHELL_TOOL_NAME, 'job'] }) });
       return;
     }
 

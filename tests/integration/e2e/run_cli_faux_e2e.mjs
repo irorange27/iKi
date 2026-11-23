@@ -89,8 +89,10 @@ const runCli = args => {
 try {
   await waitForServer();
 
-  // Turn 1: E2E_TASK triggers two write_file calls and returns E2E_DONE
-  const turn1 = runCli(['--thread', 'cli-e2e-1', '--tools', 'write_file,load_skill', '--skills', 'user:demo-skill', 'E2E_TASK run']);
+const SHELL_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash';
+
+  // Turn 1: E2E_TASK triggers two shell calls and returns E2E_DONE
+  const turn1 = runCli(['--thread', 'cli-e2e-1', '--tools', `${SHELL_TOOL},job`, '--skills', 'user:demo-skill', 'E2E_TASK run']);
   assert.equal(turn1.success, true, 'turn 1 should succeed');
   assert.ok(turn1.text.includes('E2E_DONE'), `unexpected turn 1 text: ${turn1.text}`);
   assert.ok(turn1.usage && turn1.usage.inputTokens > 0, 'turn 1 should report inputTokens');
@@ -116,22 +118,50 @@ try {
   assert.ok(lines.length >= 2, 'session JSONL should contain header and event batches');
 
   // Turn 2: CHECK_HISTORY verifies persisted history is replayed on the next CLI invocation
-  const turn2 = runCli(['--thread', 'cli-e2e-1', '--tools', 'write_file', 'CHECK_HISTORY']);
+  const turn2 = runCli(['--thread', 'cli-e2e-1', '--tools', `${SHELL_TOOL},job`, 'CHECK_HISTORY']);
   assert.equal(turn2.success, true, 'turn 2 should succeed');
   assert.ok(
     turn2.text.includes('HISTORY_REPORT') && turn2.text.includes('tool_msgs=2'),
     `expected HISTORY_REPORT with tool_msgs=2, got: ${turn2.text}`
   );
 
+  // Verify KV-cache prefix stability on the wire:
+  // Turn 2's messages[0..N-1] must match Turn 1's final step byte-for-byte,
+  // followed by Turn 1's closing assistant reply and Turn 2's user prompt,
+  // with consistent session affinity header.
+  const fauxEntries = fs
+    .readFileSync(fauxLog, 'utf8')
+    .trim()
+    .split('\n')
+    .map(line => JSON.parse(line))
+    .filter(entry => Array.isArray(entry.messages));
+  const turn1FinalReq = [...fauxEntries]
+    .reverse()
+    .find(entry => entry.lastUserText === 'E2E_TASK run' && entry.toolMsgs === 2);
+  const turn2Req = fauxEntries.find(entry => entry.lastUserText === 'CHECK_HISTORY');
+  assert.ok(turn1FinalReq && turn2Req, 'expected both turn 1 final step and turn 2 wire requests in fauxLog');
+  assert.equal(turn1FinalReq.sessionAffinity, 'cli-e2e-1', 'turn 1 must send session affinity header');
+  assert.equal(turn2Req.sessionAffinity, 'cli-e2e-1', 'turn 2 must send matching session affinity header');
+  assert.deepEqual(
+    turn2Req.messages.slice(0, turn1FinalReq.messages.length),
+    turn1FinalReq.messages,
+    'turn 2 wire prefix must match turn 1 final step byte-for-byte for KV cache hit'
+  );
+  assert.equal(
+    turn2Req.messages[turn1FinalReq.messages.length]?.role,
+    'assistant',
+    'turn 1 final assistant answer must follow tool results before turn 2 user message'
+  );
+
   // Interactive REPL mode (-i -c): resumes latest thread, handles slash commands + chat turn + /exit
   const interactiveOut = execFileSync(
     TSX_BIN,
-    [CLI_ENTRY, '--interactive', '--continue', '--data-dir', dataDir, '--workspace', workspaceDir, '--tools', 'write_file'],
+    [CLI_ENTRY, '--interactive', '--continue', '--data-dir', dataDir, '--workspace', workspaceDir, '--tools', `${SHELL_TOOL},job`],
     {
       cwd: ROOT,
       encoding: 'utf8',
       env: { ...process.env, HOME: workDir, NO_COLOR: '1' },
-      input: ['/help', '/models', '/context', '/threads', 'CHECK_HISTORY', '/history', '/usage', '/exit', ''].join('\n'),
+      input: ['/help', '/models', '/context', '/jobs', '/threads', 'CHECK_HISTORY', '/compact', '/history', '/usage', '/exit', ''].join('\n'),
     }
   );
   assert.ok(interactiveOut.includes('iKi CLI'), 'interactive banner should render');
@@ -139,7 +169,9 @@ try {
   assert.ok(interactiveOut.includes('Commands:'), '/help should print command list');
   assert.ok(interactiveOut.includes('Enabled models:'), '/models should list models');
   assert.ok(interactiveOut.includes('Loaded Context & Harness State:'), '/context should show repo context & harness state');
+  assert.ok(interactiveOut.includes('Durable background jobs'), '/jobs should list recorded durable shell jobs');
   assert.ok(interactiveOut.includes('HISTORY_REPORT'), 'interactive chat turn should stream model reply');
+  assert.ok(interactiveOut.includes('Compacted thread cli-e2e-1:'), '/compact should persist a compaction checkpoint');
   assert.ok(interactiveOut.includes('Session usage: 1 turn(s)'), '/usage should aggregate session turns');
 
   console.log('[cli-e2e] PASS — CLI interactive REPL, tool execution, JSONL persistence, history replay, and cache usage verified');
