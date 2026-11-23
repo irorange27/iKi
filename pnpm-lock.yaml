@@ -115,9 +115,9 @@ importers:
       '@earendil-works/pi-ai':
         specifier: ^1.5.0
         version: 1.5.0(@aws-sdk/credential-provider-node@3.972.92)(@modelcontextprotocol/sdk@1.32.2(supports-color@8.1.1)(zod@4.6.7))(@smithy/signature-v4@5.7.5)(supports-color@8.1.1)(undici@6.29.1)(ws@8.22.1)(zod@4.6.7)
-      '@iki/backend':
+      '@iki/harness':
         specifier: workspace:*
-        version: link:packages/backend
+        version: link:packages/harness
       '@iki/theme':
         specifier: workspace:*
         version: link:packages/theme
@@ -273,37 +273,28 @@ importers:
         specifier: ^3.3.14
         version: 3.3.14(typescript@5.9.3)
 
-  packages/ai:
+  packages/agent:
     dependencies:
       '@iki/core':
         specifier: workspace:*
         version: link:../core
-      '@iki/store':
-        specifier: workspace:*
-        version: link:../store
 
-  packages/backend:
+  packages/agent-loop:
     dependencies:
-      '@iki/ai':
+      '@iki/agent':
         specifier: workspace:*
-        version: link:../ai
-      '@iki/core':
+        version: link:../agent
+      '@iki/llm':
         specifier: workspace:*
-        version: link:../core
-      '@iki/store':
-        specifier: workspace:*
-        version: link:../store
-      '@iki/theme':
-        specifier: workspace:*
-        version: link:../theme
+        version: link:../llm
 
   packages/core: {}
 
   packages/desktop:
     dependencies:
-      '@iki/backend':
+      '@iki/harness':
         specifier: workspace:*
-        version: link:../backend
+        version: link:../harness
       '@iki/theme':
         specifier: workspace:*
         version: link:../theme
@@ -332,6 +323,63 @@ importers:
       electron:
         specifier: 39.2.7
         version: 39.2.7(supports-color@8.1.1)
+
+  packages/harness:
+    dependencies:
+      '@iki/agent':
+        specifier: workspace:*
+        version: link:../agent
+      '@iki/agent-loop':
+        specifier: workspace:*
+        version: link:../agent-loop
+      '@iki/core':
+        specifier: workspace:*
+        version: link:../core
+      '@iki/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@iki/llm-pi-ai':
+        specifier: workspace:*
+        version: link:../llm-pi-ai
+      '@iki/session':
+        specifier: workspace:*
+        version: link:../session
+      '@iki/store':
+        specifier: workspace:*
+        version: link:../store
+      '@iki/theme':
+        specifier: workspace:*
+        version: link:../theme
+
+  packages/llm:
+    dependencies:
+      '@iki/core':
+        specifier: workspace:*
+        version: link:../core
+      '@iki/session':
+        specifier: workspace:*
+        version: link:../session
+      '@iki/store':
+        specifier: workspace:*
+        version: link:../store
+
+  packages/llm-pi-ai:
+    dependencies:
+      '@iki/core':
+        specifier: workspace:*
+        version: link:../core
+      '@iki/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@iki/store':
+        specifier: workspace:*
+        version: link:../store
+
+  packages/session:
+    dependencies:
+      '@iki/store':
+        specifier: workspace:*
+        version: link:../store
 
   packages/store:
     dependencies:
