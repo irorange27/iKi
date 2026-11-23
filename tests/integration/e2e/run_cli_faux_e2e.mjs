@@ -123,7 +123,26 @@ try {
     `expected HISTORY_REPORT with tool_msgs=2, got: ${turn2.text}`
   );
 
-  console.log('[cli-e2e] PASS — CLI tool execution, JSONL persistence, history replay, and cache usage verified');
+  // Interactive REPL mode (-i -c): resumes latest thread, handles slash commands + chat turn + /exit
+  const interactiveOut = execFileSync(
+    TSX_BIN,
+    [CLI_ENTRY, '--interactive', '--continue', '--data-dir', dataDir, '--workspace', workspaceDir, '--tools', 'write_file'],
+    {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: { ...process.env, HOME: workDir, NO_COLOR: '1' },
+      input: ['/help', '/models', '/context', '/threads', 'CHECK_HISTORY', '/history', '/usage', '/exit', ''].join('\n'),
+    }
+  );
+  assert.ok(interactiveOut.includes('iKi CLI'), 'interactive banner should render');
+  assert.ok(interactiveOut.includes('cli-e2e-1'), '--continue should resume cli-e2e-1');
+  assert.ok(interactiveOut.includes('Commands:'), '/help should print command list');
+  assert.ok(interactiveOut.includes('Enabled models:'), '/models should list models');
+  assert.ok(interactiveOut.includes('Loaded Context & Harness State:'), '/context should show repo context & harness state');
+  assert.ok(interactiveOut.includes('HISTORY_REPORT'), 'interactive chat turn should stream model reply');
+  assert.ok(interactiveOut.includes('Session usage: 1 turn(s)'), '/usage should aggregate session turns');
+
+  console.log('[cli-e2e] PASS — CLI interactive REPL, tool execution, JSONL persistence, history replay, and cache usage verified');
 } finally {
   cleanup();
 }

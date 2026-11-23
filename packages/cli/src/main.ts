@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -12,10 +13,12 @@ import { registerStandardTools } from '@iki/harness/tools';
 import { createChatService, type ChatStreamTarget } from '@iki/harness/thread_session';
 import { createAgentRunTracker } from '@iki/harness/thread_session/run_tracker';
 import { finalizeHarnessTurn, finalizeTurnFailure } from '@iki/harness/thread_session/turn_finalize';
+import { createWorkspaceSelection, runInteractiveCli } from './interactive';
 
 type CliArgs = {
   dataDir: string;
   threadId?: string;
+  continueLatest: boolean;
   providerType?: string;
   providerId?: string;
   model?: string;
@@ -23,6 +26,8 @@ type CliArgs = {
   tools?: string[];
   skills?: string[];
   skillMode?: 'manual' | 'auto';
+  interactive?: boolean;
+  printOnly: boolean;
   json: boolean;
   prompt: string;
 };
@@ -30,6 +35,7 @@ type CliArgs = {
 const parseArgs = (argv: string[]): CliArgs => {
   let dataDir = process.env.IKI_DATA_DIR || path.join(os.homedir(), '.iki');
   let threadId: string | undefined;
+  let continueLatest = false;
   let providerType: string | undefined;
   let providerId: string | undefined;
   let model: string | undefined;
@@ -37,6 +43,8 @@ const parseArgs = (argv: string[]): CliArgs => {
   let tools: string[] | undefined;
   let skills: string[] | undefined;
   let skillMode: 'manual' | 'auto' | undefined;
+  let interactive: boolean | undefined;
+  let printOnly = false;
   let json = false;
   const positional: string[] = [];
 
@@ -46,13 +54,15 @@ const parseArgs = (argv: string[]): CliArgs => {
       dataDir = path.resolve(argv[++i]);
     } else if (arg === '--thread' && argv[i + 1]) {
       threadId = argv[++i];
+    } else if (arg === '-c' || arg === '--continue') {
+      continueLatest = true;
     } else if (arg === '--provider' && argv[i + 1]) {
       providerType = argv[++i];
     } else if (arg === '--provider-id' && argv[i + 1]) {
       providerId = argv[++i];
     } else if (arg === '--model' && argv[i + 1]) {
       model = argv[++i];
-    } else if (arg === '--workspace' && argv[i + 1]) {
+    } else if ((arg === '--workspace' || arg === '-C') && argv[i + 1]) {
       workspace = path.resolve(argv[++i]);
     } else if (arg === '--tools' && argv[i + 1]) {
       tools = argv[++i].split(',').map(s => s.trim()).filter(Boolean);
@@ -61,17 +71,26 @@ const parseArgs = (argv: string[]): CliArgs => {
     } else if (arg === '--skill-mode' && argv[i + 1]) {
       const mode = argv[++i];
       if (mode === 'manual' || mode === 'auto') skillMode = mode;
+    } else if (arg === '-i' || arg === '--interactive') {
+      interactive = true;
+    } else if (arg === '-p' || arg === '--print') {
+      printOnly = true;
     } else if (arg === '--json') {
       json = true;
+      printOnly = true;
     } else if (arg === '-h' || arg === '--help') {
       console.log(
-        'Usage: iki [options] <prompt>\n' +
+        'Usage: iki [options] [prompt]\n' +
+          '  Run with no prompt in a terminal to start interactive mode.\n\n' +
+          '  -i, --interactive        Start interactive REPL mode\n' +
+          '  -p, --print              Run single turn and exit (auto-enabled with <prompt> or --json)\n' +
+          '  -c, --continue           Resume most recent saved thread\n' +
           '  --data-dir <dir>         User data directory (default ~/.iki)\n' +
           '  --thread <id>            Existing or new thread id\n' +
           '  --provider <type>        Provider type (e.g. openai, anthropic)\n' +
           '  --provider-id <id>       Provider id from models.toml\n' +
           '  --model <id>             Model id\n' +
-          '  --workspace <path>       Workspace directory path\n' +
+          '  -C, --workspace <path>   Workspace directory (defaults to cwd in interactive mode)\n' +
           '  --tools <a,b>            Comma-separated tool names\n' +
           '  --skills <a,b>           Comma-separated skill ids\n' +
           '  --skill-mode <mode>      Skill mode: manual | auto\n' +
@@ -86,6 +105,7 @@ const parseArgs = (argv: string[]): CliArgs => {
   return {
     dataDir,
     ...(threadId ? { threadId } : {}),
+    continueLatest,
     ...(providerType ? { providerType } : {}),
     ...(providerId ? { providerId } : {}),
     ...(model ? { model } : {}),
@@ -93,15 +113,30 @@ const parseArgs = (argv: string[]): CliArgs => {
     ...(tools ? { tools } : {}),
     ...(skills ? { skills } : {}),
     ...(skillMode ? { skillMode } : {}),
+    ...(interactive !== undefined ? { interactive } : {}),
+    printOnly,
     json,
     prompt: positional.join(' ').trim(),
   };
 };
 
+const readPipedStdin = (): string => {
+  try {
+    return fs.readFileSync(0, 'utf8').trim();
+  } catch {
+    return '';
+  }
+};
+
 const main = async () => {
   const args = parseArgs(process.argv.slice(2));
-  if (!args.prompt) {
-    console.error('Error: prompt is required. Run with --help for usage.');
+  const useInteractive = args.interactive === true || (!args.printOnly && !args.prompt && Boolean(process.stdin.isTTY));
+  const prompt =
+    args.prompt ||
+    (!useInteractive && !process.stdin.isTTY ? readPipedStdin() : '');
+
+  if (!useInteractive && !prompt) {
+    console.error('Error: prompt is required in non-interactive mode. Run with --help or --interactive.');
     process.exit(1);
   }
 
@@ -137,11 +172,32 @@ const main = async () => {
   }
 
   const chatService = createChatService();
-  const threadId = args.threadId ?? `cli_${randomUUID().slice(0, 8)}`;
+  const latestThread = args.continueLatest ? chatService.listThreads()[0] : undefined;
+  const threadId = args.threadId ?? latestThread?.id ?? `cli_${randomUUID().slice(0, 8)}`;
+
+  if (useInteractive) {
+    await runInteractiveCli({
+      chatService,
+      dataDir: args.dataDir,
+      threadId,
+      providerType: args.providerType ?? latestThread?.provider_type ?? providerType,
+      ...((args.providerId ?? latestThread?.provider_id ?? providerId)
+        ? { providerId: args.providerId ?? latestThread?.provider_id ?? providerId ?? undefined }
+        : {}),
+      model: args.model ?? latestThread?.model ?? model,
+      workspace: args.workspace ?? process.cwd(),
+      ...(args.tools ? { tools: args.tools } : {}),
+      ...(args.skills ? { skills: args.skills } : {}),
+      skillMode: args.skillMode ?? 'auto',
+      ...(prompt ? { initialPrompt: prompt } : {}),
+    });
+    return;
+  }
+
   if (!chatService.getThread(threadId)) {
     chatService.createThread({
       id: threadId,
-      title: args.prompt.slice(0, 48),
+      title: prompt.slice(0, 48),
       provider_type: providerType,
       ...(providerId ? { provider_id: providerId } : {}),
       model,
@@ -171,7 +227,7 @@ const main = async () => {
   const userMessage = {
     id: `msg_${randomUUID()}`,
     role: 'user' as const,
-    parts: [{ type: 'text' as const, text: args.prompt }],
+    parts: [{ type: 'text' as const, text: prompt }],
   };
 
   const result = await chatService.stream(target, {
@@ -182,23 +238,7 @@ const main = async () => {
     ...(args.tools ? { tools: args.tools } : {}),
     ...(args.skills ? { skillIds: args.skills } : {}),
     ...(args.skillMode ? { skillMode: args.skillMode } : {}),
-    ...(args.workspace
-      ? {
-          workspaceSelection: {
-            threadId,
-            workspaceId: 'cli-workspace',
-            workspace: {
-              id: 'cli-workspace',
-              name: path.basename(args.workspace),
-              path: args.workspace,
-              is_temporary: false,
-              show_in_list: false,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-          },
-        }
-      : {}),
+    ...(args.workspace ? { workspaceSelection: createWorkspaceSelection(threadId, args.workspace) } : {}),
     messages: [...history, userMessage],
   });
 
