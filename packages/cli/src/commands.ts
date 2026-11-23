@@ -170,17 +170,10 @@ export const formatBannerLines = async (state: InteractiveCliState): Promise<str
   const skills = await listSkills();
   const repoSkillNames = listRepoLocalAgentSkills(state.workspace);
 
-  const contextParts = [
-    repoInstructions
-      ? `${repoInstructions.filename} (${repoInstructions.lineCount}L, ${repoInstructions.charCount} chars)`
-      : 'no AGENTS.md/AGENT.md',
-    persona.chars > 0 ? `PERSONA.md (${persona.chars} chars)` : 'PERSONA.md (empty)',
-  ];
-
   const loadedSkillIds = skills.map(s => s.id);
-  const skillsPreview =
+  const skillsText =
     loadedSkillIds.length > 0
-      ? `${loadedSkillIds.slice(0, 4).join(', ')}${loadedSkillIds.length > 4 ? ` (+${loadedSkillIds.length - 4})` : ''}`
+      ? loadedSkillIds.join(', ')
       : 'none loaded';
 
   const toolsSummary = state.tools
@@ -191,13 +184,20 @@ export const formatBannerLines = async (state: InteractiveCliState): Promise<str
 
   return [
     `iKi CLI (${state.providerType}) — ${providerLabel}`,
-    `thread:    ${state.threadId} (${view.messages.length} msg${view.messages.length === 1 ? '' : 's'}${view.compaction ? ', compacted' : ''})`,
-    ...(state.workspace ? [`workspace: ${state.workspace}`] : []),
-    `[Context]  ${contextParts.join(' · ')}`,
-    `[Skills]   mode=${state.skillMode} · loaded: ${skillsPreview}` +
-      (repoSkillNames.length ? ` · repo .agents/skills: ${repoSkillNames.length}` : ''),
-    `[Tools]    ${toolsSummary}`,
-    'Shortcuts: /models switch model · /resume switch thread · /context inspect · /help commands',
+    `thread: ${state.threadId} (${view.messages.length} msg${view.messages.length === 1 ? '' : 's'}${view.compaction ? ', compacted' : ''})`,
+    '',
+    '[Context]',
+    `  ${repoInstructions ? `${repoInstructions.filename} (${repoInstructions.lineCount} lines, ${repoInstructions.charCount} chars)` : 'no repo AGENTS.md / AGENT.md'}`,
+    `  PERSONA.md (${persona.chars > 0 ? `${persona.chars} chars` : 'empty placeholder'})`,
+    '',
+    '[Skills]',
+    `  mode=${state.skillMode} · ${skillsText}`,
+    ...(repoSkillNames.length ? [`  repo .agents/skills (${repoSkillNames.length}): ${repoSkillNames.slice(0, 8).join(', ')}${repoSkillNames.length > 8 ? ` (+${repoSkillNames.length - 8})` : ''}`] : []),
+    '',
+    '[Tools]',
+    `  ${toolsSummary}`,
+    '',
+    'Shortcuts: /models · /resume · /context · /skills · /help',
   ];
 };
 

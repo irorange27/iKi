@@ -1,7 +1,10 @@
+import { execFileSync } from 'node:child_process';
+import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import {
+  Box,
   CombinedAutocompleteProvider,
   Container,
   Editor,
@@ -12,8 +15,8 @@ import {
   Text,
   TuiMainScreen,
   matchesKey,
-  type EditorTheme,
-  type MarkdownTheme,
+  visibleWidth,
+  type Component,
 } from '@earendil-works/pi-tui';
 import type { ChatStreamTarget } from '@iki/harness/thread_session';
 import { rebuildThreadViewFromEvents } from '@iki/harness/thread_session/session_log';
@@ -31,49 +34,62 @@ import {
   type UsageTotals,
 } from './commands';
 import { openSearchablePickerOverlay } from './selectors';
+import { cliMarkdownTheme, cliTheme, createCliEditorTheme, selectListTheme } from './theme';
 
 export { createWorkspaceSelection, type InteractiveCliState } from './commands';
 
 const SENDER_ID = 1;
-const useColor = Boolean(output.isTTY) && !process.env.NO_COLOR;
-const ansi = (code: string, text: string) => (useColor ? `\x1b[${code}m${text}\x1b[0m` : text);
-const dim = (text: string) => ansi('2', text);
-const bold = (text: string) => ansi('1', text);
-const italic = (text: string) => ansi('3', text);
-const cyan = (text: string) => ansi('36', text);
-const green = (text: string) => ansi('32', text);
-const yellow = (text: string) => ansi('33', text);
-const red = (text: string) => ansi('31', text);
-const userBg = (text: string) => (useColor ? `\x1b[48;5;236m${text}\x1b[49m` : text);
-const selectedRow = (text: string) => (useColor ? `\x1b[48;5;24m\x1b[97;1m${text}\x1b[0m` : text);
 
-const MARKDOWN_THEME: MarkdownTheme = {
-  heading: text => bold(cyan(text)),
-  link: text => cyan(text),
-  linkUrl: text => dim(text),
-  code: text => yellow(text),
-  codeBlock: text => text,
-  codeBlockBorder: text => dim(text),
-  quote: text => dim(text),
-  quoteBorder: text => dim(text),
-  hr: text => dim(text),
-  listBullet: text => cyan(text),
-  bold: text => bold(text),
-  italic: text => italic(text),
-  strikethrough: text => ansi('9', text),
-  underline: text => ansi('4', text),
+const resolveGitBranch = (cwd?: string): string | null => {
+  if (!cwd) return null;
+  try {
+    const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 800,
+    }).trim();
+    return branch || null;
+  } catch {
+    return null;
+  }
 };
 
-const createEditorTheme = (isBusy: () => boolean): EditorTheme => ({
-  borderColor: text => (isBusy() ? dim(text) : cyan(text)),
-  selectList: {
-    selectedPrefix: text => bold(cyan(text)),
-    selectedText: text => selectedRow(text),
-    description: text => dim(text),
-    scrollInfo: text => dim(text),
-    noMatch: text => dim(text),
-  },
-});
+const formatDisplayPath = (targetPath?: string): string => {
+  if (!targetPath) return '';
+  const home = os.homedir();
+  return targetPath === home || targetPath.startsWith(`${home}/`)
+    ? `~${targetPath.slice(home.length)}`
+    : targetPath;
+};
+
+class CliFooter implements Component {
+  private leftTop = '';
+  private leftBottom = '';
+  private rightBottom = '';
+
+  update(params: { leftTop: string; leftBottom: string; rightBottom: string }): void {
+    this.leftTop = params.leftTop;
+    this.leftBottom = params.leftBottom;
+    this.rightBottom = params.rightBottom;
+  }
+
+  invalidate(): void {
+    /* stateless formatting */
+  }
+
+  render(width: number): readonly string[] {
+    const line1 = ` ${cliTheme.dim(this.leftTop)}`;
+    const leftText = cliTheme.dim(this.leftBottom);
+    const rightText = cliTheme.muted(this.rightBottom);
+    const gap = width - 2 - visibleWidth(this.leftBottom) - visibleWidth(this.rightBottom);
+    const line2 =
+      gap >= 2
+        ? ` ${leftText}${' '.repeat(gap)}${rightText} `
+        : ` ${leftText}  ${rightText}`;
+    return [line1, line2];
+  }
+}
 
 const buildTurnStreamRequest = (state: InteractiveCliState, prompt: string) => {
   const history = state.chatService.listMessages(state.threadId);
@@ -112,6 +128,13 @@ const extractUiText = (parts: unknown): string => {
     .trim();
 };
 
+const styleBannerLine = (line: string): string => {
+  if (line.startsWith('[') && line.endsWith(']')) return cliTheme.bold(cliTheme.accent(line));
+  if (line.startsWith('iKi CLI')) return cliTheme.bold(cliTheme.text(line));
+  if (line.startsWith('Shortcuts:')) return cliTheme.dim(line);
+  return cliTheme.muted(line);
+};
+
 const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> => {
   const totals: UsageTotals = { turns: 0, inputTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
   const terminal = new ProcessTerminal();
@@ -120,24 +143,34 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
 
   const transcript = new Container();
   const loaderSlot = new Container();
-  const statusText = new Text('', 1, 0);
+  const footer = new CliFooter();
 
   let activeTurn = false;
   let idleInterruptAt = 0;
   let stopped = false;
   let currentLoader: Loader | null = null;
+  let cachedWorkspace = state.workspace;
+  let cachedBranch = resolveGitBranch(state.workspace);
 
-  const refreshStatus = () => {
+  const refreshFooter = () => {
+    if (state.workspace !== cachedWorkspace) {
+      cachedWorkspace = state.workspace;
+      cachedBranch = resolveGitBranch(state.workspace);
+    }
+    const view = rebuildThreadViewFromEvents(state.threadId);
     const modelLabel = state.providerId ? `${state.providerId}/${state.model}` : state.model;
-    const hint = activeTurn ? 'esc interrupt' : '/ cmd · @ file · ^c quit';
-    statusText.setText(
-      dim(
-        `${modelLabel} · ${state.threadId} · t:${totals.turns} · ${totals.inputTokens}in/${totals.cacheReadTokens}c  |  ${hint}`
-      )
-    );
+    const pathPart = formatDisplayPath(state.workspace) || state.dataDir;
+    const leftTop = cachedBranch ? `${pathPart} (${cachedBranch})` : pathPart;
+    const compactFlag = view.compaction ? ' · compacted' : '';
+    const leftBottom = `${state.threadId} · t:${totals.turns} · ${totals.inputTokens}in/${totals.cacheReadTokens}c${compactFlag}`;
+    footer.update({
+      leftTop,
+      leftBottom,
+      rightBottom: activeTurn ? `working · ${modelLabel}` : modelLabel,
+    });
   };
 
-  const editor = new Editor(tui, createEditorTheme(() => activeTurn), {
+  const editor = new Editor(tui, createCliEditorTheme(() => activeTurn), {
     paddingX: 1,
     autocompleteMaxVisible: 10,
   });
@@ -149,12 +182,21 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
 
   const appendUserMessage = (prompt: string) => {
     transcript.addChild(
-      new Markdown(prompt, 1, 1, MARKDOWN_THEME, { bgColor: userBg })
+      new Markdown(prompt, 1, 1, cliMarkdownTheme, {
+        color: cliTheme.text,
+        bgColor: cliTheme.userBg,
+      })
     );
     transcript.addChild(new Spacer(1));
   };
 
-  const appendInfoBlock = (lines: string[], colorFn: (s: string) => string = s => s) => {
+  const appendBanner = async () => {
+    const lines = await formatBannerLines(state);
+    transcript.addChild(new Text(lines.map(styleBannerLine).join('\n'), 1, 0));
+    transcript.addChild(new Spacer(1));
+  };
+
+  const appendInfoBlock = (lines: string[], colorFn: (s: string) => string = cliTheme.muted) => {
     if (lines.length === 0) return;
     transcript.addChild(new Text(lines.map(colorFn).join('\n'), 1, 0));
     transcript.addChild(new Spacer(1));
@@ -167,7 +209,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     if (tail.length === 0) return;
     if (view.messages.length > tail.length) {
       transcript.addChild(
-        new Text(dim(`... (${view.messages.length - tail.length} earlier message(s))`), 1, 0)
+        new Text(cliTheme.dim(`... (${view.messages.length - tail.length} earlier message(s))`), 1, 0)
       );
       transcript.addChild(new Spacer(1));
     }
@@ -177,21 +219,20 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       if (msg.role === 'user') {
         appendUserMessage(text);
       } else {
-        transcript.addChild(new Markdown(text, 1, 0, MARKDOWN_THEME));
+        transcript.addChild(new Markdown(text, 1, 0, cliMarkdownTheme, { color: cliTheme.text }));
         transcript.addChild(new Spacer(1));
       }
     }
   };
 
-  const bannerLines = await formatBannerLines(state);
-  appendInfoBlock(bannerLines, dim);
+  await appendBanner();
   renderResumedTail(state.threadId);
-  refreshStatus();
+  refreshFooter();
 
   tui.addChild(transcript);
   tui.addChild(loaderSlot);
   tui.addChild(editor);
-  tui.addChild(statusText);
+  tui.addChild(footer);
   tui.setFocus(editor);
 
   const stopAll = () => {
@@ -211,7 +252,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
   const runTurn = async (prompt: string) => {
     activeTurn = true;
     editor.disableSubmit = true;
-    refreshStatus();
+    refreshFooter();
     const startedAt = Date.now();
     let reasoningBuf = '';
     let textBuf = '';
@@ -220,17 +261,14 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
 
     appendUserMessage(prompt);
 
-    // Mount turn slots in-place inside `transcript` on first data so streaming
-    // never jumps between containers and never leaves empty spacer lines.
     const turnContainer = new Container();
     transcript.addChild(turnContainer);
 
     let reasoningView: Text | null = null;
-    let toolView: Text | null = null;
     let markdownView: Markdown | null = null;
-    const toolLines: string[] = [];
+    const toolCards = new Map<string, { box: Box; text: Text; label: string }>();
 
-    const loader = new Loader(tui, cyan, dim, 'Thinking...');
+    const loader = new Loader(tui, cliTheme.borderAccent, cliTheme.dim, 'Working...');
     currentLoader = loader;
     loaderSlot.addChild(loader);
     loader.start();
@@ -243,16 +281,9 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       return reasoningView;
     };
 
-    const ensureToolView = () => {
-      if (toolView) return toolView;
-      toolView = new Text('', 1, 0);
-      turnContainer.addChild(toolView);
-      return toolView;
-    };
-
     const ensureMarkdownView = () => {
       if (markdownView) return markdownView;
-      markdownView = new Markdown('', 1, 0, MARKDOWN_THEME);
+      markdownView = new Markdown('', 1, 0, cliMarkdownTheme, { color: cliTheme.text });
       turnContainer.addChild(markdownView);
       return markdownView;
     };
@@ -266,28 +297,41 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
           reasoningBuf += chunk.delta;
           const tail = reasoningBuf.replace(/\s+/g, ' ').trim();
           const preview = tail.length > 140 ? `...${tail.slice(-137)}` : tail;
-          ensureReasoningView().setText(dim(`[thinking] ${preview}`));
+          ensureReasoningView().setText(cliTheme.thinking(`Thinking: ${preview}`));
           tui.requestRender();
         } else if (chunk.type === 'text-delta' && typeof chunk.delta === 'string') {
           textBuf += chunk.delta;
           ensureMarkdownView().setText(textBuf);
           tui.requestRender();
         } else if (chunk.type === 'tool-input-available' && typeof chunk.toolName === 'string') {
+          const callId = typeof chunk.toolCallId === 'string' ? chunk.toolCallId : `${chunk.toolName}-${toolCards.size}`;
           const args = summarizeToolArgs(chunk.input);
+          const label = `${cliTheme.bold(cliTheme.text(chunk.toolName))} ${cliTheme.dim(args)}`;
+          const text = new Text(`${cliTheme.warning('•')} ${label}`, 0, 0);
+          const box = new Box(1, 0, cliTheme.toolPendingBg);
+          box.addChild(text);
+          toolCards.set(callId, { box, text, label });
+          turnContainer.addChild(box);
           loader.setMessage(`Running ${chunk.toolName}...`);
-          toolLines.push(`${yellow('•')} ${bold(chunk.toolName)} ${dim(args)}`);
-          ensureToolView().setText(toolLines.join('\n'));
           tui.requestRender();
         } else if (chunk.type === 'tool-output-available' && typeof chunk.toolName === 'string') {
-          loader.setMessage('Thinking...');
-          toolLines.push(`  ${green('✓')} ${dim(chunk.toolName)}`);
-          ensureToolView().setText(toolLines.join('\n'));
+          const callId = typeof chunk.toolCallId === 'string' ? chunk.toolCallId : '';
+          const card = toolCards.get(callId);
+          if (card) {
+            card.box.setBgFn(cliTheme.toolSuccessBg);
+            card.text.setText(`${cliTheme.success('✓')} ${card.label}`);
+          }
+          loader.setMessage('Working...');
           tui.requestRender();
         } else if (chunk.type === 'tool-output-error' && typeof chunk.toolName === 'string') {
+          const callId = typeof chunk.toolCallId === 'string' ? chunk.toolCallId : '';
           const err = typeof chunk.errorText === 'string' ? chunk.errorText : 'failed';
-          loader.setMessage('Thinking...');
-          toolLines.push(`  ${red('✗')} ${chunk.toolName}: ${red(err)}`);
-          ensureToolView().setText(toolLines.join('\n'));
+          const card = toolCards.get(callId);
+          if (card) {
+            card.box.setBgFn(cliTheme.toolErrorBg);
+            card.text.setText(`${cliTheme.error('✗')} ${card.label}\n${cliTheme.error(err)}`);
+          }
+          loader.setMessage('Working...');
           tui.requestRender();
         } else if (chunk.type === 'abort') {
           aborted = true;
@@ -312,9 +356,9 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
         ensureMarkdownView().setText(result.text);
       }
       if (aborted) {
-        turnContainer.addChild(new Text(yellow('[interrupted]'), 1, 0));
+        turnContainer.addChild(new Text(cliTheme.warning('[interrupted]'), 1, 0));
       } else if (!result.success && 'error' in result && result.error) {
-        turnContainer.addChild(new Text(red(`[error] ${result.error}`), 1, 0));
+        turnContainer.addChild(new Text(cliTheme.error(`[error] ${result.error}`), 1, 0));
       }
 
       totals.turns += 1;
@@ -325,7 +369,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
         const sec = ((Date.now() - startedAt) / 1000).toFixed(1);
         turnContainer.addChild(
           new Text(
-            dim(
+            cliTheme.dim(
               `[in ${turnUsage.inputTokens ?? 0} · cache ${turnUsage.cacheReadTokens ?? 0} · out ${turnUsage.outputTokens ?? 0} · ${sec}s]`
             ),
             1,
@@ -339,12 +383,12 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       loaderSlot.clear();
       currentLoader = null;
       const message = error instanceof Error ? error.message : String(error);
-      turnContainer.addChild(new Text(red(`[error] ${message}`), 1, 0));
+      turnContainer.addChild(new Text(cliTheme.error(`[error] ${message}`), 1, 0));
       transcript.addChild(new Spacer(1));
     } finally {
       activeTurn = false;
       editor.disableSubmit = false;
-      refreshStatus();
+      refreshFooter();
       tui.requestRender();
     }
   };
@@ -355,17 +399,16 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
   });
 
   const createPickerTheme = () => ({
-    title: (text: string) => bold(cyan(text)),
-    dim,
-    border: (text: string) => dim(text),
-    panelBg: userBg,
-    selectList: createEditorTheme(() => activeTurn).selectList,
+    title: (text: string) => cliTheme.bold(cliTheme.borderAccent(text)),
+    dim: cliTheme.dim,
+    panelBg: cliTheme.panelBg,
+    selectList: selectListTheme,
   });
 
   const openModelPicker = async () => {
     const models = collectEnabledModels(state);
     if (models.length === 0) {
-      appendInfoBlock(['No enabled models in models.toml.'], yellow);
+      appendInfoBlock(['No enabled models in models.toml.'], cliTheme.warning);
       return;
     }
     const picked = await openSearchablePickerOverlay({
@@ -382,14 +425,14 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       theme: createPickerTheme(),
     });
     if (picked) {
-      appendInfoBlock([switchModel(picked.value, state)], green);
+      appendInfoBlock([switchModel(picked.value, state)], cliTheme.success);
     }
   };
 
   const openThreadPicker = async () => {
     const threads = state.chatService.listThreads().slice(0, 30);
     if (threads.length === 0) {
-      appendInfoBlock(['No saved threads found.'], dim);
+      appendInfoBlock(['No saved threads found.'], cliTheme.dim);
       return;
     }
     const picked = await openSearchablePickerOverlay({
@@ -409,7 +452,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       state.threadId = picked.value;
       ensureThreadExists(state, state.threadId, 'Interactive CLI');
       transcript.clear();
-      appendInfoBlock(await formatBannerLines(state), dim);
+      await appendBanner();
       renderResumedTail(state.threadId);
     }
   };
@@ -455,17 +498,20 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     if (!picked) return;
     if (picked.data.kind === 'mode') {
       state.skillMode = picked.data.mode;
-      appendInfoBlock([`Set skillMode = ${state.skillMode}`], green);
+      appendInfoBlock([`Set skillMode = ${state.skillMode}`], cliTheme.success);
     } else if (picked.data.kind === 'clear') {
       state.skills = undefined;
-      appendInfoBlock(['Cleared explicit skill selection'], green);
+      appendInfoBlock(['Cleared explicit skill selection'], cliTheme.success);
     } else {
       const current = new Set(state.skills ?? []);
       if (current.has(picked.data.id)) current.delete(picked.data.id);
       else current.add(picked.data.id);
       state.skills = [...current];
       state.skillMode = 'manual';
-      appendInfoBlock([`Pinned skills: ${state.skills.length ? state.skills.join(', ') : '(none)'}`], green);
+      appendInfoBlock(
+        [`Pinned skills: ${state.skills.length ? state.skills.join(', ') : '(none)'}`],
+        cliTheme.success
+      );
     }
   };
 
@@ -496,15 +542,15 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       await openSkillPicker();
     } else if (outcome.kind === 'clear') {
       transcript.clear();
-      appendInfoBlock(outcome.lines, dim);
+      appendInfoBlock(outcome.lines, styleBannerLine);
     } else if (state.threadId !== previousThreadId) {
       transcript.clear();
-      appendInfoBlock(await formatBannerLines(state), dim);
+      await appendBanner();
       renderResumedTail(state.threadId);
     } else if (outcome.kind === 'handled') {
-      appendInfoBlock(outcome.lines, dim);
+      appendInfoBlock(outcome.lines, cliTheme.muted);
     }
-    refreshStatus();
+    refreshFooter();
     tui.requestRender();
   };
 
@@ -531,7 +577,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
         return { consume: true };
       }
       idleInterruptAt = now;
-      appendInfoBlock(['(Press Ctrl+C again or /exit to quit)'], dim);
+      appendInfoBlock(['(Press Ctrl+C again or /exit to quit)'], cliTheme.dim);
       return { consume: true };
     }
     if (matchesKey(data, 'escape') && activeTurn) {
@@ -576,10 +622,10 @@ const runPipedInteractiveCli = async (state: InteractiveCliState): Promise<void>
         const chunk = payload as Record<string, unknown>;
         if (chunk.type === 'reasoning-delta' && typeof chunk.delta === 'string') {
           if (!inReasoning) {
-            output.write(dim('[thinking] '));
+            output.write(cliTheme.dim('[thinking] '));
             inReasoning = true;
           }
-          output.write(dim(chunk.delta));
+          output.write(cliTheme.dim(chunk.delta));
         } else if (chunk.type === 'text-delta' && typeof chunk.delta === 'string') {
           closeReasoning();
           if (!printedText) output.write('\n');
@@ -587,12 +633,14 @@ const runPipedInteractiveCli = async (state: InteractiveCliState): Promise<void>
           output.write(chunk.delta);
         } else if (chunk.type === 'tool-input-available' && typeof chunk.toolName === 'string') {
           closeReasoning();
-          output.write(`\n${yellow('•')} ${bold(chunk.toolName)} ${dim(summarizeToolArgs(chunk.input))}\n`);
+          output.write(
+            `\n${cliTheme.warning('•')} ${cliTheme.bold(chunk.toolName)} ${cliTheme.dim(summarizeToolArgs(chunk.input))}\n`
+          );
         } else if (chunk.type === 'tool-output-available' && typeof chunk.toolName === 'string') {
-          output.write(`  ${green('✓')} ${dim(chunk.toolName)}\n`);
+          output.write(`  ${cliTheme.success('✓')} ${cliTheme.dim(chunk.toolName)}\n`);
         } else if (chunk.type === 'tool-output-error' && typeof chunk.toolName === 'string') {
           const err = typeof chunk.errorText === 'string' ? chunk.errorText : 'failed';
-          output.write(`  ${red('✗')} ${chunk.toolName}: ${red(err)}\n`);
+          output.write(`  ${cliTheme.error('✗')} ${chunk.toolName}: ${cliTheme.error(err)}\n`);
         } else if (chunk.type === 'data-token-usage' && chunk.data && typeof chunk.data === 'object') {
           const data = chunk.data as Record<string, unknown>;
           turnUsage = {
@@ -610,7 +658,7 @@ const runPipedInteractiveCli = async (state: InteractiveCliState): Promise<void>
       output.write(`\n${result.text}`);
     }
     if (!result.success && 'error' in result && result.error) {
-      output.write(`\n${red(`[error] ${result.error}`)}`);
+      output.write(`\n${cliTheme.error(`[error] ${result.error}`)}`);
     }
     output.write('\n');
 
@@ -621,7 +669,7 @@ const runPipedInteractiveCli = async (state: InteractiveCliState): Promise<void>
       totals.outputTokens += turnUsage.outputTokens ?? 0;
       const sec = ((Date.now() - startedAt) / 1000).toFixed(1);
       output.write(
-        dim(
+        cliTheme.dim(
           `  [in ${turnUsage.inputTokens ?? 0} · cache ${turnUsage.cacheReadTokens ?? 0} · out ${turnUsage.outputTokens ?? 0} · ${sec}s]`
         ) + '\n'
       );

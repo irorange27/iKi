@@ -23,7 +23,6 @@ export type PickerOption<T> = {
 type PickerStyle = {
   title: (text: string) => string;
   dim: (text: string) => string;
-  border: (text: string) => string;
   panelBg?: (text: string) => string;
   selectList: SelectListTheme;
 };
