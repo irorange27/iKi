@@ -6,6 +6,7 @@ import type { ChatTurnOptions } from '../turn_prep/turn_preparer';
 import { toModelInputMessages } from '@iki/llm/message/ui_messages';
 import {
   rebuildThreadViewFromEvents,
+  selectMessagesForCompaction,
   APPROVAL_REQUESTED,
   TOOL_EXECUTED,
   type RebuiltThreadView,
@@ -197,7 +198,8 @@ const resumeHistoryFromReplay = async (
   replay: RebuiltThreadView
 ): Promise<ModelMessage[] | null> => {
   if (replay.messages.length === 0) return null;
-  return await toModelInputMessages(replay.messages, { repairInterruptedTools: false });
+  const activeMessages = selectMessagesForCompaction(replay.messages, replay.compaction).messages;
+  return await toModelInputMessages(activeMessages, { repairInterruptedTools: false });
 };
 
 export const rebuildResumeHistoryFromEvents = async (

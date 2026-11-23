@@ -39,6 +39,7 @@ export type ExecutionPlan = {
   workspaceSelection?: ThreadWorkspaceSelection | null;
 
   systemPrompt: string;
+  compactionSummary?: string;
   contextTokens?: number;
   skillMode: 'manual' | 'auto';
 
@@ -103,6 +104,7 @@ export const assembleExecutionPlan = (params: {
       .filter(part => part.trim().length > 0)
       .join('\n\n'),
     contextTokens: preparedTurn.report.totalEstimatedTokens,
+    ...(options.compactionSummary ? { compactionSummary: options.compactionSummary } : {}),
     skillMode: preparedTurn.skillMode,
     threadId: options.threadId,
     kind: options.runConfig?.kind ?? 'chat-turn',

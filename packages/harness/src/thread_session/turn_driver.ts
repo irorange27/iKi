@@ -3,7 +3,7 @@ import type { ModelMessage } from '@iki/llm/message/model_history';
 import { addTurnPerf, type AgentStep, type AgentTurnPerf } from '@iki/harness/agent';
 import type { ConversationPreview } from '@iki/core/types/companion';
 import { runWithToolRuntimeContext } from '@iki/core/utils/runtime_context';
-import type { TurnDriverHarness } from '../agent/harness';
+import type { CompactionCheckpointRecord, TurnDriverHarness } from '../agent/harness';
 import type { AgentRunTracker } from './run_tracker';
 import type { ExecutionPlan } from './execution_plan';
 import {
@@ -64,6 +64,7 @@ export type TurnDriverDeps = {
   onToolActivity?: () => void;
 
   onRunIdChanged?: (runId: string) => void;
+  onCompacted?: (checkpoint: CompactionCheckpointRecord) => void;
 
   registerChildRunAlias?: (parentRunId: string, childRunId: string) => () => void;
 };
@@ -224,8 +225,10 @@ const runTurnBatches = async (
                 for await (const event of state.harness.turn({
                   prompt: state.streamPrompt,
                   history: state.streamHistory,
+                  ...(plan.compactionSummary ? { compactionSummary: plan.compactionSummary } : {}),
                   runId: state.runTracker.id,
                   onInference: record => state.runTracker.recordModelStep(record),
+                  ...(deps.onCompacted ? { onCompacted: deps.onCompacted } : {}),
                   abortSignal: streamState.abortController.signal,
                 })) {
                   if (event.event === 'step') {

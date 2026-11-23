@@ -1,4 +1,5 @@
 import { deriveModelAwareContextConfig } from './context_budget';
+import { estimateTextTokens } from '../agent/context_budget';
 import {
   buildDroppedBlock,
   buildIdentityContext,
@@ -66,7 +67,17 @@ export const createChatContextAssembler = (deps: {
         );
     blocks.push(identityContext.block);
 
-    blocks.push(buildDroppedBlock('thread-summary', 'managed at model step boundary'));
+    const compactionSummary = params.compactionSummary?.trim();
+    blocks.push(
+      compactionSummary
+        ? {
+            kind: 'thread-summary',
+            status: 'included',
+            estimatedTokens: estimateTextTokens(compactionSummary),
+            charCount: compactionSummary.length,
+          }
+        : buildDroppedBlock('thread-summary', 'managed at model step boundary')
+    );
 
     const withIdentity = insertSystemMessages(
       [...recentHistory.systemMessages, ...recentHistory.recentMessages],

@@ -63,9 +63,18 @@ export type ToolExecutionOutcome =
       interrupted?: ToolExecutionInterruption;
     };
 
+export type CompactionCheckpointRecord = {
+  summary: string;
+  omittedCount: number;
+  keptCount: number;
+  firstKeptInitialIndex: number;
+  compactedAt: string;
+};
+
 export type TurnInput = {
   prompt: string;
   history?: ModelMessage[];
+  compactionSummary?: string;
 
   toolsOverride?: AgentTool[];
 
@@ -74,6 +83,7 @@ export type TurnInput = {
   recordInlineExecution?: (execution: InlineExecutionRecord) => void;
 
   onInference?: (record: ModelInferenceRecord) => void;
+  onCompacted?: (checkpoint: CompactionCheckpointRecord) => void;
   abortSignal?: AbortSignal;
 };
 

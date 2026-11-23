@@ -24,7 +24,11 @@ import {
   type LoopTool,
   type LoopUsageBuckets,
 } from '@iki/agent-loop';
-import { preparePiTurnHistory, compactPiRequestStep } from './turn_budget';
+import {
+  preparePiTurnHistory,
+  compactPiRequestStep,
+  findFirstKeptInitialIndex,
+} from './turn_budget';
 import { resolveTools } from '../harness/tool_resolver';
 import {
   estimateTextTokens,
@@ -39,7 +43,7 @@ import type {
   TurnInput,
   TurnOutput,
 } from '../harness/harness_types';
-import { unwrapCheckpoint } from '../../runtimes/compaction_prompt';
+import { frameCheckpoint, unwrapCheckpoint } from '../../runtimes/compaction_prompt';
 
 const logger = createLogger({ module: 'pi_tool_turn_harness' });
 
@@ -105,9 +109,21 @@ export class PiToolTurnHarness {
     const toolSchemaTokens = tools.length ? estimateToolSchemaTokens(tools) : undefined;
 
     this.history = this.buildTurnHistory(input.history, input.prompt);
+    const initialConversation = this.history.filter(message => message.role !== 'system');
+    const existingSummary = input.compactionSummary?.trim() || undefined;
+    const priorSummaryMessage: ModelMessage | undefined = existingSummary
+      ? { role: 'system', content: frameCheckpoint(existingSummary) }
+      : undefined;
+    const budgetHistory = priorSummaryMessage
+      ? [
+          ...this.history.filter(message => message.role === 'system'),
+          priorSummaryMessage,
+          ...initialConversation,
+        ]
+      : this.history;
 
     const personaPrompt = resolvePersonaPrompt(this.config.providerType, this.config.providerId);
-    const firstTranscriptSystem = this.history.find(
+    const firstTranscriptSystem = budgetHistory.find(
       (message): message is Extract<ModelMessage, { role: 'system' }> => message.role === 'system'
     );
 
@@ -115,7 +131,7 @@ export class PiToolTurnHarness {
     const transcriptSystemText =
       typeof firstTranscriptSystem?.content === 'string' ? firstTranscriptSystem.content : '';
     const { requestHistory, summaryMessage: turnStartSummaryMessage } = await preparePiTurnHistory({
-      history: this.history,
+      history: budgetHistory,
       personaPrompt,
       planPrompt: this.config.systemPrompt,
       transcriptSystemText,
@@ -125,6 +141,10 @@ export class PiToolTurnHarness {
         : {}),
       ...(this.config.threadId ? { threadId: this.config.threadId } : {}),
       ...(signal ? { signal } : {}),
+      ...(existingSummary ? { existingSummary } : {}),
+      ...(priorSummaryMessage ? { previousSummaryMessage: priorSummaryMessage } : {}),
+      initialConversation,
+      ...(input.onCompacted ? { onCompacted: input.onCompacted } : {}),
     });
 
     const projected = projectHistoryToPiContext(
@@ -189,6 +209,16 @@ export class PiToolTurnHarness {
       if (!planned.compacted) return false;
       requestView = planned.requestView;
       summaryMessage = planned.summaryMessage;
+      input.onCompacted?.({
+        summary: planned.summaryText,
+        omittedCount: planned.omittedCount,
+        keptCount: planned.keptCount,
+        firstKeptInitialIndex: findFirstKeptInitialIndex(
+          initialConversation,
+          planned.requestView
+        ),
+        compactedAt: new Date().toISOString(),
+      });
 
       const rebuilt = projectHistoryToPiContext(
         [{ role: 'system', content: PER_REQUEST_COMPACT_PLACEHOLDER }, ...requestView],

@@ -25,9 +25,13 @@ import {
 } from './turn_persistence';
 import {
   asChatUiMessage,
+  compactionCheckpointToEvent,
   recordSessionEvents,
+  rebuildThreadViewFromEvents,
+  selectMessagesForCompaction,
   turnFactsToEvents,
 } from './session_log';
+import { toModelInputMessages } from '@iki/llm/message/ui_messages';
 import type { ThreadStreamCoordinator } from './thread_stream_coordinator';
 import { createTurnDriver, type TurnDriverHandle } from './turn_driver';
 import {
@@ -155,10 +159,42 @@ export const createChatStreaming = (deps: {
         options.workspaceSelection !== undefined
           ? options.workspaceSelection
           : resolveThreadWorkspaceSelectionSnapshot(options.threadId);
-      const preparedTurn = await turnPreparer.prepareChatTurn({
+      const threadView = options.threadId ? rebuildThreadViewFromEvents(options.threadId) : null;
+      const incomingUiMessages = options.messages
+        .map(asChatUiMessage)
+        .filter((message): message is NonNullable<typeof message> => message !== null);
+      const allIncomingAreUi =
+        options.messages.length > 0 && incomingUiMessages.length === options.messages.length;
+      const slicedUi =
+        allIncomingAreUi && threadView?.compaction
+          ? selectMessagesForCompaction(incomingUiMessages, threadView.compaction)
+          : undefined;
+      const activeUiForBoundaries = slicedUi
+        ? slicedUi.messages
+        : allIncomingAreUi
+          ? incomingUiMessages
+          : threadView
+            ? selectMessagesForCompaction(threadView.messages, threadView.compaction).messages
+            : [];
+      const initialModelMessageIds: string[] = [];
+      for (const uiMessage of activeUiForBoundaries) {
+        if (uiMessage.role === 'system') continue;
+        const converted = await toModelInputMessages([uiMessage], {
+          repairInterruptedTools: allIncomingAreUi,
+        });
+        for (let i = 0; i < converted.length; i += 1) {
+          initialModelMessageIds.push(uiMessage.id);
+        }
+      }
+      const turnOptions: ChatTurnOptions = {
         ...options,
+        ...(slicedUi ? { messages: slicedUi.messages } : {}),
+        ...(threadView?.compaction?.summary
+          ? { compactionSummary: threadView.compaction.summary }
+          : {}),
         workspaceSelection: turnStartWorkspace,
-      });
+      };
+      const preparedTurn = await turnPreparer.prepareChatTurn(turnOptions);
       streamState.abortController.signal.throwIfAborted();
 
       if (preparedTurn.usedSkills.length > 0) {
@@ -289,6 +325,24 @@ export const createChatStreaming = (deps: {
           drainSteerMessages: () => coordinator.takeSteerMessages(senderId),
           onToolActivity: persistTurnProgress,
           onRunIdChanged: runId => execution.setRunId(runId),
+          onCompacted: checkpoint => {
+            if (!options.threadId) return;
+            const mappedAnchor =
+              checkpoint.firstKeptInitialIndex >= 0
+                ? initialModelMessageIds[checkpoint.firstKeptInitialIndex]
+                : undefined;
+            const firstKeptMessageId = mappedAnchor ?? acceptedInput?.messageId;
+            recordSessionEvents(options.threadId, [
+              compactionCheckpointToEvent({
+                runId: activeDriver.getRunTracker().id,
+                summary: checkpoint.summary,
+                ...(firstKeptMessageId ? { firstKeptMessageId } : {}),
+                omittedCount: checkpoint.omittedCount,
+                keptCount: checkpoint.keptCount,
+                compactedAt: checkpoint.compactedAt,
+              }),
+            ]);
+          },
           registerChildRunAlias: coordinator.registerChildRunAlias,
         }
       );

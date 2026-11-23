@@ -40,6 +40,7 @@ export type ChatTurnOptions = {
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
   threadId?: string;
+  compactionSummary?: string;
   maxIterations?: number;
   experimentalContext?: ChatExperimentalContext;
   runConfig?: {
@@ -146,6 +147,7 @@ export const createChatTurnPreparer = (deps: {
       skillIds: options.skillIds,
       skillMode: options.skillMode,
       contextMode: options.experimentalContext?.contextMode,
+      ...(options.compactionSummary ? { compactionSummary: options.compactionSummary } : {}),
       modelCapability,
       contextBudgetOverride: runtimeConfig.contextBudget,
     });

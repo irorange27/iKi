@@ -22,6 +22,7 @@ import {
   projectUsageToIki,
 } from '@iki/llm-pi-ai/pi_adapter';
 import { preparePiTurnHistory } from './turn_budget';
+import { frameCheckpoint } from '../../runtimes/compaction_prompt';
 import type { AgentTurnPerf, AgentUsage } from '../types';
 import type { HarnessConfig, TurnEvent, TurnInput, TurnOutput } from '../harness/harness_types';
 
@@ -107,13 +108,25 @@ export class PiTextTurnHarness {
     }
 
     this.history = this.buildTurnHistory(input.history, input.prompt);
+    const initialConversation = this.history.filter(message => message.role !== 'system');
+    const existingSummary = input.compactionSummary?.trim() || undefined;
+    const priorSummaryMessage: ModelMessage | undefined = existingSummary
+      ? { role: 'system', content: frameCheckpoint(existingSummary) }
+      : undefined;
+    const budgetHistory = priorSummaryMessage
+      ? [
+          ...this.history.filter(message => message.role === 'system'),
+          priorSummaryMessage,
+          ...initialConversation,
+        ]
+      : this.history;
 
     const personaPrompt = resolvePersonaPrompt(this.config.providerType, this.config.providerId);
-    const firstTranscriptSystem = this.history.find(
+    const firstTranscriptSystem = budgetHistory.find(
       (message): message is Extract<ModelMessage, { role: 'system' }> => message.role === 'system'
     );
     const { requestHistory } = await preparePiTurnHistory({
-      history: this.history,
+      history: budgetHistory,
       personaPrompt,
       planPrompt: this.config.systemPrompt,
       transcriptSystemText:
@@ -123,6 +136,10 @@ export class PiTextTurnHarness {
         : {}),
       ...(this.config.threadId ? { threadId: this.config.threadId } : {}),
       ...(signal ? { signal } : {}),
+      ...(existingSummary ? { existingSummary } : {}),
+      ...(priorSummaryMessage ? { previousSummaryMessage: priorSummaryMessage } : {}),
+      initialConversation,
+      ...(input.onCompacted ? { onCompacted: input.onCompacted } : {}),
     });
 
     const projected = projectHistoryToPiContext(requestHistory, this.config.model, this.config.providerType);

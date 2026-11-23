@@ -228,6 +228,7 @@ export const SESSION_EVENT_TYPES = {
   TOOL_EXECUTION_PREPARED: 'tool_execution_prepared',
   TOOL_EXECUTION_STARTED: 'tool_execution_started',
   TOOL_EXECUTION_FINISHED: 'tool_execution_finished',
+  COMPACTION_CHECKPOINT: 'compaction_checkpoint',
 } as const;
 
 type SessionEventName = (typeof SESSION_EVENT_TYPES)[keyof typeof SESSION_EVENT_TYPES];

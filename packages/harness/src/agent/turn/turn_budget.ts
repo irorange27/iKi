@@ -9,8 +9,24 @@ import {
   estimateTextTokens,
 } from '../context_budget';
 import { frameCheckpoint } from '../../runtimes/compaction_prompt';
+import type { CompactionCheckpointRecord } from '../harness/harness_types';
 
 const COMPACTION_RETRIES = 1;
+
+export const findFirstKeptInitialIndex = (
+  initialConversation: readonly ModelMessage[],
+  keptHistory: readonly ModelMessage[]
+): number => {
+  if (initialConversation.length === 0) return -1;
+  const kept = new Set(keptHistory);
+  return initialConversation.findIndex(message => kept.has(message));
+};
+
+export const countKeptConversationMessages = (
+  history: readonly ModelMessage[],
+  summaryMessage?: ModelMessage
+): number =>
+  history.filter(message => message.role !== 'system' && message !== summaryMessage).length;
 
 const summarizerMessages = (omitted: ModelMessage[]) =>
   omitted.map(message => ({
@@ -51,6 +67,10 @@ export const preparePiTurnHistory = async (params: {
   maxInputTokens?: number;
   threadId?: string;
   signal?: AbortSignal;
+  existingSummary?: string;
+  previousSummaryMessage?: ModelMessage;
+  initialConversation?: readonly ModelMessage[];
+  onCompacted?: (checkpoint: CompactionCheckpointRecord) => void;
 }): Promise<{ requestHistory: ModelMessage[]; summaryMessage?: ModelMessage }> => {
   const { history } = params;
   const overhead = estimateTextTokens(
@@ -60,20 +80,27 @@ export const preparePiTurnHistory = async (params: {
       { slot: 'transcriptSystem', text: params.transcriptSystemText },
     ])
   );
-  if (!params.maxInputTokens) return { requestHistory: history };
+  if (!params.maxInputTokens) {
+    return {
+      requestHistory: history,
+      ...(params.previousSummaryMessage ? { summaryMessage: params.previousSummaryMessage } : {}),
+    };
+  }
 
   const planned = autoCompactHistory({
     history,
     maxInputTokens: params.maxInputTokens - overhead - (params.toolSchemaTokens ?? 0),
   });
   let requestHistory = history;
-  let turnStartSummaryMessage: ModelMessage | undefined;
+  let turnStartSummaryMessage: ModelMessage | undefined = params.previousSummaryMessage;
+  let compactedRecord: Omit<CompactionCheckpointRecord, 'compactedAt'> | null = null;
   if (planned.compacted) {
     const summaryText = await summarizeOmitted({
       omitted: planned.omitted,
       history,
       ...(params.threadId ? { threadId: params.threadId } : {}),
       ...(params.signal ? { signal: params.signal } : {}),
+      ...(params.existingSummary ? { existingSummary: params.existingSummary } : {}),
     });
     params.signal?.throwIfAborted();
     const summaryMessage: ModelMessage = {
@@ -82,10 +109,21 @@ export const preparePiTurnHistory = async (params: {
     };
     turnStartSummaryMessage = summaryMessage;
     requestHistory = [
-      ...planned.history.filter(message => message.role === 'system'),
+      ...planned.history.filter(
+        message => message.role === 'system' && message !== params.previousSummaryMessage
+      ),
       summaryMessage,
       ...planned.history.filter(message => message.role !== 'system'),
     ];
+    compactedRecord = {
+      summary: summaryText,
+      omittedCount: planned.omitted.length,
+      keptCount: countKeptConversationMessages(requestHistory, summaryMessage),
+      firstKeptInitialIndex: findFirstKeptInitialIndex(
+        params.initialConversation ?? [],
+        requestHistory
+      ),
+    };
   }
   const overheadWithTools = overhead + (params.toolSchemaTokens ?? 0);
   if (
@@ -95,6 +133,12 @@ export const preparePiTurnHistory = async (params: {
     throw new Error(
       'Context budget exceeded by protected instructions or the current turn; history has been preserved.'
     );
+  }
+  if (compactedRecord) {
+    params.onCompacted?.({
+      ...compactedRecord,
+      compactedAt: new Date().toISOString(),
+    });
   }
   return { requestHistory, ...(turnStartSummaryMessage ? { summaryMessage: turnStartSummaryMessage } : {}) };
 };
@@ -106,7 +150,9 @@ type CompactPiRequestStepResult =
       requestView: ModelMessage[];
 
       summaryMessage: ModelMessage;
+      summaryText: string;
       omittedCount: number;
+      keptCount: number;
 
       viewTokens: number;
     }
@@ -182,7 +228,9 @@ export const compactPiRequestStep = async (params: {
         compacted: true,
         requestView: view,
         summaryMessage,
+        summaryText,
         omittedCount: lastOmittedCount,
+        keptCount: countKeptConversationMessages(view, summaryMessage),
         viewTokens: lastTokens,
       };
     }
@@ -196,7 +244,9 @@ export const compactPiRequestStep = async (params: {
       compacted: true,
       requestView: view,
       summaryMessage: lastSummaryMessage,
+      summaryText: existingSummary ?? '',
       omittedCount: lastOmittedCount,
+      keptCount: countKeptConversationMessages(view, lastSummaryMessage),
       viewTokens: lastTokens,
     };
   }

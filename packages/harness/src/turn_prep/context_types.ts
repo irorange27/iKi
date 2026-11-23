@@ -51,6 +51,7 @@ export type AssembleChatContextParams = {
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
   contextMode?: ChatContextMode;
+  compactionSummary?: string;
   modelCapability?: ModelCapability | null;
   contextBudgetOverride?: AppConfig['context'] | null;
 };

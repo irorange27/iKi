@@ -6,7 +6,7 @@ import type { ContextConfig, IdentityContext, SkillContext } from './context_typ
 import { buildDroppedBlock, clipTextToTokenBudget, estimateTextTokens } from './context_helpers';
 import type { ChatInputMessage } from '@iki/llm/message/chat_message_types';
 
-const AGENT_INSTRUCTIONS_FILENAMES = ['AGENTS.md', 'IKI.md'];
+const AGENT_INSTRUCTIONS_FILENAMES = ['AGENTS.md', 'AGENT.md', 'IKI.md'];
 
 const stripHtmlComments = (value: string): string => value.replace(/<!--[\s\S]*?-->/g, '');
 
@@ -15,27 +15,46 @@ const hasMeaningfulContent = (value: string): boolean => {
   return stripped.length > 0;
 };
 
-export const readAgentInstructionsForSelection = (
-  selection: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null | undefined
-): string => {
-  if (!selection) return '';
+export type InspectedAgentInstructions = {
+  filePath: string;
+  filename: string;
+  content: string;
+  lineCount: number;
+  charCount: number;
+};
 
-  const workspacePath = selection.workspace?.path;
-  if (!workspacePath) return '';
-
+export const inspectAgentInstructionsForWorkspace = (
+  workspacePath: string | null | undefined
+): InspectedAgentInstructions | null => {
+  if (!workspacePath) return null;
   try {
     const filename = AGENT_INSTRUCTIONS_FILENAMES.find(name =>
       fs.existsSync(path.join(workspacePath, name))
     );
-    if (!filename) return '';
+    if (!filename) return null;
     const filePath = path.join(workspacePath, filename);
     const raw = fs.readFileSync(filePath, 'utf8');
     const cleaned = stripHtmlComments(raw).trim();
-    if (!hasMeaningfulContent(cleaned)) return '';
-    return [`Project agent instructions (from ${filename}):`, cleaned].join('\n');
+    if (!hasMeaningfulContent(cleaned)) return null;
+    return {
+      filePath,
+      filename,
+      content: cleaned,
+      lineCount: cleaned.split(/\r?\n/).length,
+      charCount: cleaned.length,
+    };
   } catch {
-    return '';
+    return null;
   }
+};
+
+export const readAgentInstructionsForSelection = (
+  selection: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null | undefined
+): string => {
+  if (!selection) return '';
+  const inspected = inspectAgentInstructionsForWorkspace(selection.workspace?.path);
+  if (!inspected) return '';
+  return [`Project agent instructions (from ${inspected.filename}):`, inspected.content].join('\n');
 };
 
 export const readAgentInstructions = (threadId?: string): string => {

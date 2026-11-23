@@ -52,6 +52,7 @@ export {
   APPROVAL_REQUESTED,
   APPROVAL_DECIDED,
   MESSAGES_TRUNCATED,
+  COMPACTION_CHECKPOINT,
   SESSION_EVENT_VERSION,
 } from '@iki/core/types/session_events';
 import {
@@ -63,6 +64,7 @@ import {
   APPROVAL_REQUESTED,
   APPROVAL_DECIDED,
   MESSAGES_TRUNCATED,
+  COMPACTION_CHECKPOINT,
   SESSION_EVENT_VERSION,
 } from '@iki/core/types/session_events';
 
@@ -124,6 +126,23 @@ export type MessagesTruncatedPayload = {
   deletedMessageIds: string[];
   truncatedAt: string;
 };
+
+export type CompactionCheckpointPayload = {
+  runId?: string;
+  summary: string;
+  firstKeptMessageId?: string;
+  omittedCount: number;
+  keptCount: number;
+  compactedAt: string;
+};
+
+export const compactionCheckpointToEvent = (
+  payload: CompactionCheckpointPayload
+): NewSessionEvent => ({
+  type: COMPACTION_CHECKPOINT,
+  version: SESSION_EVENT_VERSION,
+  payload,
+});
 
 export const recordSessionEvents = (
   threadId: string,
@@ -201,13 +220,44 @@ type RebuiltApproval = {
   decisionSource?: ApprovalDecidedPayload['source'];
 };
 
+export type CompactionCheckpoint = CompactionCheckpointPayload & {
+  messageCountAtCheckpoint: number;
+};
+
 export type RebuiltThreadView = {
   events: StoredSessionEvent[];
   messages: ChatUiMessage[];
   turns: RebuiltTurn[];
   approvals: RebuiltApproval[];
+  compaction?: CompactionCheckpoint;
 
   inputRunId?: string;
+};
+
+/**
+ * Slices a message timeline to the active post-compaction window while preserving
+ * the full UI history untouched for scrollback rendering.
+ */
+export const selectMessagesForCompaction = <T extends { id?: string }>(
+  messages: readonly T[],
+  compaction: CompactionCheckpoint | undefined
+): { messages: T[]; summary?: string } => {
+  if (!compaction) return { messages: [...messages] };
+  if (compaction.firstKeptMessageId) {
+    const startIndex = messages.findIndex(message => message.id === compaction.firstKeptMessageId);
+    if (startIndex >= 0) {
+      return {
+        messages: messages.slice(startIndex),
+        summary: compaction.summary,
+      };
+    }
+    return { messages: [...messages] };
+  }
+  const tailIndex = Math.max(0, Math.min(messages.length, compaction.messageCountAtCheckpoint));
+  return {
+    messages: messages.slice(tailIndex),
+    summary: compaction.summary,
+  };
 };
 
 export const asChatUiMessage = (value: unknown): ChatUiMessage | null => {
@@ -250,6 +300,7 @@ export const rebuildThreadViewFromEvents = (
   const messages: ChatUiMessage[] = [];
   const turns = new Map<string, RebuiltTurn>();
   const approvals = new Map<string, RebuiltApproval>();
+  let compaction: CompactionCheckpoint | undefined;
   // Accepted inputs in log order, so a truncation can move the replay tail to the
   // newest input that survived rather than to one that was just deleted.
   const inputs: { messageId: string; runId?: string }[] = [];
@@ -324,6 +375,32 @@ export const rebuildThreadViewFromEvents = (
         for (let index = inputs.length - 1; index >= 0; index -= 1) {
           if (deleted.has(inputs[index]?.messageId ?? '')) inputs.splice(index, 1);
         }
+        if (
+          compaction &&
+          ((compaction.firstKeptMessageId && deleted.has(compaction.firstKeptMessageId)) ||
+            messages.length < compaction.messageCountAtCheckpoint)
+        ) {
+          compaction = undefined;
+        }
+        break;
+      }
+      case COMPACTION_CHECKPOINT: {
+        const summary = typeof payload.summary === 'string' ? payload.summary.trim() : '';
+        if (!summary) break;
+        compaction = {
+          summary,
+          ...(typeof payload.firstKeptMessageId === 'string' && payload.firstKeptMessageId
+            ? { firstKeptMessageId: payload.firstKeptMessageId }
+            : {}),
+          omittedCount: typeof payload.omittedCount === 'number' ? payload.omittedCount : 0,
+          keptCount: typeof payload.keptCount === 'number' ? payload.keptCount : 0,
+          compactedAt:
+            typeof payload.compactedAt === 'string' && payload.compactedAt
+              ? payload.compactedAt
+              : event.createdAt,
+          ...(typeof payload.runId === 'string' && payload.runId ? { runId: payload.runId } : {}),
+          messageCountAtCheckpoint: messages.length,
+        };
         break;
       }
       case APPROVAL_REQUESTED: {
@@ -397,6 +474,7 @@ export const rebuildThreadViewFromEvents = (
     messages,
     turns: [...turns.values()],
     approvals: [...approvals.values()],
+    ...(compaction ? { compaction } : {}),
     ...(tailInput?.runId ? { inputRunId: tailInput.runId } : {}),
   };
 };
