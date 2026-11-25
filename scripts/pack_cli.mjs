@@ -71,7 +71,7 @@ const publishManifest = {
   bugs: { url: 'https://github.com/irorange27/iKi/issues' },
   keywords: rootPkg.keywords,
   engines: { node: '>=24.0.0' },
-  bin: { iki: './bin/iki.mjs' },
+  bin: { iki: 'bin/iki.mjs' },
   files: ['bin/iki.mjs', 'README.md', 'LICENSE'],
   dependencies: {},
 };
