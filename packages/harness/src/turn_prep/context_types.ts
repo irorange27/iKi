@@ -50,6 +50,8 @@ export type AssembleChatContextParams = {
   threadId?: string;
 
   workspaceSelection?: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null;
+  mcpServerIds?: string[];
+  mcpCodeMode?: boolean;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
   contextMode?: ChatContextMode;

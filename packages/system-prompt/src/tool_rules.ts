@@ -51,6 +51,12 @@ export const buildToolSystemPrompt = (params: {
     );
   }
 
+  if (tools.has('ptc')) {
+    rules.push(
+      'Use `ptc` (Programmatic Tool Calling) to run a short TypeScript/JavaScript snippet when chaining, looping, or running multiple tool/MCP calls in parallel (`Promise.all`) and filtering/aggregating results before replying. In MCP Code Mode, inspect signatures via `mcp.describe(server?)` and call MCP APIs via `await mcp.<server>.<tool>(args)`.'
+    );
+  }
+
   if (tools.has('web') || tools.has('fetch')) {
     rules.push(
       tools.has('web') && tools.has('fetch')

@@ -79,6 +79,7 @@ export type PreparedChatTurn = {
 type ChatTurnRuntimeConfig = {
   autoApproveToolRequests: boolean;
   contextBudget: AppConfig['context'] | null;
+  mcpExposureMode?: 'code' | 'direct';
 };
 
 const mergeToolNames = (primary: string[], secondary: string[]): string[] => {
@@ -118,10 +119,16 @@ const collectRequiredBuiltinSkillTools = (skills: SkillSummary[]): string[] => {
 export const createChatTurnPreparer = (deps: {
   getRuntimeConfig: () => ChatTurnRuntimeConfig;
   resolveSkillsSystemPrompt: typeof import('../thread_session/skills').resolveSkillsSystemPrompt;
+  resolveMcpReminders?: (params: {
+    threadId?: string;
+    mcpServerIds?: string[];
+    currentUserAnchor?: string;
+  }) => import('@iki/core/types/chat').ThreadSkillReminderAnchor[];
 }) => {
   const contextAssembler = createChatContextAssembler({
     workspaceSystemMessage: buildThreadWorkspaceSystemMessage,
     resolveSkillsSystemPrompt: deps.resolveSkillsSystemPrompt,
+    ...(deps.resolveMcpReminders ? { resolveMcpReminders: deps.resolveMcpReminders } : {}),
   });
 
   const prepareChatTurn = async (options: ChatTurnOptions): Promise<PreparedChatTurn> => {
@@ -141,6 +148,7 @@ export const createChatTurnPreparer = (deps: {
     const maxOutputTokens = modelCapability.maxOutputTokens ?? undefined;
     const runtimeConfig = deps.getRuntimeConfig();
     const autoApproveToolRequests = runtimeConfig.autoApproveToolRequests;
+    const mcpExposureMode = runtimeConfig.mcpExposureMode ?? 'code';
 
     const userMessageIds = options.messages
       .filter(
@@ -154,6 +162,8 @@ export const createChatTurnPreparer = (deps: {
       userMessageIds,
       threadId: options.threadId,
       workspaceSelection: options.workspaceSelection,
+      mcpCodeMode: mcpExposureMode === 'code',
+      ...(options.mcpServerIds ? { mcpServerIds: options.mcpServerIds } : {}),
       skillIds: options.skillIds,
       skillMode: options.skillMode,
       contextMode: options.experimentalContext?.contextMode,
@@ -171,7 +181,7 @@ export const createChatTurnPreparer = (deps: {
 
     const { resolvedTools } = await resolveToolNames({
       tools: options.tools,
-      mcpServerIds: options.mcpServerIds,
+      ...(mcpExposureMode === 'direct' ? { mcpServerIds: options.mcpServerIds } : {}),
       inputMessages: finalMessages,
       autoApproveToolRequests,
     });
@@ -187,6 +197,30 @@ export const createChatTurnPreparer = (deps: {
     if (!explicitToolSelection) {
       if (!guardedTools.includes(primaryShell)) guardedTools.push(primaryShell);
       if (!guardedTools.includes('job')) guardedTools.push('job');
+      if (defaultToolRegistry.get('ptc') && !guardedTools.includes('ptc')) {
+        guardedTools.push('ptc');
+      }
+      if (
+        mcpExposureMode === 'direct' &&
+        Array.isArray(options.mcpServerIds) &&
+        options.mcpServerIds.length > 0
+      ) {
+        const allowedServers = new Set(options.mcpServerIds.map(id => id.trim()).filter(Boolean));
+        const mcpTools = defaultToolRegistry
+          .getToolMetadata()
+          .filter(
+            tool =>
+              tool.source?.kind === 'mcp' &&
+              tool.autoAllowed === true &&
+              typeof tool.source.id === 'string' &&
+              allowedServers.has(tool.source.id)
+          )
+          .map(tool => tool.name)
+          .sort();
+        for (const name of mcpTools) {
+          if (!guardedTools.includes(name)) guardedTools.push(name);
+        }
+      }
     }
 
     const firstUserMessage = modelMessages.find(message => message.role === 'user');

@@ -16,6 +16,7 @@ import {
   getCompanion,
 } from './platform';
 import { resolveSkillsSystemPrompt } from './skills';
+import { resolveMcpAnchoredReminders } from '../mcp/mcp_delta';
 import { resolveThreadWorkspaceSelectionSnapshot } from '../workspaces/thread_workspace';
 import { parseApprovalPolicy } from '../workspaces/thread_mode';
 import {
@@ -72,15 +73,17 @@ export const createChatStreaming = (deps: {
 }) => {
   const turnPreparer = createChatTurnPreparer({
     resolveSkillsSystemPrompt,
+    resolveMcpReminders: resolveMcpAnchoredReminders,
     getRuntimeConfig: () => {
       try {
         const config = getAppConfig();
         return {
           autoApproveToolRequests: config?.general?.autoApproveToolRequests === true,
           contextBudget: config?.context ?? null,
+          mcpExposureMode: config?.mcp?.exposureMode ?? 'code',
         };
       } catch {
-        return { autoApproveToolRequests: false, contextBudget: null };
+        return { autoApproveToolRequests: false, contextBudget: null, mcpExposureMode: 'code' };
       }
     },
   });

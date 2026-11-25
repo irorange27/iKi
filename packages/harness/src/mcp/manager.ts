@@ -22,12 +22,28 @@ import {
   listMcpServers,
   updateMcpServer,
 } from '@iki/store/mcp_servers';
-import { createTool, defaultToolRegistry } from '@iki/harness/tools';
+import {
+  createTool,
+  defaultToolRegistry,
+  renderMcpNamespaceDts,
+  setPtcMcpBridge,
+  type PtcMcpServerDescriptor,
+} from '@iki/harness/tools';
+import {
+  assignToolNames,
+  buildConnectedServerCatalog,
+  compareStrings,
+  isToolSafe,
+  normalizeToolAllowlist,
+  parseToolCatalog,
+  resolveApprovalMode,
+  resolveServerToolByName,
+  type McpToolCandidate,
+} from './catalog';
 import { resolveMcpToolResult } from './tool_results';
 import { createPrefixedId } from '@iki/core/utils/id';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import type {
-  McpApprovalMode,
   McpServer,
   McpServerInput,
   McpServerStatus,
@@ -43,72 +59,8 @@ type McpConnection = {
   tools: McpToolCatalogItem[];
 };
 
-type McpToolCandidate = {
-  server: McpServer;
-  tool: McpToolCatalogItem;
-};
-
-type McpToolRegistration = McpToolCandidate & {
-  internalName: string;
-};
-
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
-const MAX_SCHEMA_BYTES = 20000;
 const mcpManagerLogger = createLogger({ module: 'mcp_manager' });
-
-const TOOL_NAME_MAX_LENGTH = 64;
-const TOOL_NAME_PREFIX = 'mcp_';
-const TOOL_NAME_SANITIZE = /[^a-zA-Z0-9_-]+/g;
-const MAX_SERVER_LABEL_LENGTH = 24;
-const MAX_TOOL_LABEL_LENGTH = 32;
-// Room kept for the collision ordinal (`_2` … `_1000`) so an assigned name never
-// exceeds TOOL_NAME_MAX_LENGTH, whatever the truncation produced.
-const TOOL_NAME_ORDINAL_RESERVE = 5;
-
-const sanitizeToolName = (value: string): string => {
-  const cleaned = value.trim().replace(TOOL_NAME_SANITIZE, '_').replace(/_+/g, '_');
-  return cleaned.replace(/^_+|_+$/g, '');
-};
-
-const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-
-// The server row's human name is what the model should read; the id is the fallback
-// for a name that sanitizes away (empty, or only unsupported characters).
-const serverToolLabel = (server: McpServer): string =>
-  sanitizeToolName(server.name) || sanitizeToolName(server.id) || 'server';
-
-const fitToolName = (serverLabel: string, toolLabel: string): string => {
-  const server = sanitizeToolName(serverLabel).slice(0, MAX_SERVER_LABEL_LENGTH) || 'server';
-  const budget = Math.max(
-    1,
-    TOOL_NAME_MAX_LENGTH -
-      TOOL_NAME_PREFIX.length -
-      server.length -
-      1 -
-      TOOL_NAME_ORDINAL_RESERVE
-  );
-  const tool = sanitizeToolName(toolLabel).slice(0, Math.min(MAX_TOOL_LABEL_LENGTH, budget)) || 'tool';
-  return `${TOOL_NAME_PREFIX}${server}_${tool}`;
-};
-
-// The model-visible name is the tool's identity, so duplicates get the next stable
-// ordinal — never a digest. The order comes from McpManager.toolCandidates(), which is
-// sorted by server id then tool name, so the same set of connected servers always
-// yields the same names, across reconnects and restarts.
-const assignToolNames = (candidates: readonly McpToolCandidate[]): McpToolRegistration[] => {
-  const taken = new Set<string>();
-  return candidates.map(candidate => {
-    const base = fitToolName(serverToolLabel(candidate.server), candidate.tool.name);
-    let internalName = base;
-    let ordinal = 1;
-    while (taken.has(internalName)) {
-      ordinal += 1;
-      internalName = `${base}_${ordinal}`;
-    }
-    taken.add(internalName);
-    return { ...candidate, internalName };
-  });
-};
 
 const isLocalUrl = (url: URL): boolean => LOCAL_HOSTS.has(url.hostname);
 
@@ -139,72 +91,6 @@ const mergeRequestHeaders = (
   }
 
   return merged;
-};
-
-const sanitizeToolSchema = (schema: unknown): Record<string, unknown> => {
-  if (!schema || typeof schema !== 'object') {
-    return { type: 'object', properties: {} };
-  }
-  const raw = schema as Record<string, unknown>;
-  if (raw.type !== 'object') {
-    return { type: 'object', properties: {} };
-  }
-  try {
-    const serialized = JSON.stringify(raw);
-    if (serialized.length > MAX_SCHEMA_BYTES) {
-      return { type: 'object', properties: {} };
-    }
-  } catch {
-    return { type: 'object', properties: {} };
-  }
-  return raw;
-};
-
-const isToolSafe = (tool: McpToolCatalogItem): boolean => {
-  const annotations = tool.annotations;
-  if (!annotations) return false;
-  if (annotations.destructiveHint) return false;
-  if (annotations.openWorldHint) return false;
-  return annotations.readOnlyHint === true;
-};
-
-const resolveApprovalMode = (server: McpServer, defaultMode: McpApprovalMode): McpApprovalMode => {
-  if (
-    server.approval_mode === 'always' ||
-    server.approval_mode === 'safe-only' ||
-    server.approval_mode === 'never'
-  ) {
-    return server.approval_mode;
-  }
-  return defaultMode;
-};
-
-const parseToolCatalog = (tools: Array<Record<string, unknown>>): McpToolCatalogItem[] =>
-  tools
-    .map(tool => {
-      const name = typeof tool.name === 'string' ? tool.name.trim() : '';
-      if (!name) return null;
-      return {
-        name,
-        description: typeof tool.description === 'string' ? tool.description : undefined,
-        inputSchema: sanitizeToolSchema(tool.inputSchema),
-        outputSchema:
-          tool.outputSchema && typeof tool.outputSchema === 'object'
-            ? sanitizeToolSchema(tool.outputSchema)
-            : undefined,
-        annotations:
-          tool.annotations && typeof tool.annotations === 'object'
-            ? (tool.annotations as McpToolCatalogItem['annotations'])
-            : undefined,
-        title: typeof tool.title === 'string' ? tool.title : undefined,
-      } as McpToolCatalogItem;
-    })
-    .filter((tool): tool is McpToolCatalogItem => tool !== null);
-
-const normalizeToolAllowlist = (allowlist: string[] | null | undefined): Set<string> | null => {
-  if (!Array.isArray(allowlist) || allowlist.length === 0) return null;
-  const cleaned = allowlist.map(name => name.trim()).filter(Boolean);
-  return cleaned.length > 0 ? new Set(cleaned) : null;
 };
 
 class Semaphore {
@@ -334,6 +220,11 @@ export class McpManager extends EventEmitter {
 
       defaultToolRegistry.register(agentTool);
     }
+
+    setPtcMcpBridge({
+      listMcpServers: () => this.listConnectedServerCatalog(),
+      invokeMcpTool: (serverRef, toolRef, args) => this.callToolByName(serverRef, toolRef, args),
+    });
   }
 
   private registerServerTools(server: McpServer, tools: McpToolCatalogItem[]) {
@@ -509,6 +400,56 @@ export class McpManager extends EventEmitter {
       ...server,
       status: this.connections.get(server.id)?.status,
     }));
+  }
+
+  getConnectedServerIds(): string[] {
+    const ids: string[] = [];
+    for (const [id, conn] of this.connections.entries()) {
+      if (conn.status.state === 'connected') ids.push(id);
+    }
+    return ids.sort(compareStrings);
+  }
+
+  listRegisteredTools(): Array<{
+    name: string;
+    serverId: string;
+    serverName: string;
+    description: string;
+  }> {
+    return defaultToolRegistry
+      .getToolMetadata()
+      .filter(tool => tool.source?.kind === 'mcp' && typeof tool.source.id === 'string')
+      .map(tool => ({
+        name: tool.name,
+        serverId: tool.source?.id ?? '',
+        serverName: tool.source?.name ?? tool.source?.id ?? 'mcp',
+        description: tool.description,
+      }))
+      .sort((a, b) => compareStrings(a.name, b.name));
+  }
+
+  listConnectedServerCatalog(allowedServerIds?: readonly string[]): PtcMcpServerDescriptor[] {
+    return buildConnectedServerCatalog(this.connections.values(), allowedServerIds);
+  }
+
+  renderNamespaceDts(serverRef?: string, toolRef?: string): string {
+    return renderMcpNamespaceDts(this.listConnectedServerCatalog(), {
+      ...(serverRef ? { server: serverRef } : {}),
+      ...(toolRef ? { tool: toolRef } : {}),
+    });
+  }
+
+  async callToolByName(serverRef: string, toolRef: string, args: unknown): Promise<unknown> {
+    const { serverId, toolName } = resolveServerToolByName(
+      this.listConnectedServerCatalog(),
+      serverRef,
+      toolRef
+    );
+    const recordArgs =
+      args && typeof args === 'object' && !Array.isArray(args)
+        ? (args as Record<string, unknown>)
+        : {};
+    return await this.callTool(serverId, toolName, recordArgs);
   }
 
   async addServer(input: McpServerInput): Promise<McpServer> {

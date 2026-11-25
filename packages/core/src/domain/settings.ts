@@ -265,9 +265,21 @@ export const SwarmToolSettingsSchema = z.object({
 });
 export type SwarmToolSettings = z.infer<typeof SwarmToolSettingsSchema>;
 
+export const PtcToolSettingsSchema = z.object({
+  enabled: z.boolean().catch(true),
+  defaultTimeoutMs: z.number().int().positive().catch(30000),
+  maxTimeoutMs: z.number().int().positive().catch(120000),
+  maxCodeBytes: z.number().int().positive().catch(32000),
+  maxToolCalls: z.number().int().positive().catch(24),
+  maxOutputBytes: z.number().int().positive().catch(24000),
+  maxLogLines: z.number().int().positive().catch(100),
+});
+export type PtcToolSettings = z.infer<typeof PtcToolSettingsSchema>;
+
 export const ToolsSettingsSchema = z.object({
   shell: ShellToolSettingsSchema.prefault({}).catch(ShellToolSettingsSchema.parse({})),
   swarm: SwarmToolSettingsSchema.prefault({}).catch(SwarmToolSettingsSchema.parse({})),
+  ptc: PtcToolSettingsSchema.prefault({}).catch(PtcToolSettingsSchema.parse({})),
 });
 export type ToolsSettings = z.infer<typeof ToolsSettingsSchema>;
 
@@ -276,6 +288,7 @@ export const McpSettingsSchema = z.object({
   connectOnStartup: z.boolean().catch(false),
   allowRemoteServers: z.boolean().catch(false),
   defaultApprovalMode: z.enum(['always', 'safe-only', 'never']).catch('safe-only'),
+  exposureMode: z.enum(['code', 'direct']).catch('code'),
   requestTimeoutMs: z.number().finite().catch(20000),
   maxConcurrentRequests: z.number().int().nonnegative().catch(4),
 });

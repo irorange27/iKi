@@ -8,6 +8,7 @@ import { wirePlatformContext } from '@iki/core/platform_wiring';
 import { initializeDatabase } from '@iki/store/database';
 import { getProviders } from '@iki/store/providers';
 import { getBuiltinToolNames, registerStandardTools, registerSwarmTool } from '@iki/harness/tools';
+import { getMcpManager } from '@iki/harness/mcp';
 import { createSwarmManager } from '@iki/harness/swarm';
 import { createChatService, type ChatStreamTarget } from '@iki/harness/thread_session';
 import { createWorkspaceSelection, runInteractiveCli } from './interactive';
@@ -21,6 +22,7 @@ type CliArgs = {
   model?: string;
   workspace?: string;
   tools?: string[];
+  mcpServerIds?: string[];
   skills?: string[];
   skillMode?: 'manual' | 'auto';
   interactive?: boolean;
@@ -38,6 +40,7 @@ const parseArgs = (argv: string[]): CliArgs => {
   let model: string | undefined;
   let workspace: string | undefined;
   let tools: string[] | undefined;
+  let mcpServerIds: string[] | undefined;
   let skills: string[] | undefined;
   let skillMode: 'manual' | 'auto' | undefined;
   let interactive: boolean | undefined;
@@ -63,6 +66,8 @@ const parseArgs = (argv: string[]): CliArgs => {
       workspace = path.resolve(argv[++i]);
     } else if (arg === '--tools' && argv[i + 1]) {
       tools = argv[++i].split(',').map(s => s.trim()).filter(Boolean);
+    } else if (arg === '--mcp' && argv[i + 1]) {
+      mcpServerIds = argv[++i].split(',').map(s => s.trim()).filter(Boolean);
     } else if (arg === '--skills' && argv[i + 1]) {
       skills = argv[++i].split(',').map(s => s.trim()).filter(Boolean);
     } else if (arg === '--skill-mode' && argv[i + 1]) {
@@ -89,6 +94,7 @@ const parseArgs = (argv: string[]): CliArgs => {
           '  --model <id>             Model id\n' +
           '  -C, --workspace <path>   Workspace directory (defaults to cwd in interactive mode)\n' +
           '  --tools <a,b>            Comma-separated tool names\n' +
+          '  --mcp <id1,id2>          Comma-separated MCP server ids/names to connect\n' +
           '  --skills <a,b>           Comma-separated skill ids\n' +
           '  --skill-mode <mode>      Skill mode: manual | auto\n' +
           '  --json                   Output structured JSON summary'
@@ -108,6 +114,7 @@ const parseArgs = (argv: string[]): CliArgs => {
     ...(model ? { model } : {}),
     ...(workspace ? { workspace } : {}),
     ...(tools ? { tools } : {}),
+    ...(mcpServerIds ? { mcpServerIds } : {}),
     ...(skills ? { skills } : {}),
     ...(skillMode ? { skillMode } : {}),
     ...(interactive !== undefined ? { interactive } : {}),
@@ -173,102 +180,129 @@ const main = async () => {
     getBuiltinTools: getBuiltinToolNames,
   });
   registerSwarmTool(swarmManager);
+
+  const mcpManager = getMcpManager();
+  await mcpManager.initialize();
+  if (args.mcpServerIds && args.mcpServerIds.length > 0) {
+    const configured = mcpManager.listServers();
+    for (const ref of args.mcpServerIds) {
+      const target =
+        configured.find(s => s.id === ref) ??
+        configured.find(s => s.name.toLowerCase() === ref.toLowerCase());
+      if (target) {
+        try {
+          await mcpManager.connectServer(target.id);
+        } catch {
+          /* surfaced via /mcp status */
+        }
+      }
+    }
+  }
+
   const latestThread = args.continueLatest ? chatService.listThreads()[0] : undefined;
   const threadId = args.threadId ?? latestThread?.id ?? `cli_${randomUUID().slice(0, 8)}`;
 
-  if (useInteractive) {
-    await runInteractiveCli({
-      chatService,
-      swarmManager,
-      dataDir: args.dataDir,
+  try {
+    if (useInteractive) {
+      await runInteractiveCli({
+        chatService,
+        swarmManager,
+        mcpManager,
+        dataDir: args.dataDir,
+        threadId,
+        providerType: args.providerType ?? latestThread?.provider_type ?? providerType,
+        ...((args.providerId ?? latestThread?.provider_id ?? providerId)
+          ? { providerId: args.providerId ?? latestThread?.provider_id ?? providerId ?? undefined }
+          : {}),
+        model: args.model ?? latestThread?.model ?? model,
+        workspace: args.workspace ?? process.cwd(),
+        ...(args.tools ? { tools: args.tools } : {}),
+        ...(args.mcpServerIds ? { mcpServerIds: args.mcpServerIds } : {}),
+        ...(args.skills ? { skills: args.skills } : {}),
+        skillMode: args.skillMode ?? 'auto',
+        ...(prompt ? { initialPrompt: prompt } : {}),
+      });
+      return;
+    }
+
+    if (!chatService.getThread(threadId)) {
+      chatService.createThread({
+        id: threadId,
+        title: prompt.slice(0, 48),
+        provider_type: providerType,
+        ...(providerId ? { provider_id: providerId } : {}),
+        model,
+      });
+    }
+
+    let capturedUsage: Record<string, unknown> | undefined;
+    let streamedText = '';
+
+    const target: ChatStreamTarget = {
+      id: 1,
+      send: (channel: string, payload: unknown) => {
+        if (channel !== 'chat:ui-chunk' || !payload || typeof payload !== 'object') return;
+        const chunk = payload as Record<string, unknown>;
+        if (chunk.type === 'text-delta' && typeof chunk.delta === 'string') {
+          streamedText += chunk.delta;
+          if (!args.json) process.stdout.write(chunk.delta);
+        } else if (chunk.type === 'data-token-usage' && chunk.data && typeof chunk.data === 'object') {
+          capturedUsage = chunk.data as Record<string, unknown>;
+        } else if (!args.json && chunk.type === 'tool-input-available' && typeof chunk.toolName === 'string') {
+          process.stderr.write(`\n[tool] ${chunk.toolName}\n`);
+        }
+      },
+    };
+
+    const history = chatService.listMessages(threadId);
+    const userMessage = {
+      id: `msg_${randomUUID()}`,
+      role: 'user' as const,
+      parts: [{ type: 'text' as const, text: prompt }],
+    };
+    const activeMcpIds = mcpManager.getConnectedServerIds();
+
+    const result = await chatService.stream(target, {
       threadId,
-      providerType: args.providerType ?? latestThread?.provider_type ?? providerType,
-      ...((args.providerId ?? latestThread?.provider_id ?? providerId)
-        ? { providerId: args.providerId ?? latestThread?.provider_id ?? providerId ?? undefined }
-        : {}),
-      model: args.model ?? latestThread?.model ?? model,
-      workspace: args.workspace ?? process.cwd(),
-      ...(args.tools ? { tools: args.tools } : {}),
-      ...(args.skills ? { skills: args.skills } : {}),
-      skillMode: args.skillMode ?? 'auto',
-      ...(prompt ? { initialPrompt: prompt } : {}),
-    });
-    return;
-  }
-
-  if (!chatService.getThread(threadId)) {
-    chatService.createThread({
-      id: threadId,
-      title: prompt.slice(0, 48),
-      provider_type: providerType,
-      ...(providerId ? { provider_id: providerId } : {}),
+      providerType,
+      ...(providerId ? { providerId } : {}),
       model,
+      ...(args.tools ? { tools: args.tools } : {}),
+      ...(activeMcpIds.length > 0 ? { mcpServerIds: activeMcpIds } : {}),
+      ...(args.skills ? { skillIds: args.skills } : {}),
+      ...(args.skillMode ? { skillMode: args.skillMode } : {}),
+      ...(args.workspace ? { workspaceSelection: createWorkspaceSelection(threadId, args.workspace) } : {}),
+      messages: [...history, userMessage],
     });
-  }
 
-  let capturedUsage: Record<string, unknown> | undefined;
-  let streamedText = '';
+    const runId = 'runId' in result ? result.runId : undefined;
+    const finalText = ('text' in result && typeof result.text === 'string' ? result.text : undefined) ?? streamedText;
+    const errorText = 'error' in result && typeof result.error === 'string' ? result.error : undefined;
 
-  const target: ChatStreamTarget = {
-    id: 1,
-    send: (channel: string, payload: unknown) => {
-      if (channel !== 'chat:ui-chunk' || !payload || typeof payload !== 'object') return;
-      const chunk = payload as Record<string, unknown>;
-      if (chunk.type === 'text-delta' && typeof chunk.delta === 'string') {
-        streamedText += chunk.delta;
-        if (!args.json) process.stdout.write(chunk.delta);
-      } else if (chunk.type === 'data-token-usage' && chunk.data && typeof chunk.data === 'object') {
-        capturedUsage = chunk.data as Record<string, unknown>;
-      } else if (!args.json && chunk.type === 'tool-input-available' && typeof chunk.toolName === 'string') {
-        process.stderr.write(`\n[tool] ${chunk.toolName}\n`);
-      }
-    },
-  };
+    if (args.json) {
+      console.log(
+        JSON.stringify(
+          {
+            success: result.success,
+            threadId,
+            ...(runId ? { runId } : {}),
+            text: finalText,
+            usage: capturedUsage ?? null,
+            ...(errorText ? { error: errorText } : {}),
+          },
+          null,
+          2
+        )
+      );
+    } else {
+      process.stdout.write('\n');
+    }
 
-  const history = chatService.listMessages(threadId);
-  const userMessage = {
-    id: `msg_${randomUUID()}`,
-    role: 'user' as const,
-    parts: [{ type: 'text' as const, text: prompt }],
-  };
-
-  const result = await chatService.stream(target, {
-    threadId,
-    providerType,
-    ...(providerId ? { providerId } : {}),
-    model,
-    ...(args.tools ? { tools: args.tools } : {}),
-    ...(args.skills ? { skillIds: args.skills } : {}),
-    ...(args.skillMode ? { skillMode: args.skillMode } : {}),
-    ...(args.workspace ? { workspaceSelection: createWorkspaceSelection(threadId, args.workspace) } : {}),
-    messages: [...history, userMessage],
-  });
-
-  const runId = 'runId' in result ? result.runId : undefined;
-  const finalText = ('text' in result && typeof result.text === 'string' ? result.text : undefined) ?? streamedText;
-  const errorText = 'error' in result && typeof result.error === 'string' ? result.error : undefined;
-
-  if (args.json) {
-    console.log(
-      JSON.stringify(
-        {
-          success: result.success,
-          threadId,
-          ...(runId ? { runId } : {}),
-          text: finalText,
-          usage: capturedUsage ?? null,
-          ...(errorText ? { error: errorText } : {}),
-        },
-        null,
-        2
-      )
-    );
-  } else {
-    process.stdout.write('\n');
-  }
-
-  if (!result.success) {
-    process.exit(1);
+    if (!result.success) {
+      process.exit(1);
+    }
+  } finally {
+    await mcpManager.disconnectAll();
   }
 };
 

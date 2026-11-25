@@ -14,6 +14,11 @@ export interface ThreadSkillsSnapshot {
   anchoredReminders: ThreadSkillReminderAnchor[];
 }
 
+export interface ThreadMcpSnapshot {
+  lastDelivered: Record<string, string>;
+  anchoredReminders: ThreadSkillReminderAnchor[];
+}
+
 export interface ChatThread {
   id: string;
   title: string;
@@ -39,6 +44,7 @@ export interface ChatThread {
   artifact_workspace_id?: string;
   skill_ids?: string[] | null;
   skills_snapshot?: ThreadSkillsSnapshot | null;
+  mcp_snapshot?: ThreadMcpSnapshot | null;
 }
 
 // There is no `ChatMessage` row type any more (task-1 / ADR-008). The session log

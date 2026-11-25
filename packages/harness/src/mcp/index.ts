@@ -10,3 +10,12 @@ export const getMcpManager = (): McpManager => {
 };
 
 export type { McpManager } from './manager';
+export {
+  findDefaultMcpJsonPath,
+  parseMcpJsonConfig,
+  readMcpJsonFile,
+} from './config_import';
+export {
+  buildMcpDeltaReminderText,
+  resolveMcpAnchoredReminders,
+} from './mcp_delta';

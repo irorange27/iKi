@@ -38,6 +38,11 @@ const extractSystemTexts = (messages: readonly ModelMessage[]): string[] =>
 export const createChatContextAssembler = (deps: {
   workspaceSystemMessage?: (threadId?: string) => string;
   resolveSkillsSystemPrompt: typeof import('../thread_session/skills').resolveSkillsSystemPrompt;
+  resolveMcpReminders?: (params: {
+    threadId?: string;
+    mcpServerIds?: string[];
+    currentUserAnchor?: string;
+  }) => import('@iki/core/types/chat').ThreadSkillReminderAnchor[];
 }) => {
   const assemble = async (params: AssembleChatContextParams) => {
     const contextConfig = deriveModelAwareContextConfig(
@@ -188,18 +193,32 @@ export const createChatContextAssembler = (deps: {
       .filter(Boolean)
       .join('\n\n');
 
-    const reminderByAnchor = new Map(
-      (skillContext.anchoredReminders ?? []).map(item => [item.beforeAnchor, item.text] as const)
-    );
+    const mcpAnchoredReminders =
+      benchmarkCleanContext || params.mcpCodeMode === false || !deps.resolveMcpReminders
+        ? []
+        : deps.resolveMcpReminders({
+            threadId: params.threadId,
+            mcpServerIds: params.mcpServerIds,
+            currentUserAnchor,
+          });
+
+    const reminderByAnchor = new Map<string, string[]>();
+    for (const item of [...(skillContext.anchoredReminders ?? []), ...mcpAnchoredReminders]) {
+      const list = reminderByAnchor.get(item.beforeAnchor) ?? [];
+      list.push(item.text);
+      reminderByAnchor.set(item.beforeAnchor, list);
+    }
     const interleavedRecentMessages: ModelMessage[] = [];
     let seenUserIndex = 0;
     for (const message of recentHistory.recentMessages) {
       if (message.role === 'user') {
         const anchor = anchorForUserIndex(seenUserIndex);
         seenUserIndex += 1;
-        const reminderText = reminderByAnchor.get(anchor);
-        if (reminderText) {
-          interleavedRecentMessages.push({ role: 'user', content: reminderText });
+        const reminderTexts = reminderByAnchor.get(anchor);
+        if (reminderTexts) {
+          for (const reminderText of reminderTexts) {
+            interleavedRecentMessages.push({ role: 'user', content: reminderText });
+          }
         }
       }
       interleavedRecentMessages.push(message);

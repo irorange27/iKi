@@ -82,12 +82,14 @@ const buildTurnStreamRequest = (state: InteractiveCliState, prompt: string) => {
   const effectiveTools = activeSwarm
     ? [...new Set([...(state.tools ?? getBuiltinToolNames()), 'swarm'])]
     : state.tools;
+  const connectedMcpIds = state.mcpServerIds ?? state.mcpManager?.getConnectedServerIds() ?? [];
   return {
     threadId: state.threadId,
     providerType: state.providerType,
     ...(state.providerId ? { providerId: state.providerId } : {}),
     model: state.model,
     ...(effectiveTools ? { tools: effectiveTools } : {}),
+    ...(connectedMcpIds.length > 0 ? { mcpServerIds: connectedMcpIds } : {}),
     ...(activeSwarm ? { extraSystemPrompt: buildCoordinatorSystemPrompt(activeSwarm.id) } : {}),
     ...(state.skills ? { skillIds: state.skills } : {}),
     skillMode: state.skillMode,
@@ -209,6 +211,8 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     const swarmFlag = swarmBadge ? ` · ${swarmBadge}` : '';
     const runningJobs = jobTracker.getRunningCount();
     const jobFlag = runningJobs > 0 ? ` · jobs:${runningJobs}` : '';
+    const mcpToolCount = state.mcpManager?.listRegisteredTools().length ?? 0;
+    const mcpFlag = mcpToolCount > 0 ? ` · mcp:${mcpToolCount}t` : '';
     const watchMode = watchController?.getMode();
     const watchFlag =
       watchMode?.kind === 'swarm-member'
@@ -223,7 +227,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       state.threadId,
       view.messages
     );
-    const leftBottom = `${state.threadId} · turn:${threadTurns}/step:${modelSteps} · ${totals.uncachedInputTokens}in/${totals.cacheReadTokens}c${compactFlag}${swarmFlag}${jobFlag}${watchFlag}${thinkFlag}`;
+    const leftBottom = `${state.threadId} · turn:${threadTurns}/step:${modelSteps} · ${totals.uncachedInputTokens}in/${totals.cacheReadTokens}c${compactFlag}${swarmFlag}${mcpFlag}${jobFlag}${watchFlag}${thinkFlag}`;
     footer.update({
       leftTop,
       leftBottom,

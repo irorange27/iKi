@@ -29,13 +29,20 @@ import {
   selectMessagesForCompaction,
 } from '@iki/harness/thread_session/session_log';
 import type { ChatService } from '@iki/harness/thread_session';
+import type { McpManager } from '@iki/harness/mcp';
 import type { SwarmManager } from '@iki/harness/swarm';
 import { copyLastAssistantReply } from './clipboard';
+import {
+  executeMcpSlashCommand,
+  formatMcpBannerSummary,
+  getMcpSlashCompletions,
+} from './mcp_commands';
 import { executeSwarmSlashCommand } from './swarm_commands';
 
 export type InteractiveCliState = {
   chatService: ChatService;
   swarmManager?: SwarmManager;
+  mcpManager?: McpManager;
   dataDir: string;
   threadId: string;
   providerType: string;
@@ -43,6 +50,7 @@ export type InteractiveCliState = {
   model: string;
   workspace?: string;
   tools?: string[];
+  mcpServerIds?: string[];
   skills?: string[];
   skillMode: 'manual' | 'auto';
   initialPrompt?: string;
@@ -324,9 +332,9 @@ export const formatBannerLines = async (state: InteractiveCliState): Promise<str
     `  mode=${state.skillMode} · ${loadedSkillIds.length} loaded (${skillsText})`,
     '',
     '[Tools]',
-    `  ${toolsSummary}`,
+    `  ${toolsSummary} · MCP: ${formatMcpBannerSummary(state.mcpManager)}`,
     '',
-    'Shortcuts: /models · /resume · /jobs (Ctrl+J) · /swarm (Ctrl+W) · /context · /skills · /help',
+    'Shortcuts: /models · /resume · /jobs (Ctrl+J) · /swarm (Ctrl+W) · /mcp · /context · /skills · /help',
   ];
 };
 
@@ -337,7 +345,8 @@ const formatHelpLines = (): string[] => [
   '  /new [title]              Start a fresh thread',
   '  /context                  Inspect loaded AGENTS.md, PERSONA.md, skills & tools',
   '  /skills [auto|manual|ids] Pick skills, switch skill mode, or list all',
-  '  /tools [default|all|a,b]  View or override enabled tools',
+  '  /tools [default|all|a,b]  View or override enabled tools (includes ptc)',
+  '  /mcp [add|import|tools..] Manage MCP servers & inspect active MCP tools',
   '  /jobs [all|log|kill]      Inspect, tail, or stop durable background jobs (Ctrl+J)',
   '  /swarm <task|watch|...>   Start a swarm or watch live workers/board (Ctrl+W)',
   '  /history                  Inspect messages & compaction checkpoint',
@@ -397,6 +406,7 @@ const formatContextLines = async (state: InteractiveCliState): Promise<string[]>
     ),
     ...(skills.length > 12 ? [`    ... (+${skills.length - 12} more)`] : []),
     `  Tools:          ${state.tools ? (state.tools.length ? state.tools.join(', ') : '(disabled)') : `default (${builtins.join(', ')})`}`,
+    `  MCP:            ${formatMcpBannerSummary(state.mcpManager)}`,
     `  [tools.shell]:  timeout=${shellCfg.defaultTimeoutMs}ms (max ${shellCfg.maxTimeoutMs}ms), promoteOnTimeout=${shellCfg.promoteOnTimeout}, maxOutput=${shellCfg.maxOutputLines} lines/${shellCfg.maxOutputBytes}B${shellCfg.shellPath ? `, shellPath=${shellCfg.shellPath}` : ''}`,
     `  Compaction:     ${view.compaction ? `active (omitted=${view.compaction.omittedCount}, kept=${view.compaction.keptCount}, anchor=${view.compaction.firstKeptMessageId ?? 'tail'})` : 'none in current thread'}`,
   ];
@@ -541,6 +551,12 @@ export const buildSlashCommands = (state: InteractiveCliState): SlashCommand[] =
     },
   },
   {
+    name: 'mcp',
+    description: 'Manage MCP servers, import mcp.json, or list MCP tools',
+    argumentHint: 'status | tools | add <name> <cmd> | add-http <name> <url> | import [path] | connect <name>',
+    getArgumentCompletions: prefix => getMcpSlashCompletions(state.mcpManager, prefix),
+  },
+  {
     name: 'swarm',
     description: 'Start a multi-agent swarm or inspect/steer board & workers',
     argumentHint: '<task> | status | board | inspect <name> | post <msg> | steer <name> <msg> | kill <name|all>',
@@ -595,7 +611,7 @@ export const executeSlashCommand = async (
 
   const allCommandNames = [
     '/help', '/models', '/model', '/resume', '/threads', '/thread', '/new',
-    '/history', '/context', '/system', '/persona', '/tools', '/jobs', '/swarm',
+    '/history', '/context', '/system', '/persona', '/tools', '/mcp', '/jobs', '/swarm',
     '/skills', '/compact', '/copy', '/usage', '/clear', '/exit', '/quit',
   ];
   let cmd = rawCmd;
@@ -660,31 +676,21 @@ export const executeSlashCommand = async (
     if (arg === 'all') return { kind: 'handled', lines: formatJobsLines() };
     const [sub, targetId] = arg.split(/\s+/);
     if (sub === 'kill' && targetId) {
-      try {
-        const res = await killShellJob(targetId);
-        return { kind: 'handled', lines: [res.message] };
-      } catch (error) {
-        return { kind: 'handled', lines: [error instanceof Error ? error.message : String(error)] };
-      }
+      try { return { kind: 'handled', lines: [(await killShellJob(targetId)).message] }; }
+      catch (error) { return { kind: 'handled', lines: [error instanceof Error ? error.message : String(error)] }; }
     }
     if (sub === 'log' && targetId) {
       try {
         const job = getShellJob(targetId);
         if (!job) return { kind: 'handled', lines: [`Job "${targetId}" not found.`] };
         const slice = readBoundedLogSlice(job.logPath, { maxLines: 40 });
-        return {
-          kind: 'handled',
-          lines: [
-            `Job ${job.jobId} [${job.status}${typeof job.exitCode === 'number' ? ` exit=${job.exitCode}` : ''}] pid=${job.pid}`,
-            `log: ${job.logPath}`,
-            ...(slice.output ? slice.output.split(/\r?\n/) : ['(no output yet)']),
-          ],
-        };
-      } catch (error) {
-        return { kind: 'handled', lines: [error instanceof Error ? error.message : String(error)] };
-      }
+        return { kind: 'handled', lines: [`Job ${job.jobId} [${job.status}${typeof job.exitCode === 'number' ? ` exit=${job.exitCode}` : ''}] pid=${job.pid}`, `log: ${job.logPath}`, ...(slice.output ? slice.output.split(/\r?\n/) : ['(no output yet)'])] };
+      } catch (error) { return { kind: 'handled', lines: [error instanceof Error ? error.message : String(error)] }; }
     }
     return { kind: 'handled', lines: ['Usage: /jobs [all] | /jobs log <jobId> | /jobs kill <jobId>'] };
+  }
+  if (cmd === '/mcp') {
+    return executeMcpSlashCommand(arg, state);
   }
   if (cmd === '/swarm') {
     return executeSwarmSlashCommand(arg, state, createWorkspaceSelection, options);

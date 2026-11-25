@@ -147,6 +147,46 @@ const formatSwarmCallHeader = (
   };
 };
 
+const formatPtcCallHeader = (
+  input: Record<string, unknown>
+): { header: string; extraLines: string[] } => {
+  const lang = input.language === 'js' ? 'js' : 'ts';
+  const meta: string[] = [lang];
+  if (typeof input.timeoutMs === 'number' && Number.isFinite(input.timeoutMs)) {
+    meta.push(`timeout ${formatTimeout(Math.trunc(input.timeoutMs))}`);
+  }
+  const suffix = ` ${cliTheme.dim(`(${meta.join(' · ')})`)}`;
+  const header = `${cliTheme.bold(cliTheme.accent('ptc'))}${suffix}`;
+  const rawCode = typeof input.code === 'string' ? input.code.trim() : '';
+  const codeLines = rawCode ? rawCode.split(/\r?\n/) : [];
+  const extraLines: string[] = [];
+  if (typeof input.description === 'string' && input.description.trim()) {
+    extraLines.push(`  ${cliTheme.dim(input.description.trim())}`);
+  }
+  for (const line of codeLines.slice(0, COMMAND_PREVIEW_LINES)) {
+    extraLines.push(`  ${cliTheme.text(line)}`);
+  }
+  if (codeLines.length > COMMAND_PREVIEW_LINES) {
+    extraLines.push(cliTheme.dim(`  ... (+${codeLines.length - COMMAND_PREVIEW_LINES} more lines)`));
+  }
+  return { header, extraLines };
+};
+
+const formatMcpCallHeader = (
+  toolName: string,
+  input: unknown
+): { header: string; extraLines: string[] } => {
+  const rest = toolName.slice('mcp_'.length);
+  const sep = rest.indexOf('_');
+  const label = sep > 0 ? `${rest.slice(0, sep)}/${rest.slice(sep + 1)}` : rest;
+  const generic = formatGenericCallHeader(toolName, input);
+  const argsPart = generic.header.slice(cliTheme.bold(cliTheme.text(toolName)).length);
+  return {
+    header: `${cliTheme.bold(cliTheme.accent('mcp'))} ${cliTheme.bold(cliTheme.text(label))}${argsPart}`,
+    extraLines: generic.extraLines,
+  };
+};
+
 const formatCallParts = (
   toolName: string,
   input: unknown
@@ -159,6 +199,12 @@ const formatCallParts = (
   }
   if (toolName === 'swarm' && isRecord(input)) {
     return formatSwarmCallHeader(input);
+  }
+  if (toolName === 'ptc' && isRecord(input)) {
+    return formatPtcCallHeader(input);
+  }
+  if (toolName.startsWith('mcp_')) {
+    return formatMcpCallHeader(toolName, input);
   }
   return formatGenericCallHeader(toolName, input);
 };
@@ -197,6 +243,14 @@ export const formatToolCallPipedSummary = (toolName: string, input: unknown): st
     const action = typeof input.action === 'string' ? input.action : 'status';
     const name = typeof input.name === 'string' ? ` @${input.name}` : '';
     return `${action}${name}`;
+  }
+  if (toolName === 'ptc' && isRecord(input)) {
+    const desc = typeof input.description === 'string' && input.description.trim()
+      ? input.description.trim()
+      : typeof input.code === 'string'
+        ? input.code.trim().split(/\r?\n/)[0] ?? ''
+        : '';
+    return desc.length > 72 ? `${desc.slice(0, 69)}...` : desc;
   }
   if (!isRecord(input)) return '';
   const raw = JSON.stringify(input);
@@ -332,6 +386,70 @@ export const formatToolCallCompleted = (params: {
     } else if (typeof unwrapped.title === 'string') {
       bodyLines.push(`  ${cliTheme.muted(`Title: ${unwrapped.title}`)}`);
     }
+    const duration = formatDuration(elapsedMs);
+    if (duration) bodyLines.push(`  ${cliTheme.dim(`[${duration}]`)}`);
+    return {
+      tone: failed ? 'error' : 'success',
+      text: [`${badge} ${header}`, ...extraLines, ...bodyLines].join('\n'),
+    };
+  }
+
+  if (toolName === 'ptc' && isRecord(unwrapped)) {
+    const failed = unwrapped.isError === true || unwrapped.ok === false;
+    const badge = failed ? cliTheme.error('✗') : cliTheme.success('✓');
+    const bodyLines: string[] = [];
+    if (Array.isArray(unwrapped.toolCalls) && unwrapped.toolCalls.length > 0) {
+      const trace = (unwrapped.toolCalls as Array<Record<string, unknown>>)
+        .slice(0, 8)
+        .map(c => {
+          const icon = c.ok === false ? '✗' : '✓';
+          const ms = typeof c.durationMs === 'number' ? `${c.durationMs}ms` : '';
+          return `${icon}${String(c.name ?? '')}${ms ? `(${ms})` : ''}`;
+        })
+        .join(' → ');
+      const extraCount = unwrapped.toolCalls.length > 8 ? ` (+${unwrapped.toolCalls.length - 8})` : '';
+      bodyLines.push(`  ${cliTheme.dim(`calls: ${trace}${extraCount}`)}`);
+    }
+    if (Array.isArray(unwrapped.logs) && unwrapped.logs.length > 0) {
+      const logLines = (unwrapped.logs as unknown[]).map(l => String(l)).join('\n');
+      bodyLines.push(...formatTailPreviewLines(logLines, 4));
+    }
+    if (failed && typeof unwrapped.error === 'string') {
+      bodyLines.push(`  ${cliTheme.error(unwrapped.error)}`);
+    } else if (unwrapped.result !== undefined && unwrapped.result !== null) {
+      const resStr = typeof unwrapped.result === 'string'
+        ? unwrapped.result
+        : JSON.stringify(unwrapped.result, null, 2);
+      bodyLines.push(...formatTailPreviewLines(resStr, 4));
+    }
+    const duration = formatDuration(
+      typeof unwrapped.durationMs === 'number' ? unwrapped.durationMs : elapsedMs
+    );
+    const callCount = typeof unwrapped.toolCallCount === 'number' ? unwrapped.toolCallCount : 0;
+    const meta = [duration, `${callCount} call${callCount === 1 ? '' : 's'}`].filter(Boolean);
+    if (unwrapped.truncated === true) meta.push('truncated');
+    if (meta.length > 0) bodyLines.push(`  ${cliTheme.dim(`[${meta.join(' · ')}]`)}`);
+    return {
+      tone: failed ? 'error' : 'success',
+      text: [`${badge} ${header}`, ...extraLines, ...bodyLines].join('\n'),
+    };
+  }
+
+  if (toolName.startsWith('mcp_') && isRecord(unwrapped)) {
+    const failed = unwrapped.isError === true;
+    const badge = failed ? cliTheme.error('✗') : cliTheme.success('✓');
+    const textParts = Array.isArray(unwrapped.content)
+      ? (unwrapped.content as unknown[])
+          .filter(
+            (b): b is { type: string; text: string } =>
+              isRecord(b) && b.type === 'text' && typeof b.text === 'string'
+          )
+          .map(b => b.text)
+      : [];
+    const previewText = textParts.length > 0
+      ? textParts.join('\n')
+      : JSON.stringify(unwrapped, null, 2);
+    const bodyLines = formatTailPreviewLines(previewText, 5);
     const duration = formatDuration(elapsedMs);
     if (duration) bodyLines.push(`  ${cliTheme.dim(`[${duration}]`)}`);
     return {

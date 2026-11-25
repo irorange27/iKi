@@ -66,6 +66,12 @@
       "@iki/tools/shell": [
         "./packages/tools/src/shell/index.ts"
       ],
+      "@iki/tools/swarm": [
+        "./packages/tools/src/swarm/index.ts"
+      ],
+      "@iki/tools/ptc": [
+        "./packages/tools/src/ptc/index.ts"
+      ],
       "@iki/tools/*": [
         "./packages/tools/src/*"
       ]
