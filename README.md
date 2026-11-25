@@ -2,7 +2,7 @@
 
 **A KV-cache-native AI agent harness with MCP Code Mode, a TypeScript PTC sandbox, and live-observable multi-agent swarms.**
 
-English | [简体中文](./README.zh-CN.md)
+English | [简体中文](./README.zh-CN.md) | [Website & Docs](https://irorange27.github.io/iKi/)
 
 [![npm](https://img.shields.io/npm/v/%40irorange27%2Fiki?color=cb3837&logo=npm)](https://www.npmjs.com/package/@irorange27/iki)
 [![Node.js 24+](https://img.shields.io/badge/Node.js-24%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
@@ -141,6 +141,7 @@ pnpm run ci:quality                   # eslint, tsc, vue-tsc, dependency-cruiser
 pnpm exec vitest run packages/*/tests # unit & integration tests
 pnpm run test:e2e:cli:faux            # deterministic keyless CLI E2E
 pnpm run cli:pack                     # build & pack standalone @irorange27/iki tarball
+pnpm run site:dev                     # launch iKi brand & docs website locally (site/)
 ```
 
 ---

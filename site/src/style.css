@@ -1,0 +1,259 @@
+@import "tailwindcss";
+
+/*
+ * iKi Design Tokens — derived from packages/theme/src/builtins.ts (celadon-slate hue ~205°)
+ * and .impeccable.md ("restrained, experimental, trustworthy").
+ * Uses OKLCH exclusively; neutrals carry subtle brand-hue tinting; zero pure #000/#fff.
+ */
+:root {
+  color-scheme: light;
+
+  --font-display: "Bricolage Grotesque", "Noto Sans SC", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: "Atkinson Hyperlegible Next", "Noto Sans SC", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* 60% surfaces (celadon-tinted paper) */
+  --bg: oklch(0.976 0.005 208);
+  --bg-subtle: oklch(0.952 0.007 208);
+  --bg-elevated: oklch(0.992 0.003 208);
+  --bg-hover: oklch(0.934 0.010 208);
+
+  /* 30% text & hairline rules */
+  --fg: oklch(0.215 0.014 222);
+  --fg-muted: oklch(0.455 0.014 218);
+  --fg-faint: oklch(0.585 0.012 214);
+  --border: oklch(0.875 0.010 208);
+  --border-strong: oklch(0.785 0.014 208);
+
+  /* 10% brand accent (iKi muted celadon-teal #4c7c85 / #7299a0) */
+  --accent: oklch(0.515 0.072 204);
+  --accent-strong: oklch(0.435 0.076 204);
+  --accent-soft: oklch(0.925 0.022 204);
+  --accent-ink: oklch(0.985 0.004 204);
+
+  /* Semantic signals */
+  --ok: oklch(0.54 0.115 156);
+  --ok-soft: oklch(0.935 0.032 156);
+  --warn: oklch(0.62 0.125 68);
+  --warn-soft: oklch(0.945 0.035 72);
+  --danger: oklch(0.56 0.145 24);
+  --danger-soft: oklch(0.945 0.032 24);
+
+  /* Recessed dark terminal specimen (stays dark in light mode for crisp hardware contrast) */
+  --term-bg: oklch(0.205 0.013 232);
+  --term-surface: oklch(0.245 0.014 232);
+  --term-border: oklch(0.325 0.014 228);
+  --term-fg: oklch(0.93 0.007 210);
+  --term-muted: oklch(0.69 0.012 215);
+  --term-accent: oklch(0.75 0.078 202);
+  --term-ok: oklch(0.75 0.115 158);
+  --term-warn: oklch(0.80 0.115 76);
+
+  /* 4pt spacing scale */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+  --space-2xl: 4.5rem;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: oklch(0.205 0.012 235);
+  --bg-subtle: oklch(0.235 0.013 235);
+  --bg-elevated: oklch(0.258 0.013 235);
+  --bg-hover: oklch(0.295 0.015 232);
+
+  --fg: oklch(0.935 0.007 210);
+  --fg-muted: oklch(0.725 0.012 214);
+  --fg-faint: oklch(0.585 0.012 218);
+  --border: oklch(0.335 0.014 230);
+  --border-strong: oklch(0.425 0.016 226);
+
+  --accent: oklch(0.72 0.074 202);
+  --accent-strong: oklch(0.78 0.072 200);
+  --accent-soft: oklch(0.295 0.032 210);
+  --accent-ink: oklch(0.18 0.014 232);
+
+  --ok: oklch(0.73 0.115 158);
+  --ok-soft: oklch(0.285 0.042 158);
+  --warn: oklch(0.78 0.115 76);
+  --warn-soft: oklch(0.295 0.042 74);
+  --danger: oklch(0.70 0.135 24);
+  --danger-soft: oklch(0.295 0.045 24);
+
+  --term-bg: oklch(0.172 0.011 236);
+  --term-surface: oklch(0.212 0.013 236);
+  --term-border: oklch(0.30 0.014 232);
+}
+
+html {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--fg);
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.62;
+}
+
+:root[data-theme="dark"] body {
+  line-height: 1.68;
+}
+
+h1, h2, h3, h4, .font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+}
+
+code, pre, kbd, .font-mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+}
+
+/* Subtle dot-grid drafting paper background for hero band */
+.drafting-surface {
+  background-image: radial-gradient(color-mix(in oklch, var(--border-strong) 45%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Staggered entrance animation (transform + opacity only, ease-out-quart) */
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reveal {
+  animation: riseIn 480ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+.reveal-delay-1 { animation-delay: 70ms; }
+.reveal-delay-2 { animation-delay: 140ms; }
+.reveal-delay-3 { animation-delay: 210ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .reveal-delay-1, .reveal-delay-2, .reveal-delay-3 {
+    animation: none;
+  }
+}
+
+/* Clean custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+/* Docs prose rules (68ch max measure, generous rhythm, zero side-stripe bans) */
+.docs-prose {
+  max-width: 70ch;
+}
+
+.docs-prose h2 {
+  font-size: clamp(1.35rem, 2vw, 1.65rem);
+  font-weight: 600;
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  scroll-margin-top: 5rem;
+}
+
+.docs-prose h2:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 1.5rem;
+}
+
+.docs-prose h3 {
+  font-size: 1.08rem;
+  font-weight: 600;
+  margin-top: 1.6rem;
+  margin-bottom: 0.5rem;
+  scroll-margin-top: 5rem;
+}
+
+.docs-prose p {
+  color: var(--fg-muted);
+  margin-bottom: 0.95rem;
+}
+
+.docs-prose strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.docs-prose ul {
+  margin: 0.75rem 0 1.15rem;
+  padding-left: 1.25rem;
+  color: var(--fg-muted);
+  list-style: disc;
+}
+
+.docs-prose li {
+  margin-bottom: 0.4rem;
+}
+
+.docs-prose code:not(pre code) {
+  font-size: 0.86em;
+  padding: 0.14rem 0.4rem;
+  border-radius: 5px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
+
+.docs-prose pre {
+  margin: 1rem 0 1.4rem;
+  padding: 1rem 1.15rem;
+  border-radius: 10px;
+  background: var(--term-bg);
+  color: var(--term-fg);
+  border: 1px solid var(--term-border);
+  overflow-x: auto;
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.docs-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.1rem 0 1.5rem;
+  font-size: 0.9rem;
+}
+
+.docs-prose th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--fg);
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--bg-subtle);
+}
+
+.docs-prose td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-muted);
+  vertical-align: top;
+}

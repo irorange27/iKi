@@ -2,7 +2,7 @@
 
 **KV-Cache 原生的开源 AI Agent Harness —— 内置 MCP Code Mode、TypeScript PTC 沙箱与实时可观测的多 Agent Swarm。**
 
-[English](./README.md) | 简体中文
+[English](./README.md) | 简体中文 | [官网与文档](https://irorange27.github.io/iKi/)
 
 [![npm](https://img.shields.io/npm/v/%40irorange27%2Fiki?color=cb3837&logo=npm)](https://www.npmjs.com/package/@irorange27/iki)
 [![Node.js 24+](https://img.shields.io/badge/Node.js-24%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
@@ -123,6 +123,7 @@ pnpm run ci:quality                   # eslint / tsc / vue-tsc / depcruise / kni
 pnpm exec vitest run packages/*/tests # 单元测试与集成测试
 pnpm run test:e2e:cli:faux            # 无密钥确定性 CLI E2E
 pnpm run cli:pack                     # 构建并打包独立的 @irorange27/iki tarball
+pnpm run site:dev                     # 本地启动 iKi 品牌与文档网站（site/）
 ```
 
 ---

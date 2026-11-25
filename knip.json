@@ -24,10 +24,12 @@
   "workspaces": {
     ".": {
       "entry": [
-        "scripts/**/*.{mjs,cjs,ts}"
+        "scripts/**/*.{mjs,cjs,ts}",
+        "site/src/main.ts"
       ],
       "project": [
-        "scripts/**/*.{mjs,cjs,ts}"
+        "scripts/**/*.{mjs,cjs,ts}",
+        "site/src/**/*.{ts,vue}"
       ]
     },
     "packages/harness": {
@@ -64,6 +66,7 @@
     }
   },
   "ignore": [
+    "site/dist/**",
     "packages/cli/dist/**",
     "packages/desktop/.vite/**",
     "packages/desktop/out/**",

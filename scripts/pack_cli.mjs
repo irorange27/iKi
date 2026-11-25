@@ -67,7 +67,7 @@ const publishManifest = {
   license: rootPkg.license,
   author: rootPkg.author,
   repository: rootPkg.repository,
-  homepage: 'https://github.com/irorange27/iKi#readme',
+  homepage: 'https://irorange27.github.io/iKi/',
   bugs: { url: 'https://github.com/irorange27/iKi/issues' },
   keywords: rootPkg.keywords,
   engines: { node: '>=24.0.0' },

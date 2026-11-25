@@ -45,7 +45,10 @@
     "test:e2e:settings": "node tests/integration/e2e/run_provider_settings.mjs",
     "cli": "tsx packages/cli/src/main.ts",
     "cli:build": "node scripts/build_cli.mjs",
-    "cli:pack": "node scripts/pack_cli.mjs"
+    "cli:pack": "node scripts/pack_cli.mjs",
+    "site:dev": "vite --config site/vite.config.mjs",
+    "site:build": "vite build --config site/vite.config.mjs",
+    "site:preview": "vite preview --config site/vite.config.mjs"
   },
   "keywords": [
     "ai-agent",
