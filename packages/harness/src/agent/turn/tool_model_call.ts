@@ -24,6 +24,7 @@ import {
   resolvePiModelCapability,
   resolveProviderApi,
 } from '@iki/llm-pi-ai/factory';
+import { lookupPiBuiltinModel } from '@iki/llm-pi-ai/pi_catalog';
 
 const logger = createLogger({ module: 'pi_tool_model_call' });
 
@@ -170,16 +171,18 @@ export const defaultPiToolModelCall: PiToolModelCall = (config, request) => {
     ...(config.providerId ? { providerId: config.providerId } : {}),
     modelId: config.model,
   });
+  const piBuiltinModel = lookupPiBuiltinModel(config.providerType, config.model);
   const model = buildPiModel({
     id: config.model,
     providerType: config.providerType,
-    baseUrl: provider.baseURL,
+    baseUrl: provider.baseURL || piBuiltinModel?.baseUrl || '',
 
-    api: resolveProviderApi(config.providerType, provider),
+    api: resolveProviderApi(config.providerType, provider, config.model),
     contextWindow: capability?.contextWindow ?? 128000,
     maxTokens: config.maxOutputTokens ?? capability?.maxTokens ?? 4096,
     ...(capability?.input ? { input: capability.input } : {}),
     ...(capability?.cost ? { cost: capability.cost } : {}),
+    ...(piBuiltinModel?.headers ? { headers: piBuiltinModel.headers } : {}),
   });
   return withPiRetry(
     () => {

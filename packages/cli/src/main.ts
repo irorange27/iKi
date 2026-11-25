@@ -129,9 +129,8 @@ const parseArgs = (argv: string[]): CliArgs => {
           '  --skill-mode <mode>      Skill mode: manual | auto\n' +
           '  --json                   Output structured JSON summary\n' +
           '  -v, --version            Show CLI version\n\n' +
-          'Environment variables (auto-detected if models.toml has no enabled providers):\n' +
-          '  ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY,\n' +
-          '  KIMI_API_KEY / MOONSHOT_API_KEY, GEMINI_API_KEY, IKI_BASE_URL + IKI_API_KEY'
+          'Environment variables (auto-detected across 40+ pi-ai providers when models.toml is empty):\n' +
+          '  ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, IKI_BASE_URL, etc.'
       );
       process.exit(0);
     } else {

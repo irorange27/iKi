@@ -70,7 +70,7 @@ Or run directly without global install:
 npx @irorange27/iki
 ```
 
-On first launch, export any API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `KIMI_API_KEY`, or `IKI_BASE_URL` + `IKI_API_KEY`) for zero-config startup, or follow the built-in setup wizard (`iki setup`). Type `/help` inside the TUI for interactive commands.
+On first launch, export any standard provider API key (auto-detected across all 40+ `@earendil-works/pi-ai` providers, or `IKI_BASE_URL` for custom gateways) for zero-config startup, or run `iki setup`. Type `/help` inside the TUI for interactive commands.
 
 ### macOS Desktop App
 

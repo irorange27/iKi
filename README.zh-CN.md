@@ -70,7 +70,7 @@ iki
 npx @irorange27/iki
 ```
 
-首次启动时，若终端已有主流 API Key（`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`DEEPSEEK_API_KEY`、`OPENROUTER_API_KEY`、`GEMINI_API_KEY`、`KIMI_API_KEY` 或 `IKI_BASE_URL` + `IKI_API_KEY`）会自动完成配置；否则直接进入交互式配置向导（`iki setup`）。进入终端后输入 `/help` 查看全部交互命令。
+首次启动时，终端存在任意标准 API Key 即可自动配置（覆盖 `@earendil-works/pi-ai` 全部 40+ 家内置服务商及自定义网关 `IKI_BASE_URL`），也可直接运行 `iki setup` 进入全屏向导。进入终端后输入 `/help` 查看全部交互命令。
 
 ### macOS 桌面端
 

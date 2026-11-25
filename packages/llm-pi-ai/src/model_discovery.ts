@@ -1,4 +1,5 @@
 import { fetchModelsFromDev, getProviderConfig } from './factory';
+import { getPiBuiltinProvider, listPiBuiltinModelIds } from './pi_catalog';
 import { fetchWithTimeout } from '@iki/llm/network/http';
 import { createLogger } from '@iki/core/logger';
 
@@ -6,16 +7,6 @@ const modelDiscoveryLogger = createLogger({ module: 'llm_model_discovery' });
 
 const CACHE_TTL_MS = 3600000;
 const LIVE_MODEL_LIST_TIMEOUT_MS = 8000;
-
-const DEFAULT_PROVIDER_BASE_URLS: Record<string, string> = {
-  openai: 'https://api.openai.com/v1',
-  anthropic: 'https://api.anthropic.com/v1',
-  google: 'https://generativelanguage.googleapis.com/v1beta',
-  deepseek: 'https://api.deepseek.com/v1',
-  openrouter: 'https://openrouter.ai/api/v1',
-  groq: 'https://api.groq.com/openai/v1',
-  xai: 'https://api.x.ai/v1',
-};
 
 const buildModelListUrls = (baseUrl: string, providerType?: string): string[] => {
   const trimmed = baseUrl.trim().replace(/\/+$/, '');
@@ -158,6 +149,12 @@ export const getProviderModels = async (providerType: string): Promise<string[]>
   const cached = readCache(providerType);
   if (cached) return cached;
 
+  const piModels = listPiBuiltinModelIds(providerType);
+  if (piModels.length > 0) {
+    caches.set(providerType, { models: piModels, fetchedAt: Date.now() });
+    return piModels;
+  }
+
   const fetched = await fetchModelsFromDev(providerType);
   if (fetched.length > 0) {
     caches.set(providerType, { models: fetched, fetchedAt: Date.now() });
@@ -194,7 +191,7 @@ export const getProviderModelsForRecord = async (params: {
   const resolvedBaseUrl =
     params.baseUrl?.trim() ||
     storedConfig?.baseURL?.trim() ||
-    DEFAULT_PROVIDER_BASE_URLS[params.providerType] ||
+    getPiBuiltinProvider(params.providerType)?.defaultBaseUrl ||
     '';
   const resolvedApiKey = params.apiKey?.trim() || storedConfig?.apiKey?.trim() || '';
 
@@ -207,6 +204,9 @@ export const getProviderModelsForRecord = async (params: {
     caches.set(cacheKey, { models: live, fetchedAt: Date.now() });
     return live;
   }
+
+  const piModels = listPiBuiltinModelIds(params.providerType);
+  if (piModels.length > 0) return piModels;
 
   const catalog = await fetchModelsFromDev(params.providerType);
   if (catalog.length > 0) return catalog;

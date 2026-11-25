@@ -42,52 +42,32 @@ export const CORE_DOC_PAGES: DocPage[] = [
           {
             kind: 'p',
             text: {
-              en: 'When ~/.iki/models.toml has no enabled providers, iKi automatically checks standard environment variables and writes a ready-to-use entry on first launch (never overwriting existing user entries).',
-              zh: '当 ~/.iki/models.toml 中没有已启用的 provider 时，iKi 启动会自动探测常见环境变量并生成配置（绝不覆盖已有条目）。',
+              en: 'Powered directly by @earendil-works/pi-ai (40+ built-in providers, 1,600+ catalog models, and all 10 native wire APIs including Anthropic Messages, OpenAI Responses/Completions/Codex, Google Gemini/Vertex, AWS Bedrock, Azure, and Mistral). When ~/.iki/models.toml has no enabled providers, iKi auto-detects standard environment variables on startup without overwriting existing user entries.',
+              zh: '底层直接接入 @earendil-works/pi-ai 全量生态（40+ 内置服务商、1,600+ 模型目录与全部 10 种原生协议：Anthropic Messages、OpenAI Responses/Completions/Codex、Google Gemini/Vertex、AWS Bedrock、Azure、Mistral 等）。当 ~/.iki/models.toml 中没有已启用 provider 时，启动会自动探测常见环境变量并生成配置（绝不覆盖已有条目）。',
             },
           },
           {
             kind: 'table',
             headers: {
-              en: ['Environment Variable', 'Provider Type', 'Default Base URL', 'Optional Override'],
-              zh: ['环境变量', 'Provider 类型', '默认 Base URL', '可选覆盖变量'],
+              en: ['Provider Family (Examples)', 'Native Wire API', 'Auto-Detected Env Key'],
+              zh: ['服务商示例（共 40+ 家）', '原生协议 API', '自动探测环境变量'],
             },
             rows: [
-              {
-                en: ['ANTHROPIC_API_KEY', 'anthropic', 'https://api.anthropic.com/v1', 'ANTHROPIC_BASE_URL, ANTHROPIC_MODEL'],
-                zh: ['ANTHROPIC_API_KEY', 'anthropic', 'https://api.anthropic.com/v1', 'ANTHROPIC_BASE_URL, ANTHROPIC_MODEL'],
-              },
-              {
-                en: ['OPENAI_API_KEY', 'openai', 'https://api.openai.com/v1', 'OPENAI_BASE_URL, OPENAI_MODEL'],
-                zh: ['OPENAI_API_KEY', 'openai', 'https://api.openai.com/v1', 'OPENAI_BASE_URL, OPENAI_MODEL'],
-              },
-              {
-                en: ['DEEPSEEK_API_KEY', 'deepseek', 'https://api.deepseek.com/v1', 'DEEPSEEK_BASE_URL, DEEPSEEK_MODEL'],
-                zh: ['DEEPSEEK_API_KEY', 'deepseek', 'https://api.deepseek.com/v1', 'DEEPSEEK_BASE_URL, DEEPSEEK_MODEL'],
-              },
-              {
-                en: ['OPENROUTER_API_KEY', 'openai-compatible', 'https://openrouter.ai/api/v1', 'OPENROUTER_BASE_URL, OPENROUTER_MODEL'],
-                zh: ['OPENROUTER_API_KEY', 'openai-compatible', 'https://openrouter.ai/api/v1', 'OPENROUTER_BASE_URL, OPENROUTER_MODEL'],
-              },
-              {
-                en: ['KIMI_API_KEY / MOONSHOT_API_KEY', 'openai-compatible', 'https://api.moonshot.cn/v1', 'MOONSHOT_BASE_URL, KIMI_MODEL'],
-                zh: ['KIMI_API_KEY / MOONSHOT_API_KEY', 'openai-compatible', 'https://api.moonshot.cn/v1', 'MOONSHOT_BASE_URL, KIMI_MODEL'],
-              },
-              {
-                en: ['GEMINI_API_KEY / GOOGLE_API_KEY', 'openai-compatible', 'https://generativelanguage.googleapis.com/v1beta/openai', 'GEMINI_BASE_URL, GEMINI_MODEL'],
-                zh: ['GEMINI_API_KEY / GOOGLE_API_KEY', 'openai-compatible', 'https://generativelanguage.googleapis.com/v1beta/openai', 'GEMINI_BASE_URL, GEMINI_MODEL'],
-              },
-              {
-                en: ['IKI_BASE_URL (+ IKI_API_KEY)', 'openai-compatible', 'Your custom gateway URL', 'IKI_MODEL'],
-                zh: ['IKI_BASE_URL（+ IKI_API_KEY）', 'openai-compatible', '自建或本地兼容网关地址', 'IKI_MODEL'],
-              },
+              { en: ['anthropic', 'anthropic-messages', 'ANTHROPIC_API_KEY'], zh: ['anthropic', 'anthropic-messages', 'ANTHROPIC_API_KEY'] },
+              { en: ['openai / openai-codex / azure', 'openai-responses / azure-openai-responses', 'OPENAI_API_KEY, AZURE_OPENAI_API_KEY'], zh: ['openai / openai-codex / azure', 'openai-responses / azure-openai-responses', 'OPENAI_API_KEY, AZURE_OPENAI_API_KEY'] },
+              { en: ['google / google-vertex', 'google-generative-ai / google-vertex', 'GEMINI_API_KEY, GOOGLE_CLOUD_API_KEY'], zh: ['google / google-vertex', 'google-generative-ai / google-vertex', 'GEMINI_API_KEY, GOOGLE_CLOUD_API_KEY'] },
+              { en: ['amazon-bedrock', 'bedrock-converse-stream', 'AWS credentials / bearer token'], zh: ['amazon-bedrock', 'bedrock-converse-stream', 'AWS 凭证 / bearer token'] },
+              { en: ['mistral', 'mistral-conversations', 'MISTRAL_API_KEY'], zh: ['mistral', 'mistral-conversations', 'MISTRAL_API_KEY'] },
+              { en: ['deepseek / moonshotai-cn / kimi-coding / minimax / qwen-token-plan-cn / zai-coding-cn', 'openai-completions / anthropic-messages', 'DEEPSEEK_API_KEY, MOONSHOT_API_KEY, KIMI_API_KEY, MINIMAX_API_KEY, ZAI_CODING_CN_API_KEY, ...'], zh: ['deepseek / moonshotai-cn / kimi-coding / minimax / qwen-token-plan-cn / zai-coding-cn', 'openai-completions / anthropic-messages', 'DEEPSEEK_API_KEY, MOONSHOT_API_KEY, KIMI_API_KEY, MINIMAX_API_KEY, ZAI_CODING_CN_API_KEY 等'] },
+              { en: ['openrouter / groq / xai / cerebras / together / fireworks / huggingface / vercel-ai-gateway', 'native per-model pi-ai API', 'OPENROUTER_API_KEY, GROQ_API_KEY, XAI_API_KEY, HF_TOKEN, ...'], zh: ['openrouter / groq / xai / cerebras / together / fireworks / huggingface / vercel-ai-gateway', '按模型自动匹配 pi-ai 原生 API', 'OPENROUTER_API_KEY, GROQ_API_KEY, XAI_API_KEY, HF_TOKEN 等'] },
+              { en: ['Custom gateways (OpenAI Completions / Responses / Anthropic Messages)', 'openai-completions / openai-responses / anthropic-messages', 'IKI_BASE_URL (+ IKI_API_KEY, IKI_MODEL) or `iki setup`'], zh: ['自定义兼容网关（OpenAI Completions / Responses / Anthropic Messages）', 'openai-completions / openai-responses / anthropic-messages', 'IKI_BASE_URL（+ IKI_API_KEY、IKI_MODEL）或 `iki setup`'] },
             ],
           },
           {
             kind: 'p',
             text: {
-              en: 'If no environment keys are set in a TTY, iKi launches the interactive onboarding wizard automatically. You can re-run it anytime:',
-              zh: '如果未设置环境变量且在终端中启动，iKi 会自动进入交互式配置向导，也可随时手动重新运行：',
+              en: 'If no environment keys are set in a TTY, iKi launches the interactive onboarding wizard automatically. Inside `iki setup`, enter a number, type any pi-ai provider ID directly (e.g. `groq`, `mistral`, `amazon-bedrock`), or type `all` to browse all 40+ built-in providers:',
+              zh: '如果未设置环境变量且在终端中启动，iKi 会自动进入交互式配置向导。在 `iki setup` 中可输入编号、直接输入任意 pi-ai provider ID（如 `groq`、`mistral`、`amazon-bedrock`），或输入 `all` 浏览全部 40+ 内置服务商：',
             },
           },
           {

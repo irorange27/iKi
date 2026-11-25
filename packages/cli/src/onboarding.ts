@@ -1,226 +1,117 @@
 import readline from 'node:readline/promises';
 import { stdin as defaultInput, stdout as defaultOutput } from 'node:process';
-import { addProvider, getProviders, type ProviderDeclaration } from '@iki/store/providers';
+import { addProvider, getProviders } from '@iki/store/providers';
 import type { Provider } from '@iki/core/types/provider';
-
-type EnvProviderPreset = {
-  id: string;
-  name: string;
-  type: string;
-  apiKeyEnv: string[];
-  baseUrlEnv?: string;
-  modelEnv?: string;
-  defaultBaseUrl: string;
-  defaultModel: string;
-  requiresApiKey: boolean;
-};
-
-const CLI_PROVIDER_PRESETS: readonly EnvProviderPreset[] = [
-  {
-    id: 'anthropic',
-    name: 'Anthropic',
-    type: 'anthropic',
-    apiKeyEnv: ['ANTHROPIC_API_KEY'],
-    baseUrlEnv: 'ANTHROPIC_BASE_URL',
-    modelEnv: 'ANTHROPIC_MODEL',
-    defaultBaseUrl: 'https://api.anthropic.com/v1',
-    defaultModel: 'claude-sonnet-4-20250514',
-    requiresApiKey: true,
-  },
-  {
-    id: 'openai',
-    name: 'OpenAI',
-    type: 'openai',
-    apiKeyEnv: ['OPENAI_API_KEY'],
-    baseUrlEnv: 'OPENAI_BASE_URL',
-    modelEnv: 'OPENAI_MODEL',
-    defaultBaseUrl: 'https://api.openai.com/v1',
-    defaultModel: 'gpt-4.1',
-    requiresApiKey: true,
-  },
-  {
-    id: 'deepseek',
-    name: 'DeepSeek',
-    type: 'deepseek',
-    apiKeyEnv: ['DEEPSEEK_API_KEY'],
-    baseUrlEnv: 'DEEPSEEK_BASE_URL',
-    modelEnv: 'DEEPSEEK_MODEL',
-    defaultBaseUrl: 'https://api.deepseek.com/v1',
-    defaultModel: 'deepseek-chat',
-    requiresApiKey: true,
-  },
-  {
-    id: 'openrouter',
-    name: 'OpenRouter',
-    type: 'openai-compatible',
-    apiKeyEnv: ['OPENROUTER_API_KEY'],
-    baseUrlEnv: 'OPENROUTER_BASE_URL',
-    modelEnv: 'OPENROUTER_MODEL',
-    defaultBaseUrl: 'https://openrouter.ai/api/v1',
-    defaultModel: 'anthropic/claude-sonnet-4',
-    requiresApiKey: true,
-  },
-  {
-    id: 'kimi',
-    name: 'Moonshot (Kimi)',
-    type: 'openai-compatible',
-    apiKeyEnv: ['KIMI_API_KEY', 'MOONSHOT_API_KEY'],
-    baseUrlEnv: 'MOONSHOT_BASE_URL',
-    modelEnv: 'KIMI_MODEL',
-    defaultBaseUrl: 'https://api.moonshot.cn/v1',
-    defaultModel: 'kimi-k2-0711-preview',
-    requiresApiKey: true,
-  },
-  {
-    id: 'gemini',
-    name: 'Google Gemini (OpenAI-compat)',
-    type: 'openai-compatible',
-    apiKeyEnv: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-    baseUrlEnv: 'GEMINI_BASE_URL',
-    modelEnv: 'GEMINI_MODEL',
-    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    defaultModel: 'gemini-2.5-flash',
-    requiresApiKey: true,
-  },
-];
-
-type DetectedEnvProvider = {
-  declaration: ProviderDeclaration;
-  sourceEnv: string;
-};
-
-const readFirstEnv = (
-  env: Readonly<Record<string, string | undefined>>,
-  keys: readonly string[]
-): { key: string; value: string } | null => {
-  for (const key of keys) {
-    const val = env[key]?.trim();
-    if (val) return { key, value: val };
-  }
-  return null;
-};
+import {
+  detectPiEnvProviders,
+  getPiBuiltinProvider,
+  listPiBuiltinProviders,
+  type PiProviderSummary,
+} from '@iki/harness/providers';
+import { runTuiOnboardingWizard } from './setup_tui';
 
 /**
- * Inspects standard provider environment variables and returns ready-to-save provider declarations.
- */
-const detectEnvProviderSpecs = (
-  env: Readonly<Record<string, string | undefined>> = process.env
-): DetectedEnvProvider[] => {
-  const detected: DetectedEnvProvider[] = [];
-
-  const customBaseUrl = env.IKI_BASE_URL?.trim();
-  const customApiKey = env.IKI_API_KEY?.trim();
-  const customModel = env.IKI_MODEL?.trim();
-  if (customBaseUrl) {
-    detected.push({
-      sourceEnv: customApiKey ? 'IKI_BASE_URL + IKI_API_KEY' : 'IKI_BASE_URL',
-      declaration: {
-        id: 'custom',
-        name: 'Custom Gateway',
-        type: 'openai-compatible',
-        apiKey: customApiKey || 'not-required',
-        baseUrl: customBaseUrl,
-        enabled: true,
-        models: customModel ? [customModel] : [],
-      },
-    });
-  }
-
-  for (const preset of CLI_PROVIDER_PRESETS) {
-    const hit = readFirstEnv(env, preset.apiKeyEnv);
-    if (!hit) continue;
-    const baseUrl = (preset.baseUrlEnv ? env[preset.baseUrlEnv]?.trim() : '') || preset.defaultBaseUrl;
-    const model = (preset.modelEnv ? env[preset.modelEnv]?.trim() : '') || preset.defaultModel;
-    detected.push({
-      sourceEnv: hit.key,
-      declaration: {
-        id: preset.id,
-        name: preset.name,
-        type: preset.type,
-        apiKey: hit.value,
-        baseUrl,
-        enabled: true,
-        models: [model],
-      },
-    });
-  }
-
-  return detected;
-};
-
-/**
- * Persists detected environment providers into `models.toml` without overwriting user-configured ids.
- * Returns the newly added providers.
+ * Persists detected environment providers (across all 40+ pi-ai built-in providers + IKI_BASE_URL)
+ * into `models.toml` without overwriting user-configured ids.
  */
 export const bootstrapProvidersFromEnv = (
   env: Readonly<Record<string, string | undefined>> = process.env
 ): Array<{ provider: Provider; sourceEnv: string }> => {
   const existingIds = new Set(getProviders().map(p => p.id));
-  const candidates = detectEnvProviderSpecs(env);
+  const candidates = detectPiEnvProviders(env);
   const created: Array<{ provider: Provider; sourceEnv: string }> = [];
 
   for (const item of candidates) {
-    if (existingIds.has(item.declaration.id)) continue;
-    const saved = addProvider(item.declaration);
+    if (existingIds.has(item.id)) continue;
+    const saved = addProvider({
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      apiKey: item.apiKey,
+      baseUrl: item.baseUrl,
+      enabled: true,
+      models: item.models,
+    });
     existingIds.add(saved.id);
     created.push({ provider: saved, sourceEnv: item.sourceEnv });
   }
   return created;
 };
 
-export const formatMissingProviderGuide = (dataDir: string): string =>
-  [
+export const formatMissingProviderGuide = (dataDir: string): string => {
+  const count = listPiBuiltinProviders().length;
+  return [
     'No enabled LLM provider found.',
     '',
     'Fastest ways to get started:',
-    '  1. Export an API key and re-run (auto-detected on startup):',
-    '       export DEEPSEEK_API_KEY="sk-..."   # or ANTHROPIC_API_KEY / OPENAI_API_KEY / OPENROUTER_API_KEY',
+    `  1. Export any standard API key (${count}+ pi-ai providers auto-detected on startup):`,
+    '       export ANTHROPIC_API_KEY="sk-..."   # or OPENAI_API_KEY, GEMINI_API_KEY, etc.',
     '       iki',
     '  2. Run the interactive setup wizard:',
     '       iki setup',
     `  3. Or edit ${dataDir}/models.toml directly.`,
   ].join('\n');
+};
 
-const WIZARD_CHOICES: ReadonlyArray<{
-  label: string;
+type WizardChoice = {
   id: string;
   name: string;
   type: string;
+  isResponseApi?: boolean;
   defaultBaseUrl: string;
   defaultModel: string;
   requiresApiKey: boolean;
-}> = [
-  ...CLI_PROVIDER_PRESETS.map(p => ({
-    label: `${p.name} (${p.defaultBaseUrl})`,
-    id: p.id,
-    name: p.name,
-    type: p.type,
-    defaultBaseUrl: p.defaultBaseUrl,
-    defaultModel: p.defaultModel,
-    requiresApiKey: p.requiresApiKey,
-  })),
+  label: string;
+  suggestedModels?: string[];
+};
+
+const QUICK_PROVIDER_LIMIT = 10;
+
+const summaryToChoice = (p: PiProviderSummary): WizardChoice => ({
+  id: p.id,
+  name: p.name,
+  type: p.id,
+  defaultBaseUrl: p.defaultBaseUrl,
+  defaultModel: p.defaultModel,
+  requiresApiKey: p.defaultApi !== 'bedrock-converse-stream' && p.defaultApi !== 'google-vertex',
+  label: `${p.name} [${p.id}] — ${p.modelCount} models (${p.defaultApi})`,
+  suggestedModels: p.models,
+});
+
+const CUSTOM_CHOICES: readonly WizardChoice[] = [
   {
-    label: 'Custom OpenAI-compatible / Local Gateway',
-    id: 'custom_gateway',
-    name: 'Custom Gateway',
+    id: 'custom_openai',
+    name: 'Custom (OpenAI Completions)',
     type: 'openai-compatible',
     defaultBaseUrl: 'http://127.0.0.1:8000/v1',
     defaultModel: '',
     requiresApiKey: false,
+    label: 'Custom — OpenAI Chat Completions (openai-completions)',
   },
   {
-    label: 'Ollama (local, no API key)',
-    id: 'ollama',
-    name: 'Ollama',
+    id: 'custom_responses',
+    name: 'Custom (OpenAI Responses)',
     type: 'openai-compatible',
-    defaultBaseUrl: 'http://localhost:11434/v1',
-    defaultModel: 'qwen2.5-coder:7b',
+    isResponseApi: true,
+    defaultBaseUrl: 'http://127.0.0.1:8000/v1',
+    defaultModel: '',
     requiresApiKey: false,
+    label: 'Custom — OpenAI Responses API (openai-responses)',
+  },
+  {
+    id: 'custom_anthropic',
+    name: 'Custom (Anthropic Messages)',
+    type: 'anthropic-compatible',
+    defaultBaseUrl: 'http://127.0.0.1:8000/v1',
+    defaultModel: '',
+    requiresApiKey: false,
+    label: 'Custom — Anthropic Messages API (anthropic-messages)',
   },
 ];
 
 /**
- * Interactive terminal wizard that writes a ready-to-use provider entry into `models.toml`.
+ * Interactive terminal wizard backed by the full @earendil-works/pi-ai provider catalog
+ * (40+ built-in providers + custom gateways + Ollama).
  */
 export const runCliOnboardingWizard = async (options: {
   dataDir: string;
@@ -232,6 +123,14 @@ export const runCliOnboardingWizard = async (options: {
   input?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
 }): Promise<Provider | null> => {
+  // Use fullscreen pi-tui setup wizard in interactive TTY sessions; fall back to readline when piped/tested.
+  if (!options.input && !options.output && process.stdin.isTTY && process.stdout.isTTY) {
+    return await runTuiOnboardingWizard({
+      dataDir: options.dataDir,
+      discoverModels: options.discoverModels,
+    });
+  }
+
   const input = options.input ?? defaultInput;
   const output = options.output ?? defaultOutput;
   const rl = readline.createInterface({ input, output });
@@ -247,25 +146,69 @@ export const runCliOnboardingWizard = async (options: {
   };
 
   try {
+    const allPiProviders = listPiBuiltinProviders();
+    const quickChoices: WizardChoice[] = [
+      ...allPiProviders.slice(0, QUICK_PROVIDER_LIMIT).map(summaryToChoice),
+      ...CUSTOM_CHOICES,
+    ];
+
     writeLine('');
-    writeLine('Welcome to iKi — Quick Provider Setup');
+    writeLine(`Welcome to iKi — Quick Provider Setup (${allPiProviders.length} built-in pi-ai providers)`);
     writeLine(`Config file: ${options.dataDir}/models.toml`);
     writeLine('');
-    WIZARD_CHOICES.forEach((choice, idx) => {
-      writeLine(`  ${idx + 1}. ${choice.label}`);
+    quickChoices.forEach((choice, idx) => {
+      writeLine(`  ${String(idx + 1).padStart(2)}. ${choice.label}`);
     });
     writeLine('');
+    writeLine('Tip: enter a number, a pi-ai provider id (e.g. mistral), or "all" to list all.');
 
-    const rawIdxInput = await ask(`Select provider [1-${WIZARD_CHOICES.length}] (default 1): `);
-    if (rawIdxInput === null) return null;
-    const rawIdx = rawIdxInput.trim();
-    const parsedIdx = rawIdx ? Number.parseInt(rawIdx, 10) : 1;
-    const choice =
-      Number.isFinite(parsedIdx) && parsedIdx >= 1 && parsedIdx <= WIZARD_CHOICES.length
-        ? WIZARD_CHOICES[parsedIdx - 1]!
-        : WIZARD_CHOICES[0]!;
+    let choice: WizardChoice | null = null;
+    while (!choice) {
+      const rawInput = await ask(`Select provider [1-${quickChoices.length}, id, or "all"] (default 1): `);
+      if (rawInput === null) return null;
+      const trimmed = rawInput.trim();
+      if (!trimmed) {
+        choice = quickChoices[0]!;
+        break;
+      }
+      if (trimmed.toLowerCase() === 'all' || trimmed.toLowerCase() === 'list') {
+        writeLine('');
+        for (const p of allPiProviders) {
+          writeLine(`  ${p.id.padEnd(30)} ${p.name.padEnd(24)} ${p.defaultApi} (${p.modelCount} models)`);
+        }
+        writeLine('');
+        continue;
+      }
+      const parsedIdx = Number.parseInt(trimmed, 10);
+      if (String(parsedIdx) === trimmed && parsedIdx >= 1 && parsedIdx <= quickChoices.length) {
+        choice = quickChoices[parsedIdx - 1]!;
+        break;
+      }
+      const byId = getPiBuiltinProvider(trimmed);
+      if (byId) {
+        choice = summaryToChoice(byId);
+        break;
+      }
+      const lower = trimmed.toLowerCase();
+      if (lower === 'custom' || lower === 'custom_openai' || lower === 'openai-compatible') {
+        choice = CUSTOM_CHOICES[0]!;
+        break;
+      }
+      if (lower === 'custom_responses' || lower === 'openai-responses') {
+        choice = CUSTOM_CHOICES[1]!;
+        break;
+      }
+      if (lower === 'custom_anthropic' || lower === 'anthropic-compatible') {
+        choice = CUSTOM_CHOICES[2]!;
+        break;
+      }
+      writeLine(`Unknown provider "${trimmed}". Enter 1-${quickChoices.length}, a pi-ai provider id, or "all".`);
+    }
 
-    const rawBaseUrlInput = await ask(`Base URL (default ${choice.defaultBaseUrl}): `);
+    const baseUrlPrompt = choice.defaultBaseUrl
+      ? `Base URL (default ${choice.defaultBaseUrl}): `
+      : 'Base URL (optional, press Enter for provider default): ';
+    const rawBaseUrlInput = await ask(baseUrlPrompt);
     if (rawBaseUrlInput === null) return null;
     const baseUrl = rawBaseUrlInput.trim() || choice.defaultBaseUrl;
 
@@ -281,7 +224,11 @@ export const runCliOnboardingWizard = async (options: {
     }
 
     let suggestedModel = choice.defaultModel;
-    if (!suggestedModel && options.discoverModels) {
+    if (choice.suggestedModels && choice.suggestedModels.length > 1) {
+      const sample = choice.suggestedModels.slice(0, 6).join(', ');
+      const extra = choice.suggestedModels.length > 6 ? `, ... (+${choice.suggestedModels.length - 6})` : '';
+      writeLine(`Catalog models: ${sample}${extra}`);
+    } else if (!suggestedModel && options.discoverModels && baseUrl) {
       writeLine('Discovering available models from endpoint...');
       try {
         const live = await options.discoverModels({
@@ -321,10 +268,11 @@ export const runCliOnboardingWizard = async (options: {
       id: providerId,
       name: choice.name,
       type: choice.type,
-      apiKey: rawApiKey || 'ollama',
+      apiKey: rawApiKey || 'not-required',
       baseUrl,
       enabled: true,
       models: [model],
+      ...(choice.isResponseApi ? { isResponseApi: true } : {}),
     });
 
     writeLine('');

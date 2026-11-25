@@ -3,6 +3,13 @@ import { normalizeContext } from '@earendil-works/pi-ai';
 import { stream as openaiCompletionsStream } from '@earendil-works/pi-ai/api/openai-completions';
 import { stream as openaiResponsesStream } from '@earendil-works/pi-ai/api/openai-responses';
 import { stream as anthropicMessagesStream } from '@earendil-works/pi-ai/api/anthropic-messages';
+import { googleGenerativeAIApi } from '@earendil-works/pi-ai/api/google-generative-ai.lazy';
+import { googleVertexApi } from '@earendil-works/pi-ai/api/google-vertex.lazy';
+import { bedrockConverseStreamApi } from '@earendil-works/pi-ai/api/bedrock-converse-stream.lazy';
+import { azureOpenAIResponsesApi } from '@earendil-works/pi-ai/api/azure-openai-responses.lazy';
+import { mistralConversationsApi } from '@earendil-works/pi-ai/api/mistral-conversations.lazy';
+import { openAICodexResponsesApi } from '@earendil-works/pi-ai/api/openai-codex-responses.lazy';
+import { piMessagesApi } from '@earendil-works/pi-ai/api/pi-messages.lazy';
 import type {
   AssistantMessage,
   ImageContent,
@@ -24,7 +31,17 @@ class PiProjectionError extends Error {
   }
 }
 
-type PiApiKind = 'openai-completions' | 'openai-responses' | 'anthropic-messages';
+export type PiApiKind =
+  | 'openai-completions'
+  | 'openai-responses'
+  | 'openai-codex-responses'
+  | 'azure-openai-responses'
+  | 'anthropic-messages'
+  | 'google-generative-ai'
+  | 'google-vertex'
+  | 'bedrock-converse-stream'
+  | 'mistral-conversations'
+  | 'pi-messages';
 
 type PiModelCompat =
   | {
@@ -41,7 +58,8 @@ type PiModelCompat =
   | {
       supportsEagerToolInputStreaming: boolean;
       sendSessionAffinityHeaders: true;
-    };
+    }
+  | Record<string, never>;
 
 type PiModelConfig = {
   id: string;
@@ -56,6 +74,7 @@ type PiModelConfig = {
   input?: readonly string[];
 
   cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  headers?: Record<string, string>;
 };
 
 type PiModel = {
@@ -71,7 +90,8 @@ type PiModel = {
 
   reasoning: false;
 
-  compat: PiModelCompat;
+  compat?: PiModelCompat;
+  headers?: Record<string, string>;
   contextWindow: number;
   maxTokens: number;
   cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
@@ -94,18 +114,20 @@ const nonNegativeOrZero = (value: number | null | undefined): number =>
 export const buildPiModel = (config: PiModelConfig): PiModel => {
   const api: PiApiKind = config.api ?? 'openai-completions';
 
-  const compat: PiModelCompat =
-    api === 'openai-responses'
+  const compat: PiModelCompat | undefined =
+    api === 'openai-responses' || api === 'azure-openai-responses' || api === 'openai-codex-responses'
       ? { supportsDeveloperRole: false, supportsMidConvoSystemMessages: false }
       : api === 'anthropic-messages'
         ? { supportsEagerToolInputStreaming: true, sendSessionAffinityHeaders: true }
-        : {
-            supportsDeveloperRole: false,
-            supportsReasoningEffort: false,
-            supportsMidConvoSystemMessages: false,
-            requiresReasoningContentOnAssistantMessages: false,
-            sendSessionAffinityHeaders: true,
-          };
+        : api === 'openai-completions'
+          ? {
+              supportsDeveloperRole: false,
+              supportsReasoningEffort: false,
+              supportsMidConvoSystemMessages: false,
+              requiresReasoningContentOnAssistantMessages: false,
+              sendSessionAffinityHeaders: true,
+            }
+          : undefined;
 
   return {
     id: config.id,
@@ -115,7 +137,8 @@ export const buildPiModel = (config: PiModelConfig): PiModel => {
     baseUrl: config.baseUrl,
     input: piInputModalities(config.input),
     reasoning: false,
-    compat,
+    ...(compat ? { compat } : {}),
+    ...(config.headers ? { headers: config.headers } : {}),
     contextWindow: config.contextWindow,
     maxTokens: config.maxTokens,
     cost: {
@@ -416,26 +439,29 @@ export const callPiChat = (
       : {}),
   };
 
-  if (model.api === 'anthropic-messages') {
-    return anthropicMessagesStream(
-      model as never,
-      piContext,
-      streamOptions
-    ) as unknown as ReturnType<typeof openaiCompletionsStream>;
+  type StreamReturn = ReturnType<typeof openaiCompletionsStream>;
+
+  switch (model.api) {
+    case 'anthropic-messages':
+      return anthropicMessagesStream(model as never, piContext, streamOptions) as unknown as StreamReturn;
+    case 'openai-responses':
+      return openaiResponsesStream(model as never, piContext, streamOptions) as unknown as StreamReturn;
+    case 'openai-codex-responses':
+      return openAICodexResponsesApi().stream(model as never, piContext, streamOptions) as unknown as StreamReturn;
+    case 'azure-openai-responses':
+      return azureOpenAIResponsesApi().stream(model as never, piContext, streamOptions) as unknown as StreamReturn;
+    case 'google-generative-ai':
+      return googleGenerativeAIApi().stream(model as never, piContext, streamOptions) as unknown as StreamReturn;
+    case 'google-vertex':
+      return googleVertexApi().stream(model as never, piContext, streamOptions) as unknown as StreamReturn;
+    case 'bedrock-converse-stream':
+      return bedrockConverseStreamApi().stream(model as never, piContext, streamOptions) as unknown as StreamReturn;
+    case 'mistral-conversations':
+      return mistralConversationsApi().stream(model as never, piContext, streamOptions) as unknown as StreamReturn;
+    case 'pi-messages':
+      return piMessagesApi().stream(model as never, piContext, streamOptions) as unknown as StreamReturn;
+    case 'openai-completions':
+    default:
+      return openaiCompletionsStream(model as never, piContext, streamOptions) as unknown as StreamReturn;
   }
-
-  if (model.api === 'openai-responses') {
-
-    return openaiResponsesStream(
-      model as never,
-      piContext,
-      streamOptions
-    ) as unknown as ReturnType<typeof openaiCompletionsStream>;
-  }
-
-  return openaiCompletionsStream(
-    model as never,
-    piContext,
-    streamOptions
-  ) as unknown as ReturnType<typeof openaiCompletionsStream>;
 };

@@ -32,7 +32,13 @@ import {
   projectHistoryToPiContext,
   shouldUseCacheRetention,
   projectUsageToIki,
+  type PiApiKind,
 } from './pi_adapter';
+import {
+  getPiBuiltinProvider,
+  lookupPiBuiltinModel,
+  normalizePiProviderId,
+} from './pi_catalog';
 
 const factoryLogger = createLogger({ module: 'llm_factory' });
 const MODELS_DEV_CACHE_TTL_MS = 3600000;
@@ -70,19 +76,25 @@ export const resolvePiModelCapability = (params: {
       trimmedModelId,
       modelOptions
     );
-    if (!capability) return null;
+    const storedInputLimit = capability?.maxInputTokens;
+    const catalogWindow = capability?.contextWindow;
+    const piModel = lookupPiBuiltinModel(params.providerType, trimmedModelId);
 
-    const storedInputLimit = capability.maxInputTokens;
-    const catalogWindow = capability.contextWindow;
+    const contextWindow =
+      typeof storedInputLimit === 'number' && typeof catalogWindow === 'number'
+        ? Math.min(storedInputLimit, catalogWindow)
+        : (catalogWindow ?? storedInputLimit ?? piModel?.contextWindow ?? null);
+    const maxTokens = capability?.maxOutputTokens ?? piModel?.maxTokens ?? null;
+    const input = capability?.modalities ?? piModel?.input;
+    const cost = capability?.costPerMillionTokens ?? piModel?.cost;
+
+    if (contextWindow === null && maxTokens === null && !input && !cost) return null;
 
     return {
-      ...(capability.modalities ? { input: capability.modalities } : {}),
-      contextWindow:
-        typeof storedInputLimit === 'number' && typeof catalogWindow === 'number'
-          ? Math.min(storedInputLimit, catalogWindow)
-          : (catalogWindow ?? storedInputLimit ?? null),
-      maxTokens: capability.maxOutputTokens,
-      ...(capability.costPerMillionTokens ? { cost: capability.costPerMillionTokens } : {}),
+      ...(input ? { input } : {}),
+      contextWindow,
+      maxTokens,
+      ...(cost ? { cost } : {}),
     };
   } catch {
 
@@ -161,12 +173,14 @@ export const getProviderConfig = (providerType: string, providerId?: string | nu
   }
 
   const models = provider.models;
+  const builtin = getPiBuiltinProvider(provider.type);
+  const resolvedBaseUrl = provider.baseUrl?.trim() || builtin?.defaultBaseUrl || '';
 
   return {
     id: provider.id,
     type: provider.type,
     apiKey: provider.apiKey,
-    baseURL: provider.baseUrl,
+    baseURL: resolvedBaseUrl,
     models,
     modelOptions: provider.modelOptions,
     isResponseApi: provider.isResponseApi === true,
@@ -323,32 +337,55 @@ export const resolvePersonaPrompt = (providerType: string, providerId?: string |
   return personaPrompt;
 };
 
-const STATIC_PROVIDER_API: Partial<Record<string, 'openai-responses' | 'anthropic-messages'>> = {
+const SUPPORTED_PI_APIS = new Set<string>([
+  'openai-completions',
+  'openai-responses',
+  'openai-codex-responses',
+  'azure-openai-responses',
+  'anthropic-messages',
+  'google-generative-ai',
+  'google-vertex',
+  'bedrock-converse-stream',
+  'mistral-conversations',
+  'pi-messages',
+]);
 
-  openai: 'openai-responses',
-
-  anthropic: 'anthropic-messages',
-  'anthropic-compatible': 'anthropic-messages',
-  minimax: 'anthropic-messages',
-
-};
+const APIS_WITHOUT_REQUIRED_BASE_URL = new Set<PiApiKind>([
+  'google-vertex',
+  'bedrock-converse-stream',
+  'azure-openai-responses',
+]);
 
 export const resolveProviderApi = (
   providerType: string,
-  config: Pick<ProviderConfig, 'isResponseApi'>
-): 'openai-completions' | 'openai-responses' | 'anthropic-messages' => {
-
+  config: Pick<ProviderConfig, 'isResponseApi'>,
+  modelId?: string
+): PiApiKind => {
   if (config.isResponseApi) return 'openai-responses';
-  const declared = STATIC_PROVIDER_API[providerType];
-  if (declared) return declared;
-
+  if (modelId) {
+    const modelEntry = lookupPiBuiltinModel(providerType, modelId);
+    if (modelEntry && SUPPORTED_PI_APIS.has(modelEntry.api)) {
+      return modelEntry.api as PiApiKind;
+    }
+  }
+  const builtin = getPiBuiltinProvider(providerType);
+  if (builtin && SUPPORTED_PI_APIS.has(builtin.defaultApi)) {
+    return builtin.defaultApi as PiApiKind;
+  }
+  const normalized = normalizePiProviderId(providerType);
+  if (normalized === 'anthropic-compatible') return 'anthropic-messages';
   return 'openai-completions';
 };
 
-const supportsPiGeneration = (_providerType: string, config: ProviderConfig): boolean =>
-
-  typeof config.baseURL === 'string' &&
-  config.baseURL.trim().length > 0;
+const supportsPiGeneration = (
+  providerType: string,
+  config: ProviderConfig,
+  modelId?: string
+): boolean => {
+  if (typeof config.baseURL === 'string' && config.baseURL.trim().length > 0) return true;
+  const api = resolveProviderApi(providerType, config, modelId);
+  return APIS_WITHOUT_REQUIRED_BASE_URL.has(api);
+};
 
 export type PiTurnSupplyDecision =
   | { admitted: true; reason?: never; cause?: never }
@@ -370,7 +407,7 @@ export const resolvePiTurnSupply = (params: {
       reason: `provider "${params.providerType}" is not configured: ${getErrorMessage(error)}`,
     };
   }
-  if (!supportsPiGeneration(params.providerType, config)) {
+  if (!supportsPiGeneration(params.providerType, config, params.modelId)) {
     return {
       admitted: false,
       cause: 'config',
@@ -410,16 +447,18 @@ const generateViaPi = async (
     ...(options.providerId ? { providerId: options.providerId } : {}),
     modelId: options.modelId,
   });
+  const piBuiltinModel = lookupPiBuiltinModel(options.providerType, options.modelId);
   const model = buildPiModel({
     id: options.modelId,
     providerType: config.type,
-    baseUrl: config.baseURL,
-    api: resolveProviderApi(options.providerType, config),
+    baseUrl: config.baseURL || piBuiltinModel?.baseUrl || '',
+    api: resolveProviderApi(options.providerType, config, options.modelId),
 
     contextWindow: capability?.contextWindow ?? PI_DEFAULT_CONTEXT_WINDOW,
     maxTokens: options.maxOutputTokens ?? capability?.maxTokens ?? 4096,
     ...(capability?.input ? { input: capability.input } : {}),
     ...(capability?.cost ? { cost: capability.cost } : {}),
+    ...(piBuiltinModel?.headers ? { headers: piBuiltinModel.headers } : {}),
   });
   const personaPrompt = resolvePersonaPrompt(options.providerType, options.providerId);
   const { systemPrompt: transcriptSystem, messages } = projectHistoryToPiContext(
@@ -534,7 +573,7 @@ export const generateChatWithModelMessages = async (options: {
   abortSignal?: AbortSignal;
 }): Promise<ChatGenerationResult> => {
   const config = getProviderConfig(options.providerType, options.providerId);
-  if (!supportsPiGeneration(options.providerType, config)) {
+  if (!supportsPiGeneration(options.providerType, config, options.modelId)) {
 
     throw new Error(
       `Provider "${options.providerType}" cannot be served: it has no base URL, so no model endpoint can be addressed.`

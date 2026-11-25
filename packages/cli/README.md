@@ -19,7 +19,8 @@
 | 文件 | 作用 |
 |---|---|
 | [src/main.ts](src/main.ts) | CLI 入口、参数解析、环境变量引导与 interactive / print 分发 |
-| [src/onboarding.ts](src/onboarding.ts) | 环境变量自动探测与 `iki setup` 交互式 provider 配置向导 |
+| [src/onboarding.ts](src/onboarding.ts) | 全量 `pi-ai` 环境变量自动探测与 `iki setup` 引导分发 |
+| [src/setup_tui.ts](src/setup_tui.ts) | 基于 `pi-tui` 的全屏交互式配置向导（40+ provider 模糊搜索、脱敏 API Key 与模型选择器） |
 | [src/updater.ts](src/updater.ts) | 12 小时缓存后台版本检测、`iki update [--check]` 自更新与包管理器识别 |
 | [src/interactive.ts](src/interactive.ts) | `pi-tui` 全屏交互循环、快捷键路由与流式输出 |
 | [src/commands.ts](src/commands.ts) | `/` 斜杠命令注册、自动补全与会话 Banner |
