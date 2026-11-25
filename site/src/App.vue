@@ -95,7 +95,7 @@ onBeforeUnmount(() => window.removeEventListener('hashchange', onHashChange));
         <div class="flex items-center gap-2.5">
           <img :src="'./iki-icon.png'" alt="iKi" class="h-5 w-5 rounded border border-[var(--border)]" />
           <span class="font-display font-semibold text-[var(--fg)]">iKi</span>
-          <span class="font-mono text-[11.5px] text-[var(--fg-faint)]">v0.1.2 · AGPLv3</span>
+          <span class="font-mono text-[11.5px] text-[var(--fg-faint)]">v0.1.3 · AGPLv3</span>
         </div>
         <div class="flex flex-wrap items-center gap-5">
           <a href="#/docs/getting-started" class="text-[var(--fg-muted)] no-underline hover:text-[var(--fg)]" @click.prevent="navigate('#/docs/getting-started')">

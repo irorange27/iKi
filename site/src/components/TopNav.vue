@@ -36,7 +36,7 @@ const emit = defineEmits<{
         <span
           class="hidden rounded-full border border-[var(--border)] bg-[var(--bg-subtle)] px-2 py-0.5 font-mono text-[11px] text-[var(--fg-muted)] sm:inline-block"
         >
-          v0.1.2
+          v0.1.3
         </span>
       </a>
 

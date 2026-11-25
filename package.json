@@ -1,7 +1,7 @@
 {
   "name": "iki",
   "productName": "iki",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "KV-cache-native AI agent harness with MCP Code Mode, TypeScript PTC sandbox, observable multi-agent swarm, and durable background jobs",
   "main": "packages/desktop/.vite/build/main.cjs",
   "scripts": {
