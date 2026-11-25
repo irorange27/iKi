@@ -64,6 +64,7 @@
     }
   },
   "ignore": [
+    "packages/cli/dist/**",
     "packages/desktop/.vite/**",
     "packages/desktop/out/**",
     "packages/desktop/dist/**"

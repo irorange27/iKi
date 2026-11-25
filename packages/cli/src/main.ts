@@ -7,14 +7,28 @@ import { setPlatformInfo } from '@iki/core/platform';
 import { wirePlatformContext } from '@iki/core/platform_wiring';
 import { initializeDatabase } from '@iki/store/database';
 import { getProviders } from '@iki/store/providers';
+import { getAppConfig } from '@iki/harness/config';
 import { getBuiltinToolNames, registerStandardTools, registerSwarmTool } from '@iki/harness/tools';
 import { getMcpManager } from '@iki/harness/mcp';
 import { createSwarmManager } from '@iki/harness/swarm';
 import { createChatService, type ChatStreamTarget } from '@iki/harness/thread_session';
 import { createWorkspaceSelection, runInteractiveCli } from './interactive';
+import {
+  bootstrapProvidersFromEnv,
+  formatMissingProviderGuide,
+  runCliOnboardingWizard,
+} from './onboarding';
+import {
+  resolveCliVersion,
+  runCliUpdateCommand,
+  scheduleBackgroundUpdateCheck,
+} from './updater';
 
 type CliArgs = {
   dataDir: string;
+  setup: boolean;
+  update: boolean;
+  updateCheckOnly: boolean;
   threadId?: string;
   continueLatest: boolean;
   providerType?: string;
@@ -33,6 +47,9 @@ type CliArgs = {
 
 const parseArgs = (argv: string[]): CliArgs => {
   let dataDir = process.env.IKI_DATA_DIR || path.join(os.homedir(), '.iki');
+  let setup = false;
+  let update = false;
+  let updateCheckOnly = false;
   let threadId: string | undefined;
   let continueLatest = false;
   let providerType: string | undefined;
@@ -80,16 +97,29 @@ const parseArgs = (argv: string[]): CliArgs => {
     } else if (arg === '--json') {
       json = true;
       printOnly = true;
+    } else if (arg === '--setup' || (positional.length === 0 && (arg === 'setup' || arg === 'init'))) {
+      setup = true;
+    } else if (arg === '--update' || (positional.length === 0 && (arg === 'update' || arg === 'upgrade'))) {
+      update = true;
+    } else if (arg === '--check' && update) {
+      updateCheckOnly = true;
+    } else if (arg === '-v' || arg === '--version') {
+      console.log(`iki v${resolveCliVersion()}`);
+      process.exit(0);
     } else if (arg === '-h' || arg === '--help') {
       console.log(
         'Usage: iki [options] [prompt]\n' +
+          '       iki setup            Interactive first-run provider setup wizard\n' +
+          '       iki update [--check] Check for or install the latest CLI version from npm\n' +
           '  Run with no prompt in a terminal to start interactive mode.\n\n' +
           '  -i, --interactive        Start interactive REPL mode\n' +
           '  -p, --print              Run single turn and exit (auto-enabled with <prompt> or --json)\n' +
           '  -c, --continue           Resume most recent saved thread\n' +
+          '  --setup                  Run interactive provider configuration wizard\n' +
+          '  --update                 Check for and install CLI updates (add --check to only check)\n' +
           '  --data-dir <dir>         User data directory (default ~/.iki)\n' +
           '  --thread <id>            Existing or new thread id\n' +
-          '  --provider <type>        Provider type (e.g. openai, anthropic)\n' +
+          '  --provider <type>        Provider type (e.g. openai, anthropic, deepseek)\n' +
           '  --provider-id <id>       Provider id from models.toml\n' +
           '  --model <id>             Model id\n' +
           '  -C, --workspace <path>   Workspace directory (defaults to cwd in interactive mode)\n' +
@@ -97,7 +127,11 @@ const parseArgs = (argv: string[]): CliArgs => {
           '  --mcp <id1,id2>          Comma-separated MCP server ids/names to connect\n' +
           '  --skills <a,b>           Comma-separated skill ids\n' +
           '  --skill-mode <mode>      Skill mode: manual | auto\n' +
-          '  --json                   Output structured JSON summary'
+          '  --json                   Output structured JSON summary\n' +
+          '  -v, --version            Show CLI version\n\n' +
+          'Environment variables (auto-detected if models.toml has no enabled providers):\n' +
+          '  ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, OPENROUTER_API_KEY,\n' +
+          '  KIMI_API_KEY / MOONSHOT_API_KEY, GEMINI_API_KEY, IKI_BASE_URL + IKI_API_KEY'
       );
       process.exit(0);
     } else {
@@ -107,6 +141,9 @@ const parseArgs = (argv: string[]): CliArgs => {
 
   return {
     dataDir,
+    setup,
+    update,
+    updateCheckOnly,
     ...(threadId ? { threadId } : {}),
     continueLatest,
     ...(providerType ? { providerType } : {}),
@@ -137,11 +174,19 @@ const main = async () => {
   const useInteractive = args.interactive === true || (!args.printOnly && !args.prompt && Boolean(process.stdin.isTTY));
   const prompt =
     args.prompt ||
-    (!useInteractive && !process.stdin.isTTY ? readPipedStdin() : '');
+    (!args.setup && !args.update && !useInteractive && !process.stdin.isTTY ? readPipedStdin() : '');
 
-  if (!useInteractive && !prompt) {
-    console.error('Error: prompt is required in non-interactive mode. Run with --help or --interactive.');
+  if (!args.setup && !args.update && !useInteractive && !prompt) {
+    console.error('Error: prompt is required in non-interactive mode. Run with --help, --interactive, or `iki setup`.');
     process.exit(1);
+  }
+
+  if (args.update) {
+    const code = await runCliUpdateCommand({
+      dataDir: args.dataDir,
+      checkOnly: args.updateCheckOnly,
+    });
+    process.exit(code);
   }
 
   setConsoleLoggingEnabled(false);
@@ -149,15 +194,59 @@ const main = async () => {
   setPlatformInfo({ userDataPath: args.dataDir });
   initializeDatabase();
 
+  if (useInteractive) {
+    void scheduleBackgroundUpdateCheck({
+      dataDir: args.dataDir,
+      enabled: getAppConfig().general.autoUpdate !== false,
+    });
+  }
+
+  const chatService = createChatService();
+
+  const discoverWizardModels = async (params: {
+    providerType: string;
+    baseUrl: string;
+    apiKey?: string;
+  }): Promise<string[]> => {
+    const descriptors = await chatService.getModels(params.providerType, undefined, {
+      baseUrl: params.baseUrl,
+      ...(params.apiKey ? { apiKey: params.apiKey } : {}),
+    });
+    return descriptors.map(d => d.id).filter(Boolean);
+  };
+
+  if (args.setup) {
+    const saved = await runCliOnboardingWizard({
+      dataDir: args.dataDir,
+      discoverModels: discoverWizardModels,
+    });
+    process.exit(saved ? 0 : 1);
+  }
+
   registerStandardTools();
 
-  const providers = getProviders().filter(p => p.enabled);
+  let providers = getProviders().filter(p => p.enabled);
+  if (providers.length === 0) {
+    const bootstrapped = bootstrapProvidersFromEnv(process.env);
+    if (bootstrapped.length > 0) {
+      const summary = bootstrapped.map(b => `${b.provider.id} (${b.sourceEnv})`).join(', ');
+      process.stderr.write(`[iki] Auto-configured provider from env: ${summary}\n`);
+      providers = getProviders().filter(p => p.enabled);
+    }
+  }
+  if (providers.length === 0 && !args.providerType && process.stdin.isTTY && process.stdout.isTTY) {
+    const saved = await runCliOnboardingWizard({
+      dataDir: args.dataDir,
+      discoverModels: discoverWizardModels,
+    });
+    if (saved) {
+      providers = getProviders().filter(p => p.enabled);
+    }
+  }
   const selectedProvider =
     (args.providerId ? providers.find(p => p.id === args.providerId) : undefined) ??
     (args.providerType ? providers.find(p => p.type === args.providerType) : undefined) ??
     providers[0];
-
-  const chatService = createChatService();
 
   const providerType = args.providerType ?? selectedProvider?.type;
   const providerId = args.providerId ?? selectedProvider?.id;
@@ -171,7 +260,7 @@ const main = async () => {
     model = discovered[0]?.id;
   }
   if (!providerType || !model) {
-    console.error('Error: no enabled provider/model found. Configure models.toml or pass --provider and --model.');
+    console.error(formatMissingProviderGuide(args.dataDir));
     process.exit(1);
   }
 

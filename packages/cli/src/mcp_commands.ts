@@ -77,13 +77,26 @@ const ensureMcpEnabled = (): void => {
   }
 };
 
-export const formatMcpBannerSummary = (mcpManager: McpManager | undefined): string => {
+export const formatMcpBannerSummary = (
+  mcpManager: McpManager | undefined,
+  options?: { workspacePath?: string; dataDir?: string }
+): string => {
   if (!mcpManager) return 'not initialized';
   const cfg = getAppConfig().mcp;
   const servers = mcpManager.listServers();
   const connected = mcpManager.getConnectedServerIds().length;
   const tools = mcpManager.listRegisteredTools().length;
-  if (!cfg.enabled && servers.length === 0) return 'disabled (use /mcp add or /mcp import)';
+  if (!cfg.enabled && servers.length === 0) {
+    const discovered =
+      options?.workspacePath || options?.dataDir
+        ? findDefaultMcpJsonPath({
+            workspacePath: options.workspacePath,
+            dataDir: options.dataDir,
+          })
+        : null;
+    if (discovered) return `disabled · found mcp.json (run /mcp import)`;
+    return 'disabled (use /mcp add or /mcp import)';
+  }
   return `${cfg.enabled ? 'enabled' : 'disabled'} · mode=${cfg.exposureMode} · ${connected}/${servers.length} connected · ${tools} tool(s)`;
 };
 

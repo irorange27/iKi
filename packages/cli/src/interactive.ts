@@ -43,6 +43,7 @@ import { LiveWatchController } from './live_views';
 import { runPipedInteractiveCli } from './piped';
 import { createTuiPickers } from './tui_pickers';
 import { CliFooter, TurnView } from './turn_view';
+import { readCachedUpdateNotice } from './updater';
 
 export { createWorkspaceSelection, type InteractiveCliState } from './commands';
 
@@ -258,6 +259,18 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
   const appendBanner = async () => {
     const lines = await formatBannerLines(state);
     transcript.addChild(new Text(lines.map(styleBannerLine).join('\n'), 1, 0));
+    const updateNotice = readCachedUpdateNotice({ dataDir: state.dataDir });
+    if (updateNotice) {
+      transcript.addChild(
+        new Text(
+          cliTheme.warning(
+            `Update available: v${updateNotice.currentVersion} → v${updateNotice.latestVersion} · run \`iki update\` to upgrade`
+          ),
+          1,
+          0
+        )
+      );
+    }
     transcript.addChild(new Spacer(1));
   };
 

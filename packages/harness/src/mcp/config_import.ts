@@ -95,7 +95,7 @@ export const parseMcpJsonConfig = (rawJson: string): McpServerInput[] => {
 
 export const findDefaultMcpJsonPath = (params: {
   workspacePath?: string;
-  dataDir: string;
+  dataDir?: string;
 }): string | null => {
   const candidates = [
     ...(params.workspacePath
@@ -104,7 +104,7 @@ export const findDefaultMcpJsonPath = (params: {
           path.join(params.workspacePath, '.iki', 'mcp.json'),
         ]
       : []),
-    path.join(params.dataDir, 'mcp.json'),
+    ...(params.dataDir ? [path.join(params.dataDir, 'mcp.json')] : []),
   ];
   return candidates.find(file => fs.existsSync(file)) ?? null;
 };

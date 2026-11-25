@@ -332,7 +332,7 @@ export const formatBannerLines = async (state: InteractiveCliState): Promise<str
     `  mode=${state.skillMode} · ${loadedSkillIds.length} loaded (${skillsText})`,
     '',
     '[Tools]',
-    `  ${toolsSummary} · MCP: ${formatMcpBannerSummary(state.mcpManager)}`,
+    `  ${toolsSummary} · MCP: ${formatMcpBannerSummary(state.mcpManager, { workspacePath: state.workspace, dataDir: state.dataDir })}`,
     '',
     'Shortcuts: /models · /resume · /jobs (Ctrl+J) · /swarm (Ctrl+W) · /mcp · /context · /skills · /help',
   ];
@@ -406,7 +406,7 @@ const formatContextLines = async (state: InteractiveCliState): Promise<string[]>
     ),
     ...(skills.length > 12 ? [`    ... (+${skills.length - 12} more)`] : []),
     `  Tools:          ${state.tools ? (state.tools.length ? state.tools.join(', ') : '(disabled)') : `default (${builtins.join(', ')})`}`,
-    `  MCP:            ${formatMcpBannerSummary(state.mcpManager)}`,
+    `  MCP:            ${formatMcpBannerSummary(state.mcpManager, { workspacePath: state.workspace, dataDir: state.dataDir })}`,
     `  [tools.shell]:  timeout=${shellCfg.defaultTimeoutMs}ms (max ${shellCfg.maxTimeoutMs}ms), promoteOnTimeout=${shellCfg.promoteOnTimeout}, maxOutput=${shellCfg.maxOutputLines} lines/${shellCfg.maxOutputBytes}B${shellCfg.shellPath ? `, shellPath=${shellCfg.shellPath}` : ''}`,
     `  Compaction:     ${view.compaction ? `active (omitted=${view.compaction.omittedCount}, kept=${view.compaction.keptCount}, anchor=${view.compaction.firstKeptMessageId ?? 'tail'})` : 'none in current thread'}`,
   ];
