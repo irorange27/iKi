@@ -235,7 +235,7 @@ export const formatToolCallCompleted = (params: {
       const logPath = typeof unwrapped.logPath === 'string' ? ` · ${shortenPath(unwrapped.logPath)}` : '';
       const badge = cliTheme.warning('⚡');
       const footer = cliTheme.warning(
-        `  [background ${jobId}${pid}${duration ? ` · ${duration}` : ''}${logPath}]`
+        `  [background ${jobId}${pid}${duration ? ` · ${duration}` : ''}${logPath} · Ctrl+J to tail/kill]`
       );
       return {
         tone: 'background',
@@ -283,6 +283,57 @@ export const formatToolCallCompleted = (params: {
     } else if (typeof unwrapped.message === 'string') {
       bodyLines.push(`  ${cliTheme.muted(unwrapped.message)}`);
     }
+    return {
+      tone: failed ? 'error' : 'success',
+      text: [`${badge} ${header}`, ...extraLines, ...bodyLines].join('\n'),
+    };
+  }
+
+  if (toolName === 'swarm' && isRecord(unwrapped)) {
+    const failed = unwrapped.isError === true;
+    const badge = failed ? cliTheme.error('✗') : cliTheme.success('✓');
+    const bodyLines: string[] = [];
+    if (failed && typeof unwrapped.message === 'string') {
+      bodyLines.push(`  ${cliTheme.error(unwrapped.message)}`);
+    } else if (Array.isArray(unwrapped.spawned)) {
+      for (const item of unwrapped.spawned as Array<Record<string, unknown>>) {
+        const mode = String(item.workspaceMode ?? 'inherit');
+        const branch = typeof item.branch === 'string' && item.branch ? ` · ${item.branch}` : '';
+        const model = typeof item.model === 'string' ? ` · ${item.model}` : '';
+        bodyLines.push(`  ${cliTheme.success('+')} ${cliTheme.bold(cliTheme.text(`@${String(item.name ?? 'worker')}`))} ${cliTheme.dim(`[${mode}${branch}${model}]`)}`);
+      }
+    } else if (Array.isArray(unwrapped.members)) {
+      const members = unwrapped.members as Array<Record<string, unknown>>;
+      const turns = typeof unwrapped.totalTurns === 'number' ? ` · turns ${unwrapped.totalTurns}/${String(unwrapped.maxTotalTurns ?? '?')}` : '';
+      const seq = typeof unwrapped.latestSeq === 'number' ? ` · board #${unwrapped.latestSeq}` : '';
+      if (typeof unwrapped.title === 'string') {
+        bodyLines.push(`  ${cliTheme.dim(`${unwrapped.title}${turns}${seq}`)}`);
+      }
+      for (const m of members.slice(0, 8)) {
+        const st = String(m.status ?? 'waiting');
+        const icon = st === 'working' ? cliTheme.warning('●') : st === 'waiting' ? cliTheme.success('○') : cliTheme.dim('×');
+        const br = typeof m.branch === 'string' && m.branch ? ` (${m.branch})` : '';
+        bodyLines.push(`  ${icon} ${cliTheme.text(`@${String(m.name ?? '')}`)} ${cliTheme.dim(`[${st}] ${String(m.workspaceMode ?? '')}${br} · turns=${String(m.turnsUsed ?? 0)}`)}`);
+      }
+    } else if (Array.isArray(unwrapped.entries)) {
+      const entries = unwrapped.entries as Array<Record<string, unknown>>;
+      for (const e of entries.slice(-6)) {
+        const line = String(e.content ?? '').replace(/\s+/g, ' ').trim();
+        const clipped = line.length > 76 ? `${line.slice(0, 73)}...` : line;
+        bodyLines.push(`  ${cliTheme.dim(`#${String(e.seq ?? '?')} @${String(e.sender ?? '')}:`)} ${cliTheme.muted(clipped)}`);
+      }
+    } else if (typeof unwrapped.seq === 'number') {
+      const woken = Array.isArray(unwrapped.woken) ? (unwrapped.woken as string[]) : [];
+      const wokenText = woken.length > 0 ? `woke ${woken.map(m => `@${m}`).join(', ')}` : 'no members woken';
+      bodyLines.push(`  ${cliTheme.muted(`Posted #${unwrapped.seq} (${wokenText})`)}`);
+    } else if (unwrapped.killed === true) {
+      const cleaned = unwrapped.cleanedWorkspace ? ' · workspace cleaned' : '';
+      bodyLines.push(`  ${cliTheme.muted(`Killed @${String(unwrapped.name ?? '')}${cleaned}`)}`);
+    } else if (typeof unwrapped.title === 'string') {
+      bodyLines.push(`  ${cliTheme.muted(`Title: ${unwrapped.title}`)}`);
+    }
+    const duration = formatDuration(elapsedMs);
+    if (duration) bodyLines.push(`  ${cliTheme.dim(`[${duration}]`)}`);
     return {
       tone: failed ? 'error' : 'success',
       text: [`${badge} ${header}`, ...extraLines, ...bodyLines].join('\n'),

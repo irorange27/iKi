@@ -27,6 +27,7 @@ const readUiPreview = (parts: unknown): string => {
 const formatSwarmUsageLines = (): string[] => [
   'Usage:',
   '  /swarm <task>                  Start (or continue) a swarm on this thread as @coordinator',
+  '  /swarm watch [member|board]    Open live interactive view for a worker or the board (Ctrl+W)',
   '  /swarm status                  Show active swarm roster, branches, and member states',
   '  /swarm board [n]               Show last n posts from the shared append-only board',
   '  /swarm inspect <member>        Inspect recent messages in a member thread',
@@ -143,7 +144,8 @@ export const executeSwarmSlashCommand = async (
       created_at: string;
       updated_at: string;
     };
-  }
+  },
+  options?: { interactivePickers?: boolean }
 ): Promise<SlashCommandOutcome> => {
   const swarmManager = state.swarmManager;
   if (!swarmManager) {
@@ -161,6 +163,18 @@ export const executeSwarmSlashCommand = async (
 
   if (sub === 'help') {
     return { kind: 'handled', lines: formatSwarmUsageLines() };
+  }
+
+  if (sub === 'watch') {
+    const swarm = swarmManager.getSwarmForThread(state.threadId);
+    if (!swarm) return { kind: 'handled', lines: ['No active swarm on this thread.'] };
+    if (options?.interactivePickers) {
+      return { kind: 'watch-swarm', ...(rest ? { target: rest.replace(/^@/, '') } : {}) };
+    }
+    if (!rest || rest === 'board') {
+      return { kind: 'handled', lines: formatSwarmBoardLines(swarmManager, state.threadId, 20) };
+    }
+    return { kind: 'handled', lines: formatSwarmInspectLines(swarmManager, state.threadId, rest) };
   }
 
   if (sub === 'board') {

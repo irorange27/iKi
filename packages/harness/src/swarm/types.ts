@@ -122,6 +122,19 @@ export type SwarmStatusParams = {
   callerThreadId: string;
 };
 
+export type SwarmBoardParams = {
+  callerThreadId: string;
+  limit?: number;
+};
+
+export type SwarmMemberStreamEvent = {
+  swarmId: string;
+  memberName: string;
+  threadId: string;
+  channel: string;
+  payload: unknown;
+};
+
 export type SwarmModelsParams = {
   callerThreadId: string;
   all?: boolean;

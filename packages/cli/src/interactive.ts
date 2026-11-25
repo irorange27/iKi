@@ -20,30 +20,28 @@ import type { ChatStreamTarget } from '@iki/harness/thread_session';
 import { rebuildThreadViewFromEvents } from '@iki/harness/thread_session/session_log';
 import { buildCoordinatorSystemPrompt } from '@iki/harness/swarm';
 import { getBuiltinToolNames } from '@iki/harness/tools';
-import { listSkills } from '@iki/harness/tools/skills';
 import { formatSwarmBadge, formatSwarmBoardEntryLine } from './swarm_commands';
 import {
   accumulateUsageTotals,
   buildSlashCommands,
   countThreadTurnsAndSteps,
   createWorkspaceSelection,
-  discoverEnabledModels,
   ensureThreadExists,
   executeSlashCommand,
   extractTurnTokenUsage,
   formatBannerLines,
   formatTurnUsageBadge,
   pruneEmptyThreadIfUnused,
-  resolveThreadDisplayTitle,
-  switchModel,
   type InteractiveCliState,
   type TurnTokenUsage,
   type UsageTotals,
 } from './commands';
-import { openInlineSearchablePicker } from './selectors';
 import { copyToClipboard, readClipboardFilePaths, readClipboardText } from './clipboard';
-import { cliMarkdownTheme, cliTheme, createCliEditorTheme, selectListTheme } from './theme';
+import { cliMarkdownTheme, cliTheme, createCliEditorTheme } from './theme';
+import { JobLiveTracker, LiveActivityStrip, SwarmLiveTracker } from './live_monitor';
+import { LiveWatchController } from './live_views';
 import { runPipedInteractiveCli } from './piped';
+import { createTuiPickers } from './tui_pickers';
 import { CliFooter, TurnView } from './turn_view';
 
 export { createWorkspaceSelection, type InteractiveCliState } from './commands';
@@ -158,9 +156,22 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
   };
   tui.setClearOnShrink(true);
 
+  const watchHeaderSlot = new Container();
   const transcript = new Container();
+  const watchTranscript = new Container();
+  const viewportContent = new Container();
+  viewportContent.addChild(transcript);
   const loaderSlot = new Container();
   const footer = new CliFooter();
+
+  const swarmTracker = new SwarmLiveTracker(state.swarmManager, () => state.threadId);
+  const jobTracker = new JobLiveTracker(() => {
+    const ids = new Set([state.threadId]);
+    const swarm = state.swarmManager?.getSwarmForThread(state.threadId);
+    if (swarm) for (const m of Object.values(swarm.members)) ids.add(m.threadId);
+    return ids;
+  });
+  const activityStrip = new LiveActivityStrip(swarmTracker, jobTracker);
 
   let activeTurn = false;
   let selectorOpen = false;
@@ -171,12 +182,15 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
   let cachedWorkspace = state.workspace;
   let cachedBranch = resolveGitBranch(state.workspace);
   const turnViews: TurnView[] = [];
+  let watchController: LiveWatchController | null = null;
 
   const toggleThinkingVisibility = () => {
     hideThinking = !hideThinking;
     for (const view of turnViews) {
       view.setHideThinking(hideThinking);
     }
+    swarmTracker.setHideThinking(hideThinking);
+    watchController?.setHideThinking(hideThinking);
     refreshFooter();
     tui.requestRender();
   };
@@ -193,12 +207,23 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     const compactFlag = view.compaction ? ' · compacted' : '';
     const swarmBadge = formatSwarmBadge(state.swarmManager, state.threadId);
     const swarmFlag = swarmBadge ? ` · ${swarmBadge}` : '';
+    const runningJobs = jobTracker.getRunningCount();
+    const jobFlag = runningJobs > 0 ? ` · jobs:${runningJobs}` : '';
+    const watchMode = watchController?.getMode();
+    const watchFlag =
+      watchMode?.kind === 'swarm-member'
+        ? ` · watching:@${watchMode.memberName}`
+        : watchMode?.kind === 'swarm-board'
+          ? ' · watching:board'
+          : watchMode?.kind === 'job-log'
+            ? ` · watching:${watchMode.jobId}`
+            : '';
     const thinkFlag = hideThinking ? ' · Ctrl+T thinking' : ' · thinking:on';
     const { turns: threadTurns, steps: modelSteps } = countThreadTurnsAndSteps(
       state.threadId,
       view.messages
     );
-    const leftBottom = `${state.threadId} · turn:${threadTurns}/step:${modelSteps} · ${totals.uncachedInputTokens}in/${totals.cacheReadTokens}c${compactFlag}${swarmFlag}${thinkFlag}`;
+    const leftBottom = `${state.threadId} · turn:${threadTurns}/step:${modelSteps} · ${totals.uncachedInputTokens}in/${totals.cacheReadTokens}c${compactFlag}${swarmFlag}${jobFlag}${watchFlag}${thinkFlag}`;
     footer.update({
       leftTop,
       leftBottom,
@@ -268,7 +293,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
   renderResumedTail(state.threadId);
   refreshFooter();
 
-  const transcriptScroll = new ScrollView(transcript, {
+  const transcriptScroll = new ScrollView(viewportContent, {
     follow: 'end',
     primary: true,
     overscroll: 'chain',
@@ -276,20 +301,42 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     scrollbarTrackStyle: text => cliTheme.borderMuted(text),
     scrollbarThumbStyle: text => cliTheme.borderAccent(text),
   });
+  watchController = new LiveWatchController({
+    swarmManager: state.swarmManager,
+    swarmTracker,
+    getThreadId: () => state.threadId,
+    headerSlot: watchHeaderSlot,
+    viewportContent,
+    mainTranscript: transcript,
+    watchTranscript,
+    scrollToEnd: () => transcriptScroll.scrollToEnd(),
+    requestRender: () => tui.requestRender(),
+    onModeChanged: mode => {
+      activityStrip.setWatchedTarget({
+        memberName: mode.kind === 'swarm-member' ? mode.memberName : null,
+        jobId: mode.kind === 'job-log' ? mode.jobId : null,
+      });
+      refreshFooter();
+    },
+  });
   const editorContainer = new Container();
   editorContainer.addChild(editor);
 
   const dock = new VStack([
+    { component: activityStrip, shrink: 1, minSize: 0 },
     { component: loaderSlot, shrink: 1, minSize: 0 },
     { component: editorContainer, shrink: 1, minSize: 3 },
     { component: footer, shrink: 1, minSize: 0 },
   ]);
   const layoutRoot = new VStack([
+    { component: watchHeaderSlot, basis: 'auto', grow: 0, shrink: 0, minSize: 0 },
     { component: transcriptScroll, basis: 0, grow: 1, shrink: 1, minSize: 1 },
     { component: dock, basis: 'auto', grow: 0, shrink: 1, minSize: 1 },
   ]);
 
-  tui.addChild(transcript);
+  tui.addChild(watchHeaderSlot);
+  tui.addChild(viewportContent);
+  tui.addChild(activityStrip);
   tui.addChild(loaderSlot);
   tui.addChild(editorContainer);
   tui.addChild(footer);
@@ -299,6 +346,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
   const stopSwarmBoardSub = state.swarmManager?.onBoardEntry(entry => {
     const active = state.swarmManager?.getSwarmForThread(state.threadId);
     if (!active || active.id !== entry.swarmId) return;
+    watchController?.onBoardEntry(entry);
     if (entry.sender === 'coordinator' || entry.sender === 'user') return;
     appendInfoBlock([formatSwarmBoardEntryLine(entry)], cliTheme.dim);
     refreshFooter();
@@ -309,12 +357,33 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     refreshFooter();
     tui.requestRender();
   });
+  const stopTrackerChange = swarmTracker.onChange(() => {
+    refreshFooter();
+    tui.requestRender();
+  });
+  const stopTrackerReset = swarmTracker.onMemberTurnReset(name => {
+    watchController?.onMemberTurnReset(name);
+  });
+  const liveTimer = setInterval(() => {
+    if (stopped) return;
+    const mode = watchController?.getMode().kind ?? 'main';
+    const busy = swarmTracker.hasWorkingMembers() || jobTracker.getVisibleStripJobs().length > 0 || mode !== 'main';
+    if (!busy) return;
+    watchController?.tick();
+    refreshFooter();
+    tui.requestRender();
+  }, 1000);
+  liveTimer.unref();
 
   const stopAll = () => {
     if (stopped) return;
     stopped = true;
+    clearInterval(liveTimer);
     stopSwarmBoardSub?.();
     stopSwarmStateSub?.();
+    stopTrackerChange();
+    stopTrackerReset();
+    swarmTracker.dispose();
     currentLoader?.stop();
     tui.stop();
   };
@@ -437,140 +506,34 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     finishPromiseResolve = resolve;
   });
 
-  const createPickerTheme = () => ({
-    title: (text: string) => cliTheme.bold(cliTheme.borderAccent(text)),
-    dim: cliTheme.dim,
-    border: cliTheme.borderAccent,
-    selectList: selectListTheme,
-  });
-
-  const openInlinePicker = async <T>(params: {
-    title: string;
-    subtitle?: string;
-    items: Array<{ value: string; label: string; description?: string; data: T }>;
-    initialValue?: string;
-  }) => {
-    selectorOpen = true;
-    try {
-      return await openInlineSearchablePicker({
-        tui,
-        container: editorContainer,
-        restoreComponent: editor,
-        ...params,
-        theme: createPickerTheme(),
-      });
-    } finally {
-      selectorOpen = false;
-    }
-  };
-
-  const openModelPicker = async () => {
-    const models = await discoverEnabledModels(state);
-    if (models.length === 0) {
-      appendInfoBlock(['No enabled models found from models.toml or provider endpoints.'], cliTheme.warning);
-      return;
-    }
-    const picked = await openInlinePicker({
-      title: 'Switch Model',
-      subtitle: 'Models from models.toml & live provider endpoints',
-      items: models.map(m => ({
-        value: m.qualified,
-        label: `${m.active ? '* ' : '  '}${m.model}`,
-        description: `${m.providerId} · ${m.providerType}${m.discovered ? ' · live' : ''}`,
-        data: m,
-      })),
-      initialValue: models.find(m => m.active)?.qualified,
-    });
-    if (picked) {
-      appendInfoBlock([switchModel(picked.value, state)], cliTheme.success);
-    }
-  };
-
-  const openThreadPicker = async () => {
-    const threads = state.chatService.listThreads().slice(0, 30);
-    if (threads.length === 0) {
-      appendInfoBlock(['No saved threads found.'], cliTheme.dim);
-      return;
-    }
-    const picked = await openInlinePicker({
-      title: 'Resume Thread',
-      subtitle: 'Choose a thread to inspect and continue',
-      items: threads.map(t => ({
-        value: t.id,
-        label: `${t.id === state.threadId ? '* ' : '  '}${resolveThreadDisplayTitle(t)}`,
-        description: `${t.id}${t.model ? ` · ${t.model}` : ''}`,
-        data: t,
-      })),
-      initialValue: state.threadId,
-    });
-    if (picked && picked.value !== state.threadId) {
-      pruneEmptyThreadIfUnused(state, state.threadId);
-      state.threadId = picked.value;
-      ensureThreadExists(state, state.threadId, 'Interactive CLI');
+  const {
+    openModelPicker,
+    openThreadPicker,
+    openSkillPicker,
+    openSwarmPicker,
+    openJobPicker,
+  } = createTuiPickers({
+    tui,
+    state,
+    editorContainer,
+    editor,
+    swarmTracker,
+    jobTracker,
+    getWatchController: () => watchController,
+    setSelectorOpen: open => {
+      selectorOpen = open;
+    },
+    appendInfoBlock,
+    flash: (msg, ms) => tui.flash(msg, ms),
+    onThreadSwitched: async () => {
       tui.resetTextSelection();
       transcript.clear();
       turnViews.length = 0;
       await appendBanner();
       renderResumedTail(state.threadId);
       transcriptScroll.scrollToEnd();
-    }
-  };
-
-  const openSkillPicker = async () => {
-    type SkillPickerAction =
-      | { kind: 'mode'; mode: 'auto' | 'manual' }
-      | { kind: 'clear' }
-      | { kind: 'skill'; id: string };
-    const available = await listSkills({ workspacePath: state.workspace });
-    const picked = await openInlinePicker<SkillPickerAction>({
-      title: `Skills (mode: ${state.skillMode})`,
-      subtitle: 'Toggle a pinned skill or switch skillMode',
-      items: [
-        {
-          value: '__mode:auto',
-          label: `${state.skillMode === 'auto' ? '* ' : '  '}mode: auto`,
-          description: 'Automatically select relevant skills per turn',
-          data: { kind: 'mode', mode: 'auto' },
-        },
-        {
-          value: '__mode:manual',
-          label: `${state.skillMode === 'manual' ? '* ' : '  '}mode: manual`,
-          description: 'Use only pinned skills',
-          data: { kind: 'mode', mode: 'manual' },
-        },
-        {
-          value: '__clear',
-          label: '  clear pinned skills',
-          description: 'Remove explicit skill pins',
-          data: { kind: 'clear' },
-        },
-        ...available.map(s => ({
-          value: s.id,
-          label: `${state.skills?.includes(s.id) ? '* ' : '  '}${s.id}`,
-          description: `[${s.source}] ${s.description ?? s.name}`,
-          data: { kind: 'skill' as const, id: s.id },
-        })),
-      ],
-    });
-    if (!picked) return;
-    if (picked.data.kind === 'mode') {
-      state.skillMode = picked.data.mode;
-      appendInfoBlock([`Set skillMode = ${state.skillMode}`], cliTheme.success);
-    } else if (picked.data.kind === 'clear') {
-      state.skills = undefined;
-      appendInfoBlock(['Cleared explicit skill selection'], cliTheme.success);
-    } else {
-      const current = new Set(state.skills ?? []);
-      if (current.has(picked.data.id)) current.delete(picked.data.id);
-      else current.add(picked.data.id);
-      state.skills = [...current];
-      state.skillMode = 'manual';
-      appendInfoBlock(
-        [`Pinned skills: ${state.skills.length ? state.skills.join(', ') : '(none)'}`],
-        cliTheme.success
-      );
-    }
-  };
+    },
+  });
 
   const handleSubmittedText = async (raw: string) => {
     const trimmed = raw.trim();
@@ -580,6 +543,30 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     tui.requestRender();
 
     if (!trimmed.startsWith('/')) {
+      const mode = watchController?.getMode();
+      if (mode?.kind === 'swarm-member' && state.swarmManager) {
+        try {
+          const out = state.swarmManager.steerMember(mode.swarmId, mode.memberName, trimmed);
+          tui.flash(`Steered @${mode.memberName} (${out.delivered})`, 2200);
+        } catch (error) {
+          tui.flash(error instanceof Error ? error.message : String(error), 2500);
+        }
+        return;
+      }
+      if (mode?.kind === 'swarm-board' && state.swarmManager) {
+        try {
+          const posted = state.swarmManager.postAsUser(mode.swarmId, trimmed);
+          const woke = posted.woken.length ? ` · woke ${posted.woken.map(m => `@${m}`).join(', ')}` : '';
+          tui.flash(`Posted #${posted.seq}${woke}`, 2200);
+        } catch (error) {
+          tui.flash(error instanceof Error ? error.message : String(error), 2500);
+        }
+        return;
+      }
+      if (mode?.kind === 'job-log') {
+        tui.flash('Viewing job log — press Esc to return to chat or Ctrl+K to kill job', 2500);
+        return;
+      }
       await runTurn(raw);
       return;
     }
@@ -597,7 +584,12 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       await openThreadPicker();
     } else if (outcome.kind === 'pick-skill') {
       await openSkillPicker();
+    } else if (outcome.kind === 'pick-job') {
+      await openJobPicker();
+    } else if (outcome.kind === 'watch-swarm') {
+      await openSwarmPicker(outcome.target);
     } else if (outcome.kind === 'run-swarm') {
+      watchController?.returnToMain();
       appendInfoBlock(
         [
           `${outcome.created ? 'Started' : 'Continuing'} swarm ${outcome.swarmId} as @coordinator.`,
@@ -607,12 +599,14 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       await runTurn(outcome.prompt);
       return;
     } else if (outcome.kind === 'clear') {
+      watchController?.returnToMain();
       tui.resetTextSelection();
       transcript.clear();
       turnViews.length = 0;
       appendInfoBlock(outcome.lines, styleBannerLine);
       transcriptScroll.scrollToEnd();
     } else if (state.threadId !== previousThreadId) {
+      watchController?.returnToMain();
       tui.resetTextSelection();
       transcript.clear();
       turnViews.length = 0;
@@ -620,6 +614,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       renderResumedTail(state.threadId);
       transcriptScroll.scrollToEnd();
     } else if (outcome.kind === 'handled') {
+      watchController?.returnToMain();
       appendInfoBlock(outcome.lines, cliTheme.muted);
     }
     refreshFooter();
@@ -698,9 +693,31 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       toggleThinkingVisibility();
       return { consume: true };
     }
-    if (matchesKey(data, 'escape') && activeTurn) {
-      interruptActiveTurn();
+    if (matchesKey(data, 'ctrl+w')) {
+      void openSwarmPicker();
       return { consume: true };
+    }
+    if (matchesKey(data, 'ctrl+j')) {
+      void openJobPicker();
+      return { consume: true };
+    }
+    if (matchesKey(data, 'ctrl+k') && watchController?.getMode().kind === 'job-log') {
+      void watchController.killWatchedJob().then(msg => {
+        if (msg) tui.flash(msg, 2400);
+        refreshFooter();
+        tui.requestRender();
+      });
+      return { consume: true };
+    }
+    if (matchesKey(data, 'escape')) {
+      if (activeTurn) {
+        interruptActiveTurn();
+        return { consume: true };
+      }
+      if (watchController && watchController.getMode().kind !== 'main') {
+        watchController.returnToMain();
+        return { consume: true };
+      }
     }
     if (matchesKey(data, 'ctrl+d') && !activeTurn && editor.getText().length === 0) {
       stopAll();

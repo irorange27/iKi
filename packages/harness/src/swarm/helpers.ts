@@ -21,7 +21,14 @@ import {
   buildWorkerSystemPrompt,
   formatBoardDeltaUserMessage,
 } from './prompts';
-import type { SwarmBoardEntry, SwarmMemberRecord, SwarmModelOption } from './types';
+import type {
+  SwarmBoardEntry,
+  SwarmMemberRecord,
+  SwarmModelOption,
+  SwarmRecord,
+  SwarmStatusView,
+} from './types';
+import type { ThreadMailbox } from '../thread_session/mailbox';
 
 const DEFAULT_SWARM_SETTINGS: SwarmToolSettings = SwarmToolSettingsSchema.parse({});
 const MUTATING_FILE_TOOLS = new Set(['write_file', 'edit', 'undo_edit', 'delete_file']);
@@ -50,6 +57,27 @@ export const collectEnabledModelOptions = (): SwarmModelOption[] =>
         qualified: `${p.id}/${model}`,
       }))
     );
+
+export const discoverSwarmModels = async (
+  chatService: ChatService
+): Promise<{ models: SwarmModelOption[] }> => {
+  const configured = collectEnabledModelOptions();
+  const seen = new Set(configured.map(m => m.qualified));
+  const providers = Array.from(
+    new Map(configured.map(m => [m.providerId, m.providerType] as const)).entries()
+  );
+  const liveOptions: SwarmModelOption[] = [];
+  for (const [providerId, providerType] of providers) {
+    const descriptors = await chatService.getModels(providerType, providerId);
+    for (const desc of descriptors) {
+      const qualified = `${providerId}/${desc.id}`;
+      if (seen.has(qualified)) continue;
+      seen.add(qualified);
+      liveOptions.push({ providerId, providerType, model: desc.id, qualified });
+    }
+  }
+  return { models: [...configured, ...liveOptions] };
+};
 
 export const resolveRequestedModel = (
   requested: string | undefined,
@@ -138,6 +166,38 @@ const resolveMemberTools = (
 
 const resolveMemberApprovalPolicy = (member: SwarmMemberRecord, cfg: SwarmToolSettings): string =>
   member.workspaceMode === 'inherit' ? cfg.inheritApprovalPolicy : cfg.isolatedApprovalPolicy;
+
+export const buildSwarmStatusView = (params: {
+  swarm: SwarmRecord;
+  cfg: SwarmToolSettings;
+  latestSeq: number;
+  mailbox: ThreadMailbox;
+}): SwarmStatusView => {
+  const { swarm, cfg, latestSeq, mailbox } = params;
+  return {
+    swarmId: swarm.id,
+    title: swarm.title,
+    totalTurns: swarm.totalTurns,
+    maxTotalTurns: cfg.maxTotalTurns,
+    latestSeq,
+    members: Object.values(swarm.members).map(member => ({
+      name: member.name,
+      threadId: member.threadId,
+      role: member.role,
+      parent: member.parent,
+      status: member.status === 'killed' ? 'killed' : mailbox.getState(member.threadId),
+      model: member.model,
+      providerType: member.providerType,
+      ...(member.providerId ? { providerId: member.providerId } : {}),
+      workspaceMode: member.workspaceMode,
+      workspacePath: member.workspacePath,
+      branch: member.branch,
+      turnsUsed: member.turnsUsed,
+      pendingEvents: mailbox.getPendingCount(member.threadId),
+      unreadSeqCount: Math.max(0, latestSeq - member.lastReadSeq),
+    })),
+  };
+};
 
 export const buildMemberTurnOptions = (params: {
   swarmId: string;

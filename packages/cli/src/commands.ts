@@ -326,7 +326,7 @@ export const formatBannerLines = async (state: InteractiveCliState): Promise<str
     '[Tools]',
     `  ${toolsSummary}`,
     '',
-    'Shortcuts: /models · /resume · /jobs · /swarm · /context · /skills · /help',
+    'Shortcuts: /models · /resume · /jobs (Ctrl+J) · /swarm (Ctrl+W) · /context · /skills · /help',
   ];
 };
 
@@ -338,8 +338,8 @@ const formatHelpLines = (): string[] => [
   '  /context                  Inspect loaded AGENTS.md, PERSONA.md, skills & tools',
   '  /skills [auto|manual|ids] Pick skills, switch skill mode, or list all',
   '  /tools [default|all|a,b]  View or override enabled tools',
-  '  /jobs [all|log|kill]      Inspect, tail, or stop durable background jobs',
-  '  /swarm <task|status|...>  Start a multi-agent swarm or inspect board/members',
+  '  /jobs [all|log|kill]      Inspect, tail, or stop durable background jobs (Ctrl+J)',
+  '  /swarm <task|watch|...>   Start a swarm or watch live workers/board (Ctrl+W)',
   '  /history                  Inspect messages & compaction checkpoint',
   '  /compact                  Compact older turns into a persistent checkpoint',
   '  /copy                     Copy the last assistant reply to the clipboard',
@@ -551,6 +551,7 @@ export const buildSlashCommands = (state: InteractiveCliState): SlashCommand[] =
         ? Object.keys(swarm.members).filter(n => n !== 'coordinator')
         : [];
       const candidates = [
+        { value: 'watch', label: 'watch', description: 'Live watch picker for workers & board (Ctrl+W)' },
         { value: 'status', label: 'status', description: 'Show swarm roster and member states' },
         { value: 'board', label: 'board', description: 'Show recent shared board posts' },
         { value: 'post ', label: 'post <msg>', description: 'Post to board as user' },
@@ -578,7 +579,8 @@ export type SlashCommandOutcome =
   | { kind: 'handled'; lines: string[] }
   | { kind: 'clear'; lines: string[] }
   | { kind: 'run-swarm'; prompt: string; swarmId: string; created: boolean }
-  | { kind: 'pick-model' | 'pick-thread' | 'pick-skill' }
+  | { kind: 'watch-swarm'; target?: string }
+  | { kind: 'pick-model' | 'pick-thread' | 'pick-skill' | 'pick-job' }
   | { kind: 'exit' };
 
 export const executeSlashCommand = async (
@@ -653,6 +655,7 @@ export const executeSlashCommand = async (
     return { kind: 'handled', lines: [`Started new thread: ${state.threadId}`] };
   }
   if (cmd === '/jobs') {
+    if (!arg && options?.interactivePickers) return { kind: 'pick-job' };
     if (!arg) return { kind: 'handled', lines: formatJobsLines(state.threadId) };
     if (arg === 'all') return { kind: 'handled', lines: formatJobsLines() };
     const [sub, targetId] = arg.split(/\s+/);
@@ -684,7 +687,7 @@ export const executeSlashCommand = async (
     return { kind: 'handled', lines: ['Usage: /jobs [all] | /jobs log <jobId> | /jobs kill <jobId>'] };
   }
   if (cmd === '/swarm') {
-    return executeSwarmSlashCommand(arg, state, createWorkspaceSelection);
+    return executeSwarmSlashCommand(arg, state, createWorkspaceSelection, options);
   }
   if (cmd === '/history') return { kind: 'handled', lines: formatHistoryLines(state.threadId) };
   if (cmd === '/compact') {

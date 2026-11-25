@@ -4,8 +4,8 @@ export const SwarmWorkspaceModeSchema = z.enum(['inherit', 'share', 'branch']);
 
 export const SwarmToolInputSchema = z.object({
   action: z
-    .enum(['status', 'models', 'add', 'post', 'model', 'kill', 'title'])
-    .describe('Swarm action: status, models, add, post, model, kill, or title.'),
+    .enum(['status', 'board', 'models', 'add', 'post', 'model', 'kill', 'title'])
+    .describe('Swarm action: status, board, models, add, post, model, kill, or title.'),
   name: z
     .string()
     .optional()
@@ -45,6 +45,13 @@ export const SwarmToolInputSchema = z.object({
   title: z.string().optional().describe('Short swarm title for the title action (coordinator only).'),
   reason: z.string().optional().describe('Short explanation for switching a member model.'),
   all: z.boolean().optional().describe('For models: list every available enabled model.'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('For board: maximum number of recent board entries to return (default 20).'),
   deleteBranch: z
     .boolean()
     .optional()

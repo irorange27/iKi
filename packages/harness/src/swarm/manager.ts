@@ -22,7 +22,8 @@ import {
 } from './board_store';
 import {
   buildMemberTurnOptions,
-  collectEnabledModelOptions,
+  buildSwarmStatusView,
+  discoverSwarmModels,
   memberWorkspaceSelection,
   resolveRequestedModel,
   resolveSwarmSettings,
@@ -31,9 +32,11 @@ import { buildCoordinatorSystemPrompt } from './prompts';
 import type {
   SwarmAddParams,
   SwarmBoardEntry,
+  SwarmBoardParams,
   SwarmKillParams,
   SwarmManagerDeps,
   SwarmMemberRecord,
+  SwarmMemberStreamEvent,
   SwarmModelOption,
   SwarmModelParams,
   SwarmModelsParams,
@@ -58,6 +61,7 @@ export const createSwarmManager = (deps: SwarmManagerDeps) => {
   const stateListeners = new Set<
     (event: { swarmId: string; memberName: string; change: ThreadMailboxStateChange }) => void
   >();
+  const streamListeners = new Set<(event: SwarmMemberStreamEvent) => void>();
 
   // Mirror mailbox state transitions back to roster.json and listeners.
   mailbox.onStateChange(change => {
@@ -72,6 +76,23 @@ export const createSwarmManager = (deps: SwarmManagerDeps) => {
     }
     for (const listener of stateListeners) {
       listener({ swarmId: swarm.id, memberName: member.name, change });
+    }
+  });
+
+  mailbox.onStreamEvent(evt => {
+    if (streamListeners.size === 0) return;
+    const swarm = findSwarmRecordByThreadId(evt.threadId);
+    if (!swarm) return;
+    const member = Object.values(swarm.members).find(m => m.threadId === evt.threadId);
+    if (!member) return;
+    for (const listener of streamListeners) {
+      listener({
+        swarmId: swarm.id,
+        memberName: member.name,
+        threadId: evt.threadId,
+        channel: evt.channel,
+        payload: evt.payload,
+      });
     }
   });
 
@@ -176,6 +197,12 @@ export const createSwarmManager = (deps: SwarmManagerDeps) => {
       };
     }
 
+    const cfg = settings();
+    const coordModel = resolveRequestedModel(cfg.defaultCoordinatorModel || undefined, {
+      providerType: params.providerType,
+      ...(params.providerId ? { providerId: params.providerId } : {}),
+      model: params.model,
+    });
     const now = new Date().toISOString();
     const swarmId = `swarm_${randomUUID().slice(0, 8)}`;
     const workspacePath = params.workspaceSelection?.workspace?.path?.trim() || null;
@@ -189,9 +216,9 @@ export const createSwarmManager = (deps: SwarmManagerDeps) => {
       workspaceId: params.workspaceSelection?.workspaceId ?? null,
       repoRoot: workspacePath,
       branch: null,
-      providerType: params.providerType,
-      ...(params.providerId ? { providerId: params.providerId } : {}),
-      model: params.model,
+      providerType: coordModel.providerType,
+      ...(coordModel.providerId ? { providerId: coordModel.providerId } : {}),
+      model: coordModel.model,
       status: 'waiting',
       lastReadSeq: 0,
       turnsUsed: 0,
@@ -255,55 +282,29 @@ export const createSwarmManager = (deps: SwarmManagerDeps) => {
     if (params.callerThreadId) {
       findSwarmRecordByThreadId(params.callerThreadId);
     }
-    const configured = collectEnabledModelOptions();
-    const seen = new Set(configured.map(m => m.qualified));
-    const providers = Array.from(
-      new Map(configured.map(m => [m.providerId, m.providerType] as const)).entries()
-    );
-    const liveOptions: SwarmModelOption[] = [];
-    for (const [providerId, providerType] of providers) {
-      const descriptors = await deps.chatService.getModels(providerType, providerId);
-      for (const desc of descriptors) {
-        const qualified = `${providerId}/${desc.id}`;
-        if (seen.has(qualified)) continue;
-        seen.add(qualified);
-        liveOptions.push({ providerId, providerType, model: desc.id, qualified });
-      }
+    return discoverSwarmModels(deps.chatService);
+  };
+
+  const board = (params: SwarmBoardParams) => {
+    const { swarm, caller } = requireCaller(params.callerThreadId);
+    const limit = typeof params.limit === 'number' && params.limit > 0 ? Math.min(params.limit, 100) : 20;
+    const entries = readBoardEntries(swarm.id, { limit });
+    const latestSeq = entries.at(-1)?.seq ?? getBoardHeadSeq(swarm.id);
+    if (latestSeq > caller.lastReadSeq) {
+      caller.lastReadSeq = latestSeq;
+      saveSwarmRecord(swarm);
     }
-    return { models: [...configured, ...liveOptions] };
+    return { swarmId: swarm.id, latestSeq, entries };
   };
 
   const status = (params: SwarmStatusParams): SwarmStatusView => {
     const { swarm } = requireCaller(params.callerThreadId);
-    const cfg = settings();
-    const latestSeq = getBoardHeadSeq(swarm.id);
-    return {
-      swarmId: swarm.id,
-      title: swarm.title,
-      totalTurns: swarm.totalTurns,
-      maxTotalTurns: cfg.maxTotalTurns,
-      latestSeq,
-      members: Object.values(swarm.members).map(member => {
-        const liveState =
-          member.status === 'killed' ? 'killed' : mailbox.getState(member.threadId);
-        return {
-          name: member.name,
-          threadId: member.threadId,
-          role: member.role,
-          parent: member.parent,
-          status: liveState,
-          model: member.model,
-          providerType: member.providerType,
-          ...(member.providerId ? { providerId: member.providerId } : {}),
-          workspaceMode: member.workspaceMode,
-          workspacePath: member.workspacePath,
-          branch: member.branch,
-          turnsUsed: member.turnsUsed,
-          pendingEvents: mailbox.getPendingCount(member.threadId),
-          unreadSeqCount: Math.max(0, latestSeq - member.lastReadSeq),
-        };
-      }),
-    };
+    return buildSwarmStatusView({
+      swarm,
+      cfg: settings(),
+      latestSeq: getBoardHeadSeq(swarm.id),
+      mailbox,
+    });
   };
 
   const add = async (params: SwarmAddParams) => {
@@ -355,11 +356,14 @@ export const createSwarmManager = (deps: SwarmManagerDeps) => {
       }
     }
 
-    const resolvedModel = resolveRequestedModel(params.model, {
-      providerType: caller.providerType,
-      ...(caller.providerId ? { providerId: caller.providerId } : {}),
-      model: caller.model,
-    });
+    const resolvedModel = resolveRequestedModel(
+      params.model?.trim() || cfg.defaultWorkerModel?.trim() || undefined,
+      {
+        providerType: caller.providerType,
+        ...(caller.providerId ? { providerId: caller.providerId } : {}),
+        model: caller.model,
+      }
+    );
 
     const callerWorkspace = memberWorkspaceSelection(caller);
     const worktreeBaseDir = path.join(getUserDataPath(), cfg.worktreeDirName);
@@ -753,12 +757,20 @@ export const createSwarmManager = (deps: SwarmManagerDeps) => {
     return () => stateListeners.delete(listener);
   };
 
+  const onMemberStreamEvent = (
+    listener: (event: SwarmMemberStreamEvent) => void
+  ): (() => void) => {
+    streamListeners.add(listener);
+    return () => streamListeners.delete(listener);
+  };
+
   return {
     mailbox,
     startSwarm,
     title,
     models,
     status,
+    board,
     add,
     post,
     model: switchMemberModel,
@@ -773,6 +785,7 @@ export const createSwarmManager = (deps: SwarmManagerDeps) => {
     readBoard: readBoardEntries,
     onBoardEntry,
     onMemberStateChange,
+    onMemberStreamEvent,
   };
 };
 

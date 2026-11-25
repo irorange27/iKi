@@ -6,6 +6,7 @@ import { SwarmToolInputSchema } from './schema';
 export type SwarmRuntimePort = {
   title: (params: { callerThreadId: string; title: string }) => unknown;
   status: (params: { callerThreadId: string }) => unknown;
+  board: (params: { callerThreadId: string; limit?: number }) => unknown;
   models: (params: { callerThreadId: string; all?: boolean }) => Promise<unknown> | unknown;
   add: (params: {
     callerThreadId: string;
@@ -45,7 +46,7 @@ export class SwarmControlTool extends BaseTool {
   override replay = 'unsafe' as const;
   override approvalMode = 'configurable' as const;
   override description =
-    'Manage and collaborate with a multi-agent swarm on a shared append-only message board. ONLY use when the user explicitly started `/swarm` or this conversation is part of an active swarm. Actions: `status`, `models`, `add` (spawn named or sharded workers in inherit/share/branch workspaces, optionally forked), `post` (publish on the board and wake @mentioned members), `model` (switch a waiting member model keeping history), `kill` (terminate worker and clean up its worktree), `title` (coordinator sets swarm title).';
+    'Manage and collaborate with a multi-agent swarm on a shared append-only message board. ONLY use when the user explicitly started `/swarm` or this conversation is part of an active swarm. Actions: `status`, `board` (read recent shared board entries), `models`, `add` (spawn named or sharded workers in inherit/share/branch workspaces, optionally forked), `post` (publish on the board and wake @mentioned members), `model` (switch a waiting member model keeping history), `kill` (terminate worker and clean up its worktree), `title` (coordinator sets swarm title).';
   override paramSchema = SwarmToolInputSchema;
 
   constructor(deps: SwarmToolPluginDeps) {
@@ -72,6 +73,13 @@ export class SwarmControlTool extends BaseTool {
 
     if (args.action === 'status') {
       return runtime.status({ callerThreadId });
+    }
+
+    if (args.action === 'board') {
+      return runtime.board({
+        callerThreadId,
+        ...(typeof args.limit === 'number' ? { limit: args.limit } : {}),
+      });
     }
 
     if (args.action === 'models') {

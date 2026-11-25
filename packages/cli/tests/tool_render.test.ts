@@ -73,4 +73,33 @@ describe('CLI tool TUI rendering', () => {
     expect(err).toContain('$ false');
     expect(err).toContain('Command failed');
   });
+
+  it('renders swarm tool completion cards cleanly instead of raw JSON', () => {
+    const added = formatToolCallCompleted({
+      toolName: 'swarm',
+      input: { action: 'add', name: 'builder', workspace: 'share', brief: 'Add slugify' },
+      output: {
+        type: 'json',
+        value: {
+          swarmId: 'swarm_demo',
+          spawned: [
+            { name: 'builder', workspaceMode: 'share', branch: 'iki/swarm/demo/builder', model: 'm1' },
+          ],
+        },
+      },
+      elapsedMs: 120,
+    });
+    const addedPlain = stripAnsi(added.text);
+    expect(added.tone).toBe('success');
+    expect(addedPlain).toContain('+ @builder');
+    expect(addedPlain).toContain('iki/swarm/demo/builder');
+    expect(addedPlain).not.toContain('"spawned"');
+
+    const posted = formatToolCallCompleted({
+      toolName: 'swarm',
+      input: { action: 'post', message: '@auditor check stats.js' },
+      output: { type: 'json', value: { swarmId: 'swarm_demo', seq: 5, woken: ['auditor'] } },
+    });
+    expect(stripAnsi(posted.text)).toContain('Posted #5 (woke @auditor)');
+  });
 });

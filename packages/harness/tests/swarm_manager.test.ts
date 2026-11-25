@@ -240,4 +240,73 @@ describe('SwarmManager end-to-end orchestration', () => {
     const finalStatus = swarmManager.status({ callerThreadId: 'coord_1' });
     expect(finalStatus.members.find(m => m.name === 'parser')?.status).toBe('killed');
   });
+
+  it('supports board tool action, live member stream events, and role default models', async () => {
+    const dataDir = makeTempDir('iki-swarm-stream-');
+    wirePlatformContext();
+    setPlatformInfo({ userDataPath: dataDir });
+    initializeDatabase();
+
+    const chatService = createChatService();
+    chatService.createThread({
+      id: 'coord_2',
+      title: 'Role Default Thread',
+      provider_type: 'openai',
+      model: 'base-model',
+    });
+
+    const mailbox = createThreadMailbox({
+      chat: {
+        stream: async target => {
+          target.send('chat:ui-chunk', { type: 'text-delta', delta: 'live worker delta' });
+          return { success: true, text: 'live worker delta' };
+        },
+        pushSteerByThread: () => false,
+        cancelThreadStreams: () => undefined,
+        isThreadRunning: () => false,
+      },
+    });
+
+    const swarmManager = createSwarmManager({
+      chatService,
+      mailbox,
+      getBuiltinTools: () => ['bash'],
+      getSettings: () => ({
+        defaultCoordinatorModel: 'strong-coord-model',
+        defaultWorkerModel: 'fast-worker-model',
+      }),
+    });
+
+    const streamEvents: Array<{ memberName: string; payload: unknown }> = [];
+    const stopStream = swarmManager.onMemberStreamEvent(evt => {
+      streamEvents.push({ memberName: evt.memberName, payload: evt.payload });
+    });
+
+    const started = swarmManager.startSwarm({
+      coordinatorThreadId: 'coord_2',
+      title: 'Role Defaults',
+      providerType: 'openai',
+      model: 'base-model',
+      workspaceSelection: null,
+    });
+    expect(started.swarm.members.coordinator?.model).toBe('strong-coord-model');
+
+    const added = await swarmManager.add({
+      callerThreadId: 'coord_2',
+      name: 'scout',
+      brief: 'Scout the repo',
+      workspace: 'inherit',
+    });
+    expect(added.spawned[0]?.model).toBe('fast-worker-model');
+    await swarmManager.waitForIdle(started.swarm.id);
+    stopStream();
+
+    expect(streamEvents.some(e => e.memberName === 'scout')).toBe(true);
+
+    const [swarmTool] = createSwarmTools({ getRuntime: () => swarmManager });
+    const boardRes = (await runWithToolRuntimeContext({ threadId: 'coord_2' }, () =>
+      swarmTool.execute({ action: 'board', limit: 5 })
+    )) as { entries: Array<{ content: string }> };
+    expect(boardRes.entries.some(e => e.content.includes('Scout the repo'))).toBe(true);
+  });
 });

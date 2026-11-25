@@ -260,6 +260,8 @@ export const SwarmToolSettingsSchema = z.object({
   inheritReadOnlyTools: z.array(z.string()).catch([]),
   worktreeDirName: z.string().catch('swarm-worktrees'),
   branchPrefix: z.string().catch('iki/swarm'),
+  defaultCoordinatorModel: z.string().catch(''),
+  defaultWorkerModel: z.string().catch(''),
 });
 export type SwarmToolSettings = z.infer<typeof SwarmToolSettingsSchema>;
 
