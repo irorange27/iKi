@@ -377,12 +377,6 @@ importers:
       '@iki/core':
         specifier: workspace:*
         version: link:../core
-      '@iki/session':
-        specifier: workspace:*
-        version: link:../session
-      '@iki/store':
-        specifier: workspace:*
-        version: link:../store
       '@iki/system-prompt':
         specifier: workspace:*
         version: link:../system-prompt

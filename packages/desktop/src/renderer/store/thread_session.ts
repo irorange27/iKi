@@ -7,7 +7,7 @@ import { resetToolUiStateMap } from '../modules/chat/tool_ui_state';
 import { isObjectRecord } from '@iki/core/utils/guards';
 import type { ChatThread as StoredChatThread } from '@iki/core/types/chat';
 import type { ChatUiMessage } from '@iki/llm/message/message_parts';
-import type { ElectronApi } from '@iki/harness/types/electron_api';
+import type { ElectronApi } from '../../shared/electron_api';
 import { createLogger } from '../logger';
 import { getCurrentLocale, translateWithLocale } from '../i18n';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';

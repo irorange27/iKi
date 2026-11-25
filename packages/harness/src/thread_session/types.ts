@@ -54,12 +54,7 @@ export type ChatStreamEvent =
       };
     };
 
-export type RunStatusEvent = {
-  runId: string;
-  status: import('@iki/core/types/agent_run').AgentRunStatus;
-  threadId?: string | null;
-  timestamp: string;
-};
+export type { RunStatusEvent } from '@iki/core/types/agent_run';
 
 type PersistedTurnMessage = {
   id: string;

@@ -85,7 +85,6 @@ export class PiToolTurnHarness {
       resolveTools({
         enableTools: this.config.enableTools,
         enabledToolNames: this.config.enabledToolNames,
-        availableSkillIds: this.config.availableSkillIds,
         requireApproval: false,
         autoApproveToolRequests: true,
       });

@@ -1,4 +1,4 @@
-import type { ChatInvocationOptions } from '@iki/harness/types/electron_api';
+import type { ChatInvocationOptions } from '../../../shared/electron_api';
 import { toPlainData as clonePlainData } from '@iki/core/utils/plain_clone';
 import type { ModelCapabilitySnapshot, Provider } from '@iki/core/types/provider';
 

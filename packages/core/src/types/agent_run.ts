@@ -12,6 +12,13 @@ export type AgentRunStatus =
   | 'failed'
   | 'cancelled';
 
+export type RunStatusEvent = {
+  runId: string;
+  status: AgentRunStatus;
+  threadId?: string | null;
+  timestamp: string;
+};
+
 /**
  * `finalize` and `approval-response` are retained for rows written before those
  * transitions stopped appending a step. Nothing writes either any more.

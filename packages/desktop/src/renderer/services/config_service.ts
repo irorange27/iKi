@@ -3,7 +3,7 @@ import type {
   ConfigRuntimeInfo,
   NetworkDiagnosticResult,
 } from '@iki/core/types/config';
-import type { ElectronApi } from '@iki/harness/types/electron_api';
+import type { ElectronApi } from '../../shared/electron_api';
 import { createLogger } from '../logger';
 import { getElectronApiSlice, requireElectronApiSlice } from './electron_api';
 

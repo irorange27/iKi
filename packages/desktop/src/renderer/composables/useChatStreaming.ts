@@ -2,7 +2,7 @@ import { ref } from 'vue';
 import type { Ref } from 'vue';
 
 import type { ChatUiMessage } from '@iki/llm/message/message_parts';
-import type { ElectronApi } from '@iki/harness/types/electron_api';
+import type { ElectronApi } from '../../shared/electron_api';
 import { createLogger } from '../logger';
 import type { ChatInstance } from '../modules/chat/chat_instance';
 import type { ChatMessageStore } from '../modules/chat/chat_message_store';

@@ -4,6 +4,7 @@ import { normalizeAppConfig } from './config/normalize';
 import { normalizeAppLocale } from '@iki/core/i18n/locale';
 import { getConfig, setConfig } from '@iki/store/database';
 import { getDisplayScale, getLocale, getTheme } from '@iki/core/platform';
+import { setNetworkConfigReader } from '@iki/llm/network/http';
 
 function getSystemConfig(): AppConfig {
   const locale = getLocale();
@@ -30,3 +31,5 @@ export const getAppConfig = (): AppConfig => {
 export const setAppConfig = (config: AppConfig): void => {
   setConfig('app_config', normalizeAppConfig(config));
 };
+
+setNetworkConfigReader(() => getAppConfig()?.network ?? null);

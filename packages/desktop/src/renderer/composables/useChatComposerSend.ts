@@ -2,7 +2,7 @@ import { ref, watch, type Ref } from 'vue';
 import type { UiFilePart as FileUIPart } from '@iki/llm/message/ui_protocol';
 
 import type { ComposerInvocationPartData } from '@iki/llm/message/message_parts';
-import type { ElectronApi } from '@iki/harness/types/electron_api';
+import type { ElectronApi } from '../../shared/electron_api';
 import type { ModelCapabilitySnapshot, Provider } from '@iki/core/types/provider';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import { createLogger } from '../logger';

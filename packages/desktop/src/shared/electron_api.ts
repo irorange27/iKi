@@ -9,7 +9,7 @@ import type {
   ProviderModelDiscoveryOverride,
   ProviderUpdatedEvent,
 } from '@iki/core/types/provider';
-import type { ChatThread, PromptApp, Workspace } from '@iki/core/types/chat';
+import type { ChatThread, PromptApp, ThreadContentMatch, Workspace } from '@iki/core/types/chat';
 import type { ChatUsagePeriod, ChatUsageSummary } from '@iki/core/types/chat_usage';
 import type { ChatUiMessage } from '@iki/llm/message/message_parts';
 import type { DevRuntimeStatus, DevToolsResolveRequest, DevToolsSourceResult } from '@iki/core/types/devtools';
@@ -34,10 +34,10 @@ import type {
   AgentRun,
   AgentEvalLabel,
   AgentRunTrace,
+  RunStatusEvent,
 } from '@iki/core/types/agent_run';
 import type { CompanionSnapshot } from '@iki/core/types/companion';
-import type { ChatInvocationOptions, ChatInvocationResult } from './chat_invocation';
-import type { RunStatusEvent } from '@iki/harness/thread_session/types';
+import type { ChatInvocationOptions, ChatInvocationResult } from '@iki/harness/types/chat_invocation';
 export type { ChatInvocationOptions, ChatInvocationResult };
 export type { RunStatusEvent };
 
@@ -154,7 +154,7 @@ export interface ElectronApi {
       searchContent: (
         query: string,
         limit?: number
-      ) => Promise<import('@iki/llm/message/thread_content_search').ThreadContentMatch[]>;
+      ) => Promise<ThreadContentMatch[]>;
     };
     messages: {
       /** The session log's rebuilt view — the same ChatUiMessage values a resumed turn replays. */

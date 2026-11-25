@@ -1,85 +1,118 @@
 {
-  "$comment": "Module registry for scripts/module_context.mjs. roots own all files under them (longest prefix wins); layer follows contract < domain < app < adapters < ui vocabulary.",
+  "$comment": "Module registry for scripts/module_context.mjs. roots own all files under them (longest prefix wins); layer follows contract < domain < app < orchestration < shell < ui vocabulary.",
   "modules": [
     {
-      "id": "backend/thread_session",
+      "id": "core",
       "roots": [
-        "packages/harness/src/thread_session"
+        "packages/core/src"
       ],
-      "layer": "orchestration",
-      "role": "Turn orchestration: session loop, streaming, approval persistence, recovery, run tracker, session-log authority",
-      "notes": "The durable-execution core. Approval/recovery/replay invariants here are pinned by the ownership map in packages/harness/README.md and protected by HARNESS_REVIEW.md."
+      "layer": "contract",
+      "role": "Leaf contracts: domain settings schemas, platform paths, logger, action risk, shared types & utils",
+      "notes": "Strict leaf package (depcruise core-is-a-leaf): zero internal package dependencies."
     },
     {
-      "id": "backend/agent",
+      "id": "theme",
       "roots": [
-        "packages/harness/src/agent"
+        "packages/theme/src"
       ],
-      "layer": "orchestration",
-      "role": "Agent loop and harness: Pi turn harnesses, step budget, compaction, tool resolution",
-      "notes": "No abstraction layer between AgentHarness and AgentRunner (AGENTS.md non-negotiable)."
+      "layer": "contract",
+      "role": "Base46 theme tokens, presets, and compiler"
     },
     {
-      "id": "backend/tools",
+      "id": "system-prompt",
       "roots": [
-        "packages/harness/src/tools"
-      ],
-      "layer": "domain",
-      "role": "Concrete tools: registry, schemas, file/shell/web/skill/awaiter/agent tools"
-    },
-    {
-      "id": "backend/turn_prep",
-      "roots": [
-        "packages/harness/src/turn_prep"
-      ],
-      "layer": "app",
-      "role": "Pre-turn assembly: context blocks, tool guard, prompt inputs",
-      "notes": "thread_session reaches turn_prep only via injected ports (depcruiser R5)."
-    },
-    {
-      "id": "backend/provider",
-      "roots": [
-        "packages/ai/src/provider"
+        "packages/system-prompt/src"
       ],
       "layer": "domain",
-      "role": "Model supply: LLM factory, pi adapter, model discovery, tool model",
-      "notes": "Leaf module — must not reach up into tools/session/orchestration (depcruiser R1)."
+      "role": "Static system prompt slot assembler (persona, planPrompt, extraPrompt, transcriptSystem) & dynamic <system_reminder> formatter"
     },
     {
-      "id": "backend/db",
+      "id": "store",
       "roots": [
         "packages/store/src"
       ],
       "layer": "domain",
-      "role": "File-backed persistence: collections, append-only session logs, row codecs",
-      "notes": "File store only: one JSON file per collection plus append-only JSONL session logs. The depcruise rules core-is-a-leaf and store-depends-only-on-core keep this package from reaching upward."
+      "role": "File-backed persistence: JSON collections, TOML settings/models, thread run locks",
+      "notes": "Depends only on @iki/core (depcruise store-depends-only-on-core)."
     },
     {
-      "id": "backend/message",
+      "id": "session",
       "roots": [
-        "packages/ai/src/message"
+        "packages/session/src"
       ],
       "layer": "domain",
-      "role": "Message codecs, ui/model conversions, system prompt assembly, markdown export"
+      "role": "Append-only SessionEvent JSONL log, event replay & thread forking"
     },
     {
-      "id": "backend/mcp",
+      "id": "llm",
       "roots": [
-        "packages/harness/src/mcp"
+        "packages/llm/src"
+      ],
+      "layer": "domain",
+      "role": "Model-neutral transcript types, chronological UI <-> ModelMessage projection, tool payload contracts, HTTP/proxy helpers",
+      "notes": "Pure protocol/projection layer: depends only on @iki/core and @iki/system-prompt (no store/session/vendor deps)."
+    },
+    {
+      "id": "llm-pi-ai",
+      "roots": [
+        "packages/llm-pi-ai/src"
+      ],
+      "layer": "adapter",
+      "role": "Model supply adapter (@earendil-works/pi-ai): factory, capability resolution, model discovery, auxiliary tool-model selection",
+      "notes": "Leaf provider adapter — must not reach up into tools, session, harness, or shells (depcruise provider-is-leaf)."
+    },
+    {
+      "id": "agent",
+      "roots": [
+        "packages/agent/src"
+      ],
+      "layer": "contract",
+      "role": "Tool & step contracts (BaseTool, ToolRegistry, AgentStep, AgentHooks)"
+    },
+    {
+      "id": "agent-loop",
+      "roots": [
+        "packages/agent-loop/src"
+      ],
+      "layer": "domain",
+      "role": "Pure multi-step tool-calling loop engine (runAgentLoop)"
+    },
+    {
+      "id": "tools",
+      "roots": [
+        "packages/tools/src"
+      ],
+      "layer": "domain",
+      "role": "Pluggable built-in tools (@iki/tools/shell bash/pwsh/job, @iki/tools/swarm)"
+    },
+    {
+      "id": "harness/thread_session",
+      "roots": [
+        "packages/harness/src/thread_session"
+      ],
+      "layer": "orchestration",
+      "role": "Turn orchestration: session loop, streaming, approval persistence, recovery, compaction, mailbox, session-log authority",
+      "notes": "The durable-execution core. Protected by packages/harness/README.md and HARNESS_REVIEW.md."
+    },
+    {
+      "id": "harness/agent",
+      "roots": [
+        "packages/harness/src/agent"
+      ],
+      "layer": "orchestration",
+      "role": "Turn harnesses, context budget, compaction step, tool resolution & execution"
+    },
+    {
+      "id": "harness/turn_prep",
+      "roots": [
+        "packages/harness/src/turn_prep"
       ],
       "layer": "app",
-      "role": "MCP server lifecycle, transports, remote tool registration"
+      "role": "Pre-turn assembly: context blocks, project instructions, tool guard, prompt inputs",
+      "notes": "thread_session reaches turn_prep only via injected ports (depcruise turn-prep-below-session)."
     },
     {
-      "id": "backend/awaiters",
-      "roots": [
-        "packages/harness/src/awaiters"
-      ],
-      "layer": "app",
-      "role": "Continue-later wakes: awaiter manager, schedule, wake runs"
-    },
-    {
-      "id": "backend/swarm",
+      "id": "harness/swarm",
       "roots": [
         "packages/harness/src/swarm"
       ],
@@ -87,46 +120,67 @@
       "role": "Multi-agent swarm orchestration: shared append-only board, roster, role prompts, worktree workers"
     },
     {
-      "id": "backend/workspaces",
+      "id": "harness/tools",
+      "roots": [
+        "packages/harness/src/tools"
+      ],
+      "layer": "app",
+      "role": "Host tool wiring, skills discovery & cache-safe delta reminders"
+    },
+    {
+      "id": "harness/mcp",
+      "roots": [
+        "packages/harness/src/mcp"
+      ],
+      "layer": "app",
+      "role": "MCP server lifecycle, transports, remote tool registration"
+    },
+    {
+      "id": "harness/awaiters",
+      "roots": [
+        "packages/harness/src/awaiters"
+      ],
+      "layer": "app",
+      "role": "Continue-later wakes: awaiter manager, schedule, wake runs"
+    },
+    {
+      "id": "harness/workspaces",
       "roots": [
         "packages/harness/src/workspaces"
       ],
       "layer": "domain",
-      "role": "Workspace and thread modes: scratch workspaces, worktrees, approval-policy parse"
+      "role": "Workspace selection, Git worktree isolation driver, thread approval-policy parsing"
     },
     {
-      "id": "backend/foundation",
+      "id": "harness/foundation",
       "roots": [
-        "packages/core/src/utils",
         "packages/harness/src/config",
         "packages/harness/src/constants",
-        "packages/core/src/types",
-        "packages/core/src/logging",
-        "packages/core/src/i18n",
-        "packages/ai/src/network",
-        "packages/harness/src/runtimes"
-      ],
-      "layer": "foundation",
-      "role": "Shared foundation: guards, errors, config, types, logging, locale, http, aux-model runtimes"
-    },
-    {
-      "id": "backend/standalone",
-      "roots": [
+        "packages/harness/src/runtimes",
+        "packages/harness/src/types",
         "packages/harness/src"
       ],
-      "layer": "foundation",
-      "role": "Top-level backend files (chat_platform, persona, logger) — catch-all below the named modules",
-      "notes": "Any file here that grows a real job should be promoted into a named module."
+      "layer": "app",
+      "role": "Harness composition config, auxiliary runtimes (summary/compaction prompt), and shared invocation types"
+    },
+    {
+      "id": "cli",
+      "roots": [
+        "packages/cli/src"
+      ],
+      "layer": "shell",
+      "role": "Fullscreen pi-tui interactive REPL, live Swarm/Job watch views, and --print/--json CLI"
     },
     {
       "id": "desktop/main",
       "roots": [
         "packages/desktop/src/main",
         "packages/desktop/src/main.ts",
-        "packages/desktop/src/preload"
+        "packages/desktop/src/preload",
+        "packages/desktop/src/shared"
       ],
       "layer": "shell",
-      "role": "Electron shell: IPC translate layer, windows, platform services. No business logic allowed."
+      "role": "Electron shell: IPC translate layer, preload bridge, shared ElectronApi contract, windows, platform services"
     },
     {
       "id": "desktop/renderer",
@@ -135,15 +189,7 @@
       ],
       "layer": "ui",
       "role": "Vue 3 SPA: components, composables, stores, chat module. electronAPI is the only backend door.",
-      "notes": "Imports only pure backend types/utils (depcruiser renderer-backend-whitelist). knip does not parse .vue — renderer surface is guarded by vue-tsc + eslint instead."
-    },
-    {
-      "id": "theme",
-      "roots": [
-        "packages/theme/src"
-      ],
-      "layer": "foundation",
-      "role": "Theme tokens, base46 compilation, theme editor logic"
+      "notes": "Imports only pure types/utils (depcruise renderer-backend-whitelist & renderer-no-schema-heavy-closure)."
     }
   ]
 }

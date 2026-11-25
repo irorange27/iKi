@@ -1,5 +1,6 @@
+import { getConfig } from '@iki/store/database';
 import { getProviders } from '@iki/store/providers';
-import { getAppConfig } from '@iki/harness/config';
+import { ToolModelSettingsSchema } from '@iki/core/domain/settings';
 import { createLogger } from '@iki/core/logger';
 import { generateConversationTitle } from '@iki/llm-pi-ai/title_runtime';
 import { generateChatWithModelMessages } from './factory';
@@ -111,12 +112,19 @@ const resolveFallbackToolModel = (providers: ReturnType<typeof getProviders>): T
   return null;
 };
 
+const readStoredToolModelConfig = (): ToolModelSelectionInput | null => {
+  const raw = getConfig('app_config');
+  if (!raw || typeof raw !== 'object') return null;
+  const parsed = ToolModelSettingsSchema.safeParse((raw as { toolModel?: unknown }).toolModel ?? {});
+  return parsed.success ? parsed.data : null;
+};
+
 export const getToolModel = (): ToolModelConfig | null => {
   try {
-    const config = getAppConfig();
+    const toolModelConfig = readStoredToolModelConfig();
     const providers = getProviders();
 
-    const configuredToolModel = findConfiguredToolModel(providers, config?.toolModel);
+    const configuredToolModel = findConfiguredToolModel(providers, toolModelConfig);
     if (configuredToolModel) {
       return configuredToolModel;
     }

@@ -18,14 +18,23 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const registry = JSON.parse(readFileSync(join(ROOT, 'scripts/module_registry.json'), 'utf8'));
 
-const SOURCE_GLOBS = [
-  'packages/harness/src',
-  'packages/core/src',
-  'packages/store/src',
-  'packages/ai/src',
-  'packages/theme/src',
-  'packages/desktop/src',
+const WORKSPACE_PACKAGES = [
+  'core',
+  'theme',
+  'store',
+  'session',
+  'system-prompt',
+  'llm',
+  'llm-pi-ai',
+  'agent',
+  'agent-loop',
+  'tools',
+  'harness',
+  'cli',
+  'desktop',
 ];
+
+const SOURCE_GLOBS = WORKSPACE_PACKAGES.map(pkg => `packages/${pkg}/src`);
 const EXTS = ['.ts', '.vue'];
 
 const listFiles = (dir, out = []) => {
@@ -65,10 +74,18 @@ const IMPORT_RE = /(?:from\s+|import\s*\(\s*)['"]([^'"]+)['"]/g;
 
 const resolveSpecifier = (specifier, importer) => {
   let base = null;
-  if (specifier.startsWith('@iki/harness/')) base = join(ROOT, 'packages/harness/src', specifier.slice('@iki/harness/'.length));
-  else if (specifier.startsWith('@iki/theme/')) base = join(ROOT, 'packages/theme/src', specifier.slice('@iki/theme/'.length));
-  else if (specifier.startsWith('.')) base = resolve(dirname(importer), specifier);
-  else return null; // npm package
+  if (specifier.startsWith('@iki/')) {
+    const rest = specifier.slice('@iki/'.length);
+    const slash = rest.indexOf('/');
+    const pkg = slash >= 0 ? rest.slice(0, slash) : rest;
+    const sub = slash >= 0 ? rest.slice(slash + 1) : 'index';
+    if (!WORKSPACE_PACKAGES.includes(pkg)) return null;
+    base = join(ROOT, `packages/${pkg}/src`, sub);
+  } else if (specifier.startsWith('.')) {
+    base = resolve(dirname(importer), specifier);
+  } else {
+    return null; // npm package
+  }
   const candidates = [base, ...EXTS.map(ext => base + ext), ...EXTS.map(ext => join(base, `index${ext}`))];
   return candidates.find(candidate => {
     try {

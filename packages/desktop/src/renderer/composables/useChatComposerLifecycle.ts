@@ -1,6 +1,6 @@
 import { onMounted, onUnmounted, watch, type Ref } from 'vue';
 
-import type { ElectronApi } from '@iki/harness/types/electron_api';
+import type { ElectronApi } from '../../shared/electron_api';
 
 export const useChatComposerLifecycle = (deps: {
   electronAPI: Pick<ElectronApi, 'providers'>;

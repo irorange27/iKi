@@ -1,20 +1,10 @@
 import { getSessionEvents } from '@iki/session/session_events';
-import { getChatThreads } from '@iki/store/chat_thread';
 import * as chatThreadDb from '@iki/store/chat_thread';
+import type { ThreadContentMatch } from '@iki/core/types/chat';
 import { INPUT_ACCEPTED, MODEL_OUTPUT_COMMITTED } from '@iki/core/types/session_events';
-import { extractTextFromMessageParts, isObjectRecord } from './message_parts';
+import { extractTextFromMessageParts, isObjectRecord } from '@iki/llm/message/message_parts';
 
 const MESSAGE_EVENT_TYPES_FOR_SEARCH = [INPUT_ACCEPTED, MODEL_OUTPUT_COMMITTED];
-
-export type ThreadContentMatch = {
-  threadId: string;
-  threadTitle: string;
-  messageId: string;
-
-  role: string;
-  snippet: string;
-  updatedAt: string;
-};
 
 const SNIPPET_CONTEXT = 48;
 const SNIPPET_MAX = 180;
@@ -48,7 +38,7 @@ export const searchThreadContent = (rawQuery: string, limit = 12): ThreadContent
   // instead would hit message ids, roles, tool arguments and run ids, and would
   // re-parse every message event of every thread on every keystroke.
   const candidates: { row: SearchRow; parsed: { role: string; text: string } }[] = [];
-  for (const thread of getChatThreads()) {
+  for (const thread of chatThreadDb.getChatThreads()) {
     for (const event of getSessionEvents(thread.id, MESSAGE_EVENT_TYPES_FOR_SEARCH)) {
       const payload = event.payload as { message?: { id?: unknown } };
       const parsed = messageSearchableText(payload.message);

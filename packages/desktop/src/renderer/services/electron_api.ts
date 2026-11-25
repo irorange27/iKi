@@ -1,4 +1,4 @@
-import type { ElectronApi } from '@iki/harness/types/electron_api';
+import type { ElectronApi } from '../../shared/electron_api';
 
 type AnyFunction = (...args: never[]) => unknown;
 type SliceKeys = {

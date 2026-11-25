@@ -54,7 +54,7 @@ Read [packages/harness/README.md](packages/harness/README.md) and [packages/harn
 | Change UI ↔ ModelMessage replay | `packages/llm/src/message/ui_to_model.ts`, `ui_messages.ts`, `model_history.ts` |
 | Change CLI TUI / slash commands / tool cards | `packages/cli/src/interactive.ts`, `turn_view.ts`, `tool_render.ts`, `commands.ts` |
 | Change tool approval policy / desktop UX | `packages/core/src/utils/action_risk.ts`, `packages/harness/src/agent/harness/tool_resolver.ts`, `packages/desktop/src/renderer/modules/chat/tool_approval_controller.ts` |
-| Add / modify Desktop IPC channel | `packages/desktop/src/preload/index.ts` + `packages/desktop/src/main/ipc/` + `packages/harness/src/types/electron_api.ts` |
+| Add / modify Desktop IPC channel | `packages/desktop/src/preload/index.ts` + `packages/desktop/src/main/ipc/` + `packages/desktop/src/shared/electron_api.ts` |
 | Inspect module contract surface | `pnpm run arch:context <module-id>` (`scripts/module_registry.json`) |
 | Package Desktop / cut a release | `packages/desktop/forge.config.ts`, `packages/desktop/src/build/runtime_packaging.ts` |
 | Open a GitHub Issue or PR | `.github/ISSUE_TEMPLATE/` (`bug_report.md`, `feature_request.md`) & `.github/pull_request_template.md` |

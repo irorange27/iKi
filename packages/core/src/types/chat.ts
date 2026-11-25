@@ -79,3 +79,12 @@ export interface PromptApp {
   window_height?: number;
   font_size?: number;
 }
+
+export type ThreadContentMatch = {
+  threadId: string;
+  threadTitle: string;
+  messageId: string;
+  role: string;
+  snippet: string;
+  updatedAt: string;
+};

@@ -4,7 +4,7 @@ import { IkiChat, type ChatStateAdapter } from './iki_chat';
 
 import type { ChatUiMessage } from '@iki/llm/message/message_parts';
 import { isObjectRecord } from '@iki/core/utils/guards';
-import type { ElectronApi } from '@iki/harness/types/electron_api';
+import type { ElectronApi } from '../../../shared/electron_api';
 import { createLogger } from '../../logger';
 import { recordToolChunkTiming } from './tool_ui_state';
 import { createToolApprovalController } from './tool_approval_controller';

@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 
-import type { ElectronApi } from '@iki/harness/types/electron_api';
+import type { ElectronApi } from '../../shared/electron_api';
 import type {
   ModelCapabilitySnapshot,
   Provider,

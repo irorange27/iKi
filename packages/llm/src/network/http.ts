@@ -1,7 +1,14 @@
 import type { AppConfig } from '@iki/core/types/config';
 import { buildProxyUrl } from './proxy';
-import { getAppConfig } from '@iki/harness/config';
 import { getHostFetch } from '@iki/core/platform';
+
+type NetworkConfigReader = () => AppConfig['network'] | null | undefined;
+let networkConfigReader: NetworkConfigReader | null = null;
+
+/** Injects the host network settings reader so @iki/llm never reaches up into @iki/harness. */
+export const setNetworkConfigReader = (reader: NetworkConfigReader | null): void => {
+  networkConfigReader = reader;
+};
 
 const DEFAULT_NETWORK_TIMEOUT_MS = 5000;
 const MIN_NETWORK_TIMEOUT_MS = 1000;
@@ -20,7 +27,7 @@ const managedProxyEnvState: {
 };
 
 const getNetworkConfig = (): AppConfig['network'] | null => {
-  return getAppConfig()?.network ?? null;
+  return networkConfigReader?.() ?? null;
 };
 
 export const clampNetworkTimeoutMs = (timeout: unknown): number => {

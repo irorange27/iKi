@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted, ref, type Ref } from 'vue';
-import type { ElectronApi, RunStatusEvent } from '@iki/harness/types/electron_api';
+import type { ElectronApi, RunStatusEvent } from '../../shared/electron_api';
 
 type RunStatusState = {
   currentStatus: Ref<string | null>;

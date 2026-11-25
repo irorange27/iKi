@@ -20,7 +20,7 @@ import type { AgentRun, AgentRunKind } from '@iki/core/types/agent_run';
 import { getErrorMessage } from '@iki/core/utils/errors';
 import type { ModelMessage } from '@iki/llm/message/model_history';
 import { buildThreadMarkdown } from '@iki/llm/message/thread_markdown_export';
-import { searchThreadContent } from '@iki/llm/message/thread_content_search';
+import { searchThreadContent } from './thread_content_search';
 import { compactThreadNow } from './compaction';
 
 export type { ChatStreamTarget } from './types';

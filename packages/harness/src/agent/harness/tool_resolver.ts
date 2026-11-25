@@ -82,14 +82,10 @@ const prepareToolWithGuard = (
 export const resolveTools = (params: {
   enableTools: boolean;
   enabledToolNames: string[];
-  availableSkillIds: string[];
   requireApproval: boolean;
   autoApproveToolRequests: boolean;
-
   approvalPolicy?: ApprovalPolicy;
-
   approvalPolicyBox?: ApprovalPolicyBox;
-  skillToolFactory?: () => AgentTool;
 }): AgentTool[] => {
   if (!params.enableTools) return [];
 
