@@ -589,11 +589,11 @@ export const settings = {
   'settings.skills.description':
     '技能是从本地 SKILL.md 文件加载的指令包。把你的自定义技能放到 Personal skills 文件夹后，它们就会显示在这里。',
   'settings.skills.source.personal': '个人',
-  'settings.skills.source.codex': 'Codex',
+  'settings.skills.source.agent': 'Agent',
   'settings.skills.searchPlaceholder': '按名称、描述或 id 搜索技能…',
   'settings.skills.empty': '没有找到技能。',
   'settings.skills.group.personal': '个人技能',
-  'settings.skills.group.codex': 'Codex 技能',
+  'settings.skills.group.agent': 'Agent 技能',
   'settings.skills.noDescription': '没有描述',
   'settings.skills.viewContent': '查看内容',
   'settings.skills.contentTruncated': '显示内容已截断。',

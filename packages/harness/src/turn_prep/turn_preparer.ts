@@ -24,6 +24,8 @@ export type ChatTurnOptions = {
 
   personality?: string;
 
+  extraSystemPrompt?: string;
+
   approvalPolicy?: string;
 
   requireApproval?: boolean;
@@ -140,8 +142,16 @@ export const createChatTurnPreparer = (deps: {
     const runtimeConfig = deps.getRuntimeConfig();
     const autoApproveToolRequests = runtimeConfig.autoApproveToolRequests;
 
+    const userMessageIds = options.messages
+      .filter(
+        (m): m is ChatTransportMessage & { role: 'user' } =>
+          Boolean(m) && typeof m === 'object' && 'role' in m && m.role === 'user'
+      )
+      .map(m => ('id' in m && typeof m.id === 'string' && m.id.trim() ? m.id.trim() : undefined));
+
     const assembledContext = await contextAssembler.assemble({
       messages: modelMessages,
+      userMessageIds,
       threadId: options.threadId,
       workspaceSelection: options.workspaceSelection,
       skillIds: options.skillIds,
@@ -179,11 +189,15 @@ export const createChatTurnPreparer = (deps: {
       if (!guardedTools.includes('job')) guardedTools.push('job');
     }
 
+    const firstUserMessage = modelMessages.find(message => message.role === 'user');
+    const firstUserPrompt = firstUserMessage ? getPromptFromMessage(firstUserMessage) : '';
+
     persistThreadRuntimeHints({
       threadId: options.threadId ?? '',
       providerType: options.providerType,
       providerId: options.providerId,
       model: options.model,
+      ...(firstUserPrompt ? { firstUserPrompt } : {}),
     });
 
     if (finalMessages.length === 0) {

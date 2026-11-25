@@ -1,4 +1,4 @@
-import { commitRows, patchRow, readRows } from './collection';
+import { commitRows, patchRow, readRows, removeRow } from './collection';
 import { Workspace } from '@iki/core/types/chat';
 
 const normalize = (row: Workspace): Workspace => ({
@@ -54,4 +54,8 @@ export const updateWorkspace = (id: string, workspace: Partial<Workspace>): Work
   if (Object.keys(changes).length === 0) return null;
   if (!patchRow<Workspace>('workspaces', 'id', id, changes)) return null;
   return getWorkspace(id);
+};
+
+export const deleteWorkspace = (id: string): void => {
+  removeRow<Workspace>('workspaces', 'id', id);
 };

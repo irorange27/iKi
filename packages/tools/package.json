@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./shell": "./src/shell/index.ts",
+    "./swarm": "./src/swarm/index.ts",
     "./*": "./src/*.ts"
   },
   "dependencies": {

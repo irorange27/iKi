@@ -3,6 +3,17 @@ import type { ApprovalPolicy } from '../utils/action_risk';
 /** How a thread runs: plain chat, or chat bound to a work workspace. */
 export type ThreadWorkMode = 'chat' | 'work';
 
+export interface ThreadSkillReminderAnchor {
+  beforeAnchor: string;
+  text: string;
+}
+
+export interface ThreadSkillsSnapshot {
+  baselinePrompt: string;
+  lastDelivered: Record<string, string>;
+  anchoredReminders: ThreadSkillReminderAnchor[];
+}
+
 export interface ChatThread {
   id: string;
   title: string;
@@ -27,6 +38,7 @@ export interface ChatThread {
   enable_artifacts: boolean;
   artifact_workspace_id?: string;
   skill_ids?: string[] | null;
+  skills_snapshot?: ThreadSkillsSnapshot | null;
 }
 
 // There is no `ChatMessage` row type any more (task-1 / ADR-008). The session log

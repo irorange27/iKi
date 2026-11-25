@@ -30,6 +30,12 @@ fs.writeFileSync(
   path.join(storeDir, 'skills', 'demo-skill', 'SKILL.md'),
   '---\nname: demo-skill\ndescription: Demo skill for CLI E2E verification\n---\nAlways greet concisely.\n'
 );
+fs.mkdirSync(path.join(workspaceDir, '.agents', 'skills', 'repo-e2e'), { recursive: true });
+const repoSkillFile = path.join(workspaceDir, '.agents', 'skills', 'repo-e2e', 'SKILL.md');
+fs.writeFileSync(
+  repoSkillFile,
+  '---\nname: repo-e2e\ndescription: Workspace repo skill v1\n---\nInitial workspace skill instructions.\n'
+);
 fs.writeFileSync(
   path.join(storeDir, 'settings.toml'),
   '[general]\nlanguage = "en"\n'
@@ -91,8 +97,16 @@ try {
 
 const SHELL_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash';
 
-  // Turn 1: E2E_TASK triggers two shell calls and returns E2E_DONE
-  const turn1 = runCli(['--thread', 'cli-e2e-1', '--tools', `${SHELL_TOOL},job`, '--skills', 'user:demo-skill', 'E2E_TASK run']);
+  // Turn 1: E2E_TASK triggers two shell calls and returns E2E_DONE (with both personal & workspace .agents/skills)
+  const turn1 = runCli([
+    '--thread',
+    'cli-e2e-1',
+    '--tools',
+    `${SHELL_TOOL},job`,
+    '--skills',
+    'user:demo-skill,agent:repo-e2e',
+    'E2E_TASK run',
+  ]);
   assert.equal(turn1.success, true, 'turn 1 should succeed');
   assert.ok(turn1.text.includes('E2E_DONE'), `unexpected turn 1 text: ${turn1.text}`);
   assert.ok(turn1.usage && turn1.usage.inputTokens > 0, 'turn 1 should report inputTokens');
@@ -153,6 +167,56 @@ const SHELL_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash';
     'turn 1 final assistant answer must follow tool results before turn 2 user message'
   );
 
+  // Verify auto-title from first user message persisted on thread row
+  const storedThreads = JSON.parse(
+    fs.readFileSync(path.join(storeDir, 'state', 'chat_threads.json'), 'utf8')
+  );
+  const cliThread = storedThreads.find(t => t.id === 'cli-e2e-1');
+  assert.equal(cliThread?.title, 'E2E_TASK run', 'thread title should auto-populate from first user prompt');
+
+  // Verify Turn 1 wire system prompt included workspace .agents/skills/repo-e2e
+  assert.ok(
+    String(turn1FinalReq.messages[0]?.content ?? '').includes('Workspace repo skill v1'),
+    'turn 1 system prompt must include workspace .agents/skills metadata'
+  );
+
+  // Modify workspace skill on disk before Turn 3:
+  // Leading systemPrompt MUST stay byte-identical to Turn 1; update must travel as tail <system_reminder name="skills">
+  fs.writeFileSync(
+    repoSkillFile,
+    '---\nname: repo-e2e\ndescription: Workspace repo skill v2\n---\nUpdated workspace skill instructions.\n'
+  );
+  const turn3 = runCli([
+    '--thread',
+    'cli-e2e-1',
+    '--tools',
+    `${SHELL_TOOL},job`,
+    '--skills',
+    'user:demo-skill,agent:repo-e2e',
+    'CHECK_HISTORY',
+  ]);
+  assert.equal(turn3.success, true, 'turn 3 after skill edit should succeed');
+
+  const fauxEntriesAfterEdit = fs
+    .readFileSync(fauxLog, 'utf8')
+    .trim()
+    .split('\n')
+    .map(line => JSON.parse(line))
+    .filter(entry => Array.isArray(entry.messages));
+  const turn3Req = fauxEntriesAfterEdit.at(-1);
+  assert.equal(
+    turn3Req.messages[0]?.content,
+    turn1FinalReq.messages[0]?.content,
+    'system prompt prefix must stay frozen after skill edit for KV cache stability'
+  );
+  const tailReminder = turn3Req.messages.at(-2);
+  assert.equal(tailReminder?.role, 'user', 'skills delta reminder must be user-role at tail');
+  assert.ok(
+    String(tailReminder?.content ?? '').includes('<system_reminder name="skills">') &&
+      String(tailReminder?.content ?? '').includes('Workspace repo skill v2'),
+    'tail skills reminder must announce modified workspace skill v2'
+  );
+
   // Interactive REPL mode (-i -c): resumes latest thread, handles slash commands + chat turn + /exit
   const interactiveOut = execFileSync(
     TSX_BIN,
@@ -161,20 +225,64 @@ const SHELL_TOOL = process.platform === 'win32' ? 'pwsh' : 'bash';
       cwd: ROOT,
       encoding: 'utf8',
       env: { ...process.env, HOME: workDir, NO_COLOR: '1' },
-      input: ['/help', '/models', '/context', '/jobs', '/threads', 'CHECK_HISTORY', '/compact', '/history', '/usage', '/exit', ''].join('\n'),
+      input: ['/help', '/models', '/context', '/jobs', '/swarm status', '/threads', 'CHECK_HISTORY', '/compact', '/history', '/usage', '/exit', ''].join('\n'),
     }
   );
   assert.ok(interactiveOut.includes('iKi CLI'), 'interactive banner should render');
   assert.ok(interactiveOut.includes('cli-e2e-1'), '--continue should resume cli-e2e-1');
   assert.ok(interactiveOut.includes('Commands:'), '/help should print command list');
-  assert.ok(interactiveOut.includes('Enabled models:'), '/models should list models');
+  assert.ok(interactiveOut.includes('/copy'), '/help should document /copy clipboard command');
+  assert.ok(interactiveOut.includes('Enabled models'), '/models should list models');
+  assert.ok(
+    interactiveOut.includes('faux_cli/faux-e2e-model-b'),
+    '/models should auto-discover live models exposed by provider GET /v1/models endpoint'
+  );
   assert.ok(interactiveOut.includes('Loaded Context & Harness State:'), '/context should show repo context & harness state');
+  assert.ok(interactiveOut.includes('Skill Roots:'), '/context should display active skill roots');
   assert.ok(interactiveOut.includes('Durable background jobs'), '/jobs should list recorded durable shell jobs');
+  assert.ok(interactiveOut.includes('No active swarm on this thread.'), '/swarm status should respond cleanly');
+  assert.ok(interactiveOut.includes('E2E_TASK run'), '/threads should show first-message thread title');
   assert.ok(interactiveOut.includes('HISTORY_REPORT'), 'interactive chat turn should stream model reply');
   assert.ok(interactiveOut.includes('Compacted thread cli-e2e-1:'), '/compact should persist a compaction checkpoint');
+  assert.ok(interactiveOut.includes('Thread cli-e2e-1: 4 turn(s)'), '/usage should report accurate persisted thread turns');
   assert.ok(interactiveOut.includes('Session usage: 1 turn(s)'), '/usage should aggregate session turns');
 
-  console.log('[cli-e2e] PASS — CLI interactive REPL, tool execution, JSONL persistence, history replay, and cache usage verified');
+  // Empty session auto-cleanup: launching interactive CLI and exiting (or switching away via /thread)
+  // without sending any message must not leave phantom empty threads in chat_threads.json.
+  const emptySessionOut = execFileSync(
+    TSX_BIN,
+    [CLI_ENTRY, '--interactive', '--data-dir', dataDir, '--workspace', workspaceDir],
+    {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: { ...process.env, HOME: workDir, NO_COLOR: '1' },
+      input: ['/copy', '/exit', ''].join('\n'),
+    }
+  );
+  assert.ok(
+    emptySessionOut.includes('No assistant reply to copy in this thread.'),
+    '/copy should handle empty threads cleanly without modifying clipboard'
+  );
+  execFileSync(
+    TSX_BIN,
+    [CLI_ENTRY, '--interactive', '--data-dir', dataDir, '--workspace', workspaceDir],
+    {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: { ...process.env, HOME: workDir, NO_COLOR: '1' },
+      input: ['/thread cli-e2e-1', '/exit', ''].join('\n'),
+    }
+  );
+  const threadsAfterEmptyExits = JSON.parse(
+    fs.readFileSync(path.join(storeDir, 'state', 'chat_threads.json'), 'utf8')
+  );
+  assert.deepEqual(
+    threadsAfterEmptyExits.map(t => t.id),
+    ['cli-e2e-1'],
+    'empty threads created on startup must be pruned on exit and on /thread switch'
+  );
+
+  console.log('[cli-e2e] PASS — CLI interactive REPL, workspace skills + cache-safe reminder, auto-title, turn/step counts, empty-thread cleanup, swarm, and history replay verified');
 } finally {
   cleanup();
 }

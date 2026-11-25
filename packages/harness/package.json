@@ -7,6 +7,8 @@
     "./agent": "./src/agent/index.ts",
     "./agent/*": "./src/agent/*.ts",
     "./mcp": "./src/mcp/index.ts",
+    "./swarm": "./src/swarm/index.ts",
+    "./swarm/*": "./src/swarm/*.ts",
     "./thread_session": "./src/thread_session/index.ts",
     "./thread_session/*": "./src/thread_session/*.ts",
     "./tools": "./src/tools/index.ts",

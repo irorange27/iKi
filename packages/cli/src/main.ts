@@ -7,7 +7,8 @@ import { setPlatformInfo } from '@iki/core/platform';
 import { wirePlatformContext } from '@iki/core/platform_wiring';
 import { initializeDatabase } from '@iki/store/database';
 import { getProviders } from '@iki/store/providers';
-import { registerStandardTools } from '@iki/harness/tools';
+import { getBuiltinToolNames, registerStandardTools, registerSwarmTool } from '@iki/harness/tools';
+import { createSwarmManager } from '@iki/harness/swarm';
 import { createChatService, type ChatStreamTarget } from '@iki/harness/thread_session';
 import { createWorkspaceSelection, runInteractiveCli } from './interactive';
 
@@ -149,21 +150,36 @@ const main = async () => {
     (args.providerType ? providers.find(p => p.type === args.providerType) : undefined) ??
     providers[0];
 
+  const chatService = createChatService();
+
   const providerType = args.providerType ?? selectedProvider?.type;
   const providerId = args.providerId ?? selectedProvider?.id;
-  const model = args.model ?? selectedProvider?.models?.[0];
+  let model = args.model ?? selectedProvider?.models?.[0];
+  if (!model && providerType && selectedProvider) {
+    const discovered = await chatService.getModels(providerType, providerId, {
+      id: selectedProvider.id,
+      ...(selectedProvider.baseUrl ? { baseUrl: selectedProvider.baseUrl } : {}),
+      ...(selectedProvider.apiKey ? { apiKey: selectedProvider.apiKey } : {}),
+    });
+    model = discovered[0]?.id;
+  }
   if (!providerType || !model) {
     console.error('Error: no enabled provider/model found. Configure models.toml or pass --provider and --model.');
     process.exit(1);
   }
 
-  const chatService = createChatService();
+  const swarmManager = createSwarmManager({
+    chatService,
+    getBuiltinTools: getBuiltinToolNames,
+  });
+  registerSwarmTool(swarmManager);
   const latestThread = args.continueLatest ? chatService.listThreads()[0] : undefined;
   const threadId = args.threadId ?? latestThread?.id ?? `cli_${randomUUID().slice(0, 8)}`;
 
   if (useInteractive) {
     await runInteractiveCli({
       chatService,
+      swarmManager,
       dataDir: args.dataDir,
       threadId,
       providerType: args.providerType ?? latestThread?.provider_type ?? providerType,

@@ -100,6 +100,7 @@ export const assembleExecutionPlan = (params: {
         enabledToolNames: preparedTurn.guardedTools,
       }),
       getPersonalityStylePrompt(options.personality),
+      options.extraSystemPrompt?.trim() ?? '',
     ]
       .filter(part => part.trim().length > 0)
       .join('\n\n'),

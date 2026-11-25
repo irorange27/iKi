@@ -7,6 +7,7 @@ const READ_TOOLS = new Set([
   'web_search',
   'fetch',
   'job',
+  'swarm',
   'load_skill',
   'list_personal_skills',
   'read_personal_skill',

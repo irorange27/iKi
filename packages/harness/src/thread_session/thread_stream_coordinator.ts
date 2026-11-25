@@ -193,6 +193,21 @@ export const createThreadStreamCoordinator = (deps?: {
     return session.steerQueue.splice(0, session.steerQueue.length);
   };
 
+  const pushSteerByThread = (threadId: string, message: string): boolean => {
+    const trimmed = message.trim();
+    if (!trimmed) return false;
+    const session = sessionsByThread.get(threadId);
+    const streamState = session?.streamState;
+    if (!session || !streamState || streamState.cancelled) return false;
+    if (!session.steerQueue) session.steerQueue = [];
+    session.steerQueue.push(trimmed);
+    streamState.steered = true;
+    streamState.abortController.abort('steer');
+    return true;
+  };
+
+  const isThreadRunning = (threadId: string): boolean => runningThreads.has(threadId);
+
   const stopStream = (senderId: number) => {
     const streamState = activeStreams.get(senderId);
     if (!streamState) {
@@ -302,6 +317,8 @@ export const createThreadStreamCoordinator = (deps?: {
     registerStream,
     unregisterStream,
     takeSteerMessages,
+    pushSteerByThread,
+    isThreadRunning,
     stopStream,
     abortStreamByRunId,
     registerExecution,

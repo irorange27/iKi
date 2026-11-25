@@ -53,4 +53,31 @@ describe('JsonlSessionLogStore', () => {
       '3:turn_completed',
     ]);
   });
+
+  it('forks a thread history prefix into a new independent thread', () => {
+    const { store } = makeStore();
+
+    store.append('src', 0, [
+      { type: 'input_accepted', version: 1, payload: { runId: 'r1', text: 'first' } },
+      { type: 'turn_started', version: 1, payload: { runId: 'r1' } },
+      { type: 'turn_completed', version: 1, payload: { runId: 'r1' } },
+    ]);
+
+    const forkedRev = store.forkThread('src', 'child', 2);
+    expect(forkedRev).toBe(2);
+    expect(store.readThread('child').map(e => `${e.revision}:${e.type}`)).toEqual([
+      '1:input_accepted',
+      '2:turn_started',
+    ]);
+
+    // Subsequent appends on child do not affect source
+    store.append('child', 2, [
+      { type: 'input_accepted', version: 1, payload: { runId: 'r2', text: 'forked' } },
+    ]);
+    expect(store.headRevision('src')).toBe(3);
+    expect(store.headRevision('child')).toBe(3);
+
+    // Refuses overwriting a non-empty target thread
+    expect(() => store.forkThread('src', 'child')).toThrow(/non-empty thread/);
+  });
 });

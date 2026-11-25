@@ -26,9 +26,9 @@
       <p class="card-help">{{ t('settings.skills.description') }}</p>
 
       <div v-if="skillRoots.length" class="skills-paths">
-        <div v-for="root in skillRoots" :key="root.source" class="skills-path-row">
+        <div v-for="root in skillRoots" :key="root.path" class="skills-path-row">
           <span class="skills-path-label">
-            {{ root.source === 'user' ? t('settings.skills.source.personal') : t('settings.skills.source.codex') }}
+            {{ root.source === 'user' ? t('settings.skills.source.personal') : t('settings.skills.source.agent') }}
           </span>
           <code class="skills-path-value">{{ root.path }}</code>
           <button class="skills-mini-btn" @click="openSkillsFolder(root.source)">
@@ -86,13 +86,13 @@
           </div>
         </div>
 
-        <div v-if="codexSkills.length" class="skills-group">
+        <div v-if="agentSkills.length" class="skills-group">
           <div class="skills-group-title">
-            {{ t('settings.skills.group.codex') }}
-            <span class="skills-count-pill">{{ codexSkills.length }}</span>
+            {{ t('settings.skills.group.agent') }}
+            <span class="skills-count-pill">{{ agentSkills.length }}</span>
           </div>
           <div class="skills-list">
-            <div v-for="skill in codexSkills" :key="skill.id" class="skill-item">
+            <div v-for="skill in agentSkills" :key="skill.id" class="skill-item">
               <div class="skill-item-header">
                 <div class="skill-item-meta">
                   <div class="skill-name">{{ skill.name }}</div>
@@ -156,7 +156,7 @@ const skills = ref<SkillSummary[]>([]);
 const skillsLoading = ref(false);
 const skillsError = ref('');
 const skillSearchQuery = ref('');
-const skillRoots = ref<Array<{ source: 'user' | 'codex'; path: string }>>([]);
+const skillRoots = ref<Array<{ source: 'user' | 'agent'; path: string }>>([]);
 const expandedSkillIds = ref<string[]>([]);
 const skillContents = ref<Record<string, string>>({});
 const skillContentLoading = ref<Record<string, boolean>>({});
@@ -197,7 +197,7 @@ const refreshSkills = async () => {
   }
 };
 
-const openSkillsFolder = async (source?: 'user' | 'codex') => {
+const openSkillsFolder = async (source?: 'user' | 'agent') => {
   if (!skillsApi) {
     skillsError.value = t('settings.skills.error.openFolderFailed', {
       error: t('common.unavailable'),
@@ -293,7 +293,7 @@ const filteredSkills = computed(() => {
 const personalSkills = computed(() =>
   filteredSkills.value.filter(skill => skill.source === 'user')
 );
-const codexSkills = computed(() => filteredSkills.value.filter(skill => skill.source === 'codex'));
+const agentSkills = computed(() => filteredSkills.value.filter(skill => skill.source === 'agent'));
 
 watch(
   () => props.active,

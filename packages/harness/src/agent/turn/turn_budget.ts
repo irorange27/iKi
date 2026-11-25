@@ -1,4 +1,5 @@
 import type { ModelMessage } from '@iki/llm/message/model_history';
+import type { ToolModelConfig } from '@iki/llm-pi-ai/tool_model';
 
 import { generateThreadSummary } from '../../runtimes/thread_summary';
 import { assembleRequestSystemPrompt } from '@iki/llm/message/system_prompt';
@@ -41,11 +42,13 @@ const summarizeOmitted = async (params: {
   omitted: ModelMessage[];
   history?: ModelMessage[];
   threadId?: string;
+  preferredModel?: ToolModelConfig;
   signal?: AbortSignal;
   existingSummary?: string;
 }): Promise<string> => {
   const summary = await generateThreadSummary({
     ...(params.threadId ? { threadId: params.threadId } : {}),
+    ...(params.preferredModel ? { preferredModel: params.preferredModel } : {}),
     ...(params.signal ? { abortSignal: params.signal } : {}),
     ...(params.existingSummary ? { existingSummary: params.existingSummary } : {}),
     ...(params.history && params.history.length > 0 ? { history: params.history } : {}),
@@ -169,6 +172,7 @@ export const compactPiRequestStep = async (params: {
   existingSummary?: string;
 
   previousSummaryMessage?: ModelMessage;
+  preferredModel?: ToolModelConfig;
 }): Promise<CompactPiRequestStepResult> => {
   const budget = params.maxInputTokens - params.overheadTokens;
   const originalTokens = params.requestView.reduce((sum, message) => sum + estimateMessageTokens(message), 0);
@@ -201,6 +205,7 @@ export const compactPiRequestStep = async (params: {
       omitted: planned.omitted,
       history: view,
       ...(params.threadId ? { threadId: params.threadId } : {}),
+      ...(params.preferredModel ? { preferredModel: params.preferredModel } : {}),
       ...(params.signal ? { signal: params.signal } : {}),
       ...(existingSummary ? { existingSummary } : {}),
     });

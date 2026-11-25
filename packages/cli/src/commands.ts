@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { SlashCommand } from '@earendil-works/pi-tui';
+import { getSessionEventRevision } from '@iki/session/session_events';
+import { listAgentRunSteps, listAgentRunsByThread } from '@iki/store/agent_runs';
 import { getProviders } from '@iki/store/providers';
 import {
   getCachedInputTokens,
@@ -16,16 +18,24 @@ import {
   listShellJobs,
   readBoundedLogSlice,
 } from '@iki/tools/shell';
-import { listSkills } from '@iki/harness/tools/skills';
+import { getSkillRootsForUi, listSkills } from '@iki/harness/tools/skills';
 import { inspectAgentInstructionsForWorkspace } from '@iki/harness/turn_prep/context_blocks';
+import {
+  deriveThreadTitleFromPrompt,
+  isPlaceholderThreadTitle,
+} from '@iki/harness/turn_prep/thread_hints';
 import {
   rebuildThreadViewFromEvents,
   selectMessagesForCompaction,
 } from '@iki/harness/thread_session/session_log';
 import type { ChatService } from '@iki/harness/thread_session';
+import type { SwarmManager } from '@iki/harness/swarm';
+import { copyLastAssistantReply } from './clipboard';
+import { executeSwarmSlashCommand } from './swarm_commands';
 
 export type InteractiveCliState = {
   chatService: ChatService;
+  swarmManager?: SwarmManager;
   dataDir: string;
   threadId: string;
   providerType: string;
@@ -65,12 +75,41 @@ export const accumulateUsageTotals = (totals: UsageTotals, usage: TurnTokenUsage
 export const formatTurnUsageBadge = (usage: TurnTokenUsage, elapsedSec: string): string =>
   `[in ${getUncachedInputTokens(usage)} · cache ${getCachedInputTokens(usage)} · out ${Math.max(0, usage.outputTokens ?? 0)} · ${elapsedSec}s]`;
 
+/** Counts persisted user turns and LLM model-inference steps for a thread across runs/restarts. */
+export const countThreadTurnsAndSteps = (
+  threadId: string,
+  messages?: ReadonlyArray<{ role: string }>
+): { turns: number; steps: number } => {
+  const threadMessages = messages ?? rebuildThreadViewFromEvents(threadId).messages;
+  const turns = threadMessages.filter(m => m.role === 'user').length;
+  const steps = listAgentRunsByThread(threadId).reduce(
+    (total, run) =>
+      total + listAgentRunSteps(run.id).filter(step => step.type === 'model').length,
+    0
+  );
+  return { turns, steps };
+};
+
+/** Resolves a human-recognizable thread title, falling back to the first user message for legacy placeholder titles. */
+export const resolveThreadDisplayTitle = (thread: { id: string; title?: string | null }): string => {
+  const rawTitle = thread.title?.trim() ?? '';
+  if (rawTitle && !isPlaceholderThreadTitle(rawTitle)) return rawTitle;
+  const view = rebuildThreadViewFromEvents(thread.id);
+  const firstUser = view.messages.find(m => m.role === 'user');
+  if (firstUser) {
+    const preview = deriveThreadTitleFromPrompt(readMessagePreview(firstUser.parts));
+    if (preview) return preview;
+  }
+  return rawTitle || 'New Chat';
+};
+
 export type EnabledModelOption = {
   providerId: string;
   providerType: string;
   model: string;
   qualified: string;
   active: boolean;
+  discovered?: boolean;
 };
 
 export const createWorkspaceSelection = (threadId: string, workspacePath: string) => ({
@@ -87,6 +126,11 @@ export const createWorkspaceSelection = (threadId: string, workspacePath: string
   },
 });
 
+const clipSingleLine = (text: string, max = 96): string => {
+  const single = text.replace(/\s+/g, ' ').trim();
+  return single.length > max ? `${single.slice(0, max - 3)}...` : single;
+};
+
 const readMessagePreview = (parts: unknown): string => {
   if (!Array.isArray(parts)) return '';
   const text = parts
@@ -101,8 +145,7 @@ const readMessagePreview = (parts: unknown): string => {
     .join('\n')
     .trim();
   if (!text) return `[${parts.length} non-text part(s)]`;
-  const singleLine = text.replace(/\s+/g, ' ');
-  return singleLine.length > 120 ? `${singleLine.slice(0, 117)}...` : singleLine;
+  return clipSingleLine(text, 120);
 };
 
 const formatJobsLines = (threadId?: string): string[] => {
@@ -124,43 +167,88 @@ const readPersonaSummary = (dataDir: string): { path: string; chars: number; pre
   const personaPath = path.join(dataDir, 'PERSONA.md');
   try {
     const raw = fs.readFileSync(personaPath, 'utf8').trim();
-    return {
-      path: personaPath,
-      chars: raw.length,
-      preview: raw.replace(/\s+/g, ' ').slice(0, 160),
-    };
+    return { path: personaPath, chars: raw.length, preview: raw.replace(/\s+/g, ' ').slice(0, 160) };
   } catch {
     return { path: personaPath, chars: 0, preview: '' };
   }
 };
 
-const listRepoLocalAgentSkills = (workspacePath?: string): string[] => {
-  if (!workspacePath) return [];
-  const skillsDir = path.join(workspacePath, '.agents', 'skills');
-  try {
-    if (!fs.existsSync(skillsDir)) return [];
-    return fs
-      .readdirSync(skillsDir, { withFileTypes: true })
-      .filter(entry => entry.isDirectory() && fs.existsSync(path.join(skillsDir, entry.name, 'SKILL.md')))
-      .map(entry => entry.name)
-      .sort();
-  } catch {
-    return [];
+const cachedDiscoveredModelsByProvider = new Map<string, string[]>();
+
+const mergeProviderModelIds = (
+  configured: readonly string[],
+  discovered: readonly string[]
+): Array<{ model: string; discovered: boolean }> => {
+  const configuredSet = new Set(configured.map(m => m.trim()).filter(Boolean));
+  const seen = new Set<string>();
+  const out: Array<{ model: string; discovered: boolean }> = [];
+  for (const m of configured) {
+    const trimmed = m.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push({ model: trimmed, discovered: false });
   }
+  for (const m of discovered) {
+    const trimmed = m.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push({ model: trimmed, discovered: !configuredSet.has(trimmed) });
+  }
+  return out;
 };
 
-export const collectEnabledModels = (state: InteractiveCliState): EnabledModelOption[] =>
+const collectEnabledModels = (state: InteractiveCliState): EnabledModelOption[] =>
   getProviders()
     .filter(p => p.enabled)
     .flatMap(p =>
-      (p.models ?? []).map(m => ({
+      mergeProviderModelIds(
+        p.models ?? [],
+        cachedDiscoveredModelsByProvider.get(p.id) ?? p.availableModels ?? []
+      ).map(({ model, discovered }) => ({
         providerId: p.id,
         providerType: p.type,
-        model: m,
-        qualified: `${p.id}/${m}`,
-        active: m === state.model && (!state.providerId || p.id === state.providerId),
+        model,
+        qualified: `${p.id}/${model}`,
+        active: model === state.model && (!state.providerId || p.id === state.providerId),
+        ...(discovered ? { discovered: true } : {}),
       }))
     );
+
+/** Discovers live models from every enabled provider's API endpoint and merges with models.toml. */
+export const discoverEnabledModels = async (
+  state: InteractiveCliState,
+  options?: { forceRefresh?: boolean }
+): Promise<EnabledModelOption[]> => {
+  const enabledProviders = getProviders().filter(p => p.enabled);
+  const perProvider = await Promise.all(
+    enabledProviders.map(async provider => {
+      const descriptors = await state.chatService.getModels(
+        provider.type,
+        provider.id,
+        {
+          id: provider.id,
+          ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),
+          ...(provider.apiKey ? { apiKey: provider.apiKey } : {}),
+        },
+        options
+      );
+      const liveIds = descriptors.map(d => d.id).filter(Boolean);
+      if (liveIds.length > 0) cachedDiscoveredModelsByProvider.set(provider.id, liveIds);
+      return mergeProviderModelIds(
+        provider.models ?? [],
+        liveIds.length > 0 ? liveIds : (provider.availableModels ?? [])
+      ).map(({ model, discovered }) => ({
+        providerId: provider.id,
+        providerType: provider.type,
+        model,
+        qualified: `${provider.id}/${model}`,
+        active: model === state.model && (!state.providerId || provider.id === state.providerId),
+        ...(discovered ? { discovered: true } : {}),
+      }));
+    })
+  );
+  return perProvider.flat();
+};
 
 export const switchModel = (arg: string, state: InteractiveCliState): string => {
   const providers = getProviders().filter(p => p.enabled);
@@ -182,7 +270,12 @@ export const switchModel = (arg: string, state: InteractiveCliState): string => 
     }
   }
   for (const p of providers) {
-    if ((p.models ?? []).includes(arg)) {
+    const known = new Set([
+      ...(p.models ?? []),
+      ...(p.availableModels ?? []),
+      ...(cachedDiscoveredModelsByProvider.get(p.id) ?? []),
+    ]);
+    if (known.has(arg)) {
       state.providerId = p.id;
       state.providerType = p.type;
       state.model = arg;
@@ -204,13 +297,13 @@ export const formatBannerLines = async (state: InteractiveCliState): Promise<str
   const providerLabel = state.providerId ? `${state.providerId}/${state.model}` : state.model;
   const repoInstructions = inspectAgentInstructionsForWorkspace(state.workspace);
   const persona = readPersonaSummary(state.dataDir);
-  const skills = await listSkills();
-  const repoSkillNames = listRepoLocalAgentSkills(state.workspace);
+  const skills = await listSkills({ workspacePath: state.workspace });
 
   const loadedSkillIds = skills.map(s => s.id);
   const skillsText =
     loadedSkillIds.length > 0
-      ? loadedSkillIds.join(', ')
+      ? loadedSkillIds.slice(0, 8).join(', ') +
+        (loadedSkillIds.length > 8 ? ` (+${loadedSkillIds.length - 8})` : '')
       : 'none loaded';
 
   const toolsSummary = state.tools
@@ -228,13 +321,12 @@ export const formatBannerLines = async (state: InteractiveCliState): Promise<str
     `  PERSONA.md (${persona.chars > 0 ? `${persona.chars} chars` : 'empty placeholder'})`,
     '',
     '[Skills]',
-    `  mode=${state.skillMode} · ${skillsText}`,
-    ...(repoSkillNames.length ? [`  repo .agents/skills (${repoSkillNames.length}): ${repoSkillNames.slice(0, 8).join(', ')}${repoSkillNames.length > 8 ? ` (+${repoSkillNames.length - 8})` : ''}`] : []),
+    `  mode=${state.skillMode} · ${loadedSkillIds.length} loaded (${skillsText})`,
     '',
     '[Tools]',
     `  ${toolsSummary}`,
     '',
-    'Shortcuts: /models · /resume · /jobs · /context · /skills · /help',
+    'Shortcuts: /models · /resume · /jobs · /swarm · /context · /skills · /help',
   ];
 };
 
@@ -247,8 +339,10 @@ const formatHelpLines = (): string[] => [
   '  /skills [auto|manual|ids] Pick skills, switch skill mode, or list all',
   '  /tools [default|all|a,b]  View or override enabled tools',
   '  /jobs [all|log|kill]      Inspect, tail, or stop durable background jobs',
+  '  /swarm <task|status|...>  Start a multi-agent swarm or inspect board/members',
   '  /history                  Inspect messages & compaction checkpoint',
   '  /compact                  Compact older turns into a persistent checkpoint',
+  '  /copy                     Copy the last assistant reply to the clipboard',
   '  /usage                    Show cumulative token usage for this CLI session',
   '  /clear                    Clear screen / transcript',
   '  /exit / /quit             Exit interactive mode',
@@ -285,8 +379,8 @@ const formatHistoryLines = (threadId: string): string[] => {
 const formatContextLines = async (state: InteractiveCliState): Promise<string[]> => {
   const persona = readPersonaSummary(state.dataDir);
   const repoInstructions = inspectAgentInstructionsForWorkspace(state.workspace);
-  const skills = await listSkills();
-  const repoSkillNames = listRepoLocalAgentSkills(state.workspace);
+  const skills = await listSkills({ workspacePath: state.workspace });
+  const skillRoots = getSkillRootsForUi(state.workspace);
   const view = rebuildThreadViewFromEvents(state.threadId);
   const builtins = getBuiltinToolNames();
   const shellCfg = getAppConfig().tools.shell;
@@ -296,27 +390,30 @@ const formatContextLines = async (state: InteractiveCliState): Promise<string[]>
     `  PERSONA.md:     ${persona.path} ${persona.chars ? `(${persona.chars} chars)` : '(empty)'}`,
     ...(persona.preview ? [`    "${persona.preview}${persona.chars > 160 ? '...' : ''}"`] : []),
     `  Repo Context:   ${repoInstructions ? `${repoInstructions.filePath} (${repoInstructions.lineCount} lines, ${repoInstructions.charCount} chars)` : '(none loaded; checks AGENTS.md, AGENT.md, IKI.md)'}`,
+    `  Skill Roots:    ${skillRoots.map(r => `[${r.source}] ${r.path}`).join(' · ')}`,
     `  Loaded Skills:  ${skills.length} total (mode=${state.skillMode}${state.skills?.length ? `, pinned=${state.skills.join(',')}` : ''})`,
     ...skills.slice(0, 12).map(
-      s => `    - ${s.id} [${s.source}]${s.description ? ` — ${s.description}` : ''}`
+      s => `    - ${s.id} [${s.source}]${s.description ? ` — ${clipSingleLine(s.description, 96)}` : ''}`
     ),
     ...(skills.length > 12 ? [`    ... (+${skills.length - 12} more)`] : []),
-    ...(repoSkillNames.length
-      ? [
-          `  Repo .agents/skills (workspace files, not auto-registered unless copied to ~/.iki/skills): ${repoSkillNames.join(', ')}`,
-        ]
-      : []),
     `  Tools:          ${state.tools ? (state.tools.length ? state.tools.join(', ') : '(disabled)') : `default (${builtins.join(', ')})`}`,
     `  [tools.shell]:  timeout=${shellCfg.defaultTimeoutMs}ms (max ${shellCfg.maxTimeoutMs}ms), promoteOnTimeout=${shellCfg.promoteOnTimeout}, maxOutput=${shellCfg.maxOutputLines} lines/${shellCfg.maxOutputBytes}B${shellCfg.shellPath ? `, shellPath=${shellCfg.shellPath}` : ''}`,
     `  Compaction:     ${view.compaction ? `active (omitted=${view.compaction.omittedCount}, kept=${view.compaction.keptCount}, anchor=${view.compaction.firstKeptMessageId ?? 'tail'})` : 'none in current thread'}`,
   ];
 };
 
-const formatModelsLines = (state: InteractiveCliState): string[] => {
-  const options = collectEnabledModels(state);
+const formatModelsLines = async (
+  state: InteractiveCliState,
+  options?: { forceRefresh?: boolean }
+): Promise<string[]> => {
+  const discovered = await discoverEnabledModels(state, options);
+  const list = discovered.length > 0 ? discovered : collectEnabledModels(state);
   return [
-    'Enabled models:',
-    ...options.map(opt => `  ${opt.active ? '*' : ' '} ${opt.qualified} [${opt.providerType}]`),
+    `Enabled models (${list.length}):`,
+    ...list.map(
+      opt =>
+        `  ${opt.active ? '*' : ' '} ${opt.qualified} [${opt.providerType}${opt.discovered ? ' · live' : ''}]`
+    ),
   ];
 };
 
@@ -334,6 +431,21 @@ export const ensureThreadExists = (
       model: state.model,
     });
   }
+};
+
+/** Removes an unused thread (zero session events, zero runs, no active swarm) so empty sessions do not pollute /resume. */
+export const pruneEmptyThreadIfUnused = (
+  state: InteractiveCliState,
+  threadId: string
+): boolean => {
+  const id = threadId.trim();
+  if (!id) return false;
+  if (!state.chatService.getThread(id)) return false;
+  if (getSessionEventRevision(id) > 0) return false;
+  if (listAgentRunsByThread(id).length > 0) return false;
+  if (state.swarmManager?.getSwarmForThread(id)) return false;
+  state.chatService.deleteThread(id);
+  return true;
 };
 
 export const buildSlashCommands = (state: InteractiveCliState): SlashCommand[] => [
@@ -361,7 +473,7 @@ export const buildSlashCommands = (state: InteractiveCliState): SlashCommand[] =
       const items = state.chatService
         .listThreads()
         .slice(0, 20)
-        .map(t => ({ value: t.id, label: t.id, description: t.title }))
+        .map(t => ({ value: t.id, label: t.id, description: resolveThreadDisplayTitle(t) }))
         .filter(
           item =>
             !lower ||
@@ -380,7 +492,7 @@ export const buildSlashCommands = (state: InteractiveCliState): SlashCommand[] =
     argumentHint: 'auto | manual | clear | <skillIds>',
     getArgumentCompletions: async prefix => {
       const lower = prefix.toLowerCase();
-      const discovered = await listSkills();
+      const discovered = await listSkills({ workspacePath: state.workspace });
       const items = [
         { value: 'auto', label: 'auto', description: 'Automatic skill selection' },
         { value: 'manual', label: 'manual', description: 'Manual skill selection' },
@@ -428,8 +540,33 @@ export const buildSlashCommands = (state: InteractiveCliState): SlashCommand[] =
       return candidates.length ? candidates : null;
     },
   },
+  {
+    name: 'swarm',
+    description: 'Start a multi-agent swarm or inspect/steer board & workers',
+    argumentHint: '<task> | status | board | inspect <name> | post <msg> | steer <name> <msg> | kill <name|all>',
+    getArgumentCompletions: prefix => {
+      const lower = prefix.toLowerCase();
+      const swarm = state.swarmManager?.getSwarmForThread(state.threadId);
+      const memberNames = swarm
+        ? Object.keys(swarm.members).filter(n => n !== 'coordinator')
+        : [];
+      const candidates = [
+        { value: 'status', label: 'status', description: 'Show swarm roster and member states' },
+        { value: 'board', label: 'board', description: 'Show recent shared board posts' },
+        { value: 'post ', label: 'post <msg>', description: 'Post to board as user' },
+        { value: 'kill all', label: 'kill all', description: 'Kill all workers and clean worktrees' },
+        ...memberNames.flatMap(name => [
+          { value: `inspect ${name}`, label: `inspect ${name}`, description: `Inspect @${name} thread` },
+          { value: `steer ${name} `, label: `steer ${name} <msg>`, description: `Steer @${name}` },
+          { value: `kill ${name}`, label: `kill ${name}`, description: `Kill @${name}` },
+        ]),
+      ].filter(item => !lower || item.value.toLowerCase().includes(lower));
+      return candidates.length ? candidates : null;
+    },
+  },
   { name: 'history', description: 'Inspect messages & compaction checkpoint' },
   { name: 'compact', description: 'Compact older turns into a persistent checkpoint' },
+  { name: 'copy', description: 'Copy the last assistant reply to the clipboard' },
   { name: 'usage', description: 'Show session token & cache usage' },
   { name: 'clear', description: 'Clear screen / transcript' },
   { name: 'help', description: 'Show commands and shortcuts' },
@@ -440,6 +577,7 @@ export const buildSlashCommands = (state: InteractiveCliState): SlashCommand[] =
 export type SlashCommandOutcome =
   | { kind: 'handled'; lines: string[] }
   | { kind: 'clear'; lines: string[] }
+  | { kind: 'run-swarm'; prompt: string; swarmId: string; created: boolean }
   | { kind: 'pick-model' | 'pick-thread' | 'pick-skill' }
   | { kind: 'exit' };
 
@@ -454,25 +592,9 @@ export const executeSlashCommand = async (
   const arg = spaceIdx >= 0 ? trimmed.slice(spaceIdx + 1).trim() : '';
 
   const allCommandNames = [
-    '/help',
-    '/models',
-    '/model',
-    '/resume',
-    '/threads',
-    '/thread',
-    '/new',
-    '/history',
-    '/context',
-    '/system',
-    '/persona',
-    '/tools',
-    '/jobs',
-    '/skills',
-    '/compact',
-    '/usage',
-    '/clear',
-    '/exit',
-    '/quit',
+    '/help', '/models', '/model', '/resume', '/threads', '/thread', '/new',
+    '/history', '/context', '/system', '/persona', '/tools', '/jobs', '/swarm',
+    '/skills', '/compact', '/copy', '/usage', '/clear', '/exit', '/quit',
   ];
   let cmd = rawCmd;
   if (!allCommandNames.includes(cmd)) {
@@ -491,9 +613,12 @@ export const executeSlashCommand = async (
   if (cmd === '/help') return { kind: 'handled', lines: formatHelpLines() };
   if (cmd === '/clear') return { kind: 'clear', lines: await formatBannerLines(state) };
   if (cmd === '/models' || cmd === '/model') {
+    if (arg === 'refresh') {
+      return { kind: 'handled', lines: await formatModelsLines(state, { forceRefresh: true }) };
+    }
     if (arg) return { kind: 'handled', lines: [switchModel(arg, state)] };
     if (options?.interactivePickers) return { kind: 'pick-model' };
-    return { kind: 'handled', lines: formatModelsLines(state) };
+    return { kind: 'handled', lines: await formatModelsLines(state) };
   }
   if (cmd === '/resume' || cmd === '/threads') {
     if (options?.interactivePickers) return { kind: 'pick-thread' };
@@ -503,7 +628,8 @@ export const executeSlashCommand = async (
       lines: [
         'Recent threads:',
         ...threads.map(
-          t => `  ${t.id === state.threadId ? '*' : ' '} ${t.id}  ${t.title} (${t.model ?? 'default'})`
+          t =>
+            `  ${t.id === state.threadId ? '*' : ' '} ${t.id}  ${resolveThreadDisplayTitle(t)} (${t.model ?? 'default'})`
         ),
       ],
     };
@@ -513,11 +639,15 @@ export const executeSlashCommand = async (
       if (options?.interactivePickers) return { kind: 'pick-thread' };
       return { kind: 'handled', lines: ['Usage: /thread <id>'] };
     }
+    if (arg !== state.threadId) {
+      pruneEmptyThreadIfUnused(state, state.threadId);
+    }
     state.threadId = arg;
     ensureThreadExists(state, state.threadId, 'Interactive CLI');
     return { kind: 'handled', lines: formatHistoryLines(state.threadId) };
   }
   if (cmd === '/new') {
+    pruneEmptyThreadIfUnused(state, state.threadId);
     state.threadId = `cli_${randomUUID().slice(0, 8)}`;
     ensureThreadExists(state, state.threadId, arg || 'Interactive CLI');
     return { kind: 'handled', lines: [`Started new thread: ${state.threadId}`] };
@@ -553,51 +683,48 @@ export const executeSlashCommand = async (
     }
     return { kind: 'handled', lines: ['Usage: /jobs [all] | /jobs log <jobId> | /jobs kill <jobId>'] };
   }
+  if (cmd === '/swarm') {
+    return executeSwarmSlashCommand(arg, state, createWorkspaceSelection);
+  }
   if (cmd === '/history') return { kind: 'handled', lines: formatHistoryLines(state.threadId) };
   if (cmd === '/compact') {
-    const res = await state.chatService.compactThread(state.threadId);
-    if (res.compacted === false) {
-      return { kind: 'handled', lines: [`Compaction skipped: ${'reason' in res ? res.reason : 'unchanged'}`] };
+    try {
+      const res = await state.chatService.compactThread(state.threadId);
+      if (res.compacted === false) {
+        return { kind: 'handled', lines: [`Compaction skipped: ${'reason' in res ? res.reason : 'unchanged'}`] };
+      }
+      return {
+        kind: 'handled',
+        lines: [
+          `Compacted thread ${state.threadId}: omitted=${res.omittedCount}, kept=${res.keptCount}` +
+            (res.firstKeptMessageId ? `, anchor=${res.firstKeptMessageId}` : ''),
+          res.summary.slice(0, 300) + (res.summary.length > 300 ? '...' : ''),
+        ],
+      };
+    } catch (error) {
+      return {
+        kind: 'handled',
+        lines: [`Compaction failed: ${error instanceof Error ? error.message : String(error)}`],
+      };
     }
-    return {
-      kind: 'handled',
-      lines: [
-        `Compacted thread ${state.threadId}: omitted=${res.omittedCount}, kept=${res.keptCount}` +
-          (res.firstKeptMessageId ? `, anchor=${res.firstKeptMessageId}` : ''),
-        res.summary.slice(0, 300) + (res.summary.length > 300 ? '...' : ''),
-      ],
-    };
   }
   if (cmd === '/context' || cmd === '/system' || cmd === '/persona') {
     return { kind: 'handled', lines: await formatContextLines(state) };
   }
   if (cmd === '/tools') {
     if (!arg) {
-      return {
-        kind: 'handled',
-        lines: [
-          `Active tools: ${state.tools ? (state.tools.length ? state.tools.join(', ') : '(disabled)') : `default (${getBuiltinToolNames().join(', ')})`}`,
-        ],
-      };
+      const desc = state.tools ? (state.tools.length ? state.tools.join(', ') : '(disabled)') : `default (${getBuiltinToolNames().join(', ')})`;
+      return { kind: 'handled', lines: [`Active tools: ${desc}`] };
     }
-    if (arg === 'default') {
-      state.tools = undefined;
-      return { kind: 'handled', lines: ['Reset tools to harness default'] };
-    }
-    if (arg === 'all') {
-      state.tools = [...getBuiltinToolNames()];
-      return { kind: 'handled', lines: [`Enabled all ${state.tools.length} builtin tools`] };
-    }
-    if (arg === 'none') {
-      state.tools = [];
-      return { kind: 'handled', lines: ['Disabled tools for next turns'] };
-    }
+    if (arg === 'default') { state.tools = undefined; return { kind: 'handled', lines: ['Reset tools to harness default'] }; }
+    if (arg === 'all') { state.tools = [...getBuiltinToolNames()]; return { kind: 'handled', lines: [`Enabled all ${state.tools.length} builtin tools`] }; }
+    if (arg === 'none') { state.tools = []; return { kind: 'handled', lines: ['Disabled tools for next turns'] }; }
     state.tools = arg.split(',').map(s => s.trim()).filter(Boolean);
     return { kind: 'handled', lines: [`Active tools: ${state.tools.join(', ')}`] };
   }
   if (cmd === '/skills') {
     if (!arg && options?.interactivePickers) return { kind: 'pick-skill' };
-    const available = await listSkills();
+    const available = await listSkills({ workspacePath: state.workspace });
     if (!arg) {
       return {
         kind: 'handled',
@@ -605,7 +732,7 @@ export const executeSlashCommand = async (
           `Skills (mode: ${state.skillMode}):`,
           ...(available.length
             ? available.map(
-                s => `  ${state.skills?.includes(s.id) ? '*' : ' '} ${s.id} — ${s.description ?? s.name}`
+                s => `  ${state.skills?.includes(s.id) ? '*' : ' '} ${s.id} — ${clipSingleLine(s.description ?? s.name, 96)}`
               )
             : ['  (no skills discovered)']),
         ],
@@ -619,14 +746,36 @@ export const executeSlashCommand = async (
       state.skills = undefined;
       return { kind: 'handled', lines: ['Cleared explicit skill selection'] };
     }
-    state.skills = arg.split(',').map(s => s.trim()).filter(Boolean);
+    const requested = arg.split(',').map(s => s.trim()).filter(Boolean);
+    const resolved: string[] = [];
+    const errors: string[] = [];
+    for (const token of requested) {
+      const lower = token.toLowerCase();
+      const exact = available.find(s => s.id.toLowerCase() === lower);
+      if (exact) { resolved.push(exact.id); continue; }
+      const shortMatches = available.filter(
+        s => s.name.toLowerCase() === lower || s.id.toLowerCase().endsWith(`:${lower}`)
+      );
+      if (shortMatches.length === 1) resolved.push(shortMatches[0]!.id);
+      else if (shortMatches.length > 1) errors.push(`Ambiguous skill "${token}" (${shortMatches.map(s => s.id).join(', ')})`);
+      else errors.push(`Unknown skill "${token}"`);
+    }
+    if (errors.length > 0) {
+      return { kind: 'handled', lines: [...errors, 'Run /skills to list available skill IDs.'] };
+    }
+    state.skills = [...new Set(resolved)];
     state.skillMode = 'manual';
     return { kind: 'handled', lines: [`Pinned skills: ${state.skills.join(', ')}`] };
   }
+  if (cmd === '/copy') {
+    return { kind: 'handled', lines: [await copyLastAssistantReply(state.threadId)] };
+  }
   if (cmd === '/usage') {
+    const threadCounts = countThreadTurnsAndSteps(state.threadId);
     return {
       kind: 'handled',
       lines: [
+        `Thread ${state.threadId}: ${threadCounts.turns} turn(s), ${threadCounts.steps} model step(s)`,
         `Session usage: ${totals.turns} turn(s), in=${totals.uncachedInputTokens}, cache=${totals.cacheReadTokens}, out=${totals.outputTokens}`,
       ],
     };

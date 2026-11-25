@@ -3,6 +3,7 @@ import type { ChatContextMode } from '@iki/llm/message/chat_context_mode';
 import type { AppConfig } from '@iki/core/types/config';
 import type { ModelMessage } from '@iki/llm/message/model_history';
 import type { ModelCapability } from '@iki/core/utils/provider_models';
+import type { ThreadSkillReminderAnchor } from '@iki/core/types/chat';
 import type { SkillSummary } from '@iki/core/types/skill';
 import type { EffectiveContextConfig } from './context_budget';
 
@@ -45,6 +46,7 @@ export type ContextConfig = typeof DEFAULT_APP_CONFIG.context;
 
 export type AssembleChatContextParams = {
   messages: ChatInputMessage[];
+  userMessageIds?: ReadonlyArray<string | undefined>;
   threadId?: string;
 
   workspaceSelection?: import('../workspaces/thread_workspace').ThreadWorkspaceSelection | null;
@@ -72,5 +74,6 @@ export type SkillContext = {
   systemMessage: string;
   usedSkills: SkillSummary[];
   skillMode: 'manual' | 'auto';
+  anchoredReminders?: ThreadSkillReminderAnchor[];
   block: ContextReportBlock;
 };

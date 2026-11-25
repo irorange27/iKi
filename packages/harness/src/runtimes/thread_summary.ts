@@ -1,6 +1,7 @@
 import type { ModelMessage } from '@iki/llm/message/model_history';
 import { getToolModel, type ToolModelConfig } from '@iki/llm-pi-ai/tool_model';
 import { createLogger } from '@iki/core/logger';
+import { getAppConfig } from '../config';
 import {
   appendCompactionInstruction,
   COMPACTION_INSTRUCTION,
@@ -64,19 +65,40 @@ const buildPrompt = (params: { existingSummary?: string; messages: ThreadSummary
   return sections.join('\n\n');
 };
 
+const isSameModel = (a: ToolModelConfig, b: ToolModelConfig): boolean =>
+  a.providerType === b.providerType &&
+  (a.providerId ?? '') === (b.providerId ?? '') &&
+  a.model === b.model;
+
+const resolveSummaryModelCandidates = (preferredModel?: ToolModelConfig): ToolModelConfig[] => {
+  const hasExplicitToolModel = Boolean(getAppConfig().toolModel?.model?.trim());
+  const toolModel = getToolModel();
+  const ordered = hasExplicitToolModel
+    ? [toolModel, preferredModel]
+    : [preferredModel, toolModel];
+  const candidates: ToolModelConfig[] = [];
+  for (const candidate of ordered) {
+    if (!candidate?.providerType?.trim() || !candidate.model?.trim()) continue;
+    if (candidates.some(existing => isSameModel(existing, candidate))) continue;
+    candidates.push(candidate);
+  }
+  return candidates;
+};
+
 export const generateThreadSummary = async (params: {
   existingSummary?: string;
   messages: ThreadSummaryMessage[];
 
   history?: ModelMessage[];
   threadId?: string;
+  preferredModel?: ToolModelConfig;
   abortSignal?: AbortSignal;
 }): Promise<ThreadSummaryResult | null> => {
   const hasHistory = Array.isArray(params.history) && params.history.length > 0;
   if (!hasHistory && (!Array.isArray(params.messages) || params.messages.length === 0)) return null;
 
-  const toolModel = getToolModel();
-  if (!toolModel) {
+  const candidates = resolveSummaryModelCandidates(params.preferredModel);
+  if (candidates.length === 0) {
     threadSummaryLogger.event({
       level: 'warn',
       event: 'thread.summary.generate',
@@ -103,49 +125,50 @@ export const generateThreadSummary = async (params: {
         },
       ]);
 
-  const generationSettings = getModelGenerationSettings({
-    providerType: toolModel.providerType,
-    ...(toolModel.providerId ? { providerId: toolModel.providerId } : {}),
-    modelId: toolModel.model,
-    temperature: 0.1,
-  });
-
-  try {
-    const result = await generateChatWithModelMessages({
-      providerType: toolModel.providerType,
-      ...(toolModel.providerId ? { providerId: toolModel.providerId } : {}),
-      modelId: toolModel.model,
-      messages,
-      ...(typeof generationSettings.temperature === 'number'
-        ? { temperature: generationSettings.temperature }
-        : {}),
-      ...(generationSettings.providerOptions
-        ? { providerOptions: generationSettings.providerOptions }
-        : {}),
-      maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
-      ...(params.threadId ? { threadId: params.threadId } : {}),
-      ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
+  for (const candidate of candidates) {
+    const generationSettings = getModelGenerationSettings({
+      providerType: candidate.providerType,
+      ...(candidate.providerId ? { providerId: candidate.providerId } : {}),
+      modelId: candidate.model,
+      temperature: 0.1,
     });
-    const summary = sanitizeSummary(result.text || '');
-    if (!summary) return null;
 
-    return {
-      summary,
-      model: toolModel,
-    };
-  } catch (error) {
-    if (params.abortSignal?.aborted) throw error;
-    threadSummaryLogger.event({
-      level: 'warn',
-      event: 'thread.summary.generate',
-      outcome: 'failed',
-      error,
-      data: {
-        message_count: params.messages?.length ?? 0,
-        history_count: params.history?.length ?? 0,
-        has_existing_summary: Boolean(params.existingSummary?.trim()),
-      },
-    });
-    return null;
+    try {
+      const result = await generateChatWithModelMessages({
+        providerType: candidate.providerType,
+        ...(candidate.providerId ? { providerId: candidate.providerId } : {}),
+        modelId: candidate.model,
+        messages,
+        ...(typeof generationSettings.temperature === 'number'
+          ? { temperature: generationSettings.temperature }
+          : {}),
+        ...(generationSettings.providerOptions
+          ? { providerOptions: generationSettings.providerOptions }
+          : {}),
+        maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
+        ...(params.threadId ? { threadId: params.threadId } : {}),
+        ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
+      });
+      const summary = sanitizeSummary(result.text || '');
+      if (summary) {
+        return { summary, model: candidate };
+      }
+    } catch (error) {
+      if (params.abortSignal?.aborted) throw error;
+      threadSummaryLogger.event({
+        level: 'warn',
+        event: 'thread.summary.generate',
+        outcome: 'failed',
+        error,
+        data: {
+          model: candidate.model,
+          message_count: params.messages?.length ?? 0,
+          history_count: params.history?.length ?? 0,
+          has_existing_summary: Boolean(params.existingSummary?.trim()),
+        },
+      });
+    }
   }
+
+  return null;
 };

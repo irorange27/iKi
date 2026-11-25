@@ -118,6 +118,35 @@ const formatGenericCallHeader = (
   };
 };
 
+const formatSwarmCallHeader = (
+  input: Record<string, unknown>
+): { header: string; extraLines: string[] } => {
+  const action = typeof input.action === 'string' ? input.action : 'status';
+  const target = typeof input.name === 'string' ? ` @${input.name}` : '';
+  const meta: string[] = [];
+  if (typeof input.workspace === 'string') meta.push(input.workspace);
+  if (typeof input.model === 'string') meta.push(input.model);
+  if (typeof input.fork === 'string') meta.push(`fork:${input.fork}`);
+  if (Array.isArray(input.tasks)) meta.push(`${input.tasks.length} tasks`);
+  else if (typeof input.n === 'number' && input.n > 1) meta.push(`n=${input.n}`);
+  const suffix = meta.length > 0 ? ` ${cliTheme.dim(`(${meta.join(' · ')})`)}` : '';
+  const header = `${cliTheme.bold(cliTheme.accent('swarm'))} ${cliTheme.bold(cliTheme.text(action))}${target ? cliTheme.text(target) : ''}${suffix}`;
+  const preview =
+    typeof input.message === 'string'
+      ? input.message
+      : typeof input.brief === 'string'
+        ? input.brief
+        : typeof input.title === 'string'
+          ? input.title
+          : '';
+  const firstLine = preview.trim().split(/\r?\n/)[0] ?? '';
+  const clipped = firstLine.length > 90 ? `${firstLine.slice(0, 87)}...` : firstLine;
+  return {
+    header,
+    extraLines: clipped ? [`  ${cliTheme.dim(clipped)}`] : [],
+  };
+};
+
 const formatCallParts = (
   toolName: string,
   input: unknown
@@ -127,6 +156,9 @@ const formatCallParts = (
   }
   if (toolName === 'job' && isRecord(input)) {
     return formatJobCallHeader(input);
+  }
+  if (toolName === 'swarm' && isRecord(input)) {
+    return formatSwarmCallHeader(input);
   }
   return formatGenericCallHeader(toolName, input);
 };
@@ -160,6 +192,11 @@ export const formatToolCallPipedSummary = (toolName: string, input: unknown): st
     const action = typeof input.action === 'string' ? input.action : 'status';
     const jobId = typeof input.jobId === 'string' ? ` ${input.jobId}` : '';
     return `${action}${jobId}`;
+  }
+  if (toolName === 'swarm' && isRecord(input)) {
+    const action = typeof input.action === 'string' ? input.action : 'status';
+    const name = typeof input.name === 'string' ? ` @${input.name}` : '';
+    return `${action}${name}`;
   }
   if (!isRecord(input)) return '';
   const raw = JSON.stringify(input);

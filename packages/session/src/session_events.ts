@@ -39,6 +39,12 @@ export const getSessionEvents = (
 
 export const deleteSessionEvents = (threadId: string): void => store().deleteThread(threadId);
 
+export const forkSessionEvents = (
+  sourceThreadId: string,
+  targetThreadId: string,
+  upToRevision?: number
+): number => store().forkThread(sourceThreadId, targetThreadId, upToRevision);
+
 export const getSessionEventRevision = (threadId: string): number => store().headRevision(threadId);
 
 export const insertSessionEventsAtHead = (

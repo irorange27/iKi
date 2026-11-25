@@ -56,7 +56,8 @@ export const createChatStreamingModels = () => {
   const getModels = async (
     providerType: string,
     providerId?: string,
-    providerOverride?: ProviderModelDiscoveryOverride | null
+    providerOverride?: ProviderModelDiscoveryOverride | null,
+    options?: { forceRefresh?: boolean }
   ): Promise<ProviderModelDescriptor[]> => {
     try {
 
@@ -73,6 +74,7 @@ export const createChatStreamingModels = () => {
               ? { baseUrl: overrideBaseUrl || providerOverride?.baseUrl || '' }
               : {}),
             ...(overrideApiKey ? { apiKey: overrideApiKey } : {}),
+            ...(options?.forceRefresh ? { forceRefresh: true } : {}),
           })
         : await getProviderModels(providerType);
 

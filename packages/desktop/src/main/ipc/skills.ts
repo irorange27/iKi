@@ -33,7 +33,7 @@ export const registerSkillsIpc = (): void => {
   ipcMain.handle('skills:open-root', async (_event, source?: string) => {
     try {
       const roots = getSkillRootsForUi();
-      const normalizedSource = source === 'codex' ? 'codex' : 'user';
+      const normalizedSource = source === 'agent' ? 'agent' : 'user';
       const target = roots.find(r => r.source === normalizedSource) || roots[0];
       if (!target?.path) {
         return { success: false, error: 'No skills folder configured' };

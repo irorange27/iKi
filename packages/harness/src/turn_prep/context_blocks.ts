@@ -7,6 +7,10 @@ import { buildDroppedBlock, clipTextToTokenBudget, estimateTextTokens } from './
 import type { ChatInputMessage } from '@iki/llm/message/chat_message_types';
 
 const AGENT_INSTRUCTIONS_FILENAMES = ['AGENTS.md', 'AGENT.md', 'IKI.md'];
+// Project instructions (AGENTS.md / AGENT.md / IKI.md) are never clipped to the
+// legacy 320-token persona budget (see packages/harness/README.md); only guard
+// against pathologically huge files.
+const PROJECT_INSTRUCTIONS_MAX_TOKENS = 8192;
 
 const stripHtmlComments = (value: string): string => value.replace(/<!--[\s\S]*?-->/g, '');
 
@@ -69,9 +73,13 @@ export const buildIdentityContext = (
   agentInstructions: string
 ): IdentityContext & { runtimeWorkspaceText: string } => {
   const runtimeWorkspaceText = workspaceSystemMessage?.(threadId)?.trim() ?? '';
+  const instructionsBudget = Math.max(
+    contextConfig.maxIdentityTokens,
+    PROJECT_INSTRUCTIONS_MAX_TOKENS
+  );
   const instructionsClip = clipTextToTokenBudget(
     agentInstructions?.trim() ?? '',
-    contextConfig.maxIdentityTokens
+    instructionsBudget
   );
   const totalText = [runtimeWorkspaceText, instructionsClip.text].filter(Boolean).join('\n\n');
 
@@ -95,23 +103,29 @@ export const buildIdentityContext = (
 export const buildSkillContext = async (params: {
   inputMessages: ChatInputMessage[];
   threadId?: string;
+  workspacePath?: string;
   skillIds?: string[];
   skillMode?: 'manual' | 'auto';
+  currentUserAnchor?: string;
   contextConfig: ContextConfig;
   resolveSkillsSystemPrompt: typeof import('../thread_session/skills').resolveSkillsSystemPrompt;
 }): Promise<SkillContext> => {
-  const { skillsSystemPrompt, usedSkills, skillMode } = await params.resolveSkillsSystemPrompt({
-    inputMessages: params.inputMessages,
-    threadId: params.threadId,
-    skillIds: params.skillIds,
-    skillMode: params.skillMode,
-  });
+  const { skillsSystemPrompt, usedSkills, skillMode, anchoredReminders } =
+    await params.resolveSkillsSystemPrompt({
+      inputMessages: params.inputMessages,
+      threadId: params.threadId,
+      workspacePath: params.workspacePath,
+      skillIds: params.skillIds,
+      skillMode: params.skillMode,
+      currentUserAnchor: params.currentUserAnchor,
+    });
   const skillClip = clipTextToTokenBudget(skillsSystemPrompt, params.contextConfig.maxSkillTokens);
 
   return {
     systemMessage: skillClip.text,
     usedSkills,
     skillMode,
+    anchoredReminders: anchoredReminders ?? [],
     block: {
       kind: 'skills',
       status: skillClip.text ? (skillClip.truncated ? 'truncated' : 'included') : 'dropped',

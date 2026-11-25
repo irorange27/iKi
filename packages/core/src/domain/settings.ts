@@ -245,8 +245,27 @@ export const ShellToolSettingsSchema = z.object({
 });
 export type ShellToolSettings = z.infer<typeof ShellToolSettingsSchema>;
 
+export const SwarmToolSettingsSchema = z.object({
+  maxWorkers: z.number().int().positive().catch(12),
+  maxConcurrentActive: z.number().int().positive().catch(4),
+  maxTotalTurns: z.number().int().positive().catch(80),
+  maxMentionsPerPost: z.number().int().positive().catch(6),
+  maxPingPongHops: z.number().int().positive().catch(12),
+  isolatedApprovalPolicy: z
+    .enum(['never', 'trustWorkspace', 'askRisky', 'always'])
+    .catch('trustWorkspace'),
+  inheritApprovalPolicy: z
+    .enum(['never', 'trustWorkspace', 'askRisky', 'always'])
+    .catch('askRisky'),
+  inheritReadOnlyTools: z.array(z.string()).catch([]),
+  worktreeDirName: z.string().catch('swarm-worktrees'),
+  branchPrefix: z.string().catch('iki/swarm'),
+});
+export type SwarmToolSettings = z.infer<typeof SwarmToolSettingsSchema>;
+
 export const ToolsSettingsSchema = z.object({
   shell: ShellToolSettingsSchema.prefault({}).catch(ShellToolSettingsSchema.parse({})),
+  swarm: SwarmToolSettingsSchema.prefault({}).catch(SwarmToolSettingsSchema.parse({})),
 });
 export type ToolsSettings = z.infer<typeof ToolsSettingsSchema>;
 

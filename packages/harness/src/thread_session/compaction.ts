@@ -1,5 +1,6 @@
 import type { ModelMessage } from '@iki/llm/message/model_history';
 import { toModelInputMessages } from '@iki/llm/message/ui_messages';
+import { getChatThread } from '@iki/store/chat_thread';
 import {
   compactPiRequestStep,
   findFirstKeptInitialIndex,
@@ -50,12 +51,23 @@ export const compactThreadNow = async (threadId: string): Promise<ManualCompacti
     ? [previousSummaryMessage, ...initialConversation]
     : initialConversation;
 
+  const thread = getChatThread(normalizedId);
+  const preferredModel =
+    thread?.provider_type?.trim() && thread?.model?.trim()
+      ? {
+          providerType: thread.provider_type.trim(),
+          ...(thread.provider_id?.trim() ? { providerId: thread.provider_id.trim() } : {}),
+          model: thread.model.trim(),
+        }
+      : undefined;
+
   const planned = await compactPiRequestStep({
     requestView,
     maxInputTokens: Number.MAX_SAFE_INTEGER,
     overheadTokens: 0,
     force: true,
     threadId: normalizedId,
+    ...(preferredModel ? { preferredModel } : {}),
     ...(existingSummary ? { existingSummary } : {}),
     ...(previousSummaryMessage ? { previousSummaryMessage } : {}),
   });

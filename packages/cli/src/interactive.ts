@@ -1,7 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
-import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import {
   CombinedAutocompleteProvider,
@@ -19,26 +18,32 @@ import {
 } from '@earendil-works/pi-tui';
 import type { ChatStreamTarget } from '@iki/harness/thread_session';
 import { rebuildThreadViewFromEvents } from '@iki/harness/thread_session/session_log';
-import { listAgentRunsByThread } from '@iki/store/agent_runs';
+import { buildCoordinatorSystemPrompt } from '@iki/harness/swarm';
+import { getBuiltinToolNames } from '@iki/harness/tools';
 import { listSkills } from '@iki/harness/tools/skills';
+import { formatSwarmBadge, formatSwarmBoardEntryLine } from './swarm_commands';
 import {
   accumulateUsageTotals,
   buildSlashCommands,
-  collectEnabledModels,
+  countThreadTurnsAndSteps,
   createWorkspaceSelection,
+  discoverEnabledModels,
   ensureThreadExists,
   executeSlashCommand,
   extractTurnTokenUsage,
   formatBannerLines,
   formatTurnUsageBadge,
+  pruneEmptyThreadIfUnused,
+  resolveThreadDisplayTitle,
   switchModel,
   type InteractiveCliState,
   type TurnTokenUsage,
   type UsageTotals,
 } from './commands';
-import { openSearchablePickerOverlay } from './selectors';
+import { openInlineSearchablePicker } from './selectors';
+import { copyToClipboard, readClipboardFilePaths, readClipboardText } from './clipboard';
 import { cliMarkdownTheme, cliTheme, createCliEditorTheme, selectListTheme } from './theme';
-import { formatToolCallPipedSummary } from './tool_render';
+import { runPipedInteractiveCli } from './piped';
 import { CliFooter, TurnView } from './turn_view';
 
 export { createWorkspaceSelection, type InteractiveCliState } from './commands';
@@ -68,13 +73,6 @@ const formatDisplayPath = (targetPath?: string): string => {
     : targetPath;
 };
 
-/** Total harness steps recorded for a thread (across runs and CLI restarts). */
-const countThreadSteps = (threadId: string): number =>
-  listAgentRunsByThread(threadId).reduce(
-    (total, run) => total + Math.max(0, run.working.lastStepIndex),
-    0
-  );
-
 const buildTurnStreamRequest = (state: InteractiveCliState, prompt: string) => {
   const history = state.chatService.listMessages(state.threadId);
   const userMessage = {
@@ -82,12 +80,17 @@ const buildTurnStreamRequest = (state: InteractiveCliState, prompt: string) => {
     role: 'user' as const,
     parts: [{ type: 'text' as const, text: prompt }],
   };
+  const activeSwarm = state.swarmManager?.getSwarmForThread(state.threadId);
+  const effectiveTools = activeSwarm
+    ? [...new Set([...(state.tools ?? getBuiltinToolNames()), 'swarm'])]
+    : state.tools;
   return {
     threadId: state.threadId,
     providerType: state.providerType,
     ...(state.providerId ? { providerId: state.providerId } : {}),
     model: state.model,
-    ...(state.tools ? { tools: state.tools } : {}),
+    ...(effectiveTools ? { tools: effectiveTools } : {}),
+    ...(activeSwarm ? { extraSystemPrompt: buildCoordinatorSystemPrompt(activeSwarm.id) } : {}),
     ...(state.skills ? { skillIds: state.skills } : {}),
     skillMode: state.skillMode,
     ...(state.workspace
@@ -126,8 +129,33 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     wheelScrollLines: 'auto',
     mouse: true,
     copyOnSelect: true,
+    copySelection: async text => {
+      try {
+        await copyToClipboard(text);
+        return true;
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+    },
+    onRightClickPaste: () => {
+      void handleRightClickPaste();
+    },
     scrollToEndIndicator: () => cliTheme.dim(' ↓ Jump to bottom '),
   });
+  const handleRightClickPaste = async () => {
+    const target = tui.getFocusedComponent();
+    const handleInput = target?.handleInput;
+    if (!target || !handleInput) return;
+    try {
+      const text = await readClipboardText();
+      if (!text || tui.getFocusedComponent() !== target) return;
+      const safeText = text.replaceAll('\x1b[201~', '');
+      handleInput.call(target, `\x1b[200~${safeText}\x1b[201~`);
+      tui.requestRender();
+    } catch {
+      // Ignore clipboard access errors on right-click paste.
+    }
+  };
   tui.setClearOnShrink(true);
 
   const transcript = new Container();
@@ -135,6 +163,7 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
   const footer = new CliFooter();
 
   let activeTurn = false;
+  let selectorOpen = false;
   let idleInterruptAt = 0;
   let stopped = false;
   let hideThinking = true;
@@ -162,9 +191,14 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     const pathPart = formatDisplayPath(state.workspace) || state.dataDir;
     const leftTop = cachedBranch ? `${pathPart} (${cachedBranch})` : pathPart;
     const compactFlag = view.compaction ? ' · compacted' : '';
+    const swarmBadge = formatSwarmBadge(state.swarmManager, state.threadId);
+    const swarmFlag = swarmBadge ? ` · ${swarmBadge}` : '';
     const thinkFlag = hideThinking ? ' · Ctrl+T thinking' : ' · thinking:on';
-    const stepCount = countThreadSteps(state.threadId);
-    const leftBottom = `${state.threadId} · turn:${totals.turns}/step:${stepCount} · ${totals.uncachedInputTokens}in/${totals.cacheReadTokens}c${compactFlag}${thinkFlag}`;
+    const { turns: threadTurns, steps: modelSteps } = countThreadTurnsAndSteps(
+      state.threadId,
+      view.messages
+    );
+    const leftBottom = `${state.threadId} · turn:${threadTurns}/step:${modelSteps} · ${totals.uncachedInputTokens}in/${totals.cacheReadTokens}c${compactFlag}${swarmFlag}${thinkFlag}`;
     footer.update({
       leftTop,
       leftBottom,
@@ -242,9 +276,12 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     scrollbarTrackStyle: text => cliTheme.borderMuted(text),
     scrollbarThumbStyle: text => cliTheme.borderAccent(text),
   });
+  const editorContainer = new Container();
+  editorContainer.addChild(editor);
+
   const dock = new VStack([
     { component: loaderSlot, shrink: 1, minSize: 0 },
-    { component: editor, shrink: 1, minSize: 3 },
+    { component: editorContainer, shrink: 1, minSize: 3 },
     { component: footer, shrink: 1, minSize: 0 },
   ]);
   const layoutRoot = new VStack([
@@ -254,14 +291,30 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
 
   tui.addChild(transcript);
   tui.addChild(loaderSlot);
-  tui.addChild(editor);
+  tui.addChild(editorContainer);
   tui.addChild(footer);
   tui.setLayoutRoot(layoutRoot);
   tui.setFocus(editor);
 
+  const stopSwarmBoardSub = state.swarmManager?.onBoardEntry(entry => {
+    const active = state.swarmManager?.getSwarmForThread(state.threadId);
+    if (!active || active.id !== entry.swarmId) return;
+    if (entry.sender === 'coordinator' || entry.sender === 'user') return;
+    appendInfoBlock([formatSwarmBoardEntryLine(entry)], cliTheme.dim);
+    refreshFooter();
+  });
+  const stopSwarmStateSub = state.swarmManager?.onMemberStateChange(evt => {
+    const active = state.swarmManager?.getSwarmForThread(state.threadId);
+    if (!active || active.id !== evt.swarmId) return;
+    refreshFooter();
+    tui.requestRender();
+  });
+
   const stopAll = () => {
     if (stopped) return;
     stopped = true;
+    stopSwarmBoardSub?.();
+    stopSwarmStateSub?.();
     currentLoader?.stop();
     tui.stop();
   };
@@ -314,17 +367,20 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
             typeof chunk.toolCallId === 'string' ? chunk.toolCallId : `${chunk.toolName}-${toolCounter++}`;
           turnView.addToolPending(callId, chunk.toolName, chunk.input);
           loader.setMessage(`Running ${chunk.toolName}...`);
+          refreshFooter();
           tui.requestRender();
         } else if (chunk.type === 'tool-output-available') {
           const callId = typeof chunk.toolCallId === 'string' ? chunk.toolCallId : '';
           turnView.completeTool(callId, chunk.output);
           loader.setMessage('Working...');
+          refreshFooter();
           tui.requestRender();
         } else if (chunk.type === 'tool-output-error') {
           const callId = typeof chunk.toolCallId === 'string' ? chunk.toolCallId : '';
           const err = typeof chunk.errorText === 'string' ? chunk.errorText : 'failed';
           turnView.failTool(callId, err);
           loader.setMessage('Working...');
+          refreshFooter();
           tui.requestRender();
         } else if (chunk.type === 'abort') {
           aborted = true;
@@ -384,28 +440,46 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
   const createPickerTheme = () => ({
     title: (text: string) => cliTheme.bold(cliTheme.borderAccent(text)),
     dim: cliTheme.dim,
-    panelBg: cliTheme.panelBg,
+    border: cliTheme.borderAccent,
     selectList: selectListTheme,
   });
 
+  const openInlinePicker = async <T>(params: {
+    title: string;
+    subtitle?: string;
+    items: Array<{ value: string; label: string; description?: string; data: T }>;
+    initialValue?: string;
+  }) => {
+    selectorOpen = true;
+    try {
+      return await openInlineSearchablePicker({
+        tui,
+        container: editorContainer,
+        restoreComponent: editor,
+        ...params,
+        theme: createPickerTheme(),
+      });
+    } finally {
+      selectorOpen = false;
+    }
+  };
+
   const openModelPicker = async () => {
-    const models = collectEnabledModels(state);
+    const models = await discoverEnabledModels(state);
     if (models.length === 0) {
-      appendInfoBlock(['No enabled models in models.toml.'], cliTheme.warning);
+      appendInfoBlock(['No enabled models found from models.toml or provider endpoints.'], cliTheme.warning);
       return;
     }
-    const picked = await openSearchablePickerOverlay({
-      tui,
+    const picked = await openInlinePicker({
       title: 'Switch Model',
-      subtitle: 'Select an enabled provider/model from models.toml',
+      subtitle: 'Models from models.toml & live provider endpoints',
       items: models.map(m => ({
         value: m.qualified,
-        label: `${m.active ? '* ' : '  '}${m.qualified}`,
-        description: m.providerType,
+        label: `${m.active ? '* ' : '  '}${m.model}`,
+        description: `${m.providerId} · ${m.providerType}${m.discovered ? ' · live' : ''}`,
         data: m,
       })),
       initialValue: models.find(m => m.active)?.qualified,
-      theme: createPickerTheme(),
     });
     if (picked) {
       appendInfoBlock([switchModel(picked.value, state)], cliTheme.success);
@@ -418,20 +492,19 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       appendInfoBlock(['No saved threads found.'], cliTheme.dim);
       return;
     }
-    const picked = await openSearchablePickerOverlay({
-      tui,
+    const picked = await openInlinePicker({
       title: 'Resume Thread',
       subtitle: 'Choose a thread to inspect and continue',
       items: threads.map(t => ({
         value: t.id,
-        label: `${t.id === state.threadId ? '* ' : '  '}${t.id}`,
-        description: `${t.title}${t.model ? ` (${t.model})` : ''}`,
+        label: `${t.id === state.threadId ? '* ' : '  '}${resolveThreadDisplayTitle(t)}`,
+        description: `${t.id}${t.model ? ` · ${t.model}` : ''}`,
         data: t,
       })),
       initialValue: state.threadId,
-      theme: createPickerTheme(),
     });
     if (picked && picked.value !== state.threadId) {
+      pruneEmptyThreadIfUnused(state, state.threadId);
       state.threadId = picked.value;
       ensureThreadExists(state, state.threadId, 'Interactive CLI');
       tui.resetTextSelection();
@@ -448,9 +521,8 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       | { kind: 'mode'; mode: 'auto' | 'manual' }
       | { kind: 'clear' }
       | { kind: 'skill'; id: string };
-    const available = await listSkills();
-    const picked = await openSearchablePickerOverlay<SkillPickerAction>({
-      tui,
+    const available = await listSkills({ workspacePath: state.workspace });
+    const picked = await openInlinePicker<SkillPickerAction>({
       title: `Skills (mode: ${state.skillMode})`,
       subtitle: 'Toggle a pinned skill or switch skillMode',
       items: [
@@ -479,7 +551,6 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
           data: { kind: 'skill' as const, id: s.id },
         })),
       ],
-      theme: createPickerTheme(),
     });
     if (!picked) return;
     if (picked.data.kind === 'mode') {
@@ -526,6 +597,15 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
       await openThreadPicker();
     } else if (outcome.kind === 'pick-skill') {
       await openSkillPicker();
+    } else if (outcome.kind === 'run-swarm') {
+      appendInfoBlock(
+        [
+          `${outcome.created ? 'Started' : 'Continuing'} swarm ${outcome.swarmId} as @coordinator.`,
+        ],
+        cliTheme.success
+      );
+      await runTurn(outcome.prompt);
+      return;
     } else if (outcome.kind === 'clear') {
       tui.resetTextSelection();
       transcript.clear();
@@ -551,8 +631,50 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
     void handleSubmittedText(text);
   };
 
+  const handleClipboardPaste = async () => {
+    try {
+      const filePaths = await readClipboardFilePaths();
+      if (filePaths && filePaths.length > 0) {
+        editor.insertTextAtCursor(filePaths.join('\n'));
+        tui.requestRender();
+        return;
+      }
+      const text = await readClipboardText();
+      if (text) {
+        editor.insertTextAtCursor(text);
+        tui.requestRender();
+      }
+    } catch (error) {
+      tui.flash(error instanceof Error ? error.message : 'Clipboard paste failed', 2500);
+    }
+  };
+
   tui.addInputListener(data => {
+    if (
+      matchesKey(data, 'ctrl+v') ||
+      matchesKey(data, 'ctrl+shift+v') ||
+      matchesKey(data, 'super+v')
+    ) {
+      if (selectorOpen) {
+        void handleRightClickPaste();
+      } else {
+        void handleClipboardPaste();
+      }
+      return { consume: true };
+    }
+    if (
+      (matchesKey(data, 'ctrl+shift+c') || matchesKey(data, 'super+c')) &&
+      tui.hasActiveSelection()
+    ) {
+      void tui.copyActiveSelectionToClipboard();
+      return { consume: true };
+    }
+    if (selectorOpen) return undefined;
     if (matchesKey(data, 'ctrl+c')) {
+      if (tui.hasActiveSelection()) {
+        void tui.copyActiveSelectionToClipboard();
+        return { consume: true };
+      }
       if (activeTurn) {
         interruptActiveTurn();
         return { consume: true };
@@ -595,138 +717,15 @@ const runTuiInteractiveCli = async (state: InteractiveCliState): Promise<void> =
   await donePromise;
 };
 
-const runPipedInteractiveCli = async (state: InteractiveCliState): Promise<void> => {
-  const totals: UsageTotals = { turns: 0, uncachedInputTokens: 0, cacheReadTokens: 0, outputTokens: 0 };
-  const slashNames = buildSlashCommands(state).map(c => `/${c.name}`);
-
-  const runTurn = async (prompt: string) => {
-    const startedAt = Date.now();
-    let inReasoning = false;
-    let printedText = false;
-    let turnUsage: TurnTokenUsage | undefined;
-
-    const closeReasoning = () => {
-      if (!inReasoning) return;
-      output.write('\n');
-      inReasoning = false;
-    };
-
-    const target: ChatStreamTarget = {
-      id: SENDER_ID,
-      send: (channel: string, payload: unknown) => {
-        if (channel !== 'chat:ui-chunk' || !payload || typeof payload !== 'object') return;
-        const chunk = payload as Record<string, unknown>;
-        if (chunk.type === 'reasoning-delta' && typeof chunk.delta === 'string') {
-          if (!inReasoning) {
-            output.write(cliTheme.dim('[thinking] '));
-            inReasoning = true;
-          }
-          output.write(cliTheme.dim(chunk.delta));
-        } else if (chunk.type === 'text-delta' && typeof chunk.delta === 'string') {
-          closeReasoning();
-          if (!printedText) output.write('\n');
-          printedText = true;
-          output.write(chunk.delta);
-        } else if (chunk.type === 'tool-input-available' && typeof chunk.toolName === 'string') {
-          closeReasoning();
-          output.write(
-            `\n${cliTheme.warning('•')} ${cliTheme.bold(chunk.toolName)} ${cliTheme.dim(formatToolCallPipedSummary(chunk.toolName, chunk.input))}\n`
-          );
-        } else if (chunk.type === 'tool-output-available' && typeof chunk.toolName === 'string') {
-          output.write(`  ${cliTheme.success('✓')} ${cliTheme.dim(chunk.toolName)}\n`);
-        } else if (chunk.type === 'tool-output-error' && typeof chunk.toolName === 'string') {
-          const err = typeof chunk.errorText === 'string' ? chunk.errorText : 'failed';
-          output.write(`  ${cliTheme.error('✗')} ${chunk.toolName}: ${cliTheme.error(err)}\n`);
-        } else if (chunk.type === 'data-token-usage' && chunk.data && typeof chunk.data === 'object') {
-          turnUsage = extractTurnTokenUsage(chunk.data as Record<string, unknown>);
-        }
-      },
-    };
-
-    const result = await state.chatService.stream(target, buildTurnStreamRequest(state, prompt));
-    closeReasoning();
-    if (!printedText && 'text' in result && typeof result.text === 'string' && result.text.trim()) {
-      output.write(`\n${result.text}`);
-    }
-    if (!result.success && 'error' in result && result.error) {
-      output.write(`\n${cliTheme.error(`[error] ${result.error}`)}`);
-    }
-    output.write('\n');
-
-    totals.turns += 1;
-    if (turnUsage) {
-      accumulateUsageTotals(totals, turnUsage);
-      const sec = ((Date.now() - startedAt) / 1000).toFixed(1);
-      output.write(cliTheme.dim(`  ${formatTurnUsageBadge(turnUsage, sec)}`) + '\n');
-    }
-    output.write('\n');
-  };
-
-  const rl = readline.createInterface({
-    input,
-    output,
-    terminal: false,
-    completer: (line: string): [string[], string] => {
-      if (!line.startsWith('/')) return [[], line];
-      const hits = slashNames.filter(cmd => cmd.startsWith(line));
-      return [hits.length ? hits : slashNames, line];
-    },
-  });
-
-  const pendingLines: string[] = [];
-  let eof = false;
-  let lineWaiter: (() => void) | null = null;
-  rl.on('line', (line: string) => {
-    pendingLines.push(line);
-    if (lineWaiter) {
-      const wake = lineWaiter;
-      lineWaiter = null;
-      wake();
-    }
-  });
-  rl.on('close', () => {
-    eof = true;
-    if (lineWaiter) {
-      const wake = lineWaiter;
-      lineWaiter = null;
-      wake();
-    }
-  });
-
-  output.write(`\n${(await formatBannerLines(state)).join('\n')}\n\n`);
-  if (state.initialPrompt) {
-    await runTurn(state.initialPrompt);
-  }
-
-  while (!eof || pendingLines.length > 0) {
-    while (pendingLines.length === 0) {
-      if (eof) return rl.close();
-      await new Promise<void>(resolve => {
-        lineWaiter = resolve;
-      });
-    }
-    const line = pendingLines.shift();
-    if (line === undefined) break;
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    if (!trimmed.startsWith('/')) {
-      await runTurn(trimmed);
-      continue;
-    }
-    const outcome = await executeSlashCommand(trimmed, state, totals);
-    if (outcome.kind === 'exit') break;
-    if ('lines' in outcome) {
-      output.write(`\n${outcome.lines.join('\n')}\n\n`);
-    }
-  }
-  rl.close();
-};
-
 export const runInteractiveCli = async (state: InteractiveCliState): Promise<void> => {
   ensureThreadExists(state, state.threadId, 'Interactive CLI');
-  if (Boolean(input.isTTY) && Boolean(output.isTTY)) {
-    await runTuiInteractiveCli(state);
-    return;
+  try {
+    if (Boolean(input.isTTY) && Boolean(output.isTTY)) {
+      await runTuiInteractiveCli(state);
+      return;
+    }
+    await runPipedInteractiveCli(state, SENDER_ID, buildTurnStreamRequest);
+  } finally {
+    pruneEmptyThreadIfUnused(state, state.threadId);
   }
-  await runPipedInteractiveCli(state);
 };

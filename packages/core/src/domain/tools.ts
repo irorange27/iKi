@@ -90,7 +90,7 @@ export const McpApprovalModeSchema = z.enum(['always', 'safe-only', 'never']);
 export type McpApprovalMode = z.infer<typeof McpApprovalModeSchema>;
 
 /** iKi skill origin (from `types/skill.ts`). */
-export const SkillSourceSchema = z.enum(['user', 'codex']);
+export const SkillSourceSchema = z.enum(['user', 'agent']);
 export type SkillSource = z.infer<typeof SkillSourceSchema>;
 
 // ============================================================================

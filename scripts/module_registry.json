@@ -79,6 +79,14 @@
       "role": "Continue-later wakes: awaiter manager, schedule, wake runs"
     },
     {
+      "id": "backend/swarm",
+      "roots": [
+        "packages/harness/src/swarm"
+      ],
+      "layer": "orchestration",
+      "role": "Multi-agent swarm orchestration: shared append-only board, roster, role prompts, worktree workers"
+    },
+    {
       "id": "backend/workspaces",
       "roots": [
         "packages/harness/src/workspaces"

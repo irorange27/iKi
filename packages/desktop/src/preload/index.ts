@@ -160,7 +160,7 @@ const electronApi: ElectronApi = {
   skills: {
     list: () => ipcRenderer.invoke('skills:list'),
     roots: () => ipcRenderer.invoke('skills:roots'),
-    openRoot: (source?: 'user' | 'codex') => ipcRenderer.invoke('skills:open-root', source),
+    openRoot: (source?: 'user' | 'agent') => ipcRenderer.invoke('skills:open-root', source),
     openSkill: (id: string) => ipcRenderer.invoke('skills:open-skill', id),
     read: (id: string, options?: { maxChars?: number }) =>
       ipcRenderer.invoke('skills:read', id, options),

@@ -118,4 +118,49 @@ describe('system prompt assembly & cache-safe projection', () => {
     expect(requestSystem).toContain('<project_context>');
     expect(requestSystem).toContain('<skills>');
   });
+
+  it('never clips project AGENTS.md to the legacy 320-token persona budget', async () => {
+    const rootDir = makeTempDir();
+    const userDataDir = path.join(rootDir, 'user-data');
+    const workspaceDir = path.join(rootDir, 'workspace');
+    fs.mkdirSync(userDataDir, { recursive: true });
+    fs.mkdirSync(workspaceDir, { recursive: true });
+    const longAgentsMd = [
+      '# Project Rules',
+      ...Array.from({ length: 80 }, (_, i) => `- Rule ${i + 1}: keep module boundaries clean and tested.`),
+      'FINAL_TAIL_MARKER_THREAD_SESSION',
+    ].join('\n');
+    fs.writeFileSync(path.join(workspaceDir, 'AGENTS.md'), longAgentsMd, 'utf8');
+    setPlatformInfo({ userDataPath: userDataDir });
+
+    const assembler = createChatContextAssembler({
+      resolveSkillsSystemPrompt: async () => ({
+        skillMode: 'auto',
+        usedSkills: [],
+        skillsSystemPrompt: '',
+      }),
+    });
+
+    const assembled = await assembler.assemble({
+      messages: [{ role: 'user', content: 'Where is thread_session?' }],
+      workspaceSelection: {
+        threadId: 'thread-long-agents',
+        workspaceId: 'ws-long',
+        workspace: {
+          id: 'ws-long',
+          name: 'long-repo',
+          path: workspaceDir,
+          is_temporary: false,
+          show_in_list: true,
+          created_at: '2026-11-23T00:00:00.000Z',
+          updated_at: '2026-11-23T00:00:00.000Z',
+        },
+      },
+      contextBudgetOverride: { enabled: true, maxIdentityTokens: 320, maxSkillTokens: 1200 },
+    });
+
+    const systemText = String(assembled.messages.find(m => m.role === 'system')?.content ?? '');
+    expect(systemText).toContain('FINAL_TAIL_MARKER_THREAD_SESSION');
+    expect(assembled.report.blocks.find(b => b.kind === 'identity')?.status).toBe('included');
+  });
 });

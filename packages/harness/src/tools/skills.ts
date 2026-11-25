@@ -38,39 +38,36 @@ const normalizeIdPath = (value: string): string =>
     .replace(/^\.\/+/, '')
     .trim();
 
-const getCodexHome = (): string => {
-  const env = process.env.CODEX_HOME;
+const getAgentsHome = (): string => {
+  const env = process.env.AGENTS_HOME;
   if (typeof env === 'string' && env.trim()) return env.trim();
-  return path.join(os.homedir(), '.codex');
+  return path.join(os.homedir(), '.agents');
 };
 
-const getSkillRootsInternal = (): Array<{ source: SkillSource; root: string }> => {
-  const roots: Array<{ source: SkillSource; root: string }> = [];
-
-  roots.push({
-    source: 'user',
-    root: path.join(getUserDataPath(), 'skills'),
-  });
-
-  roots.push({
-    source: 'codex',
-    root: path.join(getCodexHome(), 'skills'),
-  });
-
+const getSkillRootsInternal = (workspacePath?: string): Array<{ source: SkillSource; root: string }> => {
+  const roots: Array<{ source: SkillSource; root: string }> = [
+    { source: 'user', root: path.join(getUserDataPath(), 'skills') },
+  ];
+  const seenAgentRoots = new Set<string>();
+  const ws = typeof workspacePath === 'string' ? workspacePath.trim() : '';
+  if (ws) {
+    const wsSkillsRoot = path.resolve(ws, '.agents', 'skills');
+    seenAgentRoots.add(wsSkillsRoot);
+    roots.push({ source: 'agent', root: wsSkillsRoot });
+  }
+  const globalAgentsRoot = path.resolve(getAgentsHome(), 'skills');
+  if (!seenAgentRoots.has(globalAgentsRoot)) {
+    roots.push({ source: 'agent', root: globalAgentsRoot });
+  }
   return roots;
 };
 
-export const getSkillRootsForUi = (): Array<{ source: SkillSource; path: string }> => {
-  return getSkillRootsInternal().map(root => ({ source: root.source, path: root.root }));
-};
+export const getSkillRootsForUi = (workspacePath?: string): Array<{ source: SkillSource; path: string }> =>
+  getSkillRootsInternal(workspacePath).map(root => ({ source: root.source, path: root.root }));
 
-const getSkillRootPath = (source: SkillSource): string => {
-  const root = getSkillRootsInternal().find(entry => entry.source === source)?.root;
-  if (root) return root;
-  return source === 'codex'
-    ? path.join(getCodexHome(), 'skills')
-    : path.join(getUserDataPath(), 'skills');
-};
+const getSkillRootPath = (source: SkillSource, workspacePath?: string): string =>
+  getSkillRootsInternal(workspacePath).find(entry => entry.source === source)?.root ??
+  (source === 'agent' ? path.join(getAgentsHome(), 'skills') : path.join(getUserDataPath(), 'skills'));
 
 const normalizeSummaryText = (value: string): string => value.replace(/\s+/g, ' ').trim();
 
@@ -358,10 +355,13 @@ const invalidateSkillCache = () => {
   cachedRootsSignature = '';
 };
 
-const listSkillRecords = async (options?: { forceRefresh?: boolean }): Promise<SkillRecord[]> => {
+const listSkillRecords = async (options?: {
+  forceRefresh?: boolean;
+  workspacePath?: string;
+}): Promise<SkillRecord[]> => {
   const forceRefresh = options?.forceRefresh === true;
   const now = Date.now();
-  const roots = getSkillRootsInternal();
+  const roots = getSkillRootsInternal(options?.workspacePath);
   const rootsSignature = roots.map(root => `${root.source}:${root.root}`).join('|');
   if (
     !forceRefresh &&
@@ -538,8 +538,14 @@ const readRawSkillFile = async (
   };
 };
 
-export const listSkills = async (options?: { forceRefresh?: boolean }): Promise<SkillSummary[]> => {
-  const records = await listSkillRecords({ forceRefresh: options?.forceRefresh === true });
+export const listSkills = async (options?: {
+  forceRefresh?: boolean;
+  workspacePath?: string;
+}): Promise<SkillSummary[]> => {
+  const records = await listSkillRecords({
+    forceRefresh: options?.forceRefresh === true,
+    workspacePath: options?.workspacePath,
+  });
   return records.map(record => ({
     id: record.id,
     name: record.name,
@@ -552,22 +558,17 @@ export const listSkills = async (options?: { forceRefresh?: boolean }): Promise<
   }));
 };
 
-const getSkillRecordById = async (id: string): Promise<SkillRecord | null> => {
-  const records = await listSkillRecords();
-  const found = records.find(record => record.id === id);
-  return found || null;
-};
+const getSkillRecordById = async (id: string, workspacePath?: string): Promise<SkillRecord | null> =>
+  (await listSkillRecords({ workspacePath })).find(record => record.id === id) ?? null;
 
-const truncateText = (value: string, maxChars: number): { text: string; truncated: boolean } => {
-  if (value.length <= maxChars) {
-    return { text: value, truncated: false };
-  }
-  return { text: `${value.slice(0, maxChars)}...`, truncated: true };
-};
+const truncateText = (value: string, maxChars: number): { text: string; truncated: boolean } =>
+  value.length <= maxChars
+    ? { text: value, truncated: false }
+    : { text: `${value.slice(0, maxChars)}...`, truncated: true };
 
 export const readSkillContent = async (
   id: string,
-  options?: { maxChars?: number }
+  options?: { maxChars?: number; workspacePath?: string }
 ): Promise<{
   id: string;
   name: string;
@@ -576,22 +577,15 @@ export const readSkillContent = async (
   content: string;
   truncated: boolean;
 } | null> => {
-  const record = await getSkillRecordById(id);
+  const record = await getSkillRecordById(id, options?.workspacePath);
   if (!record) return null;
   const truncated = await readRawSkillFile(record.filePath, options);
-  return {
-    id: record.id,
-    name: record.name,
-    source: record.source,
-    filePath: record.filePath,
-    content: truncated.content,
-    truncated: truncated.truncated,
-  };
+  return { id: record.id, name: record.name, source: record.source, filePath: record.filePath, content: truncated.content, truncated: truncated.truncated };
 };
 
 export const readSkillInstructions = async (
   id: string,
-  options?: { maxChars?: number }
+  options?: { maxChars?: number; workspacePath?: string }
 ): Promise<{
   id: string;
   name: string;
@@ -599,9 +593,8 @@ export const readSkillInstructions = async (
   content: string;
   truncated: boolean;
 } | null> => {
-  const record = await getSkillRecordById(id);
+  const record = await getSkillRecordById(id, options?.workspacePath);
   if (!record) return null;
-
   const raw = await safeReadTextFile(record.filePath);
   const body = (extractFrontmatter(raw)?.body || raw).trim();
   const maxChars =
@@ -609,14 +602,7 @@ export const readSkillInstructions = async (
       ? Math.max(200, Math.trunc(options.maxChars))
       : 20000;
   const truncated = truncateText(body, maxChars);
-
-  return {
-    id: record.id,
-    name: record.name,
-    source: record.source,
-    content: truncated.text,
-    truncated: truncated.truncated,
-  };
+  return { id: record.id, name: record.name, source: record.source, content: truncated.text, truncated: truncated.truncated };
 };
 
 export const listPersonalSkills = async (options?: {
@@ -747,10 +733,12 @@ export const deletePersonalSkill = async (
   return { deleted: true, id: location.id, filePath: location.filePath };
 };
 
-export const getSkillFolderPath = async (id: string): Promise<string | null> => {
-  const record = await getSkillRecordById(id);
-  if (!record) return null;
-  return path.dirname(record.filePath);
+export const getSkillFolderPath = async (
+  id: string,
+  options?: { workspacePath?: string }
+): Promise<string | null> => {
+  const record = await getSkillRecordById(id, options?.workspacePath);
+  return record ? path.dirname(record.filePath) : null;
 };
 
 export const formatSkillMetadataForPrompt = (skill: {

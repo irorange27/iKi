@@ -608,11 +608,11 @@ export const settings = {
   'settings.skills.description':
     'Skills are instruction packs loaded from local SKILL.md files. Put your custom skills into the Personal skills folder to make them show up here.',
   'settings.skills.source.personal': 'Personal',
-  'settings.skills.source.codex': 'Codex',
+  'settings.skills.source.agent': 'Agent',
   'settings.skills.searchPlaceholder': 'Search skills by name, description, or id...',
   'settings.skills.empty': 'No skills found.',
   'settings.skills.group.personal': 'Personal Skills',
-  'settings.skills.group.codex': 'Codex Skills',
+  'settings.skills.group.agent': 'Agent Skills',
   'settings.skills.noDescription': 'No description',
   'settings.skills.viewContent': 'View Content',
   'settings.skills.contentTruncated': 'Content truncated for display.',

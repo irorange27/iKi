@@ -7,7 +7,10 @@ import {
   readAgentInstructions,
   readAgentInstructionsForSelection,
 } from './context_blocks';
-import { buildWorkspaceSystemMessageForSelection } from '../workspaces/thread_workspace';
+import {
+  buildWorkspaceSystemMessageForSelection,
+  getThreadWorkspaceSelection,
+} from '../workspaces/thread_workspace';
 import { buildAssembleResult, getContextConfig } from './context_helpers';
 import { selectRecentHistory } from './context_history';
 import type { AssembleChatContextParams, SkillContext } from './context_types';
@@ -123,18 +126,34 @@ export const createChatContextAssembler = (deps: {
       ...recentHistory.recentMessages,
     ];
 
+    const userMessagesCount = recentHistory.recentMessages.filter(m => m.role === 'user').length;
+    const anchorForUserIndex = (userIndex: number): string => {
+      const explicitId = params.userMessageIds?.[userIndex]?.trim();
+      return explicitId || `idx:${userIndex}`;
+    };
+    const currentUserAnchor =
+      userMessagesCount > 0 ? anchorForUserIndex(userMessagesCount - 1) : undefined;
+
+    const effectiveWorkspacePath =
+      params.workspaceSelection !== undefined
+        ? params.workspaceSelection?.workspace?.path
+        : getThreadWorkspaceSelection(params.threadId)?.workspace?.path;
+
     const skillContext: SkillContext = benchmarkCleanContext
       ? {
           systemMessage: '',
           usedSkills: [],
           skillMode: params.skillMode === 'auto' ? 'auto' : 'manual',
+          anchoredReminders: [],
           block: buildDroppedBlock('skills', 'disabled for benchmark clean mode'),
         }
       : await buildSkillContext({
           inputMessages: skillInputMessages,
           threadId: params.threadId,
+          workspacePath: effectiveWorkspacePath,
           skillIds: params.skillIds,
           skillMode: params.skillMode,
+          currentUserAnchor,
           contextConfig,
           resolveSkillsSystemPrompt: deps.resolveSkillsSystemPrompt,
         });
@@ -169,11 +188,28 @@ export const createChatContextAssembler = (deps: {
       .filter(Boolean)
       .join('\n\n');
 
+    const reminderByAnchor = new Map(
+      (skillContext.anchoredReminders ?? []).map(item => [item.beforeAnchor, item.text] as const)
+    );
+    const interleavedRecentMessages: ModelMessage[] = [];
+    let seenUserIndex = 0;
+    for (const message of recentHistory.recentMessages) {
+      if (message.role === 'user') {
+        const anchor = anchorForUserIndex(seenUserIndex);
+        seenUserIndex += 1;
+        const reminderText = reminderByAnchor.get(anchor);
+        if (reminderText) {
+          interleavedRecentMessages.push({ role: 'user', content: reminderText });
+        }
+      }
+      interleavedRecentMessages.push(message);
+    }
+
     return buildAssembleResult({
       messages: [
         ...(singleSystemText ? [{ role: 'system' as const, content: singleSystemText }] : []),
         ...(runtimeReminderMessage ? [runtimeReminderMessage] : []),
-        ...recentHistory.recentMessages,
+        ...interleavedRecentMessages,
       ],
       usedSkills: skillContext.usedSkills,
       skillMode: skillContext.skillMode,

@@ -39,7 +39,7 @@ type SkillReferenceItem = {
   id: string;
   name: string;
   description: string;
-  source: 'user' | 'codex' | '';
+  source: 'user' | 'agent' | '';
   sourceLabel: string;
 };
 
@@ -145,13 +145,13 @@ const toScore = (value: unknown): number | null => {
 };
 
 const formatSkillSourceLabel = (value: unknown): SkillReferenceItem['sourceLabel'] => {
-  if (value === 'codex') return 'Codex';
+  if (value === 'agent') return 'Agent';
   if (value === 'user') return 'User';
   return 'Skill';
 };
 
 const normalizeSkillSource = (value: unknown): SkillReferenceItem['source'] => {
-  if (value === 'user' || value === 'codex') return value;
+  if (value === 'user' || value === 'agent') return value;
   return '';
 };
 

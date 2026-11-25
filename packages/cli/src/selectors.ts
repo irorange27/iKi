@@ -1,5 +1,4 @@
 import {
-  Box,
   Container,
   Input,
   SelectList,
@@ -7,6 +6,7 @@ import {
   Text,
   fuzzyFilter,
   matchesKey,
+  type Component,
   type Focusable,
   type SelectItem,
   type SelectListTheme,
@@ -23,11 +23,27 @@ export type PickerOption<T> = {
 type PickerStyle = {
   title: (text: string) => string;
   dim: (text: string) => string;
-  panelBg?: (text: string) => string;
+  border: (text: string) => string;
   selectList: SelectListTheme;
 };
 
-class SearchablePicker<T> extends Container implements Focusable {
+class HorizontalRule implements Component {
+  private readonly style: (text: string) => string;
+
+  constructor(style: (text: string) => string) {
+    this.style = style;
+  }
+
+  invalidate(): void {
+    // Width-dependent; rendered dynamically per viewport width.
+  }
+
+  render(width: number): string[] {
+    return [this.style('─'.repeat(Math.max(1, width)))];
+  }
+}
+
+class InlineSearchablePicker<T> extends Container implements Focusable {
   readonly capturesViewportInput = true;
   private readonly input: Input;
   private readonly listContainer: Container;
@@ -67,26 +83,25 @@ class SearchablePicker<T> extends Container implements Focusable {
     this.onSelect = params.onSelect;
     this.onCancel = params.onCancel;
 
-    const box = new Box(2, 1, this.theme.panelBg);
-    box.addChild(new Text(this.theme.title(params.title), 0, 0));
+    this.addChild(new HorizontalRule(this.theme.border));
+    this.addChild(new Text(this.theme.title(params.title), 1, 0));
     if (params.subtitle) {
-      box.addChild(new Text(this.theme.dim(params.subtitle), 0, 0));
+      this.addChild(new Text(this.theme.dim(params.subtitle), 1, 0));
     }
-    box.addChild(new Spacer(1));
+    this.addChild(new Spacer(1));
 
-    this.input = new Input({ prompt: 'Filter: ', placeholder: 'type to filter...' });
-    box.addChild(this.input);
-    box.addChild(new Spacer(1));
+    this.input = new Input({ prompt: ' Filter: ', placeholder: 'type to filter...' });
+    this.addChild(this.input);
+    this.addChild(new Spacer(1));
 
     this.listContainer = new Container();
     this.list = this.createList(params.initialValue);
     this.listContainer.addChild(this.list);
-    box.addChild(this.listContainer);
+    this.addChild(this.listContainer);
 
-    box.addChild(new Spacer(1));
-    box.addChild(new Text(this.theme.dim('↑/↓ navigate · Enter select · Esc cancel'), 0, 0));
-
-    this.addChild(box);
+    this.addChild(new Spacer(1));
+    this.addChild(new Text(this.theme.dim('↑/↓ navigate · Enter select · Esc cancel'), 1, 0));
+    this.addChild(new HorizontalRule(this.theme.border));
   }
 
   private createList(initialValue?: string): SelectList {
@@ -143,39 +158,54 @@ class SearchablePicker<T> extends Container implements Focusable {
   }
 }
 
-export const openSearchablePickerOverlay = <T>(params: {
+const activeSlotToken = new WeakMap<Container, symbol>();
+
+/**
+ * Displays a searchable selector inline in place of the editor (pi's `showSelector`
+ * pattern) instead of a floating modal overlay, leaving transcript scrollback unobstructed.
+ */
+export const openInlineSearchablePicker = <T>(params: {
   tui: TUI;
+  container: Container;
+  restoreComponent: Component;
   title: string;
   subtitle?: string;
   items: Array<PickerOption<T>>;
   initialValue?: string;
+  maxVisible?: number;
   theme: PickerStyle;
 }): Promise<PickerOption<T> | null> =>
   new Promise(resolve => {
+    const token = Symbol('inline-selector');
+    activeSlotToken.set(params.container, token);
     let settled = false;
-    let handle: ReturnType<TUI['showOverlay']> | null = null;
+
     const close = (result: PickerOption<T> | null) => {
       if (settled) return;
       settled = true;
-      handle?.hide();
-      params.tui.requestRender();
+      if (activeSlotToken.get(params.container) === token) {
+        activeSlotToken.delete(params.container);
+        params.container.clear();
+        params.container.addChild(params.restoreComponent);
+        params.tui.setFocus(params.restoreComponent);
+        params.tui.requestRender();
+      }
       resolve(result);
     };
 
-    const picker = new SearchablePicker({
+    const picker = new InlineSearchablePicker({
       title: params.title,
       ...(params.subtitle ? { subtitle: params.subtitle } : {}),
       items: params.items,
       ...(params.initialValue ? { initialValue: params.initialValue } : {}),
+      ...(params.maxVisible ? { maxVisible: params.maxVisible } : {}),
       theme: params.theme,
       onSelect: item => close(item),
       onCancel: () => close(null),
     });
 
-    handle = params.tui.showOverlay(picker, {
-      anchor: 'center',
-      width: '86%',
-      maxHeight: '75%',
-    });
+    params.container.clear();
+    params.container.addChild(picker);
+    params.tui.setFocus(picker);
     params.tui.requestRender();
   });

@@ -251,7 +251,7 @@ export const useChatSlashCommands = (deps: {
         id,
         name,
         description: typeof description === 'string' ? description : '',
-        source: source === 'codex' || source === 'user' ? source : 'user',
+        source: source === 'agent' || source === 'user' ? source : 'user',
         path: typeof path === 'string' ? path : undefined,
       });
     }

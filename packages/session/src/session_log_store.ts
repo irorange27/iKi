@@ -53,12 +53,18 @@ export interface SessionLogStore {
   readThread(threadId: string, types?: readonly string[], match?: SessionEventMatch): StoredSessionEvent[];
   headRevision(threadId: string): number;
   deleteThread(threadId: string): void;
+  forkThread(sourceThreadId: string, targetThreadId: string, upToRevision?: number): number;
   findMessage(messageId: string, threadId?: string): { threadId: string; payload: unknown } | null;
 }
 
 const HEADER_VERSION = 1;
 
-type HeaderLine = { kind: 'header'; version: number; threadId: string };
+type HeaderLine = {
+  kind: 'header';
+  version: number;
+  threadId: string;
+  forkedFrom?: { threadId: string; revision: number };
+};
 
 /**
  * One line = one append call = one atomic commit. The whole batch is a single JSON
@@ -197,6 +203,48 @@ export const createJsonlSessionLogStore = (rootDir: string): SessionLogStore => 
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
+    },
+
+    forkThread(sourceThreadId, targetThreadId, upToRevision) {
+      if (!sourceThreadId.trim() || !targetThreadId.trim()) {
+        throw new Error('forkThread requires non-empty sourceThreadId and targetThreadId.');
+      }
+      if (sourceThreadId === targetThreadId) {
+        throw new Error('forkThread targetThreadId must differ from sourceThreadId.');
+      }
+      if (headRevision(targetThreadId) > 0) {
+        throw new Error(`Cannot fork into non-empty thread "${targetThreadId}".`);
+      }
+
+      const sourceEvents = eventsOf(sourceThreadId).filter(event =>
+        typeof upToRevision === 'number' ? event.revision <= upToRevision : true
+      );
+      const forkedRevision = sourceEvents.at(-1)?.revision ?? 0;
+      const targetFile = fileFor(rootDir, targetThreadId);
+      fs.mkdirSync(path.dirname(targetFile), { recursive: true });
+
+      const header: HeaderLine = {
+        kind: 'header',
+        version: HEADER_VERSION,
+        threadId: targetThreadId,
+        forkedFrom: { threadId: sourceThreadId, revision: forkedRevision },
+      };
+      const lines = [`${JSON.stringify(header)}\n`];
+      if (sourceEvents.length > 0) {
+        const batch: BatchLine = {
+          kind: 'batch',
+          firstRevision: 1,
+          events: sourceEvents.map(({ type, version, payload, createdAt }) => ({
+            type,
+            version,
+            payload,
+            createdAt,
+          })),
+        };
+        lines.push(`${JSON.stringify(batch)}\n`);
+      }
+      fs.writeFileSync(targetFile, lines.join(''), 'utf8');
+      return sourceEvents.length;
     },
 
     findMessage(messageId, threadId) {
